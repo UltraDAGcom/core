@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UltraDAG — DAG-BFT Cryptocurrency</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080b0f;--bg2:#0d1118;--bg3:#111820;
+  --border:#1e2a38;--border2:#253040;
+  --dim:#2e4055;--muted:#4a6480;--subtle:#6b8aaa;
+  --body:#8fafc8;--bright:#c4daf0;--white:#e8f2fa;
+  --accent:#3d9be9;--accent2:#1a6fb5;
+  --glow:rgba(61,155,233,0.12);--glow2:rgba(61,155,233,0.04);
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--body);font-family:'Syne',sans-serif;font-size:16px;line-height:1.6;overflow-x:hidden;cursor:default}
+a{color:var(--accent);text-decoration:none;transition:color .2s}
+a:hover{color:var(--white)}
+
+/* NOISE OVERLAY */
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.4}
+
+/* GRID BG */
+.grid-bg{position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.25;pointer-events:none;z-index:0;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,black 30%,transparent 100%)}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid transparent;transition:border-color .3s,background .3s}
+nav.scrolled{border-color:var(--border);background:rgba(8,11,15,.9);backdrop-filter:blur(12px)}
+.nav-logo{font-family:'Cormorant',serif;font-size:22px;font-weight:300;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px}
+.nav-logo-mark{width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
+.nav-logo-mark::after{content:'';width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)}
+.nav-links{display:flex;align-items:center;gap:32px;list-style:none}
+.nav-links a{font-family:'DM Mono',monospace;font-size:12px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s}
+.nav-links a:hover{color:var(--white)}
+.nav-cta{color:var(--accent)!important;border:1px solid var(--accent2);padding:8px 18px;border-radius:2px;transition:background .2s!important}
+.nav-cta:hover{background:var(--glow)}
+
+/* HERO */
+.hero{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:120px 48px 80px;max-width:1200px;margin:0 auto}
+.hero-eyebrow{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);margin-bottom:32px;display:flex;align-items:center;gap:12px;opacity:0;animation:fadeUp .8s .2s forwards}
+.hero-eyebrow::before{content:'';width:32px;height:1px;background:var(--accent)}
+h1{font-family:'Cormorant',serif;font-size:clamp(56px,8vw,108px);font-weight:300;line-height:.95;letter-spacing:-.02em;color:var(--white);margin-bottom:16px;opacity:0;animation:fadeUp .8s .35s forwards}
+h1 em{font-style:italic;color:var(--accent)}
+.hero-subtitle{font-family:'Cormorant',serif;font-size:clamp(20px,2.5vw,28px);font-weight:300;font-style:italic;color:var(--subtle);margin-bottom:48px;max-width:540px;line-height:1.4;opacity:0;animation:fadeUp .8s .5s forwards}
+.hero-actions{display:flex;gap:16px;flex-wrap:wrap;opacity:0;animation:fadeUp .8s .65s forwards}
+
+/* HERO DAG GRAPHIC */
+.hero-graphic{position:absolute;right:48px;top:50%;transform:translateY(-50%);width:420px;height:420px;opacity:0;animation:fadeIn 1.2s .8s forwards;pointer-events:none}
+.dag-svg{width:100%;height:100%}
+
+/* BUTTONS */
+.btn-primary{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--bg);background:var(--accent);border:none;padding:14px 32px;border-radius:2px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:10px;transition:background .2s,transform .15s}
+.btn-primary:hover{background:#5aaef0;color:var(--bg);transform:translateY(-1px)}
+.btn-secondary{font-family:'DM Mono',monospace;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--bright);background:transparent;border:1px solid var(--border2);padding:14px 32px;border-radius:2px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:10px;transition:border-color .2s,color .2s,transform .15s}
+.btn-secondary:hover{border-color:var(--subtle);color:var(--white);transform:translateY(-1px)}
+
+/* STATS BAR */
+.stats-bar{position:relative;z-index:1;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--bg2);padding:0 48px;opacity:0;animation:fadeIn .8s 1s forwards}
+.stats-inner{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+.stat{padding:28px 0;border-right:1px solid var(--border);padding-right:32px;padding-left:32px}
+.stat:first-child{padding-left:0}
+.stat:last-child{border-right:none}
+.stat-value{font-family:'Cormorant',serif;font-size:36px;font-weight:600;color:var(--white);line-height:1;margin-bottom:6px}
+.stat-value span{font-size:20px;font-weight:300;color:var(--accent)}
+.stat-label{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+
+/* SECTIONS */
+section{position:relative;z-index:1}
+.section-inner{max-width:1200px;margin:0 auto;padding:120px 48px}
+.section-tag{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);margin-bottom:16px;display:flex;align-items:center;gap:10px}
+.section-tag::before{content:'';width:20px;height:1px;background:var(--accent)}
+h2{font-family:'Cormorant',serif;font-size:clamp(36px,5vw,60px);font-weight:300;line-height:1.05;color:var(--white);margin-bottom:20px}
+h2 em{font-style:italic;color:var(--accent)}
+.section-lead{font-family:'Cormorant',serif;font-size:20px;font-weight:300;color:var(--subtle);max-width:560px;line-height:1.5;margin-bottom:64px}
+
+/* FEATURE GRID (3-col ruled) */
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border)}
+.feature{background:var(--bg2);padding:48px 40px;position:relative;overflow:hidden;transition:background .3s}
+.feature::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),transparent);opacity:0;transition:opacity .3s}
+.feature:hover{background:var(--bg3)}
+.feature:hover::before{opacity:1}
+.feature-icon{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:16px}
+.feature h3{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--white);margin-bottom:12px;letter-spacing:.01em}
+.feature p{font-family:'Cormorant',serif;font-size:17px;font-weight:300;color:var(--subtle);line-height:1.6;margin:0}
+
+/* TOKENOMICS GRID (ruled) */
+.token-section{background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.token-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border)}
+.token-card{background:var(--bg2);padding:40px 32px;transition:background .2s}
+.token-card:hover{background:var(--bg3)}
+.token-value{font-family:'Cormorant',serif;font-size:36px;font-weight:600;color:var(--white);line-height:1;margin-bottom:8px}
+.token-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}
+
+/* CODE */
+.code-section{background:var(--bg3);border:1px solid var(--border);border-radius:2px;overflow:hidden}
+.code-header{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;border-bottom:1px solid var(--border)}
+.code-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.code-dots{display:flex;gap:6px}
+.code-dot{width:8px;height:8px;border-radius:50%;background:var(--border2)}
+pre{padding:24px 28px;overflow-x:auto;font-family:'DM Mono',monospace;font-size:13px;line-height:1.8;color:var(--body);background:transparent;margin:0}
+.kw{color:var(--accent)}
+.fn{color:#7dd3fc}
+.str{color:#86efac}
+.cm{color:var(--dim)}
+.num{color:#fbbf24}
+
+/* CTA */
+.cta-section{position:relative;overflow:hidden}
+.cta-section::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:800px;height:600px;background:radial-gradient(ellipse,var(--glow) 0%,transparent 70%);pointer-events:none}
+.cta-inner{max-width:1200px;margin:0 auto;padding:120px 48px;text-align:center}
+.install-box{background:var(--bg3);border:1px solid var(--border);border-radius:2px;padding:20px 28px;font-family:'DM Mono',monospace;font-size:13px;display:inline-flex;align-items:center;gap:20px}
+.install-cmd{color:var(--body)}
+.install-cmd span{color:var(--dim)}
+.copy-btn{background:var(--bg2);border:1px solid var(--border2);color:var(--muted);padding:6px 14px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;transition:all .2s}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* FOOTER */
+footer{position:relative;z-index:1;border-top:1px solid var(--border);background:var(--bg)}
+.footer-inner{max-width:1200px;margin:0 auto;padding:48px;display:flex;justify-content:space-between;align-items:center}
+.footer-logo{font-family:'Cormorant',serif;font-size:20px;font-weight:300;color:var(--subtle);letter-spacing:.06em}
+.footer-links{display:flex;gap:28px;list-style:none}
+.footer-links a{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-decoration:none;transition:color .2s}
+.footer-links a:hover{color:var(--subtle)}
+.footer-note{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase}
+
+/* ANIMATIONS */
+@keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
+@keyframes drawLine{from{stroke-dashoffset:1000}to{stroke-dashoffset:0}}
+
+.reveal{opacity:0;transform:translateY(20px);transition:opacity .7s,transform .7s}
+.reveal.visible{opacity:1;transform:translateY(0)}
+.reveal-delay-1{transition-delay:.1s}
+.reveal-delay-2{transition-delay:.2s}
+.reveal-delay-3{transition-delay:.3s}
+
+/* RESPONSIVE */
+@media(max-width:900px){
+  nav{padding:0 24px}
+  .nav-links{display:none}
+  .hero{padding:100px 24px 60px}
+  .hero-graphic{display:none}
+  h1{font-size:52px}
+  .features-grid,.token-grid{grid-template-columns:1fr}
+  .stats-inner{grid-template-columns:repeat(2,1fr)}
+  .stat{border-right:none;border-bottom:1px solid var(--border)}
+  .section-inner,.cta-inner{padding:80px 24px}
+  .footer-inner{flex-direction:column;gap:24px;text-align:center}
+  .footer-links{flex-wrap:wrap;justify-content:center}
+  .install-box{flex-direction:column;gap:12px;text-align:left;font-size:11px}
+}
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+
+<!-- NAV -->
+<nav id="nav">
+  <a href="/" class="nav-logo">
+    <div class="nav-logo-mark"></div>
+    UltraDAG
+  </a>
+  <ul class="nav-links">
+    <li><a href="#consensus">Consensus</a></li>
+    <li><a href="#tokenomics">Tokenomics</a></li>
+    <li><a href="whitepaper.html">Whitepaper</a></li>
+    <li><a href="#run">Run a Node</a></li>
+    <li><a href="https://github.com/ultradag/ultradag" target="_blank">GitHub</a></li>
+    <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <p class="hero-eyebrow">Ed25519 + Blake3 + DAG-BFT</p>
+  <h1>Ultra<em>DAG</em></h1>
+  <p class="hero-subtitle">A minimal cryptocurrency with DAG-BFT consensus. Parallel blocks, Byzantine finality, 21M max supply. Written in Rust.</p>
+  <div class="hero-actions">
+    <a href="dashboard.html" class="btn-primary">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M2 6h12M6 6v8"/></svg>
+      Open Dashboard
+    </a>
+    <a href="#run" class="btn-secondary">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2v12l9-6z"/></svg>
+      Run a Node
+    </a>
+  </div>
+
+  <!-- DAG structure SVG -->
+  <div class="hero-graphic">
+    <svg class="dag-svg" viewBox="0 0 420 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Outer rings -->
+      <circle cx="210" cy="210" r="190" stroke="#1e2a38" stroke-width="1"/>
+      <circle cx="210" cy="210" r="160" stroke="#1e2a38" stroke-width="0.5" stroke-dasharray="4 6"/>
+
+      <!-- DAG edges (multi-parent structure) -->
+      <g stroke="#253040" stroke-width="1" stroke-dasharray="1000" style="animation:drawLine 3s 1s forwards">
+        <!-- Round 1 to Round 2 -->
+        <line x1="130" y1="90" x2="100" y2="170"/>
+        <line x1="130" y1="90" x2="210" y2="170"/>
+        <line x1="210" y1="90" x2="100" y2="170"/>
+        <line x1="210" y1="90" x2="210" y2="170"/>
+        <line x1="210" y1="90" x2="320" y2="170"/>
+        <line x1="290" y1="90" x2="210" y2="170"/>
+        <line x1="290" y1="90" x2="320" y2="170"/>
+        <!-- Round 2 to Round 3 -->
+        <line x1="100" y1="170" x2="150" y2="260"/>
+        <line x1="100" y1="170" x2="270" y2="260"/>
+        <line x1="210" y1="170" x2="150" y2="260"/>
+        <line x1="210" y1="170" x2="270" y2="260"/>
+        <line x1="320" y1="170" x2="270" y2="260"/>
+        <line x1="320" y1="170" x2="150" y2="260"/>
+        <!-- Round 3 to finalized -->
+        <line x1="150" y1="260" x2="210" y2="340"/>
+        <line x1="270" y1="260" x2="210" y2="340"/>
+      </g>
+
+      <!-- Highlighted finality path -->
+      <line x1="210" y1="90" x2="210" y2="170" stroke="#3d9be9" stroke-width="1.5" opacity="0.5"/>
+      <line x1="210" y1="170" x2="270" y2="260" stroke="#3d9be9" stroke-width="1.5" opacity="0.5"/>
+      <line x1="270" y1="260" x2="210" y2="340" stroke="#3d9be9" stroke-width="1.5" opacity="0.5"/>
+
+      <!-- Round 1 vertices -->
+      <circle cx="130" cy="90" r="12" fill="#080b0f" stroke="#253040" stroke-width="1"/>
+      <circle cx="130" cy="90" r="4" fill="#3d9be9" opacity="0.4"/>
+      <circle cx="210" cy="90" r="14" fill="#080b0f" stroke="#3d9be9" stroke-width="1.5"/>
+      <circle cx="210" cy="90" r="5" fill="#3d9be9" style="animation:pulse 2s infinite"/>
+      <circle cx="290" cy="90" r="12" fill="#080b0f" stroke="#253040" stroke-width="1"/>
+      <circle cx="290" cy="90" r="4" fill="#3d9be9" opacity="0.4"/>
+
+      <!-- Round 2 vertices -->
+      <circle cx="100" cy="170" r="10" fill="#080b0f" stroke="#1a6fb5" stroke-width="1"/>
+      <circle cx="100" cy="170" r="3" fill="#3d9be9" opacity="0.5"/>
+      <circle cx="210" cy="170" r="10" fill="#080b0f" stroke="#1a6fb5" stroke-width="1"/>
+      <circle cx="210" cy="170" r="3" fill="#3d9be9" opacity="0.5"/>
+      <circle cx="320" cy="170" r="10" fill="#080b0f" stroke="#1a6fb5" stroke-width="1"/>
+      <circle cx="320" cy="170" r="3" fill="#3d9be9" opacity="0.5"/>
+
+      <!-- Round 3 vertices -->
+      <circle cx="150" cy="260" r="8" fill="#080b0f" stroke="#253040" stroke-width="1"/>
+      <circle cx="150" cy="260" r="2.5" fill="#3d9be9" opacity="0.3"/>
+      <circle cx="270" cy="260" r="8" fill="#080b0f" stroke="#253040" stroke-width="1"/>
+      <circle cx="270" cy="260" r="2.5" fill="#3d9be9" opacity="0.3"/>
+
+      <!-- Finalized vertex -->
+      <rect x="198" y="328" width="24" height="24" fill="#0d2236" stroke="#3d9be9" stroke-width="1.5"/>
+
+      <!-- Labels -->
+      <text x="126" y="56" fill="#4a6480" font-family="monospace" font-size="8" letter-spacing="1">ROUND 1</text>
+      <text x="126" y="156" fill="#4a6480" font-family="monospace" font-size="8" letter-spacing="1">ROUND 2</text>
+      <text x="126" y="248" fill="#4a6480" font-family="monospace" font-size="8" letter-spacing="1">ROUND 3</text>
+      <text x="235" y="345" fill="#3d9be9" font-family="monospace" font-size="8" letter-spacing="1">FINALIZED</text>
+    </svg>
+  </div>
+</div>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="stats-inner">
+    <div class="stat">
+      <div class="stat-value">21<span>M max</span></div>
+      <div class="stat-label">Total supply cap</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">DAG<span>-BFT</span></div>
+      <div class="stat-label">Consensus protocol</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">5<span>s</span></div>
+      <div class="stat-label">Default round time</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">3<span> crates</span></div>
+      <div class="stat-label">Entire codebase</div>
+    </div>
+  </div>
+</div>
+
+<!-- CONSENSUS -->
+<section id="consensus">
+  <div class="section-inner">
+    <p class="section-tag reveal">Consensus</p>
+    <h2 class="reveal">DAG-BFT<br><em>consensus.</em></h2>
+    <p class="section-lead reveal">Blocks form a DAG, not a chain. Round-based validators produce signed vertices, BFT rules finalize.</p>
+
+    <div class="features-grid">
+      <div class="feature reveal">
+        <div class="feature-icon">Vertex Structure</div>
+        <h3>Multi-Parent Blocks</h3>
+        <p>Every vertex references all known tips, forming a directed acyclic graph. Multiple validators produce vertices concurrently in the same round without conflict.</p>
+      </div>
+      <div class="feature reveal reveal-delay-1">
+        <div class="feature-icon">Finality</div>
+        <h3>Byzantine Finality</h3>
+        <p>A vertex is finalized when 2/3+ of active validators have at least one descendant of it. Once finalized, it cannot be reverted. No 6-block wait.</p>
+      </div>
+      <div class="feature reveal reveal-delay-2">
+        <div class="feature-icon">Timing</div>
+        <h3>Round-Based Timing</h3>
+        <p>Configurable round intervals replace PoW as the rate limiter. Validators produce exactly one signed vertex per round. Clean async timing via tokio::interval.</p>
+      </div>
+      <div class="feature reveal">
+        <div class="feature-icon">Network</div>
+        <h3>TCP Peer Network</h3>
+        <p>Length-prefixed JSON over TCP. Peer discovery, transaction relay, DAG vertex propagation, and automatic orphan resolution with parent buffering.</p>
+      </div>
+      <div class="feature reveal reveal-delay-1">
+        <div class="feature-icon">Cryptography</div>
+        <h3>Ed25519 Signatures</h3>
+        <p>Real asymmetric cryptography via ed25519-dalek. Transactions and DAG vertices are Ed25519-signed. On-chain verification: blake3(pubkey) == address.</p>
+      </div>
+      <div class="feature reveal reveal-delay-2">
+        <div class="feature-icon">Architecture</div>
+        <h3>Minimal Codebase</h3>
+        <p>Three crates total: coin (crypto primitives + consensus), network (P2P), node (binary). No frameworks, no VMs, no smart contracts. Just a cryptocurrency.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TOKENOMICS -->
+<section class="token-section" id="tokenomics">
+  <div class="section-inner">
+    <p class="section-tag reveal">Tokenomics</p>
+    <h2 class="reveal">Bitcoin-model<br><em>supply.</em></h2>
+    <p class="section-lead reveal">Fixed supply, halving schedule, account-based ledger. No premine, no ICO.</p>
+
+    <div class="token-grid">
+      <div class="token-card reveal">
+        <div class="token-value">21M</div>
+        <div class="token-label">Max supply</div>
+      </div>
+      <div class="token-card reveal reveal-delay-1">
+        <div class="token-value">50 UDAG</div>
+        <div class="token-label">Initial block reward</div>
+      </div>
+      <div class="token-card reveal reveal-delay-2">
+        <div class="token-value">210K</div>
+        <div class="token-label">Halving interval</div>
+      </div>
+      <div class="token-card reveal">
+        <div class="token-value">5s</div>
+        <div class="token-label">Default round time</div>
+      </div>
+      <div class="token-card reveal reveal-delay-1">
+        <div class="token-value">10<sup style="font-size:18px;color:var(--accent)">8</sup> sats</div>
+        <div class="token-label">1 UDAG</div>
+      </div>
+      <div class="token-card reveal reveal-delay-2">
+        <div class="token-value">Account</div>
+        <div class="token-label">Ledger model</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- RUN A NODE -->
+<section id="run">
+  <div class="section-inner">
+    <p class="section-tag reveal">Run a Node</p>
+    <h2 class="reveal">Start validating<br><em>in 60 seconds.</em></h2>
+    <p class="section-lead reveal">One binary, no configuration files, automatic peer discovery.</p>
+
+    <div class="code-section reveal">
+      <div class="code-header">
+        <div class="code-dots"><div class="code-dot"></div><div class="code-dot"></div><div class="code-dot"></div></div>
+        <span class="code-label">Terminal</span>
+      </div>
+      <pre><span class="cm"># Build the node</span>
+<span class="kw">cargo</span> build --release -p ultradag-node
+
+<span class="cm"># Start validating (generates a keypair automatically)</span>
+<span class="kw">cargo</span> run --release -p ultradag-node -- --port <span class="num">9333</span> --validate
+
+<span class="cm"># Connect a second validator to the first</span>
+<span class="kw">cargo</span> run --release -p ultradag-node -- --port <span class="num">9334</span> --seed <span class="str">127.0.0.1:9333</span> --validate
+
+<span class="cm"># Check chain status via HTTP RPC</span>
+<span class="kw">curl</span> <span class="str">http://127.0.0.1:10333/status</span>
+
+<span class="cm"># Generate a new keypair</span>
+<span class="kw">curl</span> <span class="str">http://127.0.0.1:10333/keygen</span>
+
+<span class="cm"># Send UDAG coins</span>
+<span class="kw">curl</span> -X POST <span class="str">http://127.0.0.1:10333/tx</span> \
+  -d <span class="str">'{"from_secret":"&lt;sk_hex&gt;","to":"&lt;addr_hex&gt;","amount":5000000000,"fee":100000}'</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section" id="start">
+  <div class="cta-inner">
+    <p class="section-tag reveal" style="justify-content:center">Get Started</p>
+    <h2 class="reveal">Clone &amp;<br><em>validate.</em></h2>
+    <p class="section-lead reveal" style="margin:0 auto 48px;text-align:center">The entire codebase is three Rust crates.</p>
+    <div class="install-box reveal">
+      <div class="install-cmd"><span>$</span> git clone https://github.com/ultradag/ultradag && cd ultradag && cargo run --release -p ultradag-node -- --validate</div>
+      <button class="copy-btn" onclick="navigator.clipboard.writeText('git clone https://github.com/ultradag/ultradag && cd ultradag && cargo run --release -p ultradag-node -- --validate');this.textContent='copied';setTimeout(()=>this.textContent='copy',2000)">copy</button>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">UltraDAG</div>
+    <ul class="footer-links">
+      <li><a href="dashboard.html">Dashboard</a></li>
+      <li><a href="whitepaper.html">Whitepaper</a></li>
+      <li><a href="https://github.com/ultradag/ultradag" target="_blank">GitHub</a></li>
+    </ul>
+    <div class="footer-note">MIT / Apache-2.0</div>
+  </div>
+</footer>
+
+<script>
+// Nav scroll
+const nav = document.getElementById('nav');
+window.addEventListener('scroll', () => {
+  nav.classList.toggle('scrolled', window.scrollY > 40);
+});
+
+// Scroll reveal
+const reveals = document.querySelectorAll('.reveal');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible');
+      observer.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+reveals.forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>

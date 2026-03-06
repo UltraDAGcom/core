@@ -1,0 +1,15 @@
+[package]
+name = "ultradag-network"
+description = "P2P networking: peer discovery, gossip, block/tx propagation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ultradag-coin = { workspace = true }
+blake3 = { workspace = true }
+serde = { workspace = true, features = ["std"] }
+serde_json = "1"
+tokio = { workspace = true }
+tracing = { workspace = true }
+rand = { workspace = true }

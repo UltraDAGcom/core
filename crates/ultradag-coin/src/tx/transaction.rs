@@ -1,0 +1,194 @@
+use serde::{Deserialize, Serialize};
+
+use crate::address::{Address, Signature};
+
+/// A transaction transferring UDAG from one address to another.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Transaction {
+    pub from: Address,
+    pub to: Address,
+    pub amount: u64,
+    pub fee: u64,
+    pub nonce: u64,
+    /// Ed25519 public key of the sender (32 bytes). Used to verify the signature
+    /// and must hash to the `from` address: `blake3(pub_key) == from`.
+    pub pub_key: [u8; 32],
+    pub signature: Signature,
+}
+
+impl Transaction {
+    /// Compute the transaction hash (its unique identifier).
+    pub fn hash(&self) -> [u8; 32] {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&self.from.0);
+        hasher.update(&self.to.0);
+        hasher.update(&self.amount.to_le_bytes());
+        hasher.update(&self.fee.to_le_bytes());
+        hasher.update(&self.nonce.to_le_bytes());
+        *hasher.finalize().as_bytes()
+    }
+
+    /// The data that gets signed (everything except the signature).
+    /// Includes network identifier to prevent cross-network replay attacks.
+    pub fn signable_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(100);
+        buf.extend_from_slice(crate::constants::NETWORK_ID);
+        buf.extend_from_slice(&self.from.0);
+        buf.extend_from_slice(&self.to.0);
+        buf.extend_from_slice(&self.amount.to_le_bytes());
+        buf.extend_from_slice(&self.fee.to_le_bytes());
+        buf.extend_from_slice(&self.nonce.to_le_bytes());
+        buf
+    }
+
+    pub fn total_cost(&self) -> u64 {
+        self.amount.saturating_add(self.fee)
+    }
+
+    /// Verify that the Ed25519 signature is valid and the pub_key hashes to `from`.
+    pub fn verify_signature(&self) -> bool {
+        // 1. Verify pub_key hashes to the from address
+        let expected_addr = Address(*blake3::hash(&self.pub_key).as_bytes());
+        if expected_addr != self.from {
+            return false;
+        }
+
+        // 2. Parse the verifying key
+        let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(&self.pub_key) else {
+            return false;
+        };
+
+        // 3. Verify the signature over signable_bytes
+        self.signature.verify(&vk, &self.signable_bytes())
+    }
+}
+
+/// Coinbase transaction — block reward to validator.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoinbaseTx {
+    pub to: Address,
+    pub amount: u64,
+    pub height: u64,
+}
+
+impl CoinbaseTx {
+    pub fn hash(&self) -> [u8; 32] {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&self.to.0);
+        hasher.update(&self.amount.to_le_bytes());
+        hasher.update(&self.height.to_le_bytes());
+        *hasher.finalize().as_bytes()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_signed_tx(sk: &crate::address::SecretKey, amount: u64, fee: u64, nonce: u64) -> Transaction {
+        let mut tx = Transaction {
+            from: sk.address(),
+            to: Address::ZERO,
+            amount,
+            fee,
+            nonce,
+            pub_key: sk.verifying_key().to_bytes(),
+            signature: Signature([0u8; 64]),
+        };
+        tx.signature = sk.sign(&tx.signable_bytes());
+        tx
+    }
+
+    fn make_tx(amount: u64, fee: u64, nonce: u64) -> Transaction {
+        let sk = crate::address::SecretKey::generate();
+        make_signed_tx(&sk, amount, fee, nonce)
+    }
+
+    #[test]
+    fn hash_is_deterministic() {
+        let sk = crate::address::SecretKey::from_bytes([1u8; 32]);
+        let tx = make_signed_tx(&sk, 100, 10, 0);
+        assert_eq!(tx.hash(), tx.hash());
+    }
+
+    #[test]
+    fn different_transactions_have_different_hashes() {
+        let tx1 = make_tx(100, 10, 0);
+        let tx2 = make_tx(200, 10, 0);
+        assert_ne!(tx1.hash(), tx2.hash());
+    }
+
+    #[test]
+    fn different_nonce_different_hash() {
+        let sk = crate::address::SecretKey::from_bytes([1u8; 32]);
+        let tx1 = make_signed_tx(&sk, 100, 10, 0);
+        let tx2 = make_signed_tx(&sk, 100, 10, 1);
+        assert_ne!(tx1.hash(), tx2.hash());
+    }
+
+    #[test]
+    fn signable_bytes_is_consistent() {
+        let sk = crate::address::SecretKey::from_bytes([5u8; 32]);
+        let tx = make_signed_tx(&sk, 50, 5, 3);
+        assert_eq!(tx.signable_bytes(), tx.signable_bytes());
+        // Should be NETWORK_ID (19) + from (32) + to (32) + amount (8) + fee (8) + nonce (8) = 107 bytes
+        assert_eq!(tx.signable_bytes().len(), 107);
+    }
+
+    #[test]
+    fn signable_bytes_excludes_signature() {
+        let sk = crate::address::SecretKey::from_bytes([5u8; 32]);
+        let mut tx1 = make_signed_tx(&sk, 50, 5, 0);
+        let tx2_signable = tx1.signable_bytes();
+        tx1.signature = Signature([0xff; 64]);
+        assert_eq!(tx2_signable, tx1.signable_bytes());
+    }
+
+    #[test]
+    fn total_cost_equals_amount_plus_fee() {
+        let tx = make_tx(100, 10, 0);
+        assert_eq!(tx.total_cost(), 110);
+    }
+
+    #[test]
+    fn total_cost_saturates_on_overflow() {
+        let sk = crate::address::SecretKey::from_bytes([1u8; 32]);
+        let tx = make_signed_tx(&sk, u64::MAX, 1, 0);
+        assert_eq!(tx.total_cost(), u64::MAX);
+    }
+
+    #[test]
+    fn verify_signature_valid() {
+        let sk = crate::address::SecretKey::generate();
+        let tx = make_signed_tx(&sk, 100, 10, 0);
+        assert!(tx.verify_signature());
+    }
+
+    #[test]
+    fn verify_signature_wrong_key() {
+        let sk1 = crate::address::SecretKey::generate();
+        let sk2 = crate::address::SecretKey::generate();
+        let mut tx = make_signed_tx(&sk1, 100, 10, 0);
+        // Replace pub_key with wrong key
+        tx.pub_key = sk2.verifying_key().to_bytes();
+        assert!(!tx.verify_signature());
+    }
+
+    #[test]
+    fn verify_signature_tampered_amount() {
+        let sk = crate::address::SecretKey::generate();
+        let mut tx = make_signed_tx(&sk, 100, 10, 0);
+        tx.amount = 999;
+        assert!(!tx.verify_signature());
+    }
+
+    #[test]
+    fn coinbase_hash_is_deterministic() {
+        let cb = CoinbaseTx {
+            to: Address::ZERO,
+            amount: 5_000_000_000,
+            height: 0,
+        };
+        assert_eq!(cb.hash(), cb.hash());
+    }
+}

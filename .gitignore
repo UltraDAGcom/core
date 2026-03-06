@@ -1,0 +1,10 @@
+/target
+**/target
+**/*.rs.bk
+*.swp
+*.swo
+.DS_Store
+*.json.bak
+/testnet_results
+/benchmark_results
+wallet*.json

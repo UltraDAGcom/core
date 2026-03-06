@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UltraDAG — Whitepaper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080b0f;--bg2:#0d1118;--bg3:#111820;
+  --border:#1e2a38;--border2:#253040;
+  --dim:#2e4055;--muted:#4a6480;--subtle:#6b8aaa;
+  --body:#8fafc8;--bright:#c4daf0;--white:#e8f2fa;
+  --accent:#3d9be9;--accent2:#1a6fb5;
+  --glow:rgba(61,155,233,0.12);
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--body);font-family:'Cormorant',serif;font-size:18px;line-height:1.75;overflow-x:hidden}
+a{color:var(--accent);text-decoration:none;transition:color .2s}
+a:hover{color:var(--white)}
+
+/* NOISE */
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.4}
+
+/* GRID BG */
+.grid-bg{position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.15;pointer-events:none;z-index:0;mask-image:radial-gradient(ellipse 80% 40% at 50% 0%,black 20%,transparent 100%)}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid transparent;transition:border-color .3s,background .3s}
+nav.scrolled{border-color:var(--border);background:rgba(8,11,15,.9);backdrop-filter:blur(12px)}
+.nav-logo{font-family:'Cormorant',serif;font-size:22px;font-weight:300;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px}
+.nav-logo-mark{width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
+.nav-logo-mark::after{content:'';width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)}
+.nav-links{display:flex;align-items:center;gap:32px;list-style:none}
+.nav-links a{font-family:'DM Mono',monospace;font-size:12px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s}
+.nav-links a:hover{color:var(--white)}
+.nav-links a.active{color:var(--accent)}
+.nav-cta{color:var(--accent)!important;border:1px solid var(--accent2);padding:8px 18px;border-radius:2px;transition:background .2s!important}
+.nav-cta:hover{background:var(--glow)}
+
+/* PAPER CONTAINER */
+.paper{position:relative;z-index:1;max-width:820px;margin:0 auto;padding:120px 48px 80px}
+
+/* TITLE */
+.paper-title{font-family:'Cormorant',serif;font-size:clamp(40px,6vw,64px);font-weight:300;line-height:1.05;color:var(--white);margin-bottom:8px;letter-spacing:-.01em}
+.paper-title em{font-style:italic;color:var(--accent)}
+.paper-subtitle{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:48px}
+
+/* ABSTRACT */
+.abstract{border-left:2px solid var(--accent2);padding:24px 32px;background:var(--bg2);margin-bottom:64px;border-radius:0 2px 2px 0}
+.abstract-label{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+.abstract p{font-size:17px;font-weight:300;color:var(--subtle);line-height:1.7}
+
+/* TOC */
+.toc{border:1px solid var(--border);background:var(--bg2);padding:32px 40px;margin-bottom:64px;border-radius:2px}
+.toc-title{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:16px}
+.toc ol{padding-left:20px;counter-reset:toc}
+.toc li{font-family:'Syne',sans-serif;font-size:14px;color:var(--subtle);margin-bottom:6px;padding-left:4px}
+.toc a{color:var(--subtle);transition:color .2s}
+.toc a:hover{color:var(--accent)}
+
+/* HEADINGS */
+h2{font-family:'Cormorant',serif;font-size:36px;font-weight:300;color:var(--white);margin:72px 0 12px;padding-top:24px;border-top:1px solid var(--border);line-height:1.15}
+h2:first-of-type{border-top:none;margin-top:0}
+h2 em{font-style:italic;color:var(--accent)}
+h3{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--bright);margin:40px 0 12px;letter-spacing:.01em}
+h4{font-family:'Syne',sans-serif;font-size:15px;font-weight:600;color:var(--bright);margin:28px 0 8px}
+
+/* BODY TEXT */
+.paper p{margin-bottom:16px;font-weight:300;color:var(--body)}
+.paper strong{color:var(--bright);font-weight:600}
+.paper em{color:var(--subtle);font-style:italic}
+
+/* MATH / DEFINITIONS */
+.def{border-left:2px solid var(--border2);padding:16px 24px;background:var(--bg2);margin:20px 0;border-radius:0 2px 2px 0}
+.def-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+
+/* CODE / FORMULAS */
+code{font-family:'DM Mono',monospace;font-size:14px;color:var(--accent);background:var(--bg3);padding:2px 8px;border-radius:2px;border:1px solid var(--border)}
+pre{background:var(--bg3);border:1px solid var(--border);border-radius:2px;padding:20px 24px;overflow-x:auto;font-family:'DM Mono',monospace;font-size:13px;line-height:1.7;color:var(--body);margin:16px 0 24px}
+
+/* TABLES */
+table{width:100%;border-collapse:collapse;margin:20px 0 28px;font-size:15px}
+thead{border-bottom:2px solid var(--border)}
+th{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 16px;background:var(--bg2)}
+td{padding:10px 16px;border-bottom:1px solid var(--border);color:var(--body);font-weight:300}
+tr:hover td{background:var(--bg2)}
+
+/* LISTS */
+.paper ul,.paper ol{margin:12px 0 20px;padding-left:24px}
+.paper li{margin-bottom:6px;font-weight:300}
+.paper li strong{font-weight:600}
+
+/* SECTION NUMBERS */
+.sec-num{font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);letter-spacing:.05em;margin-right:8px}
+
+/* FOOTER */
+footer{position:relative;z-index:1;border-top:1px solid var(--border);background:var(--bg);margin-top:80px}
+.footer-inner{max-width:820px;margin:0 auto;padding:48px;display:flex;justify-content:space-between;align-items:center}
+.footer-logo{font-family:'Cormorant',serif;font-size:20px;font-weight:300;color:var(--subtle);letter-spacing:.06em}
+.footer-links{display:flex;gap:28px;list-style:none}
+.footer-links a{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-decoration:none;transition:color .2s}
+.footer-links a:hover{color:var(--subtle)}
+.footer-note{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase}
+
+/* RESPONSIVE */
+@media(max-width:900px){
+  nav{padding:0 24px}
+  .nav-links{display:none}
+  .paper{padding:100px 24px 60px}
+  .paper-title{font-size:40px}
+  h2{font-size:28px}
+  .abstract{padding:16px 20px}
+  .toc{padding:20px 24px}
+  .footer-inner{flex-direction:column;gap:24px;text-align:center;padding:32px 24px}
+  .footer-links{flex-wrap:wrap;justify-content:center}
+  table{font-size:13px}
+  th,td{padding:8px 10px}
+}
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+
+<!-- NAV -->
+<nav id="nav">
+  <a href="index.html" class="nav-logo">
+    <div class="nav-logo-mark"></div>
+    UltraDAG
+  </a>
+  <ul class="nav-links">
+    <li><a href="index.html#consensus">Consensus</a></li>
+    <li><a href="index.html#tokenomics">Tokenomics</a></li>
+    <li><a href="whitepaper.html" class="active">Whitepaper</a></li>
+    <li><a href="index.html#run">Run a Node</a></li>
+    <li><a href="https://github.com/ultradag/ultradag" target="_blank">GitHub</a></li>
+    <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
+  </ul>
+</nav>
+
+<!-- CONTENT -->
+<div class="paper">
+
+  <p class="paper-subtitle">Version 1.0 &mdash; March 2026</p>
+  <h1 class="paper-title">UltraDAG: A Leaderless DAG-BFT <em>Cryptocurrency</em></h1>
+
+  <!-- ABSTRACT -->
+  <div class="abstract">
+    <div class="abstract-label">Abstract</div>
+    <p>UltraDAG is a cryptocurrency built on a novel leaderless DAG-BFT consensus protocol. Unlike traditional blockchains where a single leader proposes blocks sequentially, UltraDAG allows all validators to produce cryptographically signed vertices concurrently. These vertices form a directed acyclic graph (DAG) where each vertex references all known tips as parents. Finality is achieved through a descendant-coverage rule: a vertex is considered final when a Byzantine fault tolerant supermajority of validators have built upon it. The protocol requires no leader election, no view changes, and no explicit voting rounds &mdash; the DAG structure itself serves as an implicit, persistent vote.</p>
+    <p style="margin-top:12px">UltraDAG implements an account-based ledger with Bitcoin-inspired tokenomics (21 million supply cap, halving schedule) and Ed25519 cryptography throughout. The system has been verified through 238 automated tests covering BFT safety rules, fault tolerance, cryptographic correctness, and double-spend prevention, and has been validated on a 4-node testnet through 200+ consensus rounds with stable 2&ndash;3 round finality latency.</p>
+  </div>
+
+  <!-- TOC -->
+  <div class="toc">
+    <div class="toc-title">Contents</div>
+    <ol>
+      <li><a href="#s1">Introduction</a></li>
+      <li><a href="#s2">System Model</a></li>
+      <li><a href="#s3">Protocol Description</a></li>
+      <li><a href="#s4">Finality</a></li>
+      <li><a href="#s5">Safety</a></li>
+      <li><a href="#s6">Liveness</a></li>
+      <li><a href="#s7">Equivocation Handling</a></li>
+      <li><a href="#s8">State Machine</a></li>
+      <li><a href="#s9">Tokenomics</a></li>
+      <li><a href="#s10">Network Protocol</a></li>
+      <li><a href="#s11">Implementation</a></li>
+      <li><a href="#s12">Security Analysis</a></li>
+      <li><a href="#s13">Testnet Results</a></li>
+      <li><a href="#s14">Comparison with Related Work</a></li>
+      <li><a href="#s15">Future Work</a></li>
+      <li><a href="#s16">Conclusion</a></li>
+    </ol>
+  </div>
+
+  <!-- 1. INTRODUCTION -->
+  <h2 id="s1"><span class="sec-num">1.</span> Introduction</h2>
+
+  <h3>1.1 Motivation</h3>
+  <p>Traditional Byzantine Fault Tolerant (BFT) consensus protocols &mdash; such as PBFT, Tendermint, and HotStuff &mdash; operate in a leader-based paradigm. In each round or view, a designated leader proposes a block, and other validators vote on it. This creates three fundamental limitations:</p>
+  <ol>
+    <li><strong>Single point of failure per round.</strong> If the leader is slow, crashed, or Byzantine, the round stalls until a view change occurs.</li>
+    <li><strong>Sequential throughput.</strong> Only one block is produced per round, regardless of the number of validators.</li>
+    <li><strong>Protocol complexity.</strong> View change mechanisms add significant complexity and are historically the most bug-prone components of BFT protocols.</li>
+  </ol>
+  <p>DAG-based consensus protocols address these limitations by allowing all validators to produce blocks (vertices) concurrently. Recent protocols such as DAG-Rider, Tusk, Bullshark, and Narwhal have demonstrated that DAG structures can achieve consensus without explicit voting rounds.</p>
+
+  <h3>1.2 Contribution</h3>
+  <p>UltraDAG implements a complete, working cryptocurrency using a custom leaderless DAG-BFT protocol with the following properties:</p>
+  <ul>
+    <li><strong>Leaderless vertex production.</strong> All validators produce vertices concurrently every round, with no leader election.</li>
+    <li><strong>Implicit finality via descendant coverage.</strong> A vertex is finalized when &lceil;2n/3&rceil; distinct validators have at least one descendant of it in the DAG.</li>
+    <li><strong>Parent finality guarantee.</strong> A vertex is only finalized after all its parents are finalized, ensuring correct causal ordering for state application.</li>
+    <li><strong>Single-round vertex propagation.</strong> Vertices are broadcast once, not voted on. The DAG structure accumulates &ldquo;votes&rdquo; automatically as subsequent vertices reference prior ones.</li>
+    <li><strong>Equivocation detection with permanent banning.</strong> Validators that produce conflicting vertices in the same round are detected, evidence is broadcast, and they are permanently excluded.</li>
+  </ul>
+
+  <!-- 2. SYSTEM MODEL -->
+  <h2 id="s2"><span class="sec-num">2.</span> System Model</h2>
+
+  <h3>2.1 Participants</h3>
+  <p>Let <strong>V</strong> = {v<sub>1</sub>, v<sub>2</sub>, &hellip;, v<sub>n</sub>} be the set of <strong>n</strong> validators. Each validator v<sub>i</sub> holds an Ed25519 keypair (sk<sub>i</sub>, pk<sub>i</sub>) and is identified by an address:</p>
+  <pre>addr_i = Blake3(pk_i)</pre>
+  <p>We assume the standard BFT fault model: at most <strong>f</strong> validators are Byzantine, where <strong>n &ge; 3f + 1</strong>.</p>
+
+  <h3>2.2 Network Model</h3>
+  <p>The protocol assumes <strong>partial synchrony</strong>: there exists an unknown Global Stabilization Time (GST) after which all messages between honest validators are delivered within a bounded delay <strong>&delta;</strong>. Before GST, messages may be delayed arbitrarily.</p>
+
+  <h3>2.3 Cryptographic Primitives</h3>
+  <table>
+    <thead><tr><th>Primitive</th><th>Algorithm</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>Digital Signatures</td><td>Ed25519</td><td>Vertex and transaction authentication</td></tr>
+      <tr><td>Hashing</td><td>Blake3</td><td>Address derivation, vertex identity, Merkle trees</td></tr>
+      <tr><td>Replay Prevention</td><td>NETWORK_ID prefix</td><td>Cross-network signature isolation</td></tr>
+    </tbody>
+  </table>
+
+  <!-- 3. PROTOCOL DESCRIPTION -->
+  <h2 id="s3"><span class="sec-num">3.</span> Protocol Description</h2>
+
+  <h3>3.1 DAG Structure</h3>
+  <p>The core data structure is a directed acyclic graph <strong>G = (V, E)</strong> where V is the set of all accepted vertices and E = {(u, v) : H(u) &in; v.parents}. Each vertex is a tuple:</p>
+  <pre>v = (block, parents, round, validator, pub_key, signature)</pre>
+  <p>Where <strong>block</strong> contains transactions, <strong>parents</strong> references all DAG tips at time of creation, <strong>round</strong> is the logical round number, and <strong>signature</strong> is an Ed25519 signature over the vertex&rsquo;s signable bytes.</p>
+
+  <div class="def">
+    <div class="def-label">Vertex Identity</div>
+    <pre>H(v) = Blake3(block_hash || round_LE64 || validator || parent_0 || ... || parent_k)</pre>
+  </div>
+
+  <div class="def">
+    <div class="def-label">Signable Bytes</div>
+    <pre>signable(v) = NETWORK_ID || block_hash || parent_0 || ... || parent_k || round_LE64 || validator</pre>
+  </div>
+
+  <h3>3.2 Vertex Production</h3>
+  <p>Each honest validator produces exactly one vertex per round on a configurable timer (default: 5 seconds):</p>
+  <ol>
+    <li><strong>Determine round number.</strong> Set r = current_dag_round + 1.</li>
+    <li><strong>2f+1 round gate.</strong> If r &gt; 1 and |distinct_validators_in_round(r&minus;1)| &lt; &lceil;2n/3&rceil;, skip this round. After 3 consecutive skips, produce unconditionally (stall recovery).</li>
+    <li><strong>Equivocation check.</strong> If this validator already produced a vertex in round r, skip.</li>
+    <li><strong>Collect parents.</strong> Set parents = all current DAG tips.</li>
+    <li><strong>Build block.</strong> Include coinbase reward and pending mempool transactions.</li>
+    <li><strong>Sign and broadcast.</strong> Sign with Ed25519 and broadcast to all peers.</li>
+  </ol>
+
+  <h3>3.3 Vertex Acceptance</h3>
+  <p>A vertex v is accepted into the DAG if and only if <strong>all</strong> of the following hold:</p>
+  <ol>
+    <li><strong>No duplicate:</strong> H(v) is not already in the DAG</li>
+    <li><strong>Valid signature:</strong> Ed25519 verification succeeds, and Blake3(pub_key) == validator</li>
+    <li><strong>Parent existence:</strong> Every parent hash exists in the DAG or equals the genesis sentinel [0; 32]</li>
+    <li><strong>Round bound:</strong> v.round &le; current_round + 10</li>
+    <li><strong>No equivocation:</strong> No other vertex from the same validator in the same round exists</li>
+    <li><strong>Not Byzantine:</strong> The validator has not been marked Byzantine</li>
+  </ol>
+
+  <!-- 4. FINALITY -->
+  <h2 id="s4"><span class="sec-num">4.</span> Finality</h2>
+
+  <h3>4.1 Descendant-Coverage Finality Rule</h3>
+
+  <div class="def">
+    <div class="def-label">Definition &mdash; Descendant Validators</div>
+    <p>For a vertex v in DAG state G:</p>
+    <pre>DV(v, G) = { u.validator : u &in; descendants(v, G) }</pre>
+    <p>The set of distinct validator addresses that have produced at least one descendant of v.</p>
+  </div>
+
+  <div class="def">
+    <div class="def-label">Definition &mdash; Quorum Threshold</div>
+    <pre>q(n) = &lceil;2n/3&rceil; = &lfloor;(2n + 2) / 3&rfloor;</pre>
+    <p>When a <code>configured_validators</code> count is set, the threshold uses that fixed count instead of the dynamically registered count.</p>
+  </div>
+
+  <div class="def">
+    <div class="def-label">Definition &mdash; Finality</div>
+    <pre>FINALIZED(v) &hArr; |DV(v, G)| &ge; &lceil;2n/3&rceil; &and; (&forall;p &in; v.parents : FINALIZED(p))</pre>
+  </div>
+
+  <h3>4.2 Multi-Pass Finalization</h3>
+  <p>The finalization procedure must be called in a <strong>loop</strong> because finalizing a parent in pass k may enable its children to be finalized in pass k+1. Each pass collects non-finalized vertices into a <code>BTreeSet</code> for deterministic iteration order, checks the finality conditions, and sorts results in ancestor-first order.</p>
+
+  <h3>4.3 Parent Finality Guarantee</h3>
+  <p>A vertex may only be finalized if <strong>all its parents are already finalized</strong>. This ensures that when vertex v is finalized, all state changes from v&rsquo;s causal history have already been committed to the state engine. Without this guarantee, transactions could be applied against an incomplete state, producing non-deterministic results across nodes.</p>
+
+  <!-- 5. SAFETY -->
+  <h2 id="s5"><span class="sec-num">5.</span> Safety</h2>
+
+  <h3>5.1 No Conflicting Finality</h3>
+  <p>Two equivocating vertices (same validator, same round, different hash) cannot both be finalized. The equivocation detection rule ensures at most one vertex from a given validator in a given round exists in any honest node&rsquo;s DAG.</p>
+
+  <h3>5.2 Quorum Intersection Argument</h3>
+  <p>If vertex v is finalized at node A, then |DV(v, G<sub>A</sub>)| &ge; &lceil;2n/3&rceil;. If a conflicting vertex v&prime; were finalized at node B, then |DV(v&prime;, G<sub>B</sub>)| &ge; &lceil;2n/3&rceil;. By the quorum intersection property:</p>
+  <pre>|DV(v, G_A)| + |DV(v', G_B)| &ge; 2 &middot; &lceil;2n/3&rceil; &gt; n + f</pre>
+  <p>Therefore DV(v, G<sub>A</sub>) &cap; DV(v&prime;, G<sub>B</sub>) must contain at least one <strong>honest</strong> validator. This honest validator&rsquo;s DAG would contain both conflicting vertices, triggering equivocation detection &mdash; a contradiction.</p>
+  <p>For transaction-level conflicts (valid vertices from different validators containing conflicting transactions), safety is ensured by deterministic ordering: the vertex finalized first wins.</p>
+  <p><strong>Note:</strong> This is an argument sketch, not a formal proof.</p>
+
+  <!-- 6. LIVENESS -->
+  <h2 id="s6"><span class="sec-num">6.</span> Liveness</h2>
+
+  <p>If at least &lceil;2n/3&rceil; validators are honest and connected (after GST), the protocol makes progress. Each honest validator produces one vertex per round. After GST, vertices propagate within &delta; time. A vertex produced in round r accumulates honest descendants in rounds r+1 and r+2, reaching the finality threshold within 2&ndash;3 rounds.</p>
+  <p>The <strong>stall recovery mechanism</strong> ensures liveness during bootstrap: after 3 consecutive round skips (due to the 2f+1 gate), a validator produces unconditionally.</p>
+  <p><strong>Observed empirically:</strong> In testnet with 4 validators and 2&ndash;5 second rounds, finality lag stabilizes at 2&ndash;3 rounds through 200+ rounds of operation.</p>
+
+  <!-- 7. EQUIVOCATION HANDLING -->
+  <h2 id="s7"><span class="sec-num">7.</span> Equivocation Handling</h2>
+
+  <p>When a vertex v is submitted but another vertex v&prime; from the same validator in the same round already exists:</p>
+  <ol>
+    <li>Equivocation evidence [H(v), H(v&prime;)] is stored</li>
+    <li>The validator is <strong>permanently marked as Byzantine</strong></li>
+    <li>The insertion is rejected</li>
+    <li>Evidence is broadcast to all peers via <code>EquivocationEvidence</code> messages</li>
+    <li>All future vertices from this validator are rejected</li>
+  </ol>
+
+  <!-- 8. STATE MACHINE -->
+  <h2 id="s8"><span class="sec-num">8.</span> State Machine</h2>
+
+  <h3>8.1 Account-Based Ledger</h3>
+  <p>UltraDAG uses an account-based model with <strong>balance</strong> (in satoshis, 1 UDAG = 10<sup>8</sup> sats) and <strong>nonce</strong> (transaction counter for replay protection) per address.</p>
+
+  <h3>8.2 Transaction Validation</h3>
+  <ol>
+    <li>Blake3(pub_key) == from</li>
+    <li>Valid Ed25519 signature over NETWORK_ID || from || to || amount || fee || nonce</li>
+    <li>balance(from) &ge; amount + fee</li>
+    <li>nonce == current_nonce(from)</li>
+  </ol>
+
+  <h3>8.3 Deterministic Ordering</h3>
+  <p>Finalized vertices are applied to the state engine in deterministic order:</p>
+  <pre>order(v1, v2) =
+  round (ascending)    &rarr; primary key
+  ancestor count (asc) &rarr; secondary key
+  H(v) lexicographic   &rarr; tiebreaker</pre>
+
+  <!-- 9. TOKENOMICS -->
+  <h2 id="s9"><span class="sec-num">9.</span> Tokenomics</h2>
+
+  <table>
+    <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Maximum supply</td><td>21,000,000 UDAG</td></tr>
+      <tr><td>Smallest unit</td><td>1 satoshi = 10<sup>&minus;8</sup> UDAG</td></tr>
+      <tr><td>Initial block reward</td><td>50 UDAG</td></tr>
+      <tr><td>Halving interval</td><td>Every 210,000 finalized rounds</td></tr>
+      <tr><td>Default round time</td><td>5 seconds</td></tr>
+      <tr><td>Supply cap enforcement</td><td>Reward capped at MAX_SUPPLY boundary</td></tr>
+    </tbody>
+  </table>
+
+  <div class="def">
+    <div class="def-label">Block Reward Formula</div>
+    <pre>reward(h) = &lfloor;50 &times; 10&sup8; / 2^(h / 210000)&rfloor;</pre>
+    <p>With reward = 0 after 64 halvings. Each finalized vertex&rsquo;s coinbase credits the proposing validator with reward(height) + sum(fees).</p>
+  </div>
+
+  <!-- 10. NETWORK PROTOCOL -->
+  <h2 id="s10"><span class="sec-num">10.</span> Network Protocol</h2>
+
+  <p>Peers communicate over TCP with 4-byte big-endian length-prefixed JSON messages (max 4 MB). Each connection is split into independent PeerReader and PeerWriter halves.</p>
+
+  <table>
+    <thead><tr><th>Message</th><th>Direction</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>Hello</code></td><td>Bidirectional</td><td>Version, current DAG round, listen port</td></tr>
+      <tr><td><code>DagProposal</code></td><td>Broadcast</td><td>New signed DAG vertex</td></tr>
+      <tr><td><code>GetDagVertices</code></td><td>Request</td><td>Request vertices from a given round</td></tr>
+      <tr><td><code>DagVertices</code></td><td>Response</td><td>Batch of DAG vertices for sync</td></tr>
+      <tr><td><code>NewTx</code></td><td>Broadcast</td><td>New transaction for mempool</td></tr>
+      <tr><td><code>GetPeers / Peers</code></td><td>Request/Response</td><td>Gossip-based peer discovery</td></tr>
+      <tr><td><code>EquivocationEvidence</code></td><td>Broadcast</td><td>Two conflicting vertices as proof</td></tr>
+      <tr><td><code>Ping / Pong</code></td><td>Keepalive</td><td>Connection liveness</td></tr>
+    </tbody>
+  </table>
+
+  <!-- 11. IMPLEMENTATION -->
+  <h2 id="s11"><span class="sec-num">11.</span> Implementation</h2>
+
+  <h3>11.1 Architecture</h3>
+  <pre>ultradag-node      CLI binary: validator loop + HTTP RPC
+  &boxur;&mdash; ultradag-network   TCP P2P: peer discovery, DAG relay, sync
+       &boxur;&mdash; ultradag-coin    Core: consensus, state, crypto, persistence</pre>
+
+  <h3>11.2 Concurrency</h3>
+  <p>Built on Tokio for async I/O. All shared state (DAG, finality tracker, state engine, mempool) is protected by <code>tokio::sync::RwLock</code> with short lock scopes. Write locks are never held across I/O operations.</p>
+
+  <h3>11.3 Persistence</h3>
+  <p>All node state is periodically saved to disk using atomic file operations (write to .tmp, then rename). State is saved every 10 rounds and on graceful shutdown.</p>
+
+  <h3>11.4 Configured Validator Count</h3>
+  <p>The <code>--validators N</code> flag fixes the quorum threshold at &lceil;2N/3&rceil; regardless of dynamic registrations. This prevents phantom validator inflation &mdash; a class of bugs where stale registrations raise the quorum beyond what active validators can satisfy.</p>
+
+  <!-- 12. SECURITY ANALYSIS -->
+  <h2 id="s12"><span class="sec-num">12.</span> Security Analysis</h2>
+
+  <table>
+    <thead><tr><th>Attack</th><th>Defense</th></tr></thead>
+    <tbody>
+      <tr><td>Equivocation</td><td>One vertex per validator per round; permanent ban + evidence broadcast</td></tr>
+      <tr><td>Network replay</td><td>NETWORK_ID prefix in all signable bytes</td></tr>
+      <tr><td>DAG corruption</td><td>Parent existence check before insertion</td></tr>
+      <tr><td>Memory exhaustion</td><td>MAX_FUTURE_ROUNDS = 10; 4MB message limit</td></tr>
+      <tr><td>Mempool flooding</td><td>10K cap with fee-based eviction</td></tr>
+      <tr><td>Nothing-at-stake</td><td>Equivocation detection + permanent ban</td></tr>
+      <tr><td>Phantom validators</td><td>Configured validator count fixes quorum</td></tr>
+      <tr><td>Non-deterministic finality</td><td>BTreeSet iteration; deterministic hash ordering</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Known Limitations</h3>
+  <ol>
+    <li>No formal safety proof (argument sketch only)</li>
+    <li>No epoch-based validator set reconfiguration</li>
+    <li>No slashing or economic penalties</li>
+    <li>Timer-based rounds (clock synchronization dependency)</li>
+    <li>No optimistic responsiveness</li>
+    <li>Implicit votes only (descendant coverage, not explicit attestations)</li>
+    <li>Quadratic finality computation (O(V+E) per candidate)</li>
+  </ol>
+
+  <!-- 13. TESTNET RESULTS -->
+  <h2 id="s13"><span class="sec-num">13.</span> Testnet Results</h2>
+
+  <p>A 4-node local testnet was run for 200+ rounds:</p>
+
+  <table>
+    <thead><tr><th>Round</th><th>Validators</th><th>Finalized</th><th>Lag</th><th>Supply</th></tr></thead>
+    <tbody>
+      <tr><td>51</td><td>4</td><td>49</td><td>2</td><td>~2,450 UDAG</td></tr>
+      <tr><td>102</td><td>4</td><td>100</td><td>2</td><td>~5,000 UDAG</td></tr>
+      <tr><td>150</td><td>4</td><td>148</td><td>2</td><td>~7,400 UDAG</td></tr>
+      <tr><td>203</td><td>4</td><td>201</td><td>3</td><td>~10,050 UDAG</td></tr>
+    </tbody>
+  </table>
+
+  <!-- 14. COMPARISON -->
+  <h2 id="s14"><span class="sec-num">14.</span> Comparison with Related Work</h2>
+
+  <table>
+    <thead><tr><th>Protocol</th><th>Leader</th><th>Finality</th><th>Votes</th></tr></thead>
+    <tbody>
+      <tr><td>PBFT</td><td>Per-view</td><td>3 phases</td><td>Explicit</td></tr>
+      <tr><td>Tendermint</td><td>Round-robin</td><td>2 phases</td><td>Explicit</td></tr>
+      <tr><td>HotStuff</td><td>Rotating</td><td>Pipeline</td><td>Threshold</td></tr>
+      <tr><td>DAG-Rider</td><td>None</td><td>Wave-based</td><td>Implicit (DAG)</td></tr>
+      <tr><td>Narwhal/Tusk</td><td>None (DAG) + leader</td><td>Separate</td><td>Mixed</td></tr>
+      <tr><td>Bullshark</td><td>Anchor-based</td><td>2 rounds</td><td>Implicit (DAG)</td></tr>
+      <tr><td><strong>UltraDAG</strong></td><td><strong>None</strong></td><td><strong>Descendant coverage</strong></td><td><strong>Implicit (DAG)</strong></td></tr>
+    </tbody>
+  </table>
+
+  <!-- 15. FUTURE WORK -->
+  <h2 id="s15"><span class="sec-num">15.</span> Future Work</h2>
+
+  <ol>
+    <li><strong>Epoch-based validator reconfiguration</strong> &mdash; safe transitions between validator sets</li>
+    <li><strong>Per-peer rate limiting</strong> &mdash; defense against message flooding</li>
+    <li><strong>Incremental descendant tracking</strong> &mdash; reduce finality check overhead</li>
+    <li><strong>Formal verification</strong> &mdash; machine-checkable safety proof</li>
+    <li><strong>Data availability separation</strong> &mdash; Narwhal-style for higher throughput</li>
+    <li><strong>Optimistic responsiveness</strong> &mdash; advance at network speed when all honest</li>
+    <li><strong>Slashing mechanism</strong> &mdash; economic penalties for equivocation</li>
+    <li><strong>Wire protocol versioning</strong> &mdash; forward-compatible upgrades</li>
+  </ol>
+
+  <!-- 16. CONCLUSION -->
+  <h2 id="s16"><span class="sec-num">16.</span> Conclusion</h2>
+
+  <p>UltraDAG demonstrates that a complete, working cryptocurrency can be built on a leaderless DAG-BFT consensus protocol with minimal complexity. The descendant-coverage finality rule provides an intuitive and implementable path to BFT finality without leader election, view changes, or explicit voting rounds. The parent finality guarantee ensures correct state derivation, and the configured validator count mechanism provides practical stability for testnet deployment.</p>
+  <p>The protocol&rsquo;s safety relies on the standard BFT quorum intersection property &mdash; the same foundation used by PBFT, Tendermint, and HotStuff &mdash; applied to an implicit voting mechanism where DAG topology replaces explicit vote messages. While a formal safety proof remains future work, the system has been thoroughly tested with 238 automated tests covering all critical BFT properties and validated on a multi-node testnet through 200+ consensus rounds.</p>
+
+  <!-- REFERENCES -->
+  <h2 style="font-size:24px">References</h2>
+  <ol style="font-size:15px;color:var(--subtle)">
+    <li>Castro, M., &amp; Liskov, B. (1999). <em>Practical Byzantine Fault Tolerance.</em> OSDI.</li>
+    <li>Buchman, E. (2016). <em>Tendermint: Byzantine Fault Tolerance in the Age of Blockchains.</em></li>
+    <li>Yin, M., et al. (2019). <em>HotStuff: BFT Consensus with Linearity and Responsiveness.</em> PODC.</li>
+    <li>Keidar, I., et al. (2021). <em>All You Need is DAG.</em> PODC.</li>
+    <li>Danezis, G., et al. (2022). <em>Narwhal and Tusk: A DAG-based Mempool and Efficient BFT Consensus.</em> EuroSys.</li>
+    <li>Spiegelman, A., et al. (2022). <em>Bullshark: DAG BFT Protocols Made Practical.</em> CCS.</li>
+    <li>Bernstein, D. J., et al. (2012). <em>High-speed high-security signatures.</em> CHES.</li>
+    <li>O&rsquo;Connor, J. (2019). <em>BLAKE3: One function, fast everywhere.</em></li>
+  </ol>
+
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">UltraDAG</div>
+    <ul class="footer-links">
+      <li><a href="index.html">Home</a></li>
+      <li><a href="dashboard.html">Dashboard</a></li>
+      <li><a href="https://github.com/ultradag/ultradag" target="_blank">GitHub</a></li>
+    </ul>
+    <div class="footer-note">MIT / Apache-2.0</div>
+  </div>
+</footer>
+
+<script>
+// Nav scroll
+const nav = document.getElementById('nav');
+window.addEventListener('scroll', () => {
+  nav.classList.toggle('scrolled', window.scrollY > 40);
+});
+</script>
+
+</body>
+</html>
