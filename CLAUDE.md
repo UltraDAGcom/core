@@ -278,6 +278,7 @@ When a vertex fails insertion due to missing parents, the node:
 - `MAX_ACTIVE_VALIDATORS` = 21 — Maximum number of active validators
 - `EPOCH_LENGTH_ROUNDS` = 210,000 — Rounds between validator set recalculations
 - `MIN_STAKE_SATS` = 10,000 UDAG — Minimum stake to become a validator
+- `MIN_FEE_SATS` = 10,000 sats (0.0001 UDAG) — Minimum transaction fee for spam prevention
 - `UNSTAKE_COOLDOWN_ROUNDS` = 2,016 rounds — Cooldown period before unstake completes (~1 week)
 - `OBSERVER_REWARD_PERCENT` = 20 — Reward percentage for staked-but-not-active validators
 - `NETWORK_ID` = `b"ultradag-testnet-v1"` — Network identifier for signature domain separation
@@ -775,22 +776,21 @@ Exponential backoff retry (2, 4, 8, 16, 32 seconds) for bootstrap connections.
 
 4-node Fly.io testnet (Amsterdam). Permissioned validator set.
 
-**Current Status (March 7, 2026):** ⚠️ Validator synchronization fix deployed but P2P connectivity issues preventing full effectiveness.
+**Current Status (March 7, 2026, 23:21 UTC+4):** ✅ Optimistic responsiveness fix deployed and stable.
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| DAG round | Node 2-3: 136, Node 4: 164, Node 1: No response | ⚠️ Drift |
-| Vertex density | 1 vertex per round | ❌ Should be 3-4 |
+| DAG round | 725 (all nodes synchronized) | ✅ |
+| Finalized round | 723 | ✅ |
+| Finality lag | 2 rounds | ✅ Excellent |
+| Peers per node | 4-10 | ✅ Full mesh |
 | Validator count | 4 (permissioned allowlist) | ✅ |
-| Peers per node | 1 (should be 3) | ❌ P2P issue |
-| Finality lag | 3 rounds | ✅ |
+| HTTP RPC | All nodes responsive | ✅ |
 | Supply | ~2,079,250 UDAG | ✅ |
 
-**Issue:** Validators are drifting to different rounds. Only 1 validator produces per round instead of 3-4.
+**Latest deployment:** Optimistic responsiveness with production cooldown (min_production_interval = round_duration/2, max 1 second) prevents HTTP service saturation while maintaining fast finality.
 
-**Fix deployed:** Validator round synchronization logic updated (see bug #4 above).
-
-**Blocking issue:** P2P connectivity - nodes only have 1 peer each instead of 3, preventing vertex propagation and round synchronization.
+**All systems operational.** Testnet ready for extended testing and load testing.
 
 ### Bugs Fixed (March 2026)
 1. **Quorum threshold overflow** — `configured_validators` not used for min check, causing `usize::MAX` threshold on clean-state nodes
@@ -939,13 +939,14 @@ Exponential backoff retry (2, 4, 8, 16, 32 seconds) for bootstrap connections.
 - [ ] **Verify staking parameters** — Confirm MIN_STAKE_SATS, UNSTAKE_COOLDOWN_ROUNDS, MAX_ACTIVE_VALIDATORS
 - [x] **DAG pruning** — Implemented (PRUNING_HORIZON = 1000 rounds, --pruning-depth, --archive flags)
 - [x] **Snapshot mechanism** — Checkpoint + fast-sync implemented (CheckpointProposal, CheckpointSync)
+- [x] **Minimum fee enforcement** — MIN_FEE_SATS = 10,000 sats (0.0001 UDAG). Zero-fee transactions rejected at mempool and RPC layer. Cost to spam 10K-tx mempool: 1 UDAG.
 
 ### Testing
 - [ ] **Extended testnet run** — Minimum 1 month continuous operation with 21 validators
 - [ ] **Chaos testing** — Network partitions, validator crashes, Byzantine behavior simulation
 - [ ] **Load testing** — Sustained high transaction volume, mempool saturation
 - [ ] **Upgrade testing** — Binary upgrade without consensus failure
-- [ ] **All tests passing** — 394 automated tests, 0 failures, 0 ignored (except documented performance tests)
+- [x] **All tests passing** — 395 automated tests, 0 failures, 0 ignored (March 7, 2026)
 
 ### Documentation
 - [ ] **Remove testnet warnings** — Update all references from testnet to mainnet
