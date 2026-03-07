@@ -61,6 +61,16 @@ impl PeerRegistry {
         self.writers.read().await.len()
     }
 
+    /// Return list of connected peer addresses (writer keys).
+    pub async fn connected_addrs(&self) -> Vec<String> {
+        self.writers.read().await.keys().cloned().collect()
+    }
+
+    /// Return list of connected listen addresses.
+    pub async fn connected_listen_addrs(&self) -> Vec<String> {
+        self.connected_listen_addrs.read().await.iter().cloned().collect()
+    }
+
     /// Broadcast a message to all connected peers except `exclude`.
     pub async fn broadcast(&self, msg: &Message, exclude: &str) {
         let writers = self.writers.read().await;

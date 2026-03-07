@@ -26,6 +26,71 @@ pub const COINBASE_MATURITY: u64 = 100;
 /// Different for mainnet, testnet, devnet, etc.
 pub const NETWORK_ID: &[u8] = b"ultradag-testnet-v1";
 
+/// Developer allocation: 5% of total supply allocated at genesis.
+/// Funds protocol development. Visible and auditable from block 0.
+/// Total: 1,050,000 UDAG (5% of 21,000,000 UDAG max supply).
+pub const DEV_ALLOCATION_SATS: u64 = 1_050_000 * COIN;
+
+/// Developer allocation address seed for TESTNET.
+/// This seed is: "ultradag-dev-addr-testnet-v1\0\0\0\0" encoded as bytes.
+/// MAINNET REQUIREMENT: Replace with offline-generated keypair before mainnet launch.
+/// The private key for this testnet seed is derivable — acceptable for testnet only.
+/// For mainnet: generate offline, store in hardware wallet, never commit private key.
+pub const DEV_ADDRESS_SEED: [u8; 32] = [
+    0x75, 0x6c, 0x74, 0x72, 0x61, 0x64, 0x61, 0x67,
+    0x2d, 0x64, 0x65, 0x76, 0x2d, 0x61, 0x64, 0x64,
+    0x72, 0x2d, 0x74, 0x65, 0x73, 0x74, 0x6e, 0x65,
+    0x74, 0x2d, 0x76, 0x31, 0x00, 0x00, 0x00, 0x00,
+];
+
+/// Compile-time assertion: dev address seed must not be the old test placeholder.
+const _: () = assert!(
+    DEV_ADDRESS_SEED[0] != 0xDE,
+    "DEV_ADDRESS_SEED is still the test placeholder. Replace before any launch."
+);
+
+/// Return the deterministic developer address.
+pub fn dev_address() -> crate::address::Address {
+    crate::address::SecretKey::from_bytes(DEV_ADDRESS_SEED).address()
+}
+
+/// Maximum number of active validators (top stakers by amount).
+/// Odd number for clean BFT quorum (ceil(2*21/3) = 14).
+pub const MAX_ACTIVE_VALIDATORS: usize = 21;
+
+/// Epoch length in rounds. Validator set recalculated at epoch boundaries.
+/// Matches halving interval for clean alignment.
+pub const EPOCH_LENGTH_ROUNDS: u64 = 210_000;
+
+/// Observer reward percentage: staked-but-not-active addresses earn 20% of normal.
+pub const OBSERVER_REWARD_PERCENT: u64 = 20;
+
+/// How often to produce a checkpoint (in finalized rounds).
+/// Checkpoints enable fast-sync for new nodes.
+pub const CHECKPOINT_INTERVAL: u64 = 1_000;
+
+/// Compute the epoch number for a given round.
+pub fn epoch_of(round: u64) -> u64 {
+    round / EPOCH_LENGTH_ROUNDS
+}
+
+/// Check if a round is an epoch boundary (start of new epoch).
+pub fn is_epoch_boundary(round: u64) -> bool {
+    round % EPOCH_LENGTH_ROUNDS == 0
+}
+
+/// Deterministic seed for the testnet faucet keypair.
+/// Same on every node so all nodes recognize the faucet address.
+pub const FAUCET_SEED: [u8; 32] = [0xFA; 32];
+
+/// Faucet genesis pre-fund: 1,000,000 UDAG in sats.
+pub const FAUCET_PREFUND_SATS: u64 = 1_000_000 * COIN;
+
+/// Return the deterministic faucet keypair (same on every node).
+pub fn faucet_keypair() -> crate::address::SecretKey {
+    crate::address::SecretKey::from_bytes(FAUCET_SEED)
+}
+
 /// Calculate block reward for a given block height.
 pub fn block_reward(height: u64) -> u64 {
     let halvings = height / HALVING_INTERVAL;

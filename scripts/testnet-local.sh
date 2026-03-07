@@ -135,7 +135,7 @@ for i in $(seq 1 "$NUM_NODES"); do
     NODE_DIR="$TESTNET_DIR/node$i"
     mkdir -p "$NODE_DIR"
 
-    CMD=("$BINARY" --port "$PORT" --round-ms "$ROUND_MS" --validate --data-dir "$NODE_DIR" --validators "$NUM_NODES")
+    CMD=("$BINARY" --port "$PORT" --round-ms "$ROUND_MS" --validate --data-dir "$NODE_DIR" --validators "$NUM_NODES" --no-bootstrap)
     # Each node seeds from all previous nodes for mesh topology
     # (skip for node 1 which has no previous nodes)
     if [[ $i -gt 1 ]]; then

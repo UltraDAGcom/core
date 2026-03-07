@@ -314,6 +314,117 @@ fn distinct_validators_per_round() {
     assert_eq!(dag.distinct_validators_in_round(1).len(), 0);
 }
 
+/// Descendant validator counts update incrementally on insert.
+#[test]
+fn descendant_count_updates_on_insert() {
+    let sk0 = SecretKey::from_bytes([50u8; 32]);
+    let sk1 = SecretKey::from_bytes([51u8; 32]);
+    let sk2 = SecretKey::from_bytes([52u8; 32]);
+    let mut dag = BlockDag::new();
+
+    let v1 = make_vertex(80, 0, vec![], &sk0);
+    let h1 = v1.hash();
+    dag.insert(v1);
+    assert_eq!(dag.descendant_validator_count(&h1), 0);
+
+    let v2 = make_vertex(81, 1, vec![h1], &sk1);
+    let h2 = v2.hash();
+    dag.insert(v2);
+    assert_eq!(dag.descendant_validator_count(&h1), 1, "v1 should have 1 descendant validator");
+    assert_eq!(dag.descendant_validator_count(&h2), 0);
+
+    let v3 = make_vertex(82, 2, vec![h2], &sk2);
+    dag.insert(v3);
+    assert_eq!(dag.descendant_validator_count(&h1), 2, "v1 should have 2 descendant validators");
+    assert_eq!(dag.descendant_validator_count(&h2), 1, "v2 should have 1 descendant validator");
+}
+
+/// Same validator appearing multiple times only counts once.
+#[test]
+fn descendant_count_deduplicates_validators() {
+    let sk0 = SecretKey::from_bytes([55u8; 32]);
+    let mut dag = BlockDag::new();
+
+    let v1 = make_vertex(90, 0, vec![], &sk0);
+    let h1 = v1.hash();
+    dag.insert(v1);
+
+    // Same validator produces descendant
+    let v2 = make_vertex(91, 1, vec![h1], &sk0);
+    dag.insert(v2);
+
+    assert_eq!(dag.descendant_validator_count(&h1), 1,
+        "Same validator should only count once in descendant set");
+}
+
+/// Incremental counts match full BFS traversal result.
+#[test]
+fn incremental_count_matches_full_traversal() {
+    let sks: Vec<SecretKey> = (0..4u8).map(|i| {
+        let mut s = [0u8; 32]; s[0] = i + 60; SecretKey::from_bytes(s)
+    }).collect();
+    let mut dag = BlockDag::new();
+
+    // Build 25 rounds × 4 validators = 100 vertices
+    for round in 0u64..25 {
+        let tips = dag.tips();
+        let parents = if tips.is_empty() { vec![] } else { tips };
+        for (i, sk) in sks.iter().enumerate() {
+            let v = make_vertex(round * 4 + i as u64 + 100, round, parents.clone(), sk);
+            dag.insert(v);
+        }
+    }
+    assert_eq!(dag.len(), 100);
+
+    // For each vertex, verify incremental count matches full BFS
+    for round in 0u64..25 {
+        for v in dag.vertices_in_round(round) {
+            let h = v.hash();
+            let full_descendants = dag.descendants(&h);
+            let full_validators = dag.distinct_validators(&full_descendants);
+            let incremental_count = dag.descendant_validator_count(&h);
+            assert_eq!(
+                incremental_count, full_validators.len(),
+                "Mismatch at round {}: incremental={} vs full={}",
+                round, incremental_count, full_validators.len()
+            );
+        }
+    }
+}
+
+/// Finality check completes in < 10ms with precomputed counts.
+#[test]
+fn finality_check_uses_precomputed_counts() {
+    use ultradag_coin::consensus::dag::BlockDag;
+    use ultradag_coin::FinalityTracker;
+
+    let sks: Vec<SecretKey> = (0..4u8).map(|i| {
+        let mut s = [0u8; 32]; s[0] = i + 70; SecretKey::from_bytes(s)
+    }).collect();
+    let mut dag = BlockDag::new();
+    let mut ft = FinalityTracker::new(3);
+    for sk in &sks { ft.register_validator(sk.address()); }
+
+    // Build 50 rounds × 4 validators = 200 vertices
+    for round in 0u64..50 {
+        let tips = dag.tips();
+        let parents = if tips.is_empty() { vec![] } else { tips };
+        for (i, sk) in sks.iter().enumerate() {
+            let v = make_vertex(round * 4 + i as u64 + 200, round, parents.clone(), sk);
+            dag.insert(v);
+        }
+    }
+
+    let start = std::time::Instant::now();
+    loop {
+        let newly = ft.find_newly_finalized(&dag);
+        if newly.is_empty() { break; }
+    }
+    let elapsed = start.elapsed();
+    assert!(elapsed.as_millis() < 10,
+        "Finality check with 200 vertices should complete in < 10ms, took {}ms", elapsed.as_millis());
+}
+
 /// Diamond DAG topology: v1, v2 → v3 (references both), v4 (references both).
 /// Mutation: ancestors missing one branch in diamond → incomplete set.
 #[test]

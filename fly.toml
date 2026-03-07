@@ -1,0 +1,37 @@
+app = "ultradag-node-1"
+primary_region = "ams"
+
+[build]
+
+[env]
+  RUST_LOG = "info"
+  PORT = "9333"
+  RPC_PORT = "10333"
+  DATA_DIR = "/data"
+  VALIDATORS = "4"
+
+[mounts]
+  source = "ultradag_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 10333
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "60s"
+    interval = "15s"
+    method = "GET"
+    path = "/status"
+    timeout = "5s"
+
+[[services]]
+  internal_port = 9333
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 9333
+

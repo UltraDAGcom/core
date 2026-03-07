@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UltraDAG — DAG-BFT Consensus Visualization</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Syne:wght@400;600;800&display=swap');
+
+  :root {
+    --bg: #080c10;
+    --surface: #0d1117;
+    --border: #1e2a38;
+    --v0: #00d4ff;
+    --v1: #a78bfa;
+    --v2: #34d399;
+    --v3: #fb923c;
+    --finalized: #fbbf24;
+    --pending: #374151;
+    --text: #e2e8f0;
+    --muted: #4b5563;
+    --edge: #1e3a5f;
+    --edge-active: #2563eb;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 24px;
+    overflow-x: hidden;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+
+  .header h1 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: clamp(1.8rem, 4vw, 3rem);
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #00d4ff 0%, #a78bfa 50%, #34d399 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+
+  .header p {
+    color: var(--muted);
+    font-size: 0.8rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .back-link {
+    position: absolute;
+    top: 24px;
+    left: 24px;
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .back-link:hover {
+    color: var(--v0);
+  }
+
+  .viz-container {
+    width: 100%;
+    max-width: 900px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-size: 0.72rem;
+  }
+
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #22c55e;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .controls {
+    display: flex;
+    gap: 8px;
+  }
+
+  button {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  button:hover {
+    border-color: var(--v0);
+    color: var(--v0);
+  }
+
+  button.active {
+    background: var(--v0);
+    border-color: var(--v0);
+    color: var(--bg);
+  }
+
+  .canvas-wrap {
+    position: relative;
+    width: 100%;
+    height: 480px;
+  }
+
+  canvas {
+    width: 100%;
+    height: 100%;
+  }
+
+  .phase-banner {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.72rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+
+  .legend {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .legend-label {
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-right: 4px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.7rem;
+  }
+
+  .swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .swatch.ring {
+    background: transparent;
+    border: 2px solid currentColor;
+    width: 11px;
+    height: 11px;
+  }
+
+  .info-row {
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+    font-size: 0.72rem;
+    color: var(--muted);
+    line-height: 1.7;
+    min-height: 52px;
+  }
+
+  .info-row span {
+    color: var(--text);
+  }
+
+  @media(max-width: 768px) {
+    .canvas-wrap {
+      height: 360px;
+    }
+    .controls {
+      width: 100%;
+      justify-content: center;
+    }
+    button {
+      font-size: 0.65rem;
+      padding: 5px 10px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<a href="index.html" class="back-link">← Back to UltraDAG</a>
+
+<div class="header">
+  <h1>UltraDAG Consensus</h1>
+  <p>Leaderless DAG-BFT · Descendant-Coverage Finality · 4 Validators</p>
+</div>
+
+<div class="viz-container">
+  <div class="toolbar">
+    <div class="status-row">
+      <div class="status-item">
+        <div class="status-dot"></div>
+        <span id="stat-round">Round 0</span>
+      </div>
+      <div class="status-item">
+        <span style="color:var(--finalized)">■</span>
+        <span id="stat-finalized">0 finalized</span>
+      </div>
+      <div class="status-item">
+        <span style="color:var(--muted)">■</span>
+        <span id="stat-pending">0 pending</span>
+      </div>
+    </div>
+    <div class="controls">
+      <button id="btn-pause">Pause</button>
+      <button id="btn-reset">Reset</button>
+      <button id="btn-equivocation">Trigger Equivocation</button>
+    </div>
+  </div>
+
+  <div class="canvas-wrap">
+    <canvas id="canvas"></canvas>
+    <div class="phase-banner" id="phase-banner">Initializing…</div>
+  </div>
+
+  <div class="legend">
+    <span class="legend-label">Validators:</span>
+    <div class="legend-item"><div class="swatch" style="background:var(--v0)"></div>V0 — Alpha</div>
+    <div class="legend-item"><div class="swatch" style="background:var(--v1)"></div>V1 — Beta</div>
+    <div class="legend-item"><div class="swatch" style="background:var(--v2)"></div>V2 — Gamma</div>
+    <div class="legend-item"><div class="swatch" style="background:var(--v3)"></div>V3 — Delta</div>
+    <div class="legend-item"><div class="swatch" style="background:var(--finalized)"></div>Finalized</div>
+    <div class="legend-item"><div class="swatch ring" style="color:var(--muted)"></div>Pending</div>
+  </div>
+
+  <div class="info-row" id="info-row">
+    <span>Waiting for first round…</span>
+    Vertices are finalized when <span>⌈2n/3⌉ = 3</span> distinct validators have built upon them and all parents are finalized.
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+const VALIDATORS = 4;
+const QUORUM = Math.ceil(2 * VALIDATORS / 3); // 3
+const COLORS = ['#00d4ff', '#a78bfa', '#34d399', '#fb923c'];
+const BG = '#0d1117';
+const FINALIZED_COLOR = '#fbbf24';
+const PENDING_COLOR = '#374151';
+const BYZANTINE_COLOR = '#ef4444';
+
+const V_LABELS = ['Alpha', 'Beta', 'Gamma', 'Delta'];
+
+let paused = false;
+let vertices = [];
+let edges = [];
+let animQueue = [];
+let currentRound = 0;
+let animFrame;
+let lastTick = 0;
+let tickInterval = 1400; // ms per sub-step
+let equivocationPending = false;
+let infoText = '';
+
+// Layout
+const PADDING_LEFT = 90;
+const PADDING_RIGHT = 30;
+const PADDING_TOP = 60;
+const PADDING_BOTTOM = 30;
+const NODE_R = 14;
+
+function resize() {
+  const wrap = canvas.parentElement;
+  canvas.width = wrap.clientWidth * devicePixelRatio;
+  canvas.height = wrap.clientHeight * devicePixelRatio;
+  canvas.style.width = wrap.clientWidth + 'px';
+  canvas.style.height = wrap.clientHeight + 'px';
+}
+
+function getPos(round, validator) {
+  const W = canvas.width / devicePixelRatio;
+  const H = canvas.height / devicePixelRatio;
+  const usableW = W - PADDING_LEFT - PADDING_RIGHT;
+  const usableH = H - PADDING_TOP - PADDING_BOTTOM;
+  const maxRounds = 7;
+  const x = PADDING_LEFT + (round / (maxRounds - 1)) * usableW;
+  const y = PADDING_TOP + (validator / (VALIDATORS - 1)) * usableH;
+  return { x, y };
+}
+
+function makeVertex(round, validator, parents, isByzantine = false) {
+  const id = `v${round}_${validator}`;
+  const pos = getPos(round, validator);
+  return {
+    id, round, validator, parents,
+    x: pos.x, y: pos.y,
+    finalized: false,
+    byzantine: isByzantine,
+    alpha: 0, // animation: 0→1
+    descendantValidators: new Set(),
+    finalizedAt: null,
+  };
+}
+
+function initGenesis() {
+  vertices = [];
+  edges = [];
+  currentRound = 0;
+
+  // Genesis sentinel — represented as a small dot at round 0
+  for (let v = 0; v < VALIDATORS; v++) {
+    const vtx = makeVertex(0, v, []);
+    vtx.alpha = 1;
+    vtx.finalized = true;
+    vtx.finalizedAt = 0;
+    vertices.push(vtx);
+  }
+}
+
+function getVertex(round, validator) {
+  return vertices.find(v => v.round === round && v.validator === validator);
+}
+
+function getAllFinalized() {
+  return vertices.filter(v => v.finalized);
+}
+
+function getDescendantValidators(vtx) {
+  // BFS through children
+  const visited = new Set();
+  const queue = [vtx.id];
+  const validatorSet = new Set();
+  while (queue.length) {
+    const id = queue.shift();
+    if (visited.has(id)) continue;
+    visited.add(id);
+    const node = vertices.find(v => v.id === id);
+    if (!node) continue;
+    // find all vertices that reference this as a parent
+    vertices.forEach(v => {
+      if (v.parents.includes(id) && !visited.has(v.id)) {
+        validatorSet.add(v.validator);
+        queue.push(v.id);
+      }
+    });
+  }
+  return validatorSet;
+}
+
+function checkFinality() {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    vertices.forEach(vtx => {
+      if (vtx.finalized || vtx.byzantine) return;
+      // All parents finalized?
+      const parentsOk = vtx.parents.every(pid => {
+        const p = vertices.find(v => v.id === pid);
+        return p && p.finalized;
+      });
+      if (!parentsOk) return;
+      // Descendant coverage
+      const dv = getDescendantValidators(vtx);
+      vtx.descendantValidators = dv;
+      if (dv.size >= QUORUM) {
+        vtx.finalized = true;
+        vtx.finalizedAt = currentRound;
+        changed = true;
+      }
+    });
+  }
+}
+
+// Build a round: each validator produces a vertex referencing all tips in previous round
+function buildRound(round) {
+  const tips = vertices.filter(v => v.round === round - 1).map(v => v.id);
+  const newVerts = [];
+  for (let v = 0; v < VALIDATORS; v++) {
+    const vtx = makeVertex(round, v, tips);
+    vertices.push(vtx);
+    newVerts.push(vtx);
+    // edges from tips to new vertex
+    tips.forEach(tid => edges.push({ from: tid, to: vtx.id, alpha: 0 }));
+  }
+  return newVerts;
+}
+
+// Animation state machine
+// Steps: 
+//   1. Show new round vertices appearing one by one
+//   2. Show edges animating in
+//   3. Check/animate finality
+//   4. Update stats
+
+let step = 'idle';
+let stepData = {};
+
+function startRound(round) {
+  currentRound = round;
+  const newVerts = buildRound(round);
+  
+  // Reposition existing vertices for scrolling effect
+  repositionAll();
+
+  step = 'appearing';
+  stepData = { verts: newVerts, index: 0, edgesShown: false };
+  document.getElementById('phase-banner').textContent = `Round ${round} — Validators broadcasting vertices`;
+  setInfo(`Round ${round}: All ${VALIDATORS} validators produce a signed vertex referencing ${newVerts[0].parents.length} parent(s).`);
+}
+
+function repositionAll() {
+  // Slide old vertices left, place new ones at right
+  const maxRound = Math.max(...vertices.map(v => v.round));
+  const minRound = Math.max(0, maxRound - 6);
+  vertices.forEach(v => {
+    const relRound = v.round - minRound;
+    const pos = getPos(relRound, v.validator);
+    v.x = pos.x;
+    v.y = pos.y;
+  });
+  edges.forEach(e => {
+    // edges just connect vertices dynamically, no position stored
+  });
+}
+
+function setInfo(text) {
+  infoText = text;
+  document.getElementById('info-row').innerHTML = text;
+}
+
+let tickCount = 0;
+
+function tick(ts) {
+  if (!paused) {
+    if (ts - lastTick > tickInterval) {
+      lastTick = ts;
+      advance();
+    }
+  }
+  render();
+  // Animate alphas
+  let needsAnim = false;
+  vertices.forEach(v => {
+    if (v.alpha < 1) { v.alpha = Math.min(1, v.alpha + 0.06); needsAnim = true; }
+  });
+  edges.forEach(e => {
+    if (e.alpha < 1) { e.alpha = Math.min(1, e.alpha + 0.05); needsAnim = true; }
+  });
+  animFrame = requestAnimationFrame(tick);
+}
+
+function advance() {
+  tickCount++;
+
+  if (step === 'idle') {
+    if (currentRound < 6) {
+      startRound(currentRound + 1);
+    } else {
+      // Loop: reset after a pause
+      step = 'resetting';
+      document.getElementById('phase-banner').textContent = 'Consensus achieved — restarting…';
+      setTimeout(() => {
+        reset();
+      }, 2200);
+    }
+    return;
+  }
+
+  if (step === 'appearing') {
+    // Reveal vertices one by one
+    const { verts, index } = stepData;
+    if (index < verts.length) {
+      verts[index].alpha = 0.01; // trigger fade-in
+      stepData.index++;
+      if (stepData.index === verts.length) {
+        // All vertices shown, now show edges
+        setTimeout(() => {
+          revealEdgesForRound(currentRound);
+          step = 'edges';
+          document.getElementById('phase-banner').textContent = `Round ${currentRound} — Parent references forming`;
+          setInfo(`Round ${currentRound}: Each vertex references all ${verts[0].parents.length} tips from round ${currentRound-1} as parents, weaving them into the DAG.`);
+        }, 300);
+      }
+    }
+    return;
+  }
+
+  if (step === 'edges') {
+    // Edges animate automatically, just wait then check finality
+    step = 'finality';
+    document.getElementById('phase-banner').textContent = `Round ${currentRound} — Checking finality (quorum = ${QUORUM})`;
+    checkFinality();
+    const finCount = vertices.filter(v => v.finalized).length;
+    const justFinalized = vertices.filter(v => v.finalizedAt === currentRound - 1);
+    if (justFinalized.length > 0) {
+      setInfo(
+        `Finality: ${justFinalized.length} vertex/vertices from round ${currentRound-1} now have ≥${QUORUM} distinct validator descendants → <span style="color:#fbbf24">FINALIZED</span>. ` +
+        `Transactions applied to state in deterministic order.` 
+      );
+    } else {
+      setInfo(
+        `Round ${currentRound-1} vertices not yet finalized — need ${QUORUM} distinct validator descendants. Waiting for more rounds.` 
+      );
+    }
+    updateStats();
+    step = 'idle';
+    return;
+  }
+
+  if (step === 'equivocation') {
+    const { eqVtx } = stepData;
+    eqVtx.byzantine = true;
+    setInfo(
+      `⚠ Equivocation detected! Validator V${eqVtx.validator} (${V_LABELS[eqVtx.validator]}) produced two conflicting vertices in the same round. ` +
+      `Evidence broadcast to all peers. Validator permanently banned. Byzantine vertex rejected.` 
+    );
+    document.getElementById('phase-banner').textContent = `Equivocation detected — V${eqVtx.validator} banned`;
+    setTimeout(() => { step = 'idle'; }, 2000);
+  }
+}
+
+function revealEdgesForRound(round) {
+  const roundVerts = vertices.filter(v => v.round === round);
+  edges.forEach(e => {
+    const toVtx = vertices.find(v => v.id === e.to);
+    if (toVtx && toVtx.round === round) {
+      e.alpha = 0.01;
+    }
+  });
+}
+
+function triggerEquivocation() {
+  // Pick a non-byzantine vertex from the latest round
+  const candidates = vertices.filter(v => v.round === currentRound && !v.finalized && !v.byzantine);
+  if (candidates.length === 0) return;
+  const target = candidates[Math.floor(Math.random() * candidates.length)];
+  step = 'equivocation';
+  stepData = { eqVtx: target };
+  advance();
+}
+
+function updateStats() {
+  document.getElementById('stat-round').textContent = `Round ${currentRound}`;
+  const fin = vertices.filter(v => v.finalized).length;
+  const pend = vertices.filter(v => !v.finalized && !v.byzantine).length;
+  document.getElementById('stat-finalized').textContent = `${fin} finalized`;
+  document.getElementById('stat-pending').textContent = `${pend} pending`;
+}
+
+// ── RENDERING ──────────────────────────────────────────────────────────────
+
+function render() {
+  const W = canvas.width;
+  const H = canvas.height;
+  const dpr = devicePixelRatio;
+  ctx.clearRect(0, 0, W, H);
+
+  // Background grid
+  ctx.strokeStyle = 'rgba(30,42,56,0.4)';
+  ctx.lineWidth = 1;
+  // Horizontal validator lanes
+  for (let v = 0; v < VALIDATORS; v++) {
+    const pos = getPos(0, v);
+    ctx.beginPath();
+    ctx.setLineDash([4, 8]);
+    ctx.moveTo(0, pos.y * dpr);
+    ctx.lineTo(W, pos.y * dpr);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Validator label
+    ctx.font = `${11 * dpr}px 'JetBrains Mono', monospace`;
+    ctx.fillStyle = COLORS[v];
+    ctx.globalAlpha = 0.8;
+    ctx.fillText(`V${v} ${V_LABELS[v]}`, 8 * dpr, (pos.y - 4) * dpr);
+    ctx.globalAlpha = 1;
+  }
+
+  // Draw edges
+  edges.forEach(e => {
+    if (e.alpha <= 0) return;
+    const fromVtx = vertices.find(v => v.id === e.from);
+    const toVtx = vertices.find(v => v.id === e.to);
+    if (!fromVtx || !toVtx) return;
+
+    const alpha = e.alpha * 0.55;
+    const finalized = fromVtx.finalized && toVtx.finalized;
+    
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = finalized ? 'rgba(251,191,36,0.5)' : 'rgba(37,99,235,0.6)';
+    ctx.lineWidth = finalized ? 1.5 * dpr : 1 * dpr;
+    ctx.setLineDash(finalized ? [] : [3 * dpr, 4 * dpr]);
+    
+    ctx.beginPath();
+    // Bezier curve for aesthetic edges
+    const fx = fromVtx.x * dpr, fy = fromVtx.y * dpr;
+    const tx = toVtx.x * dpr, ty = toVtx.y * dpr;
+    const cx1 = fx + (tx - fx) * 0.5, cy1 = fy;
+    const cx2 = fx + (tx - fx) * 0.5, cy2 = ty;
+    ctx.moveTo(fx, fy);
+    ctx.bezierCurveTo(cx1, cy1, cx2, cy2, tx, ty);
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  // Draw vertices
+  vertices.forEach(vtx => {
+    if (vtx.alpha <= 0) return;
+    drawVertex(vtx);
+  });
+
+  // Draw descendant count badges for non-finalized vertices
+  vertices.forEach(vtx => {
+    if (vtx.finalized || vtx.byzantine || vtx.alpha < 0.8) return;
+    if (vtx.round === 0) return;
+    const dv = vtx.descendantValidators.size;
+    if (dv === 0) return;
+    const x = vtx.x * dpr;
+    const y = vtx.y * dpr;
+    ctx.save();
+    ctx.globalAlpha = vtx.alpha * 0.9;
+    ctx.fillStyle = '#1e3a5f';
+    ctx.beginPath();
+    ctx.arc(x + 10 * dpr, y - 10 * dpr, 7 * dpr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#93c5fd';
+    ctx.font = `bold ${9 * dpr}px 'JetBrains Mono', monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${dv}`, x + 10 * dpr, y - 10 * dpr);
+    ctx.restore();
+  });
+
+  updateStats();
+}
+
+function drawVertex(vtx) {
+  const x = vtx.x * devicePixelRatio;
+  const y = vtx.y * devicePixelRatio;
+  const r = NODE_R * devicePixelRatio;
+  const dpr = devicePixelRatio;
+  const alpha = vtx.alpha;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  if (vtx.byzantine) {
+    // Byzantine: red X
+    ctx.strokeStyle = BYZANTINE_COLOR;
+    ctx.lineWidth = 2 * dpr;
+    ctx.fillStyle = 'rgba(239,68,68,0.15)';
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // X mark
+    ctx.strokeStyle = BYZANTINE_COLOR;
+    ctx.lineWidth = 2.5 * dpr;
+    const d = r * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x - d, y - d); ctx.lineTo(x + d, y + d);
+    ctx.moveTo(x + d, y - d); ctx.lineTo(x - d, y + d);
+    ctx.stroke();
+  } else if (vtx.finalized) {
+    // Finalized: solid gold
+    const grd = ctx.createRadialGradient(x - r*0.3, y - r*0.3, r*0.1, x, y, r);
+    grd.addColorStop(0, '#fde68a');
+    grd.addColorStop(1, FINALIZED_COLOR);
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    // Checkmark
+    ctx.strokeStyle = '#78350f';
+    ctx.lineWidth = 2 * dpr;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x - r*0.45, y);
+    ctx.lineTo(x - r*0.1, y + r*0.38);
+    ctx.lineTo(x + r*0.45, y - r*0.35);
+    ctx.stroke();
+  } else if (vtx.round === 0) {
+    // Genesis: muted
+    ctx.fillStyle = 'rgba(55,65,81,0.6)';
+    ctx.strokeStyle = COLORS[vtx.validator];
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    // Pending: colored ring with dim fill
+    const col = COLORS[vtx.validator];
+    ctx.fillStyle = hexToRgba(col, 0.12);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2 * dpr;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Inner dot
+    ctx.fillStyle = hexToRgba(col, 0.6);
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pulsing ring for most recent round
+    const maxRound = Math.max(...vertices.map(v => v.round));
+    if (vtx.round === maxRound) {
+      const pulse = 0.4 + 0.3 * Math.sin(Date.now() / 500);
+      ctx.strokeStyle = hexToRgba(col, pulse);
+      ctx.lineWidth = 1 * dpr;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(x, y, r * 1.6, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// Controls
+document.getElementById('btn-pause').addEventListener('click', function() {
+  paused = !paused;
+  this.textContent = paused ? 'Resume' : 'Pause';
+  this.classList.toggle('active', paused);
+});
+
+document.getElementById('btn-reset').addEventListener('click', reset);
+
+document.getElementById('btn-equivocation').addEventListener('click', () => {
+  if (currentRound >= 2) triggerEquivocation();
+});
+
+function reset() {
+  paused = false;
+  document.getElementById('btn-pause').textContent = 'Pause';
+  document.getElementById('btn-pause').classList.remove('active');
+  vertices = [];
+  edges = [];
+  currentRound = 0;
+  step = 'idle';
+  tickCount = 0;
+  initGenesis();
+  repositionAll();
+  document.getElementById('phase-banner').textContent = 'Round 0 — Genesis';
+  setInfo(`Genesis block: ${VALIDATORS} validators initialized. Each holds an Ed25519 keypair. ` +
+    `Quorum threshold: ⌈2×${VALIDATORS}/3⌉ = <span>${QUORUM}</span> validators required for finality.`);
+  updateStats();
+}
+
+// Init
+resize();
+window.addEventListener('resize', () => { resize(); repositionAll(); render(); });
+initGenesis();
+repositionAll();
+updateStats();
+setInfo(`Genesis initialized. ${VALIDATORS} validators ready. Quorum = <span>${QUORUM}</span>. Watch vertices build, reference parents, and achieve finality (gold = finalized).`);
+document.getElementById('phase-banner').textContent = 'Round 0 — Genesis';
+animFrame = requestAnimationFrame(tick);
+</script>
+</body>
+</html>

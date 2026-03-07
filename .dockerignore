@@ -1,0 +1,12 @@
+target/
+.git/
+*.md
+!README.md
+testnet_results/
+benchmark_results/
+wallet*.json
+*.py
+*.sh
+!scripts/docker-entrypoint.sh
+.DS_Store
+.claude/

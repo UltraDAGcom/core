@@ -67,6 +67,42 @@ pub enum Message {
         vertex1: DagVertex,
         vertex2: DagVertex,
     },
+
+    /// Request specific vertices by hash (for resolving missing parents).
+    /// Sent when a vertex fails insertion due to missing parent hashes.
+    GetParents {
+        hashes: Vec<[u8; 32]>,
+    },
+
+    /// Response to GetParents: the requested vertices that the peer has.
+    ParentVertices {
+        vertices: Vec<DagVertex>,
+    },
+
+    /// A validator proposes a checkpoint and requests co-signatures.
+    CheckpointProposal(ultradag_coin::consensus::Checkpoint),
+
+    /// A validator's signature on a checkpoint they have verified.
+    CheckpointSignatureMsg {
+        round: u64,
+        checkpoint_hash: [u8; 32],
+        signature: ultradag_coin::consensus::CheckpointSignature,
+    },
+
+    /// Request the latest checkpoint for fast-sync.
+    GetCheckpoint {
+        min_round: u64,
+    },
+
+    /// Response to GetCheckpoint: the latest accepted checkpoint + suffix DAG + state.
+    /// Used for fast-sync by new nodes.
+    CheckpointSync {
+        checkpoint: ultradag_coin::consensus::Checkpoint,
+        /// DAG vertices from checkpoint.round to current round (the suffix).
+        suffix_vertices: Vec<DagVertex>,
+        /// State snapshot at checkpoint.round.
+        state_at_checkpoint: ultradag_coin::state::persistence::StateSnapshot,
+    },
 }
 
 impl Message {
@@ -304,6 +340,114 @@ mod tests {
         if ping_json.len() <= MAX_MESSAGE_SIZE {
             let result = Message::decode(&ping_json);
             assert!(result.is_ok(), "Message at or below max size should be accepted");
+        }
+    }
+
+    #[test]
+    fn encode_decode_checkpoint_proposal() {
+        use ultradag_coin::consensus::Checkpoint;
+        
+        let checkpoint = Checkpoint {
+            round: 1000,
+            state_root: [1u8; 32],
+            dag_tip: [2u8; 32],
+            total_supply: 1_000_000_000,
+            signatures: vec![],
+        };
+        
+        let msg = Message::CheckpointProposal(checkpoint);
+        let encoded = roundtrip(&msg);
+        let decoded = Message::decode(&encoded[4..]).unwrap();
+        
+        match decoded {
+            Message::CheckpointProposal(cp) => {
+                assert_eq!(cp.round, 1000);
+                assert_eq!(cp.total_supply, 1_000_000_000);
+            }
+            _ => panic!("expected CheckpointProposal"),
+        }
+    }
+
+    #[test]
+    fn encode_decode_checkpoint_signature_msg() {
+        use ultradag_coin::consensus::CheckpointSignature;
+        
+        let sig = CheckpointSignature {
+            validator: Address::ZERO,
+            pub_key: [0u8; 32],
+            signature: Signature([0u8; 64]),
+        };
+        
+        let msg = Message::CheckpointSignatureMsg {
+            round: 1000,
+            checkpoint_hash: [3u8; 32],
+            signature: sig,
+        };
+        
+        let encoded = roundtrip(&msg);
+        let decoded = Message::decode(&encoded[4..]).unwrap();
+        
+        match decoded {
+            Message::CheckpointSignatureMsg { round, checkpoint_hash, .. } => {
+                assert_eq!(round, 1000);
+                assert_eq!(checkpoint_hash, [3u8; 32]);
+            }
+            _ => panic!("expected CheckpointSignatureMsg"),
+        }
+    }
+
+    #[test]
+    fn encode_decode_get_checkpoint() {
+        let msg = Message::GetCheckpoint { min_round: 500 };
+        let encoded = roundtrip(&msg);
+        let decoded = Message::decode(&encoded[4..]).unwrap();
+        
+        match decoded {
+            Message::GetCheckpoint { min_round } => {
+                assert_eq!(min_round, 500);
+            }
+            _ => panic!("expected GetCheckpoint"),
+        }
+    }
+
+    #[test]
+    fn encode_decode_checkpoint_sync() {
+        use ultradag_coin::consensus::Checkpoint;
+        use ultradag_coin::state::persistence::StateSnapshot;
+        
+        let checkpoint = Checkpoint {
+            round: 1000,
+            state_root: [1u8; 32],
+            dag_tip: [2u8; 32],
+            total_supply: 1_000_000_000,
+            signatures: vec![],
+        };
+        
+        let state = StateSnapshot {
+            accounts: vec![],
+            stake_accounts: vec![],
+            active_validator_set: vec![],
+            current_epoch: 0,
+            total_supply: 1_000_000_000,
+            last_finalized_round: Some(1000),
+        };
+        
+        let msg = Message::CheckpointSync {
+            checkpoint,
+            suffix_vertices: vec![],
+            state_at_checkpoint: state,
+        };
+        
+        let encoded = roundtrip(&msg);
+        let decoded = Message::decode(&encoded[4..]).unwrap();
+        
+        match decoded {
+            Message::CheckpointSync { checkpoint, suffix_vertices, state_at_checkpoint } => {
+                assert_eq!(checkpoint.round, 1000);
+                assert_eq!(suffix_vertices.len(), 0);
+                assert_eq!(state_at_checkpoint.total_supply, 1_000_000_000);
+            }
+            _ => panic!("expected CheckpointSync"),
         }
     }
 }

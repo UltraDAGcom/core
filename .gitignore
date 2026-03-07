@@ -8,3 +8,6 @@
 /testnet_results
 /benchmark_results
 wallet*.json
+nohup.out
+testnet_monitor.log
+testnet-validators.txt

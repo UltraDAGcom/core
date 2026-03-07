@@ -6,6 +6,21 @@ use crate::consensus::vertex::DagVertex;
 /// Produces a deterministic total ordering of DAG vertices.
 /// Uses round number as primary key, then topological order within a round,
 /// then hash as final tiebreaker for determinism.
+///
+/// # Performance
+/// O(N log N) for sorting, but O(N²) worst case due to ancestor traversal during comparison.
+/// Each `count_ancestors_in_set()` call traverses the full DAG via `dag.ancestors()`.
+/// For N finalized vertices, this can result in N² ancestor traversals.
+///
+/// **Impact:** Acceptable for small/medium DAGs (<5-10K vertices) and low finalization rates.
+/// Not the primary bottleneck (finality check optimization was P2, now complete).
+///
+/// **Future optimization (P3 - non-urgent):**
+/// - Memoize ancestor counts during sort (HashMap cache)
+/// - Pre-compute topological levels during finality collection
+/// - Incremental tracking similar to descendant validator counts
+///
+/// Estimated effort: 1-2 days when needed for high-throughput deployments.
 pub fn order_vertices<'a>(
     hashes: &[[u8; 32]],
     dag: &'a BlockDag,

@@ -186,6 +186,9 @@ fn test_byzantine_equivocator_detected_and_rejected() {
                 assert_eq!(round, 3);
                 println!("✓ Equivocation detected: validator={:?}, round={}", validator, round);
             }
+            ultradag_coin::consensus::dag::DagInsertError::MissingParents(_) => {
+                panic!("Unexpected MissingParents error");
+            }
         }
     }
     

@@ -11,6 +11,10 @@ pub struct ValidatorSet {
     /// When set, quorum threshold uses this instead of the dynamic count,
     /// preventing phantom registrations from inflating the threshold.
     configured_validators: Option<usize>,
+    /// Permissioned validator allowlist.
+    /// When set, only addresses in this set can be registered as validators.
+    /// Other nodes can still connect, sync, and submit transactions.
+    allowed_validators: Option<HashSet<Address>>,
 }
 
 impl ValidatorSet {
@@ -19,6 +23,7 @@ impl ValidatorSet {
             validators: HashSet::new(),
             min_validators: min_validators.max(1),
             configured_validators: None,
+            allowed_validators: None,
         }
     }
 
@@ -34,7 +39,29 @@ impl ValidatorSet {
         self.configured_validators
     }
 
+    /// Set the permissioned validator allowlist.
+    /// When set, only addresses in this set can register as validators.
+    /// Also purges any already-registered validators not in the allowlist.
+    pub fn set_allowed_validators(&mut self, addrs: HashSet<Address>) {
+        self.validators.retain(|addr| addrs.contains(addr));
+        self.allowed_validators = Some(addrs);
+    }
+
+    /// Check if an address is allowed to be a validator.
+    /// Returns true if no allowlist is set (permissionless mode).
+    pub fn is_allowed(&self, addr: &Address) -> bool {
+        match &self.allowed_validators {
+            Some(allowed) => allowed.contains(addr),
+            None => true,
+        }
+    }
+
     pub fn register(&mut self, addr: Address) -> bool {
+        if let Some(allowed) = &self.allowed_validators {
+            if !allowed.contains(&addr) {
+                return false;
+            }
+        }
         self.validators.insert(addr)
     }
 
@@ -127,5 +154,63 @@ mod tests {
         assert!(vs.register(addr));
         assert!(!vs.register(addr));
         assert_eq!(vs.len(), 1);
+    }
+
+    #[test]
+    fn allowlist_blocks_unregistered_validators() {
+        let mut vs = ValidatorSet::new(1);
+        let allowed_sk = SecretKey::generate();
+        let blocked_sk = SecretKey::generate();
+
+        let mut allowed = HashSet::new();
+        allowed.insert(allowed_sk.address());
+        vs.set_allowed_validators(allowed);
+
+        assert!(vs.register(allowed_sk.address()));
+        assert!(!vs.register(blocked_sk.address()));
+        assert_eq!(vs.len(), 1);
+        assert!(vs.is_allowed(&allowed_sk.address()));
+        assert!(!vs.is_allowed(&blocked_sk.address()));
+    }
+
+    #[test]
+    fn allowlist_purges_existing_validators() {
+        let mut vs = ValidatorSet::new(1);
+        let sk1 = SecretKey::generate();
+        let sk2 = SecretKey::generate();
+        let sk3 = SecretKey::generate();
+
+        // Register all three
+        vs.register(sk1.address());
+        vs.register(sk2.address());
+        vs.register(sk3.address());
+        assert_eq!(vs.len(), 3);
+
+        // Set allowlist with only sk1 and sk2 — sk3 should be purged
+        let mut allowed = HashSet::new();
+        allowed.insert(sk1.address());
+        allowed.insert(sk2.address());
+        vs.set_allowed_validators(allowed);
+
+        assert_eq!(vs.len(), 2);
+        assert!(vs.contains(&sk1.address()));
+        assert!(vs.contains(&sk2.address()));
+        assert!(!vs.contains(&sk3.address()));
+
+        // Future registrations of sk3 should still be blocked
+        assert!(!vs.register(sk3.address()));
+        assert_eq!(vs.len(), 2);
+    }
+
+    #[test]
+    fn no_allowlist_permits_all() {
+        let mut vs = ValidatorSet::new(1);
+        let sk1 = SecretKey::generate();
+        let sk2 = SecretKey::generate();
+
+        assert!(vs.register(sk1.address()));
+        assert!(vs.register(sk2.address()));
+        assert_eq!(vs.len(), 2);
+        assert!(vs.is_allowed(&sk1.address()));
     }
 }

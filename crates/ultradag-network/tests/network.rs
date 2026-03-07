@@ -264,6 +264,54 @@ async fn eof_returns_error() {
     assert!(result.is_err(), "EOF should return error");
 }
 
+/// GetParents roundtrips with correct hashes.
+#[tokio::test]
+async fn get_parents_roundtrip() {
+    let (server, client) = tcp_pair().await;
+    let (_, sw) = split_connection(server, "s".into());
+    let (mut cr, _) = split_connection(client, "c".into());
+
+    let h1 = [0xAA; 32];
+    let h2 = [0xBB; 32];
+    sw.send(&Message::GetParents { hashes: vec![h1, h2] }).await.unwrap();
+
+    match cr.recv().await.unwrap() {
+        Message::GetParents { hashes } => {
+            assert_eq!(hashes.len(), 2);
+            assert_eq!(hashes[0], h1);
+            assert_eq!(hashes[1], h2);
+        }
+        other => panic!("expected GetParents, got {:?}", other),
+    }
+}
+
+/// ParentVertices roundtrips with vertices intact.
+#[tokio::test]
+async fn parent_vertices_roundtrip() {
+    let sk = SecretKey::from_bytes([40u8; 32]);
+    let v1 = make_real_vertex(&sk, 1);
+    let v2 = make_real_vertex(&sk, 2);
+    let h1 = v1.hash();
+    let h2 = v2.hash();
+
+    let (server, client) = tcp_pair().await;
+    let (_, sw) = split_connection(server, "s".into());
+    let (mut cr, _) = split_connection(client, "c".into());
+
+    sw.send(&Message::ParentVertices { vertices: vec![v1, v2] }).await.unwrap();
+
+    match cr.recv().await.unwrap() {
+        Message::ParentVertices { vertices } => {
+            assert_eq!(vertices.len(), 2);
+            assert_eq!(vertices[0].hash(), h1);
+            assert_eq!(vertices[1].hash(), h2);
+            assert!(vertices[0].verify_signature(), "signature must survive roundtrip");
+            assert!(vertices[1].verify_signature(), "signature must survive roundtrip");
+        }
+        other => panic!("expected ParentVertices, got {:?}", other),
+    }
+}
+
 /// Message too large is rejected.
 /// Mutation: recv not checking message size → OOM.
 #[tokio::test]

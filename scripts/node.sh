@@ -23,6 +23,7 @@ DATA_DIR="$HOME/.ultradag/node"
 SEED=""
 ROUND_MS=5000
 NAME=""
+NO_BOOTSTRAP=false
 
 # --- Help ---
 usage() {
@@ -31,12 +32,16 @@ Usage: $(basename "$0") [OPTIONS]
 
 Start a persistent UltraDAG validator node.
 
+Without --seed, the node connects to public testnet bootstrap nodes
+automatically. Use --no-bootstrap for local development/private networks.
+
 Options:
   --port PORT        P2P port (default: 9333)
   --data-dir DIR     Data directory (default: ~/.ultradag/node)
   --seed ADDR        Seed peer address (e.g. 1.2.3.4:9333)
   --round-ms MS      Round duration in milliseconds (default: 5000)
   --name NAME        Display name for this node (optional)
+  --no-bootstrap     Disable auto-connect to public testnet bootstrap nodes
   -h, --help         Show this help
 
 The node runs in the background via nohup. Logs are written to
@@ -45,8 +50,9 @@ The node runs in the background via nohup. Logs are written to
 The RPC server runs on P2P port + 1000 (e.g. port 9333 -> RPC 10333).
 
 Examples:
-  $(basename "$0")                                  # Start on default port
-  $(basename "$0") --port 9334 --seed 127.0.0.1:9333
+  $(basename "$0")                                  # Join public testnet
+  $(basename "$0") --port 9334 --seed 1.2.3.4:9333  # Join a specific network
+  $(basename "$0") --no-bootstrap                    # Run in isolation
   $(basename "$0") --data-dir /var/ultradag --round-ms 3000
 EOF
     exit 0
@@ -59,8 +65,9 @@ while [[ $# -gt 0 ]]; do
         --data-dir) DATA_DIR="$2"; shift 2 ;;
         --seed)     SEED="$2"; shift 2 ;;
         --round-ms) ROUND_MS="$2"; shift 2 ;;
-        --name)     NAME="$2"; shift 2 ;;
-        -h|--help)  usage ;;
+        --name)         NAME="$2"; shift 2 ;;
+        --no-bootstrap) NO_BOOTSTRAP=true; shift ;;
+        -h|--help)      usage ;;
         *) err "Unknown option: $1"; echo "Run with --help for usage."; exit 1 ;;
     esac
 done
@@ -96,6 +103,9 @@ fi
 CMD=("$BINARY" --port "$PORT" --round-ms "$ROUND_MS" --validate)
 if [[ -n "$SEED" ]]; then
     CMD+=(--seed "$SEED")
+fi
+if [[ "$NO_BOOTSTRAP" == "true" ]]; then
+    CMD+=(--no-bootstrap)
 fi
 
 # --- Start node ---

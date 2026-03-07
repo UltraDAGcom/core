@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::sync::{broadcast, Mutex, RwLock};
+use tokio::sync::{broadcast, Mutex, Notify, RwLock};
 use tracing::{info, warn};
 
-use ultradag_coin::{BlockDag, DagVertex, FinalityTracker, Mempool, StateEngine, Transaction};
+use ultradag_coin::{BlockDag, DagVertex, FinalityTracker, Mempool, StateEngine, Transaction, sync_epoch_validators};
+use ultradag_coin::consensus::dag::DagInsertError;
 
 use crate::peer::{split_connection, PeerReader, PeerRegistry};
 use crate::protocol::Message;
@@ -37,6 +38,8 @@ pub struct NodeServer {
     pub tx_tx: broadcast::Sender<Transaction>,
     /// Orphan vertices waiting for missing parents (P2P layer buffering).
     pub orphans: Arc<Mutex<HashMap<[u8; 32], DagVertex>>>,
+    /// Notified when a new DAG vertex is inserted (for optimistic responsiveness).
+    pub round_notify: Arc<Notify>,
 }
 
 impl NodeServer {
@@ -46,7 +49,7 @@ impl NodeServer {
 
         Self {
             port,
-            state: Arc::new(RwLock::new(StateEngine::new())),
+            state: Arc::new(RwLock::new(StateEngine::new_with_genesis())),
             mempool: Arc::new(RwLock::new(Mempool::new())),
             dag: Arc::new(RwLock::new(BlockDag::new())),
             finality: Arc::new(RwLock::new(FinalityTracker::new(3))),
@@ -54,12 +57,13 @@ impl NodeServer {
             vertex_tx,
             tx_tx,
             orphans: Arc::new(Mutex::new(HashMap::new())),
+            round_notify: Arc::new(Notify::new()),
         }
     }
 
     /// Start listening for incoming connections.
     pub async fn listen(&self) -> std::io::Result<()> {
-        let listener = TcpListener::bind(format!("0.0.0.0:{}", self.port)).await?;
+        let listener = TcpListener::bind(format!("[::]:{}", self.port)).await?;
         info!("Listening on port {}", self.port);
 
         loop {
@@ -78,11 +82,12 @@ impl NodeServer {
             let vertex_tx = self.vertex_tx.clone();
             let tx_tx = self.tx_tx.clone();
             let orphans = self.orphans.clone();
+            let round_notify = self.round_notify.clone();
 
             let listen_port = self.port;
             tokio::spawn(async move {
                 // handle_peer may rename peer_addr via Hello; remove both keys on disconnect
-                if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port).await {
+                if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify).await {
                     warn!("Peer {} disconnected: {}", addr_str, e);
                 }
                 // Remove by original ephemeral addr and any possible listen addr
@@ -121,10 +126,11 @@ impl NodeServer {
         let vertex_tx = self.vertex_tx.clone();
         let tx_tx = self.tx_tx.clone();
         let orphans = self.orphans.clone();
+        let round_notify = self.round_notify.clone();
         let listen_port = self.port;
 
         tokio::spawn(async move {
-            if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port).await {
+            if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify).await {
                 warn!("Peer {} disconnected: {}", addr_str, e);
             }
             peers.remove_peer(&addr_str).await;
@@ -135,6 +141,7 @@ impl NodeServer {
 }
 
 /// Try to insert orphaned vertices whose parents may now exist.
+/// Returns hashes of parents still missing (for further fetching).
 async fn resolve_orphans(
     orphans: &Arc<Mutex<HashMap<[u8; 32], DagVertex>>>,
     dag: &Arc<RwLock<BlockDag>>,
@@ -143,6 +150,7 @@ async fn resolve_orphans(
     mempool: &Arc<RwLock<Mempool>>,
     peers: &PeerRegistry,
     peer_addr: &str,
+    round_notify: &Arc<Notify>,
 ) {
     let mut resolved = true;
     while resolved {
@@ -152,54 +160,69 @@ async fn resolve_orphans(
             orph.iter().map(|(h, v)| (*h, v.clone())).collect()
         };
         for (hash, vertex) in candidates {
-            let inserted = {
+            let result = {
                 let mut dag_w = dag.write().await;
-                match dag_w.try_insert(vertex.clone()) {
-                    Ok(did_insert) => did_insert,
-                    Err(_) => false,
-                }
+                dag_w.try_insert(vertex.clone())
             };
-            if inserted {
-                orphans.lock().await.remove(&hash);
-                resolved = true;
+            match result {
+                Ok(true) => {
+                    orphans.lock().await.remove(&hash);
+                    resolved = true;
+                    round_notify.notify_one();
 
-                let validator = vertex.validator;
-                // Register validator + check finality (multi-pass)
-                {
-                    let mut fin = finality.write().await;
-                    fin.register_validator(validator);
-                    let dag_r = dag.read().await;
+                    let validator = vertex.validator;
+                    // Register validator + check finality (multi-pass)
+                    {
+                        let mut fin = finality.write().await;
+                        fin.register_validator(validator);
+                        let dag_r = dag.read().await;
 
-                    let mut all_finalized = Vec::new();
-                    loop {
-                        let newly_finalized = fin.find_newly_finalized(&dag_r);
-                        if newly_finalized.is_empty() {
-                            break;
+                        let mut all_finalized = Vec::new();
+                        loop {
+                            let newly_finalized = fin.find_newly_finalized(&dag_r);
+                            if newly_finalized.is_empty() {
+                                break;
+                            }
+                            all_finalized.extend(newly_finalized);
                         }
-                        all_finalized.extend(newly_finalized);
-                    }
 
-                    if !all_finalized.is_empty() {
-                        info!("Orphan resolve: finalized {} vertices", all_finalized.len());
-                        let finalized_vertices: Vec<DagVertex> = all_finalized
-                            .iter()
-                            .filter_map(|h| dag_r.get(h).cloned())
-                            .collect();
-                        drop(dag_r);
-                        let mut state_w = state.write().await;
-                        if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
-                            warn!("Failed to apply finalized vertices: {}", e);
-                        } else {
-                            let mut mp = mempool.write().await;
-                            for v in &finalized_vertices {
-                                for tx in &v.block.transactions {
-                                    mp.remove(&tx.hash());
+                        if !all_finalized.is_empty() {
+                            info!("Orphan resolve: finalized {} vertices", all_finalized.len());
+                            let finalized_vertices: Vec<DagVertex> = all_finalized
+                                .iter()
+                                .filter_map(|h| dag_r.get(h).cloned())
+                                .collect();
+                            drop(dag_r);
+                            let mut state_w = state.write().await;
+                            let prev_round = state_w.last_finalized_round();
+                            if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
+                                warn!("Failed to apply finalized vertices: {}", e);
+                            } else {
+                                if state_w.epoch_just_changed(prev_round) {
+                                    sync_epoch_validators(&mut fin, &state_w);
+                                    info!("Epoch transition to epoch {} — active set: {} validators",
+                                        state_w.current_epoch(), state_w.active_validators().len());
+                                }
+                                let mut mp = mempool.write().await;
+                                for v in &finalized_vertices {
+                                    for tx in &v.block.transactions {
+                                        mp.remove(&tx.hash());
+                                    }
                                 }
                             }
                         }
                     }
+                    peers.broadcast(&Message::DagProposal(vertex), peer_addr).await;
                 }
-                peers.broadcast(&Message::DagProposal(vertex), peer_addr).await;
+                Err(DagInsertError::MissingParents(missing)) => {
+                    // Still missing parents — request them from peer
+                    let hashes: Vec<[u8; 32]> = missing.into_iter().take(32).collect();
+                    let _ = peers.send_to(peer_addr, &Message::GetParents { hashes }).await;
+                }
+                _ => {
+                    // Equivocation or duplicate — remove from orphan buffer
+                    orphans.lock().await.remove(&hash);
+                }
             }
         }
     }
@@ -289,6 +312,7 @@ async fn handle_peer(
     tx_tx: &broadcast::Sender<Transaction>,
     orphans: &Arc<Mutex<HashMap<[u8; 32], DagVertex>>>,
     listen_port: u16,
+    round_notify: &Arc<Notify>,
 ) -> std::io::Result<()> {
     let peer_addr = reader.addr.clone();
 
@@ -316,8 +340,20 @@ async fn handle_peer(
                 }
 
                 // Register peer's canonical listen address for discovery
-                if let Some(ip) = peer_addr.split(':').next() {
-                    let listen_addr = format!("{}:{}", ip, listen_port);
+                // Handle both IPv4 "1.2.3.4:port" and IPv6 "[::1]:port" formats
+                let listen_addr = if peer_addr.starts_with('[') {
+                    // IPv6: "[addr]:port" → extract addr part including brackets
+                    if let Some(bracket_end) = peer_addr.find(']') {
+                        let ip_part = &peer_addr[..=bracket_end];
+                        Some(format!("{}:{}", ip_part, listen_port))
+                    } else {
+                        None
+                    }
+                } else {
+                    // IPv4: "addr:port" → extract addr before last colon
+                    peer_addr.rsplit_once(':').map(|(ip, _)| format!("{}:{}", ip, listen_port))
+                };
+                if let Some(listen_addr) = listen_addr {
                     peers.add_known(listen_addr.clone()).await;
                     // Also mark this as a connected listen address so
                     // try_connect_peer won't create duplicate connections
@@ -381,14 +417,11 @@ async fn handle_peer(
                 // Atomic equivocation check + insert (no TOCTOU race)
                 let insert_result = {
                     let mut dag_w = dag.write().await;
-                    match dag_w.try_insert(vertex.clone()) {
-                        Ok(did_insert) => Ok(did_insert),
-                        Err(equivocation) => Err(equivocation),
-                    }
+                    dag_w.try_insert(vertex.clone())
                 };
 
                 match insert_result {
-                    Err(_equivocation) => {
+                    Err(DagInsertError::Equivocation { .. }) => {
                         warn!(
                             "Detected equivocation from validator {} in round {} (peer {})",
                             validator, round, peer_addr,
@@ -406,20 +439,26 @@ async fn handle_peer(
                         }
                         continue;
                     }
-                    Ok(false) => {
-                        // Insert failed — either duplicate or missing parents.
-                        // Buffer as orphan if not already known.
-                        let dag_r = dag.read().await;
-                        if !dag_r.get(&vertex_hash).is_some() {
-                            drop(dag_r);
+                    Err(DagInsertError::MissingParents(missing)) => {
+                        // Buffer as orphan and request missing parents from peer
+                        {
                             let mut orph = orphans.lock().await;
                             if orph.len() < 1000 && orphan_buffer_bytes(&orph) < MAX_ORPHAN_BYTES {
                                 orph.insert(vertex_hash, vertex);
                             }
                         }
+                        // Request the missing parent vertices (cap at 32)
+                        let hashes: Vec<[u8; 32]> = missing.into_iter().take(32).collect();
+                        let _ = peers.send_to(&peer_addr, &Message::GetParents { hashes }).await;
                         continue;
                     }
-                    Ok(true) => {}
+                    Ok(false) => {
+                        // Duplicate — ignore
+                        continue;
+                    }
+                    Ok(true) => {
+                        round_notify.notify_one();
+                    }
                 }
 
                 // Vertex was inserted successfully
@@ -457,9 +496,16 @@ async fn handle_peer(
                             drop(dag_r);
 
                             let mut state_w = state.write().await;
+                            let prev_round = state_w.last_finalized_round();
                             if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
                                 warn!("Failed to apply finalized vertices to state: {}", e);
                             } else {
+                                // Epoch transition: sync active validator set to FinalityTracker
+                                if state_w.epoch_just_changed(prev_round) {
+                                    sync_epoch_validators(&mut fin, &state_w);
+                                    info!("Epoch transition to epoch {} — active set: {} validators",
+                                        state_w.current_epoch(), state_w.active_validators().len());
+                                }
                                 let mut mp = mempool.write().await;
                                 for v in &finalized_vertices {
                                     for tx in &v.block.transactions {
@@ -473,7 +519,7 @@ async fn handle_peer(
                     peers.broadcast(&Message::DagProposal(vertex), &peer_addr).await;
 
                     // Try to resolve orphaned vertices now that a new vertex was inserted
-                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr).await;
+                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify).await;
                 }
             }
 
@@ -495,6 +541,7 @@ async fn handle_peer(
             Message::DagVertices(vertices) => {
                 let mut new_validators = Vec::new();
                 let mut failed_vertices = Vec::new();
+                let mut all_missing_parents: Vec<[u8; 32]> = Vec::new();
                 {
                     let mut dag_w = dag.write().await;
                     for vertex in vertices {
@@ -511,12 +558,13 @@ async fn handle_peer(
                                 new_validators.push(validator);
                             }
                             Ok(false) => {
-                                // Duplicate or missing parents — buffer as orphan if unknown
-                                if dag_w.get(&hash).is_none() {
-                                    failed_vertices.push((hash, vertex));
-                                }
+                                // Duplicate — ignore
                             }
-                            Err(_equivocation) => {
+                            Err(DagInsertError::MissingParents(missing)) => {
+                                all_missing_parents.extend(&missing);
+                                failed_vertices.push((hash, vertex));
+                            }
+                            Err(DagInsertError::Equivocation { .. }) => {
                                 warn!(
                                     "Equivocation in sync vertex from validator {} round {} (peer {})",
                                     validator, vertex.round, peer_addr,
@@ -530,8 +578,6 @@ async fn handle_peer(
                                         };
                                         drop(dag_w);
                                         peers.broadcast(&evidence_msg, "").await;
-                                        // Re-acquire lock — remaining vertices in batch are lost
-                                        // but this is acceptable since equivocation is rare
                                         break;
                                     }
                                 }
@@ -548,7 +594,15 @@ async fn handle_peer(
                         }
                     }
                 }
+                // Request missing parent vertices from the peer
+                if !all_missing_parents.is_empty() {
+                    all_missing_parents.sort_unstable();
+                    all_missing_parents.dedup();
+                    let hashes: Vec<[u8; 32]> = all_missing_parents.into_iter().take(32).collect();
+                    let _ = peers.send_to(&peer_addr, &Message::GetParents { hashes }).await;
+                }
                 if !new_validators.is_empty() {
+                    round_notify.notify_one();
                     // Multi-pass finality
                     let mut fin = finality.write().await;
                     for v in &new_validators {
@@ -571,9 +625,15 @@ async fn handle_peer(
                             .collect();
                         drop(dag_r);
                         let mut state_w = state.write().await;
+                        let prev_round = state_w.last_finalized_round();
                         if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
                             warn!("Failed to apply sync-finalized vertices: {}", e);
                         } else {
+                            if state_w.epoch_just_changed(prev_round) {
+                                sync_epoch_validators(&mut fin, &state_w);
+                                info!("Epoch transition to epoch {} — active set: {} validators",
+                                    state_w.current_epoch(), state_w.active_validators().len());
+                            }
                             let mut mp = mempool.write().await;
                             for v in &finalized_vertices {
                                 for tx in &v.block.transactions {
@@ -583,7 +643,7 @@ async fn handle_peer(
                         }
                     }
                     drop(fin);
-                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr).await;
+                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify).await;
                 }
             }
 
@@ -634,6 +694,95 @@ async fn handle_peer(
                     };
                     peers.broadcast(&evidence_msg, &peer_addr).await;
                 }
+            }
+
+            Message::GetParents { hashes } => {
+                // Look up each requested hash in our DAG (cap at 32)
+                let dag_r = dag.read().await;
+                let vertices: Vec<DagVertex> = hashes
+                    .iter()
+                    .take(32)
+                    .filter_map(|h| dag_r.get(h).cloned())
+                    .collect();
+                drop(dag_r);
+                if !vertices.is_empty() {
+                    let _ = peers.send_to(&peer_addr, &Message::ParentVertices { vertices }).await;
+                }
+            }
+
+            Message::ParentVertices { vertices } => {
+                // Received parent vertices we requested — insert and resolve orphans.
+                let mut all_missing: Vec<[u8; 32]> = Vec::new();
+                let mut inserted_any = false;
+
+                for vertex in vertices.into_iter().take(50) {
+                    if !vertex.verify_signature() {
+                        continue;
+                    }
+                    let validator = vertex.validator;
+                    let hash = vertex.hash();
+                    let insert_result = {
+                        let mut dag_w = dag.write().await;
+                        dag_w.try_insert(vertex.clone())
+                    };
+                    match insert_result {
+                        Ok(true) => {
+                            inserted_any = true;
+                            let mut fin = finality.write().await;
+                            fin.register_validator(validator);
+                        }
+                        Err(DagInsertError::MissingParents(missing)) => {
+                            all_missing.extend(&missing);
+                            let mut orph = orphans.lock().await;
+                            if orph.len() < 1000 && orphan_buffer_bytes(&orph) < MAX_ORPHAN_BYTES {
+                                orph.insert(hash, vertex);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Request any still-missing parents (recursive resolution)
+                if !all_missing.is_empty() {
+                    all_missing.sort_unstable();
+                    all_missing.dedup();
+                    let dag_r = dag.read().await;
+                    let still_missing: Vec<[u8; 32]> = all_missing
+                        .into_iter()
+                        .filter(|h| dag_r.get(h).is_none())
+                        .take(32)
+                        .collect();
+                    drop(dag_r);
+                    if !still_missing.is_empty() {
+                        let _ = peers.send_to(&peer_addr, &Message::GetParents { hashes: still_missing }).await;
+                    }
+                }
+
+                // If we inserted any parent vertices, try to resolve orphans
+                if inserted_any {
+                    round_notify.notify_one();
+                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify).await;
+                }
+            }
+
+            Message::CheckpointProposal(_checkpoint) => {
+                // TODO: Verify checkpoint, add our signature if valid, broadcast signature
+                tracing::debug!("Received checkpoint proposal (not yet implemented)");
+            }
+
+            Message::CheckpointSignatureMsg { .. } => {
+                // TODO: Accumulate signatures, save checkpoint when quorum reached
+                tracing::debug!("Received checkpoint signature (not yet implemented)");
+            }
+
+            Message::GetCheckpoint { .. } => {
+                // TODO: Send latest accepted checkpoint + suffix + state
+                tracing::debug!("Received checkpoint request (not yet implemented)");
+            }
+
+            Message::CheckpointSync { .. } => {
+                // TODO: Verify and apply checkpoint for fast-sync
+                tracing::debug!("Received checkpoint sync (not yet implemented)");
             }
         }
     }

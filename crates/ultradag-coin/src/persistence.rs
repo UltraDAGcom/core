@@ -32,6 +32,56 @@ pub fn exists(path: &Path) -> bool {
     path.exists()
 }
 
+/// Save a checkpoint to disk.
+pub fn save_checkpoint(dir: &Path, checkpoint: &crate::consensus::Checkpoint) -> std::io::Result<()> {
+    let path = dir.join(format!("checkpoint_{:010}.json", checkpoint.round));
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, serde_json::to_vec(checkpoint)?)?;
+    std::fs::rename(tmp, path)?;
+    Ok(())
+}
+
+/// Load the latest checkpoint from disk, if any.
+pub fn load_latest_checkpoint(dir: &Path) -> Option<crate::consensus::Checkpoint> {
+    let mut latest: Option<(u64, crate::consensus::Checkpoint)> = None;
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with("checkpoint_") && name.ends_with(".json") {
+                if let Ok(bytes) = std::fs::read(entry.path()) {
+                    if let Ok(cp) = serde_json::from_slice::<crate::consensus::Checkpoint>(&bytes) {
+                        if latest.as_ref().map_or(true, |(r, _)| cp.round > *r) {
+                            latest = Some((cp.round, cp));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    latest.map(|(_, cp)| cp)
+}
+
+/// List all available checkpoint rounds.
+pub fn list_checkpoints(dir: &Path) -> Vec<u64> {
+    let mut rounds = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with("checkpoint_") && name.ends_with(".json") {
+                if let Ok(bytes) = std::fs::read(entry.path()) {
+                    if let Ok(cp) = serde_json::from_slice::<crate::consensus::Checkpoint>(&bytes) {
+                        rounds.push(cp.round);
+                    }
+                }
+            }
+        }
+    }
+    rounds.sort_unstable();
+    rounds
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

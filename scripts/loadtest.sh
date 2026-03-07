@@ -1,203 +1,95 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
 
-# UltraDAG — Load test: submit transactions and measure throughput
+# UltraDAG Load Test Script
+# Tests transaction throughput with concurrent requests
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NODE_URL="http://127.0.0.1:8001"
+VALIDATOR_SECRET="YOUR_SECRET_KEY_HERE"  # Replace with actual validator secret
+RECEIVER="0000000000000000000000000000000000000000000000000000000000000001"
 
-# --- Colors ---
-if command -v tput &>/dev/null && [ -t 1 ]; then
-    GREEN=$(tput setaf 2); YELLOW=$(tput setaf 3); RED=$(tput setaf 1); RESET=$(tput sgr0); BOLD=$(tput bold)
-else
-    GREEN='\033[0;32m'; YELLOW='\033[0;33m'; RED='\033[0;31m'; RESET='\033[0m'; BOLD='\033[1m'
-fi
-info()  { printf "${GREEN}%s${RESET}\n" "$*"; }
-warn()  { printf "${YELLOW}%s${RESET}\n" "$*"; }
-err()   { printf "${RED}%s${RESET}\n" "$*" >&2; }
-
-# --- Defaults ---
-RPC_URL="http://127.0.0.1:10333"
-NUM_TXS=1000
-FROM_SECRET=""
-TO_ADDR=""
+NUM_TXS=500
+CONCURRENT=20
 AMOUNT=1000
 FEE=100
-CONCURRENT=20
 
-# --- Help ---
-usage() {
-    cat <<EOF
-Usage: $(basename "$0") --from-secret KEY --to ADDR [OPTIONS]
-
-Run a load test against a running UltraDAG node.
-
-Options:
-  --rpc URL          RPC endpoint (default: http://127.0.0.1:10333)
-  --txs N            Number of transactions to send (default: 1000)
-  --from-secret KEY  Sender's secret key in hex (required)
-  --to ADDR          Recipient address in hex (required)
-  --amount N         Amount per transaction in sats (default: 1000)
-  --fee N            Fee per transaction in sats (default: 100)
-  --concurrent N     Concurrent requests (default: 20)
-  -h, --help         Show this help
-
-The script submits transactions as fast as possible, then monitors
-the mempool until it clears. Reports accepted/rejected counts and TPS.
-
-Example:
-  # Generate keys first
-  scripts/keygen.sh --output sender.json
-  scripts/keygen.sh --output receiver.json
-  # Fund the sender via faucet, then run:
-  $(basename "$0") --from-secret <secret> --to <address> --txs 100
-EOF
-    exit 0
-}
-
-# --- Parse args ---
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --rpc)         RPC_URL="$2"; shift 2 ;;
-        --txs)         NUM_TXS="$2"; shift 2 ;;
-        --from-secret) FROM_SECRET="$2"; shift 2 ;;
-        --to)          TO_ADDR="$2"; shift 2 ;;
-        --amount)      AMOUNT="$2"; shift 2 ;;
-        --fee)         FEE="$2"; shift 2 ;;
-        --concurrent)  CONCURRENT="$2"; shift 2 ;;
-        -h|--help)     usage ;;
-        *) err "Unknown option: $1"; exit 1 ;;
-    esac
-done
-
-if [[ -z "$FROM_SECRET" ]]; then
-    err "--from-secret is required"
-    echo "Run with --help for usage."
-    exit 1
-fi
-
-if [[ -z "$TO_ADDR" ]]; then
-    err "--to is required"
-    echo "Run with --help for usage."
-    exit 1
-fi
-
-if ! command -v curl &>/dev/null; then
-    err "curl is required but not found."
-    exit 1
-fi
-
-# --- Check node ---
-curl -s --max-time 5 "$RPC_URL/status" > /dev/null 2>&1 || {
-    err "Cannot reach node at $RPC_URL"
-    exit 1
-}
-
-# --- Load test ---
-printf "${BOLD}UltraDAG Load Test${RESET}\n"
-echo "  RPC:         $RPC_URL"
-echo "  Transactions: $NUM_TXS"
-echo "  Concurrent:  $CONCURRENT"
-echo "  Amount:      $AMOUNT sats/tx"
-echo "  Fee:         $FEE sats/tx"
+echo "=== UltraDAG Load Test ==="
+echo "Node: $NODE_URL"
+echo "Transactions: $NUM_TXS"
+echo "Concurrent requests: $CONCURRENT"
 echo ""
 
-ACCEPTED=0
-REJECTED=0
-ERRORS=0
-
-send_tx() {
-    local result
-    result=$(curl -s --max-time 10 -X POST "$RPC_URL/tx" \
-        -H "Content-Type: application/json" \
-        -d "{\"from_secret\":\"$FROM_SECRET\",\"to\":\"$TO_ADDR\",\"amount\":$AMOUNT,\"fee\":$FEE}" 2>/dev/null) || {
-        echo "error"
-        return
-    }
-    if echo "$result" | grep -q '"hash"'; then
-        echo "ok"
-    else
-        echo "rejected"
-    fi
-}
+# Check initial status
+echo "=== Initial Network Status ==="
+curl -s "$NODE_URL/status" | jq
+echo ""
 
 START_TIME=$(date +%s)
 
-info "Sending $NUM_TXS transactions..."
-SENT=0
-while [[ $SENT -lt $NUM_TXS ]]; do
-    BATCH=$CONCURRENT
-    if [[ $((SENT + BATCH)) -gt $NUM_TXS ]]; then
-        BATCH=$((NUM_TXS - SENT))
+echo "=== Sending $NUM_TXS transactions with $CONCURRENT concurrent requests ==="
+
+# Function to send a transaction
+send_tx() {
+    local nonce=$1
+    curl -s -X POST "$NODE_URL/tx" \
+        -H "Content-Type: application/json" \
+        -d "{\"from_secret\":\"$VALIDATOR_SECRET\",\"to\":\"$RECEIVER\",\"amount\":$AMOUNT,\"fee\":$FEE}" \
+        > /dev/null 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -n "."
+    else
+        echo -n "x"
     fi
+}
 
-    RESULTS=()
-    for _ in $(seq 1 "$BATCH"); do
-        RESULTS+=("$(send_tx &)")
+# Send transactions in batches
+sent=0
+while [ $sent -lt $NUM_TXS ]; do
+    batch_size=$CONCURRENT
+    if [ $((sent + batch_size)) -gt $NUM_TXS ]; then
+        batch_size=$((NUM_TXS - sent))
+    fi
+    
+    # Launch batch
+    for i in $(seq 1 $batch_size); do
+        send_tx $((sent + i)) &
     done
+    
+    # Wait for batch to complete
     wait
-
-    # Count results — note: with background jobs, we count by re-running
-    for _ in $(seq 1 "$BATCH"); do
-        ACCEPTED=$((ACCEPTED + 1))  # Approximate — curl in background
-    done
-
-    SENT=$((SENT + BATCH))
-
-    # Progress
-    if [[ $((SENT % 100)) -eq 0 || $SENT -eq $NUM_TXS ]]; then
-        printf "\r  Progress: %d/%d" "$SENT" "$NUM_TXS"
+    
+    sent=$((sent + batch_size))
+    
+    # Progress update every 100 txs
+    if [ $((sent % 100)) -eq 0 ]; then
+        echo " [$sent/$NUM_TXS]"
     fi
 done
 
+echo ""
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
-if [[ $DURATION -eq 0 ]]; then DURATION=1; fi
 
 echo ""
+echo "=== Results ==="
+echo "Total time: ${DURATION}s"
+echo "Throughput: $(echo "scale=2; $NUM_TXS / $DURATION" | bc) TPS"
 echo ""
 
-# --- Results ---
-printf "${BOLD}Submission Results${RESET}\n"
-echo "  Sent:      $SENT"
-echo "  Duration:  ${DURATION}s"
-if command -v bc &>/dev/null; then
-    TPS=$(echo "scale=1; $SENT / $DURATION" | bc)
-else
-    TPS=$((SENT / DURATION))
-fi
-echo "  Submit TPS: $TPS"
+# Wait for processing
+echo "=== Waiting 10 seconds for transaction processing ==="
+sleep 10
+
+# Check final status
+echo ""
+echo "=== Final Network Status ==="
+curl -s "$NODE_URL/status" | jq
 echo ""
 
-# --- Monitor mempool ---
-info "Monitoring mempool (30 second timeout)..."
-for i in $(seq 1 30); do
-    MEMPOOL_SIZE=$(curl -s --max-time 2 "$RPC_URL/status" 2>/dev/null | {
-        if command -v jq &>/dev/null; then
-            jq -r '.mempool_size // 0'
-        elif command -v python3 &>/dev/null; then
-            python3 -c "import sys,json; print(json.load(sys.stdin).get('mempool_size',0))"
-        else
-            echo "?"
-        fi
-    }) || MEMPOOL_SIZE="?"
-
-    printf "\r  Mempool: %s pending (%ds)" "$MEMPOOL_SIZE" "$i"
-
-    if [[ "$MEMPOOL_SIZE" == "0" ]]; then
-        echo ""
-        info "Mempool cleared!"
-        FINAL_TIME=$(($(date +%s) - START_TIME))
-        if [[ $FINAL_TIME -eq 0 ]]; then FINAL_TIME=1; fi
-        if command -v bc &>/dev/null; then
-            FINAL_TPS=$(echo "scale=1; $SENT / $FINAL_TIME" | bc)
-        else
-            FINAL_TPS=$((SENT / FINAL_TIME))
-        fi
-        echo "  End-to-end TPS: $FINAL_TPS (${FINAL_TIME}s total)"
-        break
-    fi
-    sleep 1
-done
-
+# Check mempool
+echo "=== Mempool Status ==="
+MEMPOOL_SIZE=$(curl -s "$NODE_URL/status" | jq '.mempool_size')
+echo "Transactions in mempool: $MEMPOOL_SIZE"
 echo ""
-info "Load test complete."
+
+echo "=== Load test complete ==="

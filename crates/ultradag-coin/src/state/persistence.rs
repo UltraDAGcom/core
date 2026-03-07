@@ -3,13 +3,19 @@ use std::path::Path;
 
 use crate::address::Address;
 use crate::persistence::{self, PersistenceError};
-use crate::state::engine::AccountState;
+use crate::state::engine::{AccountState, StakeAccount};
 
 /// Serializable snapshot of StateEngine
 /// Uses Vec of tuples instead of HashMap to avoid JSON serialization issues
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StateSnapshot {
     pub accounts: Vec<(Address, AccountState)>,
+    #[serde(default)]
+    pub stake_accounts: Vec<(Address, StakeAccount)>,
+    #[serde(default)]
+    pub active_validator_set: Vec<Address>,
+    #[serde(default)]
+    pub current_epoch: u64,
     pub total_supply: u64,
     pub last_finalized_round: Option<u64>,
 }

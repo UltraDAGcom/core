@@ -72,6 +72,19 @@ impl Mempool {
         self.txs.contains_key(hash)
     }
 
+    /// Count pending transactions from a specific sender address.
+    pub fn pending_count(&self, from: &crate::Address) -> u64 {
+        self.txs.values().filter(|tx| &tx.from == from).count() as u64
+    }
+
+    /// Get the highest nonce for a sender in the mempool, if any.
+    pub fn pending_nonce(&self, from: &crate::Address) -> Option<u64> {
+        self.txs.values()
+            .filter(|tx| &tx.from == from)
+            .map(|tx| tx.nonce)
+            .max()
+    }
+
     /// Save mempool to disk
     pub fn save(&self, path: &std::path::Path) -> Result<(), crate::persistence::PersistenceError> {
         let snapshot = crate::tx::persistence::MempoolSnapshot {

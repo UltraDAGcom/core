@@ -485,71 +485,6 @@ body::before {
 .f-text { color: var(--subtle); letter-spacing: 0.04em; }
 .f-text strong { color: var(--bright); }
 
-/* ── DAPPS GRID ── */
-.dapp-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 16px;
-}
-.dapp-card {
-  background: var(--bg2); border: 1px solid var(--border);
-  overflow: hidden;
-  cursor: pointer; transition: all 0.2s;
-  position: relative;
-}
-.dapp-card::before {
-  content: '';
-  position: absolute; top: 0; left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, var(--accent), transparent);
-  opacity: 0; transition: opacity 0.3s;
-}
-.dapp-card:hover {
-  border-color: var(--accent2);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-}
-.dapp-card:hover::before { opacity: 1; }
-.dapp-card.coming-soon { opacity: 0.45; cursor: default; }
-.dapp-card.coming-soon:hover { transform: none; box-shadow: none; border-color: var(--border); }
-.dapp-card.coming-soon:hover::before { opacity: 0; }
-.dapp-banner {
-  height: 80px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 32px;
-  background: var(--bg3);
-  position: relative; overflow: hidden;
-}
-.dapp-banner::after {
-  content: ''; position: absolute; inset: 0;
-  background: linear-gradient(180deg, transparent 50%, var(--bg2));
-}
-.dapp-info { padding: 20px 24px; }
-.dapp-name { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: var(--white); letter-spacing: 0.02em; }
-.dapp-desc { font-family: 'Cormorant', serif; font-size: 16px; font-weight: 300; color: var(--subtle); margin-top: 8px; line-height: 1.5; }
-.dapp-tags { display: flex; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
-.dapp-tag {
-  font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 400;
-  letter-spacing: 0.1em; text-transform: uppercase;
-  padding: 2px 8px; border-radius: 2px;
-  border: 1px solid;
-}
-.tag-live { color: var(--green); border-color: rgba(74,222,128,0.3); background: var(--green-dim); }
-.tag-soon { color: var(--dim); border-color: var(--border); }
-.tag-defi { color: var(--accent); border-color: var(--accent2); background: var(--glow2); }
-.tag-nft  { color: #a78bfa; border-color: rgba(167,139,250,0.3); background: rgba(167,139,250,0.06); }
-.tag-infra { color: #7dd3fc; border-color: rgba(125,211,252,0.3); background: rgba(125,211,252,0.06); }
-.dapp-connect {
-  margin-top: 16px; width: 100%;
-  font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500;
-  letter-spacing: 0.08em; text-transform: uppercase;
-  background: var(--accent); border: none;
-  color: var(--bg); padding: 10px 16px; border-radius: 2px;
-  cursor: pointer; transition: background 0.2s;
-}
-.dapp-connect:hover { background: #5aaef0; }
-.dapp-connect:disabled { background: var(--bg3); color: var(--dim); cursor: default; }
-
 /* ── MEMPOOL TX ROWS ── */
 .tx-row {
   display: flex; align-items: center; justify-content: space-between;
@@ -741,7 +676,6 @@ body::before {
   <div class="tab-mob" data-tab="send">Send</div>
   <div class="tab-mob" data-tab="dag">Explorer</div>
   <div class="tab-mob" data-tab="validator">Validator</div>
-  <div class="tab-mob" data-tab="dapps">dApps</div>
 </div>
 
 <!-- LAYOUT -->
@@ -773,11 +707,6 @@ body::before {
       Validator
     </div>
 
-    <div class="nav-section">Ecosystem</div>
-    <div class="nav-item" data-tab="dapps">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="7" height="7"/><rect x="15" y="3" width="7" height="7"/><rect x="15" y="15" width="7" height="7"/><path d="M2 17l5-5 5 5"/></svg>
-      dApps
-    </div>
   </nav>
 
   <!-- MAIN -->
@@ -973,6 +902,40 @@ body::before {
           </div>
         </div>
 
+        <!-- Search Bar -->
+        <div class="card" style="margin-bottom:24px">
+          <div class="card-head"><span class="card-title">Search</span></div>
+          <div class="card-body">
+            <div style="display:flex;gap:8px">
+              <input class="input" id="search-input" placeholder="Search by address, transaction hash, or vertex hash..." style="flex:1">
+              <button class="btn btn-primary" onclick="performSearch()">Search</button>
+            </div>
+            <div class="help">Search for addresses, transaction hashes, or vertex hashes to view details</div>
+          </div>
+        </div>
+
+        <!-- Search Results -->
+        <div class="card" id="search-results" style="margin-bottom:24px;display:none">
+          <div class="card-head">
+            <span class="card-title">Search Results</span>
+            <button class="btn btn-sm" onclick="clearSearch()">Clear</button>
+          </div>
+          <div id="search-results-body">
+            <div class="empty">No results</div>
+          </div>
+        </div>
+
+        <!-- Recent Finalized Rounds -->
+        <div class="card" style="margin-bottom:24px">
+          <div class="card-head">
+            <span class="card-title">Recent Finalized Rounds</span>
+            <button class="btn btn-sm" onclick="loadFinalizedRounds()">Refresh</button>
+          </div>
+          <div id="finalized-rounds-list">
+            <div class="empty">Loading...</div>
+          </div>
+        </div>
+
         <!-- DAG stats + round explorer -->
         <div class="g2 g-free" style="margin-bottom:24px">
           <div class="card">
@@ -994,6 +957,17 @@ body::before {
             <div id="round-vertices">
               <div class="empty"><div class="empty-sub">Enter a round number above</div></div>
             </div>
+          </div>
+        </div>
+
+        <!-- Round Details (Vertices) -->
+        <div class="card" id="round-details" style="margin-bottom:24px;display:none">
+          <div class="card-head">
+            <span class="card-title">Round Vertices</span>
+            <button class="btn btn-sm" onclick="hideRoundDetails()">Close</button>
+          </div>
+          <div id="round-details-body">
+            <div class="empty">No vertices</div>
           </div>
         </div>
 
@@ -1038,143 +1012,6 @@ body::before {
       </div>
     </div>
 
-    <!-- DAPPS -->
-    <div class="tab-panel" id="panel-dapps">
-      <div class="page-header">
-        <div>
-          <div class="page-eyebrow">Ecosystem</div>
-          <div class="page-title">dApp <em>Directory</em></div>
-          <div class="page-sub">Connect your keystore to decentralized applications</div>
-        </div>
-      </div>
-
-      <!-- Connect any dApp by URL -->
-      <div class="card" style="margin-bottom:32px">
-        <div class="card-head"><span class="card-title">Connect Any dApp</span></div>
-        <div class="card-body">
-          <p style="font-family:'Cormorant',serif;font-size:17px;font-weight:300;color:var(--subtle);margin-bottom:16px;line-height:1.6">
-            Any dApp that supports the UltraDAG wallet API can be connected by entering its URL below. Your keystore stays encrypted in this browser.
-          </p>
-          <div style="display:flex;gap:8px">
-            <input class="input" id="dapp-url" placeholder="https://app.example.com" style="flex:1">
-            <button class="btn btn-primary" onclick="launchDapp()">Launch</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Featured label -->
-      <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted);margin-bottom:16px;display:flex;align-items:center;gap:10px">
-        <span style="width:20px;height:1px;background:var(--accent)"></span>
-        Featured Applications
-      </div>
-      <div class="dapp-grid">
-
-        <!-- Explorer -->
-        <div class="dapp-card" onclick="switchTab('dag')">
-          <div class="dapp-banner" style="background:linear-gradient(135deg,#0d1a3a,#0d2040)">
-            <span style="font-size:36px;position:relative;z-index:1">&#x1f52d;</span>
-          </div>
-          <div class="dapp-info">
-            <div class="dapp-name">DAG Explorer</div>
-            <div class="dapp-desc">Explore rounds, vertices, validators and live network state in real time.</div>
-            <div class="dapp-tags">
-              <span class="dapp-tag tag-live">Live</span>
-              <span class="dapp-tag tag-infra">Infrastructure</span>
-            </div>
-            <button class="dapp-connect" onclick="event.stopPropagation();switchTab('dag')">Open Explorer</button>
-          </div>
-        </div>
-
-        <!-- Send -->
-        <div class="dapp-card" onclick="switchTab('send')">
-          <div class="dapp-banner" style="background:linear-gradient(135deg,#0a1a2e,#0a1f3d)">
-            <span style="font-size:36px;position:relative;z-index:1">&#x1f4b8;</span>
-          </div>
-          <div class="dapp-info">
-            <div class="dapp-name">Send / Receive</div>
-            <div class="dapp-desc">Transfer UDAG instantly to any address. Sub-second finality on the UltraDAG network.</div>
-            <div class="dapp-tags">
-              <span class="dapp-tag tag-live">Live</span>
-              <span class="dapp-tag tag-defi">DeFi</span>
-            </div>
-            <button class="dapp-connect" onclick="event.stopPropagation();switchTab('send')">Open Wallet</button>
-          </div>
-        </div>
-
-        <!-- DEX -->
-        <div class="dapp-card coming-soon">
-          <div class="dapp-banner" style="background:linear-gradient(135deg,#1a0d2e,#2a1040)">
-            <span style="font-size:36px;position:relative;z-index:1">&#x26a1;</span>
-          </div>
-          <div class="dapp-info">
-            <div class="dapp-name">UltraSwap DEX</div>
-            <div class="dapp-desc">Decentralized exchange with instant DAG-finalized swaps. Zero MEV. Fully on-chain.</div>
-            <div class="dapp-tags">
-              <span class="dapp-tag tag-soon">Coming Soon</span>
-              <span class="dapp-tag tag-defi">DeFi</span>
-            </div>
-            <button class="dapp-connect" disabled>Coming Soon</button>
-          </div>
-        </div>
-
-        <!-- Staking -->
-        <div class="dapp-card coming-soon">
-          <div class="dapp-banner" style="background:linear-gradient(135deg,#0d2a1a,#0a3020)">
-            <span style="font-size:36px;position:relative;z-index:1">&#x1f3e6;</span>
-          </div>
-          <div class="dapp-info">
-            <div class="dapp-name">Validator Staking</div>
-            <div class="dapp-desc">Stake UDAG to become a validator. Earn block rewards proportional to your participation.</div>
-            <div class="dapp-tags">
-              <span class="dapp-tag tag-soon">Coming Soon</span>
-              <span class="dapp-tag tag-defi">DeFi</span>
-            </div>
-            <button class="dapp-connect" disabled>Coming Soon</button>
-          </div>
-        </div>
-
-        <!-- NFTs -->
-        <div class="dapp-card coming-soon">
-          <div class="dapp-banner" style="background:linear-gradient(135deg,#2a1040,#1a0a35)">
-            <span style="font-size:36px;position:relative;z-index:1">&#x1f5bc;&#xfe0f;</span>
-          </div>
-          <div class="dapp-info">
-            <div class="dapp-name">UltraCollect NFTs</div>
-            <div class="dapp-desc">Mint, trade, and verify digital assets on the DAG. Provably fair ownership with instant finality.</div>
-            <div class="dapp-tags">
-              <span class="dapp-tag tag-soon">Coming Soon</span>
-              <span class="dapp-tag tag-nft">NFT</span>
-            </div>
-            <button class="dapp-connect" disabled>Coming Soon</button>
-          </div>
-        </div>
-
-        <!-- IoT -->
-        <div class="dapp-card coming-soon">
-          <div class="dapp-banner" style="background:linear-gradient(135deg,#0a2a2a,#0a2030)">
-            <span style="font-size:36px;position:relative;z-index:1">&#x1f916;</span>
-          </div>
-          <div class="dapp-info">
-            <div class="dapp-name">IoT Payment Hub</div>
-            <div class="dapp-desc">Machine-to-machine micropayments. Connect devices directly to the DAG for feeless settlement.</div>
-            <div class="dapp-tags">
-              <span class="dapp-tag tag-soon">Coming Soon</span>
-              <span class="dapp-tag tag-infra">Infrastructure</span>
-            </div>
-            <button class="dapp-connect" disabled>Coming Soon</button>
-          </div>
-        </div>
-
-        <!-- Submit -->
-        <div class="dapp-card" style="border-style:dashed;cursor:default;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;text-align:center;padding:24px">
-          <div style="font-family:'Cormorant',serif;font-size:48px;font-weight:300;color:var(--dim);margin-bottom:12px">+</div>
-          <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--subtle)">Submit Your dApp</div>
-          <div style="font-family:'Cormorant',serif;font-size:15px;font-weight:300;color:var(--muted);margin-top:8px;line-height:1.6">Building on UltraDAG? Get listed in the ecosystem directory.</div>
-          <button class="btn btn-sm" style="margin-top:16px" onclick="toast('Coming soon - check GitHub for the dApp SDK','info')">Learn More</button>
-        </div>
-
-      </div>
-    </div>
 
   </div><!-- /main -->
 </div><!-- /layout -->
@@ -1636,11 +1473,15 @@ async function exploreLatestRound() {
 
 async function loadMempool() {
   if (!connected) return;
+  const el = document.getElementById('mempool-list');
   try {
     const res = await fetch(nodeUrl + '/mempool');
+    if (!res.ok) {
+      el.innerHTML = '<div class="empty"><div class="empty-sub">Error loading mempool</div></div>';
+      return;
+    }
     const txs = await res.json();
-    const el = document.getElementById('mempool-list');
-    if (!txs.length) {
+    if (!txs || !txs.length) {
       el.innerHTML = '<div class="empty"><div class="empty-sub">Mempool is empty</div></div>';
       return;
     }
@@ -1648,16 +1489,155 @@ async function loadMempool() {
       <div class="tx-row">
         <div>
           <div class="tx-flow">
-            <span class="tx-addr">${tx.from.slice(0,8)}...</span>
-            <span class="tx-arrow">\u2192</span>
-            <span class="tx-addr">${tx.to.slice(0,8)}...</span>
+            <span class="tx-addr" title="${tx.from}">${tx.from.slice(0,8)}...</span>
+            <span class="tx-arrow">→</span>
+            <span class="tx-addr" title="${tx.to}">${tx.to.slice(0,8)}...</span>
           </div>
-          <div class="tx-hash-sm">${tx.hash}</div>
+          <div class="tx-hash-sm" title="${tx.hash}">${tx.hash}</div>
         </div>
         <div class="tx-amount">${formatUdag(tx.amount)} UDAG</div>
       </div>
     `).join('');
-  } catch {}
+  } catch (err) {
+    el.innerHTML = '<div class="empty"><div class="empty-sub">Failed to load mempool</div></div>';
+  }
+}
+
+// ========================================
+// ENHANCED EXPLORER FUNCTIONS
+// ========================================
+
+async function performSearch() {
+  const query = document.getElementById('search-input').value.trim();
+  if (!query || !connected) return;
+  
+  const resultsCard = document.getElementById('search-results');
+  const resultsBody = document.getElementById('search-results-body');
+  resultsCard.style.display = 'block';
+  resultsBody.innerHTML = '<div class="empty">Searching...</div>';
+  
+  try {
+    // Try searching as address
+    const balRes = await fetch(nodeUrl + '/balance/' + query);
+    if (balRes.ok) {
+      const data = await balRes.json();
+      resultsBody.innerHTML = `
+        <div class="card-body">
+          <div class="drow"><span class="dk">Type</span><span class="dv">Address</span></div>
+          <div class="drow"><span class="dk">Address</span><span class="dv">${query}</span></div>
+          <div class="drow"><span class="dk">Balance</span><span class="dv green">${formatUdag(data.balance)} UDAG</span></div>
+          <div class="drow"><span class="dk">Nonce</span><span class="dv">${data.nonce}</span></div>
+        </div>
+      `;
+      return;
+    }
+    
+    // Try searching as transaction or vertex hash
+    resultsBody.innerHTML = '<div class="empty">Hash search not yet implemented - try an address</div>';
+  } catch (err) {
+    resultsBody.innerHTML = '<div class="empty">No results found</div>';
+  }
+}
+
+function clearSearch() {
+  document.getElementById('search-input').value = '';
+  document.getElementById('search-results').style.display = 'none';
+}
+
+async function loadFinalizedRounds() {
+  if (!connected || !lastStatus) return;
+  
+  const el = document.getElementById('finalized-rounds-list');
+  // Don't show loading if we already have content (prevents flicker)
+  if (!el.innerHTML || el.innerHTML.includes('empty')) {
+    el.innerHTML = '<div class="empty">Loading...</div>';
+  }
+  
+  try {
+    const lastFinalized = lastStatus.last_finalized_round;
+    if (lastFinalized === null || lastFinalized === undefined) {
+      el.innerHTML = '<div class="empty"><div class="empty-sub">No finalized rounds yet</div></div>';
+      return;
+    }
+    
+    // Load last 5 finalized rounds
+    const rounds = [];
+    const start = Math.max(0, lastFinalized - 4);
+    for (let r = lastFinalized; r >= start; r--) {
+      try {
+        const res = await fetch(nodeUrl + '/round/' + r);
+        if (res.ok) {
+          const data = await res.json();
+          rounds.push({ round: r, data });
+        }
+      } catch {}
+    }
+    
+    if (rounds.length === 0) {
+      el.innerHTML = '<div class="empty"><div class="empty-sub">No rounds available</div></div>';
+      return;
+    }
+    
+    el.innerHTML = rounds.map(({ round, data }) => {
+      // data is an array of VertexResponse objects
+      const txCount = data.reduce((sum, v) => sum + (v.tx_count || 0), 0);
+      return `
+        <div class="vtx" onclick="showRoundDetails(${round})" style="cursor:pointer">
+          <div class="vtx-top">
+            <div class="vtx-round">Round ${round}</div>
+            <div class="vtx-validator">${data.length} vertices</div>
+          </div>
+          <div class="vtx-meta">
+            <div class="vtx-meta-item"><span>Transactions:</span><span>${txCount}</span></div>
+            <div class="vtx-meta-item"><span>Status:</span><span style="color:var(--green)">Finalized</span></div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    el.innerHTML = '<div class="empty">Error loading finalized rounds</div>';
+  }
+}
+
+async function showRoundDetails(round) {
+  const detailsCard = document.getElementById('round-details');
+  const detailsBody = document.getElementById('round-details-body');
+  detailsCard.style.display = 'block';
+  detailsBody.innerHTML = '<div class="empty">Loading...</div>';
+  
+  try {
+    const res = await fetch(nodeUrl + '/round/' + round);
+    if (!res.ok) throw new Error('Round not found');
+    
+    // data is an array of VertexResponse objects
+    const vertices = await res.json();
+    
+    if (!vertices || vertices.length === 0) {
+      detailsBody.innerHTML = '<div class="empty"><div class="empty-sub">No vertices in this round</div></div>';
+      return;
+    }
+    
+    // Show vertex details (even if 0 transactions)
+    detailsBody.innerHTML = vertices.map(v => `
+      <div class="vtx">
+        <div class="vtx-top">
+          <div class="vtx-validator">${v.validator.slice(0,12)}...</div>
+          <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--dim)">${v.tx_count} txs</div>
+        </div>
+        <div class="vtx-hash">${v.hash}</div>
+        <div class="vtx-meta">
+          <div class="vtx-meta-item"><span>Reward:</span><span>${formatUdag(v.reward)} UDAG</span></div>
+          <div class="vtx-meta-item"><span>Parents:</span><span>${v.parent_count}</span></div>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    detailsBody.innerHTML = '<div class="empty">Error loading round details</div>';
+  }
+}
+
+function hideRoundDetails() {
+  document.getElementById('round-details').style.display = 'none';
 }
 
 // ========================================
@@ -1739,6 +1719,7 @@ async function connectNode() {
     dagPollTimer = setInterval(pollDag, 2000);
     if (keystore) { refreshPortfolio(); updateSendInfo(); checkValidatorStatus(); }
     loadMempool();
+    loadFinalizedRounds();
   } catch (e) {
     connected = false;
     updateConnectionUI(false);
@@ -1759,7 +1740,16 @@ async function pollDag() {
   if (!connected) return;
   try {
     const data = await (await fetch(nodeUrl + '/status')).json();
-    lastStatus = data; updateDagView(data);
+    const oldFinalized = lastStatus?.last_finalized_round;
+    lastStatus = data; 
+    updateDagView(data);
+    // Only reload finalized rounds if the finalized round changed
+    const dagPanel = document.getElementById('panel-dag');
+    if (dagPanel && dagPanel.classList.contains('active')) {
+      if (oldFinalized !== data.last_finalized_round) {
+        loadFinalizedRounds();
+      }
+    }
   } catch { connected = false; updateConnectionUI(false); }
 }
 
@@ -1770,19 +1760,6 @@ function updateConnectionUI(ok) {
   chip.className = 'status-chip ' + (ok ? 'ok' : 'err');
   dot.className = 'status-dot ' + (ok ? 'ok' : '');
   text.textContent = ok ? nodeUrl.replace(/^https?:\/\//,'') : 'Offline';
-}
-
-// ========================================
-// DAPPS
-// ========================================
-
-function launchDapp() {
-  const url = document.getElementById('dapp-url').value.trim();
-  if (!url) { toast('Enter a dApp URL', 'err'); return; }
-  try {
-    new URL(url);
-    window.open(url, '_blank');
-  } catch { toast('Invalid URL', 'err'); }
 }
 
 // ========================================
@@ -1798,7 +1775,7 @@ function switchTab(tab) {
   });
   if (tab === 'portfolio' && keystore && connected) refreshPortfolio();
   if (tab === 'send' && keystore) { populateSendSelects(); updateSendInfo(); }
-  if (tab === 'dag' && connected) loadMempool();
+  if (tab === 'dag' && connected) { loadMempool(); loadFinalizedRounds(); }
   if (tab === 'validator' && keystore) checkValidatorStatus();
 }
 

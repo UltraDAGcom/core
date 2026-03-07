@@ -1,10 +1,37 @@
 # UltraDAG
 
-A minimal DAG-BFT cryptocurrency. Built in Rust.
+A DAG-BFT cryptocurrency for permissioned networks and IoT applications. Built in Rust.
 
-**Ed25519 signatures. DAG-BFT consensus. Blake3 hashing. 21M max supply. P2P networking.**
+**Ed25519 signatures. DAG-BFT consensus. Blake3 hashing. 21M max supply. Validator staking.**
 
-## Quick Start
+## What is UltraDAG
+
+UltraDAG is a DAG-BFT consensus protocol designed for permissioned networks and IoT applications. It uses a directed acyclic graph (DAG) structure instead of a linear blockchain, enabling parallel block production by multiple validators. The protocol achieves Byzantine fault tolerance with deterministic finality—once a vertex is finalized, it cannot be reverted. There is no proof of work.
+
+## How It Works
+
+In UltraDAG, each validator produces one vertex per round (default 5 seconds). Each vertex references all known tips from the previous round, forming a DAG structure where multiple validators produce blocks concurrently. A vertex achieves finality when 2/3+ of validators have produced at least one descendant of it. This provides immediate, deterministic finality without waiting for confirmations.
+
+Transaction ordering is deterministic: finalized vertices are sorted by (round, topological depth, hash) before applying to state. This ensures all nodes derive identical account balances from the same set of finalized vertices.
+
+## Tokenomics
+
+- **Max supply**: 21,000,000 UDAG (hard cap enforced in state engine)
+- **Halving**: every 210,000 rounds (~1 year at 5s rounds)
+- **Initial block reward**: 50 UDAG per round (total emission per round, split among validators)
+- **Developer allocation**: 1,050,000 UDAG (5%) allocated at genesis
+  - Funds protocol development. No VC funding. No presale.
+  - Deterministic address: `SecretKey::from_bytes([0xDE; 32])`
+  - Visible and auditable from block 0
+- **Faucet reserve**: 1,000,000 UDAG at genesis (testnet only)
+- **Validator rewards**: Proportional to stake when staking is active
+  - Pre-staking fallback: each validator receives full block reward
+  - Post-staking: total round reward split proportionally by stake
+- **Minimum stake**: 1,000 UDAG to become validator
+- **Unstaking cooldown**: 2,016 rounds (~1 week)
+- **Slashing**: 50% stake burn on equivocation
+
+## Running a Node
 
 ```bash
 # Run a validator node (RPC on port 10333)
@@ -16,53 +43,151 @@ cargo run --release -p ultradag-node -- --port 9334 --seed 127.0.0.1:9333 --vali
 # Custom round duration (default 5000ms)
 cargo run --release -p ultradag-node -- --port 9335 --seed 127.0.0.1:9333 --validate --round-ms 3000
 
-# Query chain status
-curl http://127.0.0.1:10333/status
-
-# Generate a keypair
-curl http://127.0.0.1:10333/keygen
-
-# Check balance
-curl http://127.0.0.1:10333/balance/<address>
-
-# Send UDAG
-curl -X POST http://127.0.0.1:10333/tx \
-  -d '{"from_secret":"<secret_key_hex>","to":"<address_hex>","amount":1000000000,"fee":100000}'
+# Fixed validator count (prevents phantom inflation)
+cargo run --release -p ultradag-node -- --port 9333 --validate --validators 4
 ```
+
+## API Reference
+
+HTTP RPC runs on P2P port + 1000 (e.g., P2P 9333 → RPC 10333).
+
+### Core Endpoints
+
+**GET /status** — Node status
+```json
+{
+  "last_finalized_round": 1863,
+  "dag_round": 1865,
+  "total_supply": 109505000000000,
+  "total_staked": 4000000000000,
+  "active_stakers": 4,
+  "peers": 13,
+  "mempool_size": 0
+}
+```
+
+**GET /balance/:address** — Account balance and nonce
+```json
+{
+  "balance_sats": 5000000000,
+  "balance_udag": 50.0,
+  "nonce": 0
+}
+```
+
+**POST /tx** — Submit transaction
+```json
+{
+  "from_secret": "<64-char-hex>",
+  "to": "<64-char-hex>",
+  "amount": 1000000000,
+  "fee": 100000
+}
+```
+
+**GET /keygen** — Generate new keypair
+```json
+{
+  "secret_key": "<64-char-hex>",
+  "address": "<64-char-hex>"
+}
+```
+
+**POST /faucet** — Testnet faucet (testnet only)
+```json
+{
+  "address": "<64-char-hex>",
+  "amount": 1000000000
+}
+```
+
+### Staking Endpoints
+
+**POST /stake** — Lock UDAG as validator stake
+- **Minimum stake:** 10,000 UDAG (1,000,000,000,000 sats)
+- **Request:**
+```json
+{
+  "secret_key": "<64-char-hex>",
+  "amount": 1000000000000
+}
+```
+- **Response:** Transaction hash and confirmation
+- **Note:** Stake becomes active at the next epoch boundary (every 210,000 rounds)
+
+**POST /unstake** — Begin unstake cooldown (~1 week)
+- **Cooldown:** 2,016 rounds before funds are returned
+- **Request:**
+```json
+{
+  "secret_key": "<64-char-hex>"
+}
+```
+- **Response:** Transaction hash and unlock round
+- **Note:** Validator is removed from active set immediately; funds return after cooldown
+
+**GET /stake/:address** — Query stake status for an address
+- **Response:**
+```json
+{
+  "staked": 1000000000000,
+  "unlock_at_round": null,
+  "is_active_validator": true
+}
+```
+- **Fields:**
+  - `staked`: Current staked amount in sats
+  - `unlock_at_round`: Round when unstaked funds will be available (null if not unstaking)
+  - `is_active_validator`: Whether address is in the active validator set
+
+**GET /validators** — List all active validators and their stakes
+- **Response:**
+```json
+[
+  {
+    "address": "a1b2c3...",
+    "stake": 1000000000000
+  }
+]
+```
+- **Note:** Validators are sorted by stake amount (descending). Max 21 active validators.
+
+### DAG Endpoints
+
+**GET /round/:round** — Vertices in a specific round
+**GET /mempool** — Pending transactions (top 100 by fee)
+**GET /peers** — Connected peers
+
+## Test Suite
+
+```bash
+cargo test --workspace --release
+```
+
+**318 tests passing** (2 ignored performance benchmarks)
+
+- ultradag-coin: 111 unit + 167 integration tests
+- ultradag-network: 31 unit + 10 integration tests
+
+Test coverage includes: consensus safety, Byzantine fault tolerance, cryptographic correctness, double-spend prevention, staking lifecycle, supply invariants, state persistence, crash recovery.
 
 ## Architecture
 
-```
-ultradag-coin     Crypto primitives: Ed25519 keys, DAG-BFT consensus, blockchain
-ultradag-network  TCP P2P: peer discovery, block/tx/DAG relay, fork resolution
-ultradag-node     Full node binary: round-based validator, HTTP RPC, peer management
-```
+**3 crates, strict layering:**
 
-## Crates
+| Crate | Purpose |
+|-------|--------|
+| `ultradag-coin` | Ed25519 keys, DAG-BFT consensus, StateEngine, staking, account-based state |
+| `ultradag-network` | TCP P2P: peer discovery, DAG vertex relay, state synchronization |
+| `ultradag-node` | Full node binary: validator + networking + HTTP RPC |
 
-| Crate | Description |
-|---|---|
-| `ultradag-coin` | DAG-BFT consensus cryptocurrency. Ed25519 signatures, multi-parent DAG, BFT finality, 21M max supply, Blake3 hashing, account-based ledger. |
-| `ultradag-network` | TCP P2P networking. Peer discovery, block/tx/DAG relay, split reader/writer connections, fork resolution via chain reorg. |
-| `ultradag-node` | Full node binary. Round-based DAG-BFT validator, Ed25519-signed vertices, finality tracking, HTTP RPC with CORS. |
+## Known Limitations
 
-## Consensus
-
-UltraDAG uses DAG-BFT consensus:
-
-- **DAG structure**: each vertex references all known tips (multiple parents)
-- **Round-based**: validators produce one signed vertex per round (configurable interval)
-- **Ed25519 signed**: every vertex is signed by the proposing validator
-- **BFT finality**: a vertex is finalized when 2/3+ validators have descendants
-- **Parallel blocks**: multiple validators produce vertices concurrently
-- **Fork resolution**: longest valid chain wins, with automatic reorg
-
-## Tokenomics
-
-- Max supply: 21,000,000 UDAG (1 UDAG = 100,000,000 sats)
-- Initial reward: 50 UDAG per block
-- Halving: every 210,000 blocks
-- Target round time: 5 seconds (configurable via `--round-ms`)
+- **Finality algorithm**: O(V²) complexity — 10K vertices takes ~47 seconds. Acceptable at current scale (<10K vertices), needs optimization before mainnet with >100K vertices.
+- **Pre-staking emission**: Total emission scales with validator count until first validator stakes. After staking activates, emission is fixed per round.
+- **No DAG pruning**: Unbounded growth. Pruning (keep last N finalized rounds) is planned.
+- **No per-peer rate limiting**: Acceptable for current permissioned validator set.
+- **Validator set**: Currently permissioned (hardcoded bootstrap nodes). Permissionless staking via epoch reconfiguration is on roadmap.
 
 ## Cryptography
 
@@ -71,7 +196,7 @@ UltraDAG uses DAG-BFT consensus:
 - **Transactions**: carry sender's public key for on-chain verification
 - **DAG vertices**: Ed25519-signed by the proposing validator
 - **Block hashing**: Blake3
-- **Merkle trees**: Blake3-based for transaction commitment
+- **Replay protection**: NETWORK_ID prefix on all signable bytes
 
 ## License
 

@@ -9,7 +9,7 @@ use std::time::Duration;
 use clap::Parser;
 use tracing::{info, warn, error};
 
-use ultradag_coin::{Address, BlockDag, FinalityTracker, Mempool, SecretKey, StateEngine};
+use ultradag_coin::{BlockDag, FinalityTracker, Mempool, SecretKey, StateEngine};
 use ultradag_network::NodeServer;
 
 #[derive(Parser)]
@@ -44,9 +44,31 @@ struct Args {
     #[arg(long)]
     validators: Option<usize>,
 
+    /// File containing allowed validator addresses (one hex address per line).
+    /// When set, only listed validators count toward quorum/finality.
+    /// Other nodes can connect, sync, and submit transactions as observers.
+    #[arg(long)]
+    validator_key: Option<String>,
+
     /// Data directory for persistence
     #[arg(long, default_value_t = default_data_dir())]
     data_dir: String,
+
+    /// Disable automatic connection to public testnet bootstrap nodes.
+    /// Use this for local development or private networks.
+    #[arg(long)]
+    no_bootstrap: bool,
+
+    /// Number of finalized rounds to keep in the DAG.
+    /// Older rounds are pruned to bound memory usage.
+    #[arg(long, default_value = "1000")]
+    pruning_depth: u64,
+
+    /// Disable pruning. Keep full DAG history.
+    /// Useful for archive nodes and block explorers.
+    /// WARNING: Significantly increases memory and disk usage over time.
+    #[arg(long)]
+    archive: bool,
 }
 
 fn default_data_dir() -> String {
@@ -139,6 +161,41 @@ async fn load_state(server: &NodeServer, data_dir: &std::path::Path) {
     }
 }
 
+/// Connect to a peer with exponential backoff retry.
+/// Tries up to `max_retries` times with delays of 2, 4, 8, 16, 32 seconds.
+async fn connect_with_retry(server: &Arc<NodeServer>, addr: &str, max_retries: u32) -> bool {
+    for attempt in 0..=max_retries {
+        match server.connect_to(addr).await {
+            Ok(()) => {
+                info!("Connected to bootstrap node {}", addr);
+                return true;
+            }
+            Err(e) => {
+                if attempt < max_retries {
+                    let delay = Duration::from_secs(2u64.pow(attempt + 1));
+                    warn!(
+                        "Failed to connect to {} (attempt {}/{}): {}. Retrying in {}s...",
+                        addr,
+                        attempt + 1,
+                        max_retries + 1,
+                        e,
+                        delay.as_secs()
+                    );
+                    tokio::time::sleep(delay).await;
+                } else {
+                    warn!(
+                        "Failed to connect to {} after {} attempts: {}",
+                        addr,
+                        max_retries + 1,
+                        e
+                    );
+                }
+            }
+        }
+    }
+    false
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -153,24 +210,27 @@ async fn main() {
     let data_dir = PathBuf::from(&args.data_dir);
     std::fs::create_dir_all(&data_dir).expect("Failed to create data directory");
 
-    let (validator_sk, secret_hex) = match &args.validator {
-        Some(hex) => {
-            let _addr = Address::from_hex(hex).expect("invalid validator address hex");
-            let sk = SecretKey::generate();
-            let sk_hex = sk.to_bytes().iter().map(|b| format!("{b:02x}")).collect::<String>();
-            info!("Note: --validator flag provided but signing requires a keypair. Generated fresh keypair.");
-            info!("  Secret key: {}", sk_hex);
-            info!("  Address:    {}", sk.address().to_hex());
-            (sk, Some(sk_hex))
+    // Load or generate validator keypair (persisted to data_dir/validator.key)
+    let key_path = data_dir.join("validator.key");
+    let validator_sk = if key_path.exists() {
+        let hex = std::fs::read_to_string(&key_path).expect("Failed to read validator key");
+        let hex = hex.trim();
+        let mut bytes = [0u8; 32];
+        for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
+            bytes[i] = u8::from_str_radix(std::str::from_utf8(chunk).unwrap(), 16).unwrap();
         }
-        None => {
-            let sk = SecretKey::generate();
-            let sk_hex = sk.to_bytes().iter().map(|b| format!("{b:02x}")).collect::<String>();
-            info!("Generated validator keypair:");
-            info!("  Secret key: {}", sk_hex);
-            info!("  Address:    {}", sk.address().to_hex());
-            (sk, Some(sk_hex))
-        }
+        let sk = SecretKey::from_bytes(bytes);
+        info!("Loaded validator keypair from disk:");
+        info!("  Address: {}", sk.address().to_hex());
+        sk
+    } else {
+        let sk = SecretKey::generate();
+        let sk_hex: String = sk.to_bytes().iter().map(|b| format!("{b:02x}")).collect();
+        std::fs::write(&key_path, &sk_hex).expect("Failed to save validator key");
+        info!("Generated and saved validator keypair:");
+        info!("  Secret key: {}", sk_hex);
+        info!("  Address:    {}", sk.address().to_hex());
+        sk
     };
 
     let server = Arc::new(NodeServer::new(args.port));
@@ -178,8 +238,49 @@ async fn main() {
     // Load persisted state
     load_state(&server, &data_dir).await;
 
+    // Load permissioned validator allowlist BEFORE rebuilding validator set from DAG.
+    // This ensures the allowlist gates which validators get registered during rebuild.
+    // set_allowed_validators also purges any already-registered non-allowed validators.
+    if let Some(ref key_file) = args.validator_key {
+        let content = std::fs::read_to_string(key_file)
+            .unwrap_or_else(|e| panic!("Failed to read validator key file {}: {}", key_file, e));
+        let mut allowed = std::collections::HashSet::new();
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if line.len() != 64 {
+                warn!("Skipping invalid validator address (expected 64 hex chars): {}", line);
+                continue;
+            }
+            let mut bytes = [0u8; 32];
+            let valid = line.as_bytes().chunks(2).enumerate().all(|(i, chunk)| {
+                u8::from_str_radix(std::str::from_utf8(chunk).unwrap_or("xx"), 16)
+                    .map(|b| { bytes[i] = b; })
+                    .is_ok()
+            });
+            if !valid {
+                warn!("Skipping invalid hex in validator address: {}", line);
+                continue;
+            }
+            let addr = ultradag_coin::Address(bytes);
+            allowed.insert(addr);
+        }
+        if allowed.is_empty() {
+            warn!("Validator key file {} contains no valid addresses!", key_file);
+        } else {
+            let count = allowed.len();
+            let mut fin = server.finality.write().await;
+            fin.set_allowed_validators(allowed);
+            fin.set_configured_validators(count);
+            drop(fin);
+            info!("Loaded {} allowed validators from {} (quorum threshold fixed)", count, key_file);
+        }
+    }
+
     // Rebuild validator set from DAG vertices (not from persisted snapshot).
-    // Prevents stale validators from previous runs inflating the quorum threshold.
+    // The allowlist (if set above) gates which validators get registered.
     {
         let dag = server.dag.read().await;
         let mut fin = server.finality.write().await;
@@ -187,18 +288,20 @@ async fn main() {
         for addr in &validators {
             fin.register_validator(*addr);
         }
+        let registered = fin.validator_count();
         if !validators.is_empty() {
-            info!("Rebuilt validator set from DAG: {} validators", validators.len());
+            info!("Rebuilt validator set from DAG: {}/{} validators registered", registered, validators.len());
         }
     }
 
-    // Set configured validator count AFTER loading state (load replaces the FinalityTracker).
-    // This fixes the quorum threshold so phantom registrations can't inflate it.
-    if let Some(n) = args.validators {
-        let mut fin = server.finality.write().await;
-        fin.set_configured_validators(n);
-        drop(fin);
-        info!("Configured validator count: {} (quorum threshold fixed)", n);
+    // Set configured validator count (only if --validator-key wasn't used, since that sets it already).
+    if args.validator_key.is_none() {
+        if let Some(n) = args.validators {
+            let mut fin = server.finality.write().await;
+            fin.set_configured_validators(n);
+            drop(fin);
+            info!("Configured validator count: {} (quorum threshold fixed)", n);
+        }
     }
 
     // Start RPC server
@@ -208,15 +311,47 @@ async fn main() {
         rpc::start_rpc(rpc_server, rpc_port).await;
     });
 
-    // Connect to seed peers
-    for seed in &args.seed {
-        let s = server.clone();
-        let addr = seed.clone();
+    // Determine seed peers: explicit --seed, bootstrap nodes, or none
+    let seeds: Vec<String> = if !args.seed.is_empty() {
+        args.seed.clone()
+    } else if !args.no_bootstrap {
+        ultradag_network::TESTNET_BOOTSTRAP_NODES
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    } else {
+        vec![]
+    };
+
+    let use_bootstrap = args.seed.is_empty() && !args.no_bootstrap;
+
+    if use_bootstrap && !seeds.is_empty() {
+        info!("No --seed provided, connecting to {} public bootstrap nodes...", seeds.len());
+        let server_clone = server.clone();
+        let bootstrap_seeds = seeds.clone();
         tokio::spawn(async move {
-            if let Err(e) = s.connect_to(&addr).await {
-                error!("Failed to connect to seed {}: {}", addr, e);
+            let mut connected_any = false;
+            for addr in &bootstrap_seeds {
+                if connect_with_retry(&server_clone, addr, 4).await {
+                    connected_any = true;
+                }
+            }
+            if !connected_any {
+                warn!("Could not connect to any bootstrap node. Running in isolation.");
+                warn!("Use --seed <addr:port> to connect to a specific peer.");
             }
         });
+    } else {
+        // Connect to explicit seed peers (no retry — immediate fire-and-forget)
+        for seed in &seeds {
+            let s = server.clone();
+            let addr = seed.clone();
+            tokio::spawn(async move {
+                if let Err(e) = s.connect_to(&addr).await {
+                    error!("Failed to connect to seed {}: {}", addr, e);
+                }
+            });
+        }
     }
 
     // Start validator loop
@@ -253,10 +388,15 @@ async fn main() {
     info!("Round duration: {}ms", args.round_ms);
     info!("Data directory: {}", data_dir.display());
     info!("DAG round: {}", server.dag.read().await.current_round());
-
-    if let Some(sk) = &secret_hex {
-        info!("Save your secret key to send transactions: {}", sk);
+    if use_bootstrap {
+        info!("Bootstrap: connecting to public testnet nodes");
+    } else if !args.seed.is_empty() {
+        info!("Seeds: {:?}", args.seed);
+    } else {
+        info!("Bootstrap: disabled (--no-bootstrap). Running in isolation.");
     }
+
+    info!("Validator key persisted at: {}", key_path.display());
 
     // Set up SIGTERM/SIGINT handler for graceful shutdown with persistence
     let shutdown_server = server.clone();

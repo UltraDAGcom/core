@@ -26,6 +26,9 @@ pub enum CoinError {
     #[error("invalid block reward")]
     InvalidReward,
 
+    #[error("invalid coinbase: expected {expected}, got {got}")]
+    InvalidCoinbase { expected: u64, got: u64 },
+
     #[error("block timestamp too far in the future")]
     TimestampTooFar,
 
@@ -34,4 +37,13 @@ pub enum CoinError {
 
     #[error("duplicate transaction")]
     DuplicateTransaction,
+
+    #[error("address is not staking")]
+    NotStaking,
+
+    #[error("already unstaking — wait for cooldown to complete")]
+    AlreadyUnstaking,
+
+    #[error("stake below minimum: need {minimum}, got {got}")]
+    BelowMinStake { minimum: u64, got: u64 },
 }

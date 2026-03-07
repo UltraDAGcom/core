@@ -1,17 +1,45 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
+
+use serde::{Serialize, Deserialize};
 
 use crate::address::Address;
 use crate::consensus::vertex::DagVertex;
 
 /// Error returned when a DAG insert is rejected.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum DagInsertError {
     /// Validator produced two different vertices for the same round.
     Equivocation { validator: Address, round: u64 },
+    /// Vertex references parent hashes that do not exist in the DAG.
+    MissingParents(Vec<[u8; 32]>),
+}
+
+/// Number of rounds to keep in memory before pruning older finalized vertices.
+/// Keeps last 1000 rounds = ~7 days at 10-second rounds.
+pub const PRUNING_HORIZON: u64 = 1000;
+
+/// Equivocation evidence stored permanently, separate from the prunable DAG.
+/// This ensures slashing proofs survive even after the relevant vertices are pruned.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EquivocationEvidence {
+    pub validator: Address,
+    pub round: u64,
+    pub vertex_hash_1: [u8; 32],
+    pub vertex_hash_2: [u8; 32],
+    pub detected_at_round: u64,
 }
 
 /// The DAG data structure for DAG-BFT consensus.
 /// Stores vertices (blocks with DAG metadata) and tracks the DAG topology.
+/// 
+/// # Pruning
+/// To prevent unbounded memory growth, the DAG prunes vertices from rounds older than
+/// `last_finalized_round - PRUNING_HORIZON`. Pruned vertices are removed from all data structures.
+/// New nodes sync from the pruned state via snapshots.
+/// 
+/// # Equivocation Evidence
+/// Evidence of Byzantine behavior is stored permanently in `evidence_store`, separate from
+/// the prunable DAG vertices. This ensures slashing proofs remain available indefinitely.
 pub struct BlockDag {
     /// All vertices by hash.
     vertices: HashMap<[u8; 32], DagVertex>,
@@ -26,7 +54,16 @@ pub struct BlockDag {
     /// Byzantine validators detected via equivocation.
     byzantine_validators: HashSet<Address>,
     /// Equivocation evidence: (validator, round) -> [vertex1_hash, vertex2_hash]
+    /// NOTE: This is the old temporary store. Use evidence_store for permanent retention.
     equivocation_evidence: HashMap<(Address, u64), [[u8; 32]; 2]>,
+    /// Permanent equivocation evidence store (survives pruning).
+    evidence_store: HashMap<Address, EquivocationEvidence>,
+    /// Incremental descendant validator tracking for O(1) finality checks.
+    /// Maps vertex hash -> set of distinct validators that have at least one descendant.
+    descendant_validators: HashMap<[u8; 32], HashSet<Address>>,
+    /// Earliest round still kept in memory (for pruning tracking).
+    /// Vertices from rounds < pruning_floor have been pruned.
+    pruning_floor: u64,
 }
 
 impl BlockDag {
@@ -39,6 +76,9 @@ impl BlockDag {
             current_round: 0,
             byzantine_validators: HashSet::new(),
             equivocation_evidence: HashMap::new(),
+            evidence_store: HashMap::new(),
+            descendant_validators: HashMap::new(),
+            pruning_floor: 0,
         }
     }
 
@@ -89,6 +129,34 @@ impl BlockDag {
             self.current_round = round;
         }
 
+        // Update incremental descendant validator counts.
+        // Walk upward through ancestors; stop early when the validator is already tracked.
+        let validator = vertex.validator;
+        self.descendant_validators.entry(hash).or_default();
+        let mut queue = VecDeque::new();
+        for parent in &vertex.parent_hashes {
+            queue.push_back(*parent);
+        }
+        let mut visited = HashSet::new();
+        let genesis: [u8; 32] = [0u8; 32];
+        while let Some(ancestor) = queue.pop_front() {
+            if ancestor == genesis || !visited.insert(ancestor) {
+                continue;
+            }
+            let set = self.descendant_validators.entry(ancestor).or_default();
+            if !set.insert(validator) {
+                // Already tracked — all further ancestors already have this validator
+                continue;
+            }
+            if let Some(v) = self.vertices.get(&ancestor) {
+                for p in &v.parent_hashes {
+                    if !visited.contains(p) {
+                        queue.push_back(*p);
+                    }
+                }
+            }
+        }
+
         self.vertices.insert(hash, vertex);
         true
     }
@@ -108,6 +176,16 @@ impl BlockDag {
         // Reject vertices from Byzantine validators
         if self.is_byzantine(&vertex.validator) {
             return Ok(false);
+        }
+
+        // Reject vertices with timestamps too far in the future (>5 minutes)
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        let vertex_time = vertex.block.header.timestamp as i64;
+        if vertex_time > now + 300 {
+            return Ok(false); // Too far in future
         }
 
         // Equivocation: same validator, same round, different vertex
@@ -136,6 +214,18 @@ impl BlockDag {
                 validator: vertex.validator,
                 round: vertex.round,
             });
+        }
+
+        // Check for missing parents before inserting
+        let genesis_parent: [u8; 32] = [0u8; 32];
+        let missing: Vec<[u8; 32]> = vertex.parent_hashes
+            .iter()
+            .filter(|h| **h != genesis_parent && !self.vertices.contains_key(*h))
+            .copied()
+            .collect();
+
+        if !missing.is_empty() {
+            return Err(DagInsertError::MissingParents(missing));
         }
 
         // All checks passed — insert
@@ -182,6 +272,30 @@ impl BlockDag {
 
     pub fn is_empty(&self) -> bool {
         self.vertices.is_empty()
+    }
+
+    /// Iterate over all vertex hashes in the DAG.
+    pub fn all_hashes(&self) -> impl Iterator<Item = &[u8; 32]> {
+        self.vertices.keys()
+    }
+
+    /// Iterate over all vertices in the DAG as (hash, vertex) pairs.
+    pub fn all_vertices(&self) -> impl Iterator<Item = (&[u8; 32], &DagVertex)> {
+        self.vertices.iter()
+    }
+
+    /// Get the number of distinct validators that have at least one descendant of this vertex.
+    /// O(1) lookup using incrementally maintained counts.
+    pub fn descendant_validator_count(&self, hash: &[u8; 32]) -> usize {
+        self.descendant_validators
+            .get(hash)
+            .map(|s| s.len())
+            .unwrap_or(0)
+    }
+
+    /// Get the set of distinct validators that have at least one descendant of this vertex.
+    pub fn descendant_validators_of(&self, hash: &[u8; 32]) -> Option<&HashSet<Address>> {
+        self.descendant_validators.get(hash)
     }
 
     /// Get direct children of a vertex.
@@ -272,6 +386,7 @@ impl BlockDag {
 
     /// Store equivocation evidence (two vertices from same validator, same round).
     /// Returns true if this is new evidence.
+    /// Evidence is stored both in the temporary map and the permanent evidence_store.
     pub fn store_equivocation_evidence(
         &mut self,
         validator: Address,
@@ -284,12 +399,34 @@ impl BlockDag {
             return false;
         }
         self.equivocation_evidence.insert(key, [vertex1_hash, vertex2_hash]);
+        
+        // Also store in permanent evidence_store (survives pruning)
+        if !self.evidence_store.contains_key(&validator) {
+            self.evidence_store.insert(validator, EquivocationEvidence {
+                validator,
+                round,
+                vertex_hash_1: vertex1_hash,
+                vertex_hash_2: vertex2_hash,
+                detected_at_round: self.current_round,
+            });
+        }
+        
         true
     }
 
     /// Get equivocation evidence for a validator in a specific round.
     pub fn get_equivocation_evidence(&self, validator: &Address, round: u64) -> Option<[[u8; 32]; 2]> {
         self.equivocation_evidence.get(&(*validator, round)).copied()
+    }
+
+    /// Get permanent equivocation evidence for a validator (survives pruning).
+    pub fn get_permanent_evidence(&self, validator: &Address) -> Option<&EquivocationEvidence> {
+        self.evidence_store.get(validator)
+    }
+
+    /// Get all permanent equivocation evidence.
+    pub fn all_evidence(&self) -> Vec<&EquivocationEvidence> {
+        self.evidence_store.values().collect()
     }
 
     /// Verify and process equivocation evidence from a peer.
@@ -327,6 +464,67 @@ impl BlockDag {
         newly_stored && was_not_byzantine
     }
 
+    /// Prune vertices from rounds older than the pruning horizon.
+    /// Called after finality advances to prevent unbounded memory growth.
+    /// 
+    /// # Arguments
+    /// * `last_finalized_round` - The most recent finalized round
+    /// 
+    /// # Returns
+    /// Number of vertices pruned
+    pub fn prune_old_rounds(&mut self, last_finalized_round: u64) -> usize {
+        // Calculate the new pruning floor
+        let new_floor = last_finalized_round.saturating_sub(PRUNING_HORIZON);
+        
+        // Only prune if we've advanced beyond the current floor
+        if new_floor <= self.pruning_floor {
+            return 0;
+        }
+        
+        let mut pruned_count = 0;
+        
+        // Collect rounds to prune (all rounds < new_floor)
+        let rounds_to_prune: Vec<u64> = self.rounds.keys()
+            .copied()
+            .filter(|&r| r < new_floor)
+            .collect();
+        
+        for round in rounds_to_prune {
+            if let Some(hashes) = self.rounds.remove(&round) {
+                for hash in hashes {
+                    // Remove from vertices
+                    self.vertices.remove(&hash);
+                    
+                    // Remove from children map
+                    self.children.remove(&hash);
+                    
+                    // Remove from tips (if present)
+                    self.tips.remove(&hash);
+                    
+                    // Remove from descendant_validators
+                    self.descendant_validators.remove(&hash);
+                    
+                    // Remove from children of other vertices
+                    for children_set in self.children.values_mut() {
+                        children_set.remove(&hash);
+                    }
+                    
+                    pruned_count += 1;
+                }
+            }
+        }
+        
+        // Update pruning floor
+        self.pruning_floor = new_floor;
+        
+        pruned_count
+    }
+
+    /// Get the current pruning floor (earliest round still in memory).
+    pub fn pruning_floor(&self) -> u64 {
+        self.pruning_floor
+    }
+
     /// Save DAG state to disk
     pub fn save(&self, path: &std::path::Path) -> Result<(), crate::persistence::PersistenceError> {
         let snapshot = crate::consensus::persistence::DagSnapshot {
@@ -337,6 +535,8 @@ impl BlockDag {
             current_round: self.current_round,
             byzantine_validators: self.byzantine_validators.iter().copied().collect(),
             equivocation_evidence: self.equivocation_evidence.iter().map(|(k, v)| (*k, *v)).collect(),
+            pruning_floor: self.pruning_floor,
+            evidence_store: self.evidence_store.iter().map(|(k, v)| (*k, v.clone())).collect(),
         };
         snapshot.save(path)
     }
@@ -344,14 +544,54 @@ impl BlockDag {
     /// Load DAG state from disk
     pub fn load(path: &std::path::Path) -> Result<Self, crate::persistence::PersistenceError> {
         let snapshot = crate::consensus::persistence::DagSnapshot::load(path)?;
+        let vertices: HashMap<[u8; 32], DagVertex> = snapshot.vertices.into_iter().collect();
+
+        // Rebuild descendant_validators from all vertices
+        let mut descendant_validators: HashMap<[u8; 32], HashSet<Address>> = HashMap::new();
+        for hash in vertices.keys() {
+            descendant_validators.entry(*hash).or_default();
+        }
+        // Sort vertices by round so we process parents before children
+        let mut sorted: Vec<_> = vertices.iter().collect();
+        sorted.sort_by_key(|(_, v)| v.round);
+        let genesis: [u8; 32] = [0u8; 32];
+        for (hash, vertex) in &sorted {
+            let validator = vertex.validator;
+            let mut queue = VecDeque::new();
+            for parent in &vertex.parent_hashes {
+                queue.push_back(*parent);
+            }
+            let mut visited = HashSet::new();
+            while let Some(ancestor) = queue.pop_front() {
+                if ancestor == genesis || !visited.insert(ancestor) {
+                    continue;
+                }
+                let set = descendant_validators.entry(ancestor).or_default();
+                if !set.insert(validator) {
+                    continue;
+                }
+                if let Some(v) = vertices.get(&ancestor) {
+                    for p in &v.parent_hashes {
+                        if !visited.contains(p) {
+                            queue.push_back(*p);
+                        }
+                    }
+                }
+            }
+            let _ = hash; // used above via sorted iteration
+        }
+
         Ok(Self {
-            vertices: snapshot.vertices.into_iter().collect(),
+            vertices,
             children: snapshot.children.into_iter().map(|(k, v)| (k, v.into_iter().collect())).collect(),
             tips: snapshot.tips.into_iter().collect(),
             rounds: snapshot.rounds.into_iter().collect(),
             current_round: snapshot.current_round,
             byzantine_validators: snapshot.byzantine_validators.into_iter().collect(),
             equivocation_evidence: snapshot.equivocation_evidence.into_iter().collect(),
+            evidence_store: snapshot.evidence_store.into_iter().collect(),
+            descendant_validators,
+            pruning_floor: snapshot.pruning_floor,
         })
     }
 
@@ -618,5 +858,40 @@ mod tests {
         let sk4 = random_sk();
         let v_over = make_vertex_with(4, 22, vec![], &sk4);
         assert!(!dag.insert(v_over), "Round 22 vertex should be rejected (exceeds MAX_FUTURE_ROUNDS)");
+    }
+
+    #[test]
+    fn reject_future_timestamp_vertex() {
+        let mut dag = BlockDag::new();
+        let sk = random_sk();
+
+        // Create vertex with timestamp 600 seconds (10 minutes) in the future
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        
+        let mut vertex = make_vertex_with(1, 1, vec![], &sk);
+        vertex.block.header.timestamp = now + 600; // 10 minutes in future
+        
+        // Re-sign with new timestamp
+        let signable = vertex.signable_bytes();
+        vertex.signature = sk.sign(&signable);
+
+        // Should be rejected (>5 minutes in future)
+        let result = dag.try_insert(vertex);
+        assert_eq!(result, Ok(false), "Vertex with timestamp 10 minutes in future should be rejected");
+
+        // Create vertex with timestamp 200 seconds (3.3 minutes) in the future
+        let mut vertex2 = make_vertex_with(2, 1, vec![], &sk);
+        vertex2.block.header.timestamp = now + 200; // 3.3 minutes in future
+        
+        // Re-sign
+        let signable2 = vertex2.signable_bytes();
+        vertex2.signature = sk.sign(&signable2);
+
+        // Should be accepted (<5 minutes in future)
+        let result2 = dag.try_insert(vertex2);
+        assert_eq!(result2, Ok(true), "Vertex with timestamp 3.3 minutes in future should be accepted");
     }
 }

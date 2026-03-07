@@ -16,6 +16,11 @@ pub struct DagSnapshot {
     pub current_round: u64,
     pub byzantine_validators: Vec<Address>,
     pub equivocation_evidence: Vec<((Address, u64), [[u8; 32]; 2])>,
+    #[serde(default)]
+    pub pruning_floor: u64,
+    /// Permanent equivocation evidence store (survives pruning).
+    #[serde(default)]
+    pub evidence_store: Vec<(Address, crate::consensus::dag::EquivocationEvidence)>,
 }
 
 impl DagSnapshot {
@@ -38,6 +43,8 @@ pub struct FinalitySnapshot {
     pub finalized: Vec<[u8; 32]>,
     pub validators: Vec<Address>,
     pub min_validators: usize,
+    #[serde(default)]
+    pub last_finalized_round: u64,
 }
 
 impl FinalitySnapshot {

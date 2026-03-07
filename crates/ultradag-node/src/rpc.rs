@@ -10,10 +10,13 @@ use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tracing::{error, info};
 
-use ultradag_coin::{Address, SecretKey, Signature, Transaction};
+use ultradag_coin::{Address, SecretKey, Signature, Transaction, StakeTx, UnstakeTx, MIN_STAKE_SATS};
 use ultradag_network::{Message, NodeServer};
 
 type BoxBody = Full<Bytes>;
+
+/// Max transactions to scan in mempool for pending cost calculation
+const MAX_MEMPOOL_SCAN: usize = 10_000;
 
 fn json_response(status: StatusCode, body: &impl Serialize) -> Response<BoxBody> {
     let json = serde_json::to_string_pretty(body).unwrap();
@@ -43,6 +46,22 @@ struct StatusResponse {
     dag_tips: usize,
     finalized_count: usize,
     validator_count: usize,
+    total_staked: u64,
+    active_stakers: usize,
+    bootstrap_connected: bool,
+}
+
+#[derive(Serialize)]
+struct BootstrapNodeStatus {
+    addr: String,
+    connected: bool,
+}
+
+#[derive(Serialize)]
+struct PeersResponse {
+    connected: usize,
+    peers: Vec<String>,
+    bootstrap_nodes: Vec<BootstrapNodeStatus>,
 }
 
 #[derive(Serialize)]
@@ -67,6 +86,33 @@ struct VertexResponse {
 struct FaucetRequest {
     address: String,
     amount: u64,
+}
+
+#[derive(Deserialize)]
+struct StakeRequest {
+    secret_key: String,
+    amount: u64,
+}
+
+#[derive(Deserialize)]
+struct UnstakeRequest {
+    secret_key: String,
+}
+
+#[derive(Serialize)]
+struct StakeInfoResponse {
+    address: String,
+    staked: u64,
+    staked_udag: f64,
+    unlock_at_round: Option<u64>,
+    is_active_validator: bool,
+}
+
+#[derive(Serialize)]
+struct ValidatorInfo {
+    address: String,
+    staked: u64,
+    staked_udag: f64,
 }
 
 #[derive(Deserialize)]
@@ -112,6 +158,10 @@ async fn handle_request(
             let peers = server.peers.connected_count().await;
             let dag = server.dag.read().await;
             let fin = server.finality.read().await;
+            let connected_addrs = server.peers.connected_listen_addrs().await;
+            let bootstrap_connected = ultradag_network::TESTNET_BOOTSTRAP_NODES
+                .iter()
+                .any(|bn| connected_addrs.iter().any(|ca| ca == *bn));
             json_response(
                 StatusCode::OK,
                 &StatusResponse {
@@ -125,6 +175,9 @@ async fn handle_request(
                     dag_tips: dag.tips().len(),
                     finalized_count: fin.finalized_count(),
                     validator_count: fin.validator_count(),
+                    total_staked: state.total_staked(),
+                    active_stakers: state.active_stakers().len(),
+                    bootstrap_connected,
                 },
             )
         }
@@ -195,61 +248,64 @@ async fn handle_request(
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid to address hex"));
             };
 
-            // Get nonce
-            let nonce = {
+            // Atomic nonce assignment + validation + mempool insertion.
+            // Hold mempool write lock for the entire sequence to prevent
+            // concurrent requests from getting the same nonce.
+            let (tx, tx_hash, nonce) = {
                 let state = server.state.read().await;
-                state.nonce(&sender)
-            };
+                let mut mp = server.mempool.write().await;
 
-            // Build and sign transaction
-            let mut tx = Transaction {
-                from: sender,
-                to,
-                amount: send_req.amount,
-                fee: send_req.fee,
-                nonce,
-                pub_key: sk.verifying_key().to_bytes(),
-                signature: Signature([0u8; 64]),
-            };
-            tx.signature = sk.sign(&tx.signable_bytes());
+                // Compute nonce: highest pending + 1, or state nonce if no pending
+                let base_nonce = state.nonce(&sender);
+                let nonce = match mp.pending_nonce(&sender) {
+                    Some(max_pending) => max_pending + 1,
+                    None => base_nonce,
+                };
 
-            // Validate against state before accepting
-            {
-                let state = server.state.read().await;
+                // Validate balance including pending cost
                 let balance = state.balance(&sender);
-                if balance < tx.total_cost() {
+                let pending_cost: u64 = mp.best(MAX_MEMPOOL_SCAN)
+                    .iter()
+                    .filter(|t| t.from == sender)
+                    .map(|t| t.total_cost())
+                    .sum();
+                let tx_cost = send_req.amount.saturating_add(send_req.fee);
+                let total_needed = pending_cost.saturating_add(tx_cost);
+                if balance < total_needed {
                     return Ok(error_response(
                         StatusCode::BAD_REQUEST,
                         &format!(
-                            "insufficient balance: need {} sats, have {} sats ({:.4} UDAG)",
-                            tx.total_cost(),
+                            "insufficient balance: need {} sats (incl. {} pending), have {} sats ({:.4} UDAG)",
+                            total_needed,
+                            pending_cost,
                             balance,
                             balance as f64 / 100_000_000.0,
                         ),
                     ));
                 }
-                let expected_nonce = state.nonce(&sender);
-                if tx.nonce != expected_nonce {
-                    return Ok(error_response(
-                        StatusCode::BAD_REQUEST,
-                        &format!("invalid nonce: expected {}, got {}", expected_nonce, tx.nonce),
-                    ));
+
+                // Build and sign transaction
+                let mut tx = Transaction {
+                    from: sender,
+                    to,
+                    amount: send_req.amount,
+                    fee: send_req.fee,
+                    nonce,
+                    pub_key: sk.verifying_key().to_bytes(),
+                    signature: Signature([0u8; 64]),
+                };
+                tx.signature = sk.sign(&tx.signable_bytes());
+                let tx_hash = tx.hash();
+
+                // Insert into mempool while still holding the lock
+                if !mp.insert(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
                 }
-            }
 
-            let tx_hash = tx.hash();
-
-            // Insert into mempool
-            let inserted = {
-                let mut mp = server.mempool.write().await;
-                mp.insert(tx.clone())
+                (tx, tx_hash, nonce)
             };
 
-            if !inserted {
-                return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
-            }
-
-            // Broadcast to peers
+            // Broadcast to peers (outside lock)
             server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
             let _ = server.tx_tx.send(tx);
 
@@ -286,21 +342,245 @@ async fn handle_request(
             let Ok(faucet_req) = serde_json::from_slice::<FaucetRequest>(&body) else {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {address, amount}"));
             };
-            let Some(addr) = Address::from_hex(&faucet_req.address) else {
+            let Some(to) = Address::from_hex(&faucet_req.address) else {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address hex"));
             };
-            {
-                let mut state = server.state.write().await;
-                state.faucet_credit(&addr, faucet_req.amount);
-            }
+
+            // Use the deterministic faucet keypair (same on every node)
+            let faucet_sk = ultradag_coin::faucet_keypair();
+            let faucet_addr = faucet_sk.address();
+            let fee = 0u64; // faucet transactions are fee-free
+
+            let (tx, tx_hash, nonce) = {
+                let state = server.state.read().await;
+                let mut mp = server.mempool.write().await;
+
+                let base_nonce = state.nonce(&faucet_addr);
+                let nonce = match mp.pending_nonce(&faucet_addr) {
+                    Some(max_pending) => max_pending + 1,
+                    None => base_nonce,
+                };
+
+                let balance = state.balance(&faucet_addr);
+                let pending_cost: u64 = mp.best(MAX_MEMPOOL_SCAN)
+                    .iter()
+                    .filter(|t| t.from == faucet_addr)
+                    .map(|t| t.total_cost())
+                    .sum();
+                let total_needed = pending_cost.saturating_add(faucet_req.amount);
+                if balance < total_needed {
+                    return Ok(error_response(
+                        StatusCode::BAD_REQUEST,
+                        &format!(
+                            "faucet insufficient balance: need {} sats, have {} sats ({:.4} UDAG)",
+                            total_needed, balance, balance as f64 / 100_000_000.0,
+                        ),
+                    ));
+                }
+
+                let mut tx = Transaction {
+                    from: faucet_addr,
+                    to,
+                    amount: faucet_req.amount,
+                    fee,
+                    nonce,
+                    pub_key: faucet_sk.verifying_key().to_bytes(),
+                    signature: Signature([0u8; 64]),
+                };
+                tx.signature = faucet_sk.sign(&tx.signable_bytes());
+                let tx_hash = tx.hash();
+
+                if !mp.insert(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                }
+
+                (tx, tx_hash, nonce)
+            };
+
+            // Broadcast to peers
+            server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+            let _ = server.tx_tx.send(tx);
+
             json_response(
                 StatusCode::OK,
                 &serde_json::json!({
-                    "address": faucet_req.address,
-                    "credited": faucet_req.amount,
-                    "credited_udag": faucet_req.amount as f64 / 100_000_000.0,
+                    "tx_hash": hex_encode(&tx_hash),
+                    "from": faucet_addr.to_hex(),
+                    "to": faucet_req.address,
+                    "amount": faucet_req.amount,
+                    "amount_udag": faucet_req.amount as f64 / 100_000_000.0,
+                    "nonce": nonce,
                 }),
             )
+        }
+
+        (&Method::GET, ["peers"]) => {
+            let connected = server.peers.connected_count().await;
+            let peer_addrs = server.peers.connected_addrs().await;
+            let listen_addrs = server.peers.connected_listen_addrs().await;
+            let bootstrap_nodes: Vec<BootstrapNodeStatus> = ultradag_network::TESTNET_BOOTSTRAP_NODES
+                .iter()
+                .map(|bn| BootstrapNodeStatus {
+                    addr: bn.to_string(),
+                    connected: listen_addrs.iter().any(|ca| ca == *bn),
+                })
+                .collect();
+            json_response(
+                StatusCode::OK,
+                &PeersResponse {
+                    connected,
+                    peers: peer_addrs,
+                    bootstrap_nodes,
+                },
+            )
+        }
+
+        (&Method::POST, ["stake"]) => {
+            let body = req.collect().await?.to_bytes();
+            let Ok(stake_req) = serde_json::from_slice::<StakeRequest>(&body) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {secret_key, amount}"));
+            };
+
+            if stake_req.secret_key.len() != 64 {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "secret_key must be 64 hex chars"));
+            }
+            let mut sk_bytes = [0u8; 32];
+            for (i, chunk) in stake_req.secret_key.as_bytes().chunks(2).enumerate() {
+                let Ok(s) = std::str::from_utf8(chunk) else {
+                    return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex"));
+                };
+                let Ok(b) = u8::from_str_radix(s, 16) else {
+                    return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex"));
+                };
+                sk_bytes[i] = b;
+            }
+            let sk = SecretKey::from_bytes(sk_bytes);
+            let sender = sk.address();
+
+            let state = server.state.read().await;
+            let nonce = state.nonce(&sender);
+            let balance = state.balance(&sender);
+            drop(state);
+
+            if stake_req.amount < MIN_STAKE_SATS {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    &format!("minimum stake is {} sats ({} UDAG)", MIN_STAKE_SATS, MIN_STAKE_SATS / 100_000_000)));
+            }
+            if balance < stake_req.amount {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    &format!("insufficient balance: need {}, have {}", stake_req.amount, balance)));
+            }
+
+            let mut tx = StakeTx {
+                from: sender,
+                amount: stake_req.amount,
+                nonce,
+                pub_key: sk.verifying_key().to_bytes(),
+                signature: Signature([0u8; 64]),
+            };
+            tx.signature = sk.sign(&tx.signable_bytes());
+
+            let mut state = server.state.write().await;
+            match state.apply_stake_tx(&tx) {
+                Ok(()) => {
+                    json_response(StatusCode::OK, &serde_json::json!({
+                        "status": "staked",
+                        "address": sender.to_hex(),
+                        "amount": stake_req.amount,
+                        "amount_udag": stake_req.amount as f64 / 100_000_000.0,
+                    }))
+                }
+                Err(e) => error_response(StatusCode::BAD_REQUEST, &e.to_string()),
+            }
+        }
+
+        (&Method::POST, ["unstake"]) => {
+            let body = req.collect().await?.to_bytes();
+            let Ok(unstake_req) = serde_json::from_slice::<UnstakeRequest>(&body) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {secret_key}"));
+            };
+
+            if unstake_req.secret_key.len() != 64 {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "secret_key must be 64 hex chars"));
+            }
+            let mut sk_bytes = [0u8; 32];
+            for (i, chunk) in unstake_req.secret_key.as_bytes().chunks(2).enumerate() {
+                let Ok(s) = std::str::from_utf8(chunk) else {
+                    return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex"));
+                };
+                let Ok(b) = u8::from_str_radix(s, 16) else {
+                    return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex"));
+                };
+                sk_bytes[i] = b;
+            }
+            let sk = SecretKey::from_bytes(sk_bytes);
+            let sender = sk.address();
+
+            let current_round = {
+                let dag = server.dag.read().await;
+                dag.current_round()
+            };
+
+            let state_r = server.state.read().await;
+            let nonce = state_r.nonce(&sender);
+            drop(state_r);
+
+            let mut tx = UnstakeTx {
+                from: sender,
+                nonce,
+                pub_key: sk.verifying_key().to_bytes(),
+                signature: Signature([0u8; 64]),
+            };
+            tx.signature = sk.sign(&tx.signable_bytes());
+
+            let mut state = server.state.write().await;
+            match state.apply_unstake_tx(&tx, current_round) {
+                Ok(()) => {
+                    let unlock_at = current_round + ultradag_coin::UNSTAKE_COOLDOWN_ROUNDS;
+                    json_response(StatusCode::OK, &serde_json::json!({
+                        "status": "unstaking",
+                        "address": sender.to_hex(),
+                        "unlock_at_round": unlock_at,
+                    }))
+                }
+                Err(e) => error_response(StatusCode::BAD_REQUEST, &e.to_string()),
+            }
+        }
+
+        (&Method::GET, ["stake", addr_hex]) => {
+            let Some(addr) = Address::from_hex(addr_hex) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address hex"));
+            };
+            let state = server.state.read().await;
+            let staked = state.stake_of(&addr);
+            let stake_acct = state.stake_account(&addr);
+            let unlock_at = stake_acct.and_then(|s| s.unlock_at_round);
+            let is_active = staked >= MIN_STAKE_SATS && unlock_at.is_none();
+            json_response(StatusCode::OK, &StakeInfoResponse {
+                address: addr.to_hex(),
+                staked,
+                staked_udag: staked as f64 / 100_000_000.0,
+                unlock_at_round: unlock_at,
+                is_active_validator: is_active,
+            })
+        }
+
+        (&Method::GET, ["validators"]) => {
+            let state = server.state.read().await;
+            let stakers = state.active_stakers();
+            let validators: Vec<ValidatorInfo> = stakers.iter().map(|addr| {
+                let staked = state.stake_of(addr);
+                ValidatorInfo {
+                    address: addr.to_hex(),
+                    staked,
+                    staked_udag: staked as f64 / 100_000_000.0,
+                }
+            }).collect();
+            json_response(StatusCode::OK, &serde_json::json!({
+                "count": validators.len(),
+                "total_staked": state.total_staked(),
+                "validators": validators,
+            }))
         }
 
         (&Method::GET, ["keygen"]) => {
@@ -322,7 +602,7 @@ async fn handle_request(
 }
 
 pub async fn start_rpc(server: Arc<NodeServer>, rpc_port: u16) {
-    let listener = match TcpListener::bind(format!("0.0.0.0:{}", rpc_port)).await {
+    let listener = match TcpListener::bind(format!("[::]:{}", rpc_port)).await {
         Ok(l) => l,
         Err(e) => {
             error!("RPC bind failed on port {}: {}", rpc_port, e);
