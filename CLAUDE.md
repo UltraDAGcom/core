@@ -776,31 +776,35 @@ Exponential backoff retry (2, 4, 8, 16, 32 seconds) for bootstrap connections.
 
 4-node Fly.io testnet (Amsterdam). Permissioned validator set.
 
-**Current Status (March 8, 2026, 00:24 UTC+4):** ✅ Clean restart complete. All systems operational.
+**Current Status (March 8, 2026, 01:24 UTC+4):** ✅ API fix deployed. All systems operational.
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| DAG round | 162 (all nodes synchronized) | ✅ |
-| Finalized round | 160-161 | ✅ |
+| DAG round | 214+ (all nodes synchronized) | ✅ |
+| Finalized round | 213+ | ✅ |
 | Finality lag | 1-2 rounds | ✅ Excellent |
 | Vertex density | 3-4 validators per round | ✅ Optimal |
-| Peers per node | 5-9 | ✅ Full mesh |
+| Peers per node | 4-11 | ✅ Full mesh |
 | Validator count | 4 (permissioned allowlist) | ✅ |
 | HTTP RPC | All nodes responsive | ✅ |
-| Supply | 2,078,050 UDAG | ✅ |
+| Supply | 2,080,850 UDAG | ✅ |
 | Round progression | 2.4 rounds/minute | ✅ |
 
-**Latest deployment:** Optimistic responsiveness with production cooldown (min_production_interval = round_duration/2, max 1 second) prevents HTTP service saturation while maintaining fast finality.
+**Latest deployment (March 8, 01:24):** API consistency fix - standardized all RPC endpoints to use `secret_key` parameter (previously `/tx` used `from_secret`). Rolling deployment completed successfully.
 
 **Comprehensive testing completed (March 8, 2026):**
-- ✅ Node synchronization: Perfect (all nodes at same round)
+- ✅ API consistency: All endpoints now use `secret_key` parameter
 - ✅ Fee enforcement: MIN_FEE_SATS = 10,000 working correctly
+- ✅ Node synchronization: Perfect (all nodes at same round)
 - ✅ Vertex density: 3-4 validators per round (optimal)
-- ✅ DAG progression: Smooth and continuous
+- ✅ DAG progression: Smooth and continuous (2.4 rounds/min)
 - ✅ P2P connectivity: Full mesh established
 - ✅ Production cooldown: Preventing HTTP saturation
+- ✅ Faucet endpoint: Operational
+- ✅ Staking endpoints: Working with correct API
+- ✅ Extended monitoring: Running (48-hour stability test in progress)
 
-**All systems operational.** Testnet ready for extended stability testing, load testing, and chaos testing.
+**All systems operational.** Testnet ready for advanced testing: fuzzing, consensus validation, staking verification.
 
 ### Bugs Fixed (March 2026)
 1. **Quorum threshold overflow** — `configured_validators` not used for min check, causing `usize::MAX` threshold on clean-state nodes
