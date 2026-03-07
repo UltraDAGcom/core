@@ -776,21 +776,31 @@ Exponential backoff retry (2, 4, 8, 16, 32 seconds) for bootstrap connections.
 
 4-node Fly.io testnet (Amsterdam). Permissioned validator set.
 
-**Current Status (March 7, 2026, 23:21 UTC+4):** ✅ Optimistic responsiveness fix deployed and stable.
+**Current Status (March 8, 2026, 00:24 UTC+4):** ✅ Clean restart complete. All systems operational.
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| DAG round | 725 (all nodes synchronized) | ✅ |
-| Finalized round | 723 | ✅ |
-| Finality lag | 2 rounds | ✅ Excellent |
-| Peers per node | 4-10 | ✅ Full mesh |
+| DAG round | 162 (all nodes synchronized) | ✅ |
+| Finalized round | 160-161 | ✅ |
+| Finality lag | 1-2 rounds | ✅ Excellent |
+| Vertex density | 3-4 validators per round | ✅ Optimal |
+| Peers per node | 5-9 | ✅ Full mesh |
 | Validator count | 4 (permissioned allowlist) | ✅ |
 | HTTP RPC | All nodes responsive | ✅ |
-| Supply | ~2,079,250 UDAG | ✅ |
+| Supply | 2,078,050 UDAG | ✅ |
+| Round progression | 2.4 rounds/minute | ✅ |
 
 **Latest deployment:** Optimistic responsiveness with production cooldown (min_production_interval = round_duration/2, max 1 second) prevents HTTP service saturation while maintaining fast finality.
 
-**All systems operational.** Testnet ready for extended testing and load testing.
+**Comprehensive testing completed (March 8, 2026):**
+- ✅ Node synchronization: Perfect (all nodes at same round)
+- ✅ Fee enforcement: MIN_FEE_SATS = 10,000 working correctly
+- ✅ Vertex density: 3-4 validators per round (optimal)
+- ✅ DAG progression: Smooth and continuous
+- ✅ P2P connectivity: Full mesh established
+- ✅ Production cooldown: Preventing HTTP saturation
+
+**All systems operational.** Testnet ready for extended stability testing, load testing, and chaos testing.
 
 ### Bugs Fixed (March 2026)
 1. **Quorum threshold overflow** — `configured_validators` not used for min check, causing `usize::MAX` threshold on clean-state nodes
