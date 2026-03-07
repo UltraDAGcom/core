@@ -117,7 +117,7 @@ struct ValidatorInfo {
 
 #[derive(Deserialize)]
 struct SendTxRequest {
-    from_secret: String,
+    secret_key: String,
     to: String,
     amount: u64,
     fee: u64,
@@ -223,20 +223,20 @@ async fn handle_request(
         (&Method::POST, ["tx"]) => {
             let body = req.collect().await?.to_bytes();
             let Ok(send_req) = serde_json::from_slice::<SendTxRequest>(&body) else {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {from_secret, to, amount, fee}"));
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {secret_key, to, amount, fee}"));
             };
 
             // Parse secret key (64 hex chars = 32 bytes)
-            if send_req.from_secret.len() != 64 {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "from_secret must be 64 hex chars (32 bytes)"));
+            if send_req.secret_key.len() != 64 {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "secret_key must be 64 hex chars (32 bytes)"));
             }
             let mut sk_bytes = [0u8; 32];
-            for (i, chunk) in send_req.from_secret.as_bytes().chunks(2).enumerate() {
+            for (i, chunk) in send_req.secret_key.as_bytes().chunks(2).enumerate() {
                 let Ok(s) = std::str::from_utf8(chunk) else {
-                    return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex in from_secret"));
+                    return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex in secret_key"));
                 };
                 let Ok(b) = u8::from_str_radix(s, 16) else {
-                    return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex in from_secret"));
+                    return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex in secret_key"));
                 };
                 sk_bytes[i] = b;
             }
