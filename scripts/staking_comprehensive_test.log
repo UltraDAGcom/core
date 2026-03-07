@@ -1,0 +1,78 @@
+=== UltraDAG Comprehensive Staking Test Suite ===
+Target: https://ultradag-node-1.fly.dev
+Start time: Sun Mar  8 01:29:43 +04 2026
+
+=== TEST 1: Current Staking State ===
+  Active validators: 0
+  Total staked: 0.00 UDAG
+  Status: Pre-staking mode ✅
+  ✅ PASS: Staking state retrieved
+
+=== TEST 2: Minimum Stake Validation ===
+Testing stake amounts below minimum...
+  Testing stake of 1.00 UDAG...
+    ✅ Correctly rejected
+  Testing stake of 5.00 UDAG...
+    ✅ Correctly rejected
+  Testing stake of 9.99 UDAG...
+    ✅ Correctly rejected
+  ✅ PASS: Minimum stake validation working
+
+=== TEST 3: Stake Endpoint Parameter Validation ===
+  ✅ Missing secret_key rejected
+  ✅ Missing amount rejected
+  ✅ Invalid secret_key format rejected
+  ✅ PASS: Parameter validation working
+
+=== TEST 4: Unstake Endpoint Validation ===
+  ✅ Unstake endpoint responding
+  ✅ Missing secret_key rejected
+  ✅ PASS: Unstake endpoint validation working
+
+=== TEST 5: Stake Query Endpoint ===
+Testing stake query for random addresses...
+  ✅ Query 1: address=e122f1a164fe4ca8... staked=0.0 UDAG
+  ✅ Query 2: address=47ec4380d0368b9a... staked=0.0 UDAG
+  ✅ Query 3: address=6836941157eafc1e... staked=0.0 UDAG
+  ✅ PASS: Stake query endpoint working
+
+=== TEST 6: Epoch Information ===
+  Current round: 376
+  Current epoch: 0
+  Rounds until next epoch: 209,624
+  Epoch progress: 0.1790%
+  ✅ Early in epoch 0 (expected for testnet)
+  ✅ PASS: Epoch information retrieved
+
+=== TEST 7: Validator Count Limits ===
+Checking MAX_ACTIVE_VALIDATORS = 21 limit...
+  Current active validators: 0
+  ✅ PASS: Validator count within limit (≤21)
+
+=== TEST 8: Staking Constants Verification ===
+Verifying staking constants...
+  MIN_STAKE_SATS = 10,000 UDAG (1,000,000,000 sats)
+  UNSTAKE_COOLDOWN_ROUNDS = 2,016 rounds (~1 week)
+  MAX_ACTIVE_VALIDATORS = 21
+  EPOCH_LENGTH_ROUNDS = 210,000 rounds
+  OBSERVER_REWARD_PERCENT = 20%
+  ✅ PASS: Constants documented
+
+=== TEST 9: Pre-staking Mode Validation ===
+Checking if network is in pre-staking mode...
+  ✅ Pre-staking mode active (no validators staked)
+  ℹ️  Network using fallback: each vertex gets full block reward
+
+=== TEST 10: Stake/Unstake Transaction Format ===
+Testing transaction response format...
+  ✅ Error response format correct: insufficient balance: need 1000000000000 sats (inc...
+  ✅ PASS: Transaction format validated
+
+=== Staking Test Complete ===
+End time: Sun Mar  8 01:29:52 +04 2026
+
+Results:
+  PASSED: 10
+  FAILED: 0
+  TOTAL:  10
+  ✅ All staking tests passed!

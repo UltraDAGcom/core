@@ -1,19 +1,34 @@
-=== UltraDAG Extended Monitoring Started ===
-Duration: 48 hours
-Interval: 300 seconds (5 minutes)
-Start time: Sun Mar  8 00:25:47 +04 2026
+[2026-03-08 01:11:21] Sample #10
+  Node 1: round= 149 fin= 148 lag= 1 peers= 3 supply=2,075,900 ✅
+  Node 2: round= 149 fin= 148 lag= 1 peers= 4 supply=2,075,900 ✅
+  Node 3: round= 149 fin= 148 lag= 1 peers=10 supply=2,075,900 ✅
+  Node 4: round= 149 fin= 148 lag= 1 peers= 3 supply=2,075,900 ✅
+  Round 149: 4 vertices ✅
 
-[2026-03-08 00:25:47] Sample #1
-  Node 1: round= 265 fin= 264 lag= 1 peers= 5 supply=2,096,250 ✅
-  Node 2: round= 266 fin= 264 lag= 2 peers= 5 supply=2,096,250 ✅
-  Node 3: round= 266 fin= 264 lag= 2 peers= 7 supply=2,096,250 ✅
-  Node 4: round= 266 fin= 264 lag= 2 peers= 9 supply=2,096,250 ✅
-  Round 265: 3 vertices ✅
+[2026-03-08 01:16:23] Sample #11
+  Node 1: round=  52 fin=  51 lag= 1 peers= 5 supply=2,058,600 ✅
+  Node 2: round=  53 fin=  52 lag= 1 peers= 4 supply=2,058,800 ✅
+  Node 3: round=  53 fin=  52 lag= 1 peers= 6 supply=2,058,800 ✅
+  Node 4: round=  54 fin=  52 lag= 2 peers=11 supply=2,058,800 ✅
 
-[2026-03-08 00:30:49] Sample #2
-  Node 1: round= 386 fin= 385 lag= 1 peers= 5 supply=2,117,400 ✅
-  Node 2: round= 386 fin= 385 lag= 1 peers= 5 supply=2,117,400 ✅
-  Node 3: round= 386 fin= 385 lag= 1 peers= 7 supply=2,117,400 ✅
-  Node 4: round= 386 fin= 385 lag= 1 peers= 9 supply=2,117,400 ✅
-  Round 385: 3 vertices ✅
+[2026-03-08 01:21:52] Sample #12
+  Node 1: round= 184 fin= 183 lag= 1 peers= 5 supply=2,081,700 ✅
+  Node 2: round= 184 fin= 183 lag= 1 peers= 4 supply=2,081,700 ✅
+  Node 3: round= 185 fin= 184 lag= 1 peers= 6 supply=2,081,900 ✅
+  Node 4: round= 185 fin= 184 lag= 1 peers=11 supply=2,081,900 ✅
+  Round 184: 4 vertices ✅
+
+[2026-03-08 01:26:55] Sample #13
+  Node 1: round= 306 fin= 304 lag= 2 peers= 5 supply=2,102,750 ✅
+  Node 2: round= 306 fin= 304 lag= 2 peers= 4 supply=2,102,750 ✅
+  Node 3: round= 306 fin= 305 lag= 1 peers= 6 supply=2,102,900 ✅
+  Node 4: round= 306 fin= 305 lag= 1 peers=11 supply=2,102,900 ✅
+  Round 305: 3 vertices ✅
+
+[2026-03-08 01:31:57] Sample #14
+  Node 1: round= 426 fin= 425 lag= 1 peers= 5 supply=2,123,900 ✅
+  Node 2: round= 426 fin= 425 lag= 1 peers= 4 supply=2,123,900 ✅
+  Node 3: round= 426 fin= 425 lag= 1 peers= 6 supply=2,123,900 ✅
+  Node 4: round= 426 fin= 425 lag= 1 peers=11 supply=2,123,900 ✅
+  Round 426: 4 vertices ✅
 

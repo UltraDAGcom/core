@@ -230,6 +230,10 @@ async fn handle_request(
             if send_req.secret_key.len() != 64 {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "secret_key must be 64 hex chars (32 bytes)"));
             }
+            // Reject null bytes and other invalid characters
+            if send_req.secret_key.contains('\0') || !send_req.secret_key.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex in secret_key"));
+            }
             let mut sk_bytes = [0u8; 32];
             for (i, chunk) in send_req.secret_key.as_bytes().chunks(2).enumerate() {
                 let Ok(s) = std::str::from_utf8(chunk) else {
@@ -374,7 +378,7 @@ async fn handle_request(
             // Use the deterministic faucet keypair (same on every node)
             let faucet_sk = ultradag_coin::faucet_keypair();
             let faucet_addr = faucet_sk.address();
-            let fee = 0u64; // faucet transactions are fee-free
+            let fee = ultradag_coin::constants::MIN_FEE_SATS; // must meet minimum fee
 
             let (tx, tx_hash, nonce) = {
                 let state = server.state.read().await;
@@ -470,6 +474,10 @@ async fn handle_request(
             if stake_req.secret_key.len() != 64 {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "secret_key must be 64 hex chars"));
             }
+            // Reject null bytes and other invalid characters
+            if stake_req.secret_key.contains('\0') || !stake_req.secret_key.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex in secret_key"));
+            }
             let mut sk_bytes = [0u8; 32];
             for (i, chunk) in stake_req.secret_key.as_bytes().chunks(2).enumerate() {
                 let Ok(s) = std::str::from_utf8(chunk) else {
@@ -553,6 +561,10 @@ async fn handle_request(
 
             if unstake_req.secret_key.len() != 64 {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "secret_key must be 64 hex chars"));
+            }
+            // Reject null bytes and other invalid characters
+            if unstake_req.secret_key.contains('\0') || !unstake_req.secret_key.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex in secret_key"));
             }
             let mut sk_bytes = [0u8; 32];
             for (i, chunk) in unstake_req.secret_key.as_bytes().chunks(2).enumerate() {
