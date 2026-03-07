@@ -38,12 +38,13 @@ pub async fn validator_loop(
     interval.tick().await;
 
     let mut consecutive_skips = 0u32;
+    let mut in_recovery = false;
     const MAX_SKIPS_BEFORE_RECOVERY: u32 = 3;
 
     loop {
-        // Optimistic responsiveness: wait for EITHER the round timer OR a new vertex notification.
-        // When a new vertex arrives, check if previous round has quorum — if yes, produce immediately.
-        // Timer fires as fallback to guarantee progress even without notifications.
+        // Optimistic responsiveness: produce early when notified (peer vertex arrived),
+        // or fall back to timer. Notification only fires from DagProposal (single vertex),
+        // never from bulk sync handlers, preventing runaway loops.
         let timer_fired;
         tokio::select! {
             _ = interval.tick() => {
@@ -59,45 +60,58 @@ pub async fn validator_loop(
             return;
         }
 
-        // Determine the round we're producing for
+        // Determine the round we're producing for.
+        // CRITICAL: All validators must produce for the same round to avoid drift.
+        // Produce for current_round if we haven't produced there yet, otherwise current_round + 1.
         let dag_round = {
             let dag = server.dag.read().await;
-            dag.current_round() + 1
+            let current = dag.current_round();
+
+            // Check if we already produced a vertex in current_round
+            if dag.has_vertex_from_validator_in_round(&validator, current) {
+                // We already produced in current round, advance to next
+                current + 1
+            } else {
+                // We haven't produced in current round yet, produce there
+                current.max(1) // Never produce for round 0 (genesis)
+            }
         };
 
         let prev_round = dag_round.saturating_sub(1);
 
         // 2f+1 reference rule: check we have enough vertices from the previous round.
         // For round 1 (prev_round=0 with no DAG history), skip the check.
-        // Stall recovery: after MAX_SKIPS consecutive skips, produce unconditionally.
-        if dag_round > 1 && consecutive_skips < MAX_SKIPS_BEFORE_RECOVERY {
+        // Stall recovery: after MAX_SKIPS consecutive timer skips, produce unconditionally.
+        // Once in recovery mode, stay there until quorum is naturally achieved.
+        if dag_round > 1 && !in_recovery && consecutive_skips < MAX_SKIPS_BEFORE_RECOVERY {
             let (has_quorum, prev_round_count, threshold) = has_prev_round_quorum(&server, dag_round).await;
 
             if !has_quorum {
-                if timer_fired {
-                    // Timer fired but no quorum — count as a skip
-                    consecutive_skips += 1;
-                    warn!(
-                        "Skipping round {} — only {}/{} validators seen in round {} (need quorum) [skip {}/{}]",
-                        dag_round, prev_round_count, threshold, prev_round,
-                        consecutive_skips, MAX_SKIPS_BEFORE_RECOVERY,
-                    );
+                if !timer_fired {
+                    // Notification was premature — quorum not yet met. Just wait more.
+                    // Don't count as a skip; only timer ticks count as genuine skips.
+                    continue;
                 }
-                // Notification without quorum — just continue waiting
+                consecutive_skips += 1;
+                warn!(
+                    "Skipping round {} — only {}/{} validators seen in round {} (need quorum) [skip {}/{}]",
+                    dag_round, prev_round_count, threshold, prev_round,
+                    consecutive_skips, MAX_SKIPS_BEFORE_RECOVERY,
+                );
                 continue;
             }
-
-            if !timer_fired {
-                info!("Optimistic: producing round {} early (quorum reached in round {})", dag_round, prev_round);
-                // Reset interval so we don't double-fire
-                interval.reset();
+        } else if consecutive_skips >= MAX_SKIPS_BEFORE_RECOVERY || in_recovery {
+            // Enter or stay in recovery mode — produce unconditionally every round
+            if !in_recovery {
+                warn!("Entering stall recovery mode after {} skips — producing unconditionally until quorum resumes", consecutive_skips);
+                in_recovery = true;
             }
-        } else if consecutive_skips >= MAX_SKIPS_BEFORE_RECOVERY {
-            warn!("Stall recovery: producing round {} unconditionally after {} skips", dag_round, consecutive_skips);
-        } else if !timer_fired {
-            // dag_round <= 1 and notification — check if we should produce
-            // For genesis round, only produce on timer
-            continue;
+            // Check if quorum has resumed so we can exit recovery
+            let (has_quorum, _, _) = has_prev_round_quorum(&server, dag_round).await;
+            if has_quorum {
+                info!("Quorum restored — exiting stall recovery mode");
+                in_recovery = false;
+            }
         }
 
         consecutive_skips = 0;
@@ -238,6 +252,42 @@ pub async fn validator_loop(
                         for tx in &v.block.transactions {
                             mp.remove(&tx.hash());
                         }
+                    }
+                    
+                    // Checkpoint generation: produce checkpoint at CHECKPOINT_INTERVAL
+                    let last_finalized_round = state_w.last_finalized_round().unwrap_or(0);
+                    if last_finalized_round > 0 && last_finalized_round % ultradag_coin::CHECKPOINT_INTERVAL == 0 {
+                        let state_snapshot = state_w.snapshot();
+                        let state_root = ultradag_coin::consensus::compute_state_root(&state_snapshot);
+                        let dag_r = server.dag.read().await;
+                        let dag_tip = dag_r.tips().first().copied().unwrap_or([0u8; 32]);
+                        drop(dag_r);
+                        
+                        let mut checkpoint = ultradag_coin::Checkpoint {
+                            round: last_finalized_round,
+                            state_root,
+                            dag_tip,
+                            total_supply: state_w.total_supply(),
+                            signatures: vec![],
+                        };
+                        
+                        // Sign with our validator key
+                        let sig = ultradag_coin::consensus::CheckpointSignature {
+                            validator,
+                            pub_key: sk.verifying_key().to_bytes(),
+                            signature: sk.sign(&checkpoint.signable_bytes()),
+                        };
+                        checkpoint.signatures.push(sig);
+                        
+                        // Persist locally
+                        if let Err(e) = ultradag_coin::persistence::save_checkpoint(&data_dir, &checkpoint) {
+                            warn!("Failed to save checkpoint: {}", e);
+                        }
+                        
+                        // Broadcast to peers for co-signing
+                        server.peers.broadcast(&Message::CheckpointProposal(checkpoint), "").await;
+                        
+                        info!("Produced checkpoint at round {}", last_finalized_round);
                     }
                 }
             }
