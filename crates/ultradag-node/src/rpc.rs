@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tracing::{error, info};
 
-use ultradag_coin::{Address, SecretKey, Signature, Transaction, StakeTx, UnstakeTx, MIN_STAKE_SATS};
+use ultradag_coin::{Address, SecretKey, Signature, Transaction, TransferTx, StakeTx, UnstakeTx, MIN_STAKE_SATS};
 use ultradag_network::{Message, NodeServer};
 
 type BoxBody = Full<Bytes>;
@@ -248,6 +248,14 @@ async fn handle_request(
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid to address hex"));
             };
 
+            // Validate minimum fee
+            if send_req.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                return Ok(error_response(
+                    StatusCode::BAD_REQUEST,
+                    &format!("fee too low: minimum {} sats (0.0001 UDAG)", ultradag_coin::constants::MIN_FEE_SATS),
+                ));
+            }
+
             // Atomic nonce assignment + validation + mempool insertion.
             // Hold mempool write lock for the entire sequence to prevent
             // concurrent requests from getting the same nonce.
@@ -266,7 +274,7 @@ async fn handle_request(
                 let balance = state.balance(&sender);
                 let pending_cost: u64 = mp.best(MAX_MEMPOOL_SCAN)
                     .iter()
-                    .filter(|t| t.from == sender)
+                    .filter(|t| t.from() == sender)
                     .map(|t| t.total_cost())
                     .sum();
                 let tx_cost = send_req.amount.saturating_add(send_req.fee);
@@ -284,8 +292,8 @@ async fn handle_request(
                     ));
                 }
 
-                // Build and sign transaction
-                let mut tx = Transaction {
+                // Build and sign transfer transaction
+                let mut transfer = TransferTx {
                     from: sender,
                     to,
                     amount: send_req.amount,
@@ -294,7 +302,8 @@ async fn handle_request(
                     pub_key: sk.verifying_key().to_bytes(),
                     signature: Signature([0u8; 64]),
                 };
-                tx.signature = sk.sign(&tx.signable_bytes());
+                transfer.signature = sk.sign(&transfer.signable_bytes());
+                let tx = Transaction::Transfer(transfer);
                 let tx_hash = tx.hash();
 
                 // Insert into mempool while still holding the lock
@@ -325,14 +334,30 @@ async fn handle_request(
         (&Method::GET, ["mempool"]) => {
             let mp = server.mempool.read().await;
             let txs: Vec<serde_json::Value> = mp.best(100).iter().map(|tx| {
-                serde_json::json!({
-                    "hash": hex_encode(&tx.hash()),
-                    "from": tx.from.to_hex(),
-                    "to": tx.to.to_hex(),
-                    "amount": tx.amount,
-                    "fee": tx.fee,
-                    "nonce": tx.nonce,
-                })
+                match tx {
+                    Transaction::Transfer(t) => serde_json::json!({
+                        "type": "transfer",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "to": t.to.to_hex(),
+                        "amount": t.amount,
+                        "fee": t.fee,
+                        "nonce": t.nonce,
+                    }),
+                    Transaction::Stake(t) => serde_json::json!({
+                        "type": "stake",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "amount": t.amount,
+                        "nonce": t.nonce,
+                    }),
+                    Transaction::Unstake(t) => serde_json::json!({
+                        "type": "unstake",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "nonce": t.nonce,
+                    }),
+                }
             }).collect();
             json_response(StatusCode::OK, &txs)
         }
@@ -364,7 +389,7 @@ async fn handle_request(
                 let balance = state.balance(&faucet_addr);
                 let pending_cost: u64 = mp.best(MAX_MEMPOOL_SCAN)
                     .iter()
-                    .filter(|t| t.from == faucet_addr)
+                    .filter(|t| t.from() == faucet_addr)
                     .map(|t| t.total_cost())
                     .sum();
                 let total_needed = pending_cost.saturating_add(faucet_req.amount);
@@ -378,7 +403,7 @@ async fn handle_request(
                     ));
                 }
 
-                let mut tx = Transaction {
+                let mut transfer = TransferTx {
                     from: faucet_addr,
                     to,
                     amount: faucet_req.amount,
@@ -387,7 +412,8 @@ async fn handle_request(
                     pub_key: faucet_sk.verifying_key().to_bytes(),
                     signature: Signature([0u8; 64]),
                 };
-                tx.signature = faucet_sk.sign(&tx.signable_bytes());
+                transfer.signature = faucet_sk.sign(&transfer.signable_bytes());
+                let tx = Transaction::Transfer(transfer);
                 let tx_hash = tx.hash();
 
                 if !mp.insert(tx.clone()) {
@@ -457,41 +483,66 @@ async fn handle_request(
             let sk = SecretKey::from_bytes(sk_bytes);
             let sender = sk.address();
 
-            let state = server.state.read().await;
-            let nonce = state.nonce(&sender);
-            let balance = state.balance(&sender);
-            drop(state);
+            // Build stake transaction and add to mempool (will be included in next vertex)
+            let (tx, tx_hash, nonce) = {
+                let state = server.state.read().await;
+                let mut mp = server.mempool.write().await;
 
-            if stake_req.amount < MIN_STAKE_SATS {
-                return Ok(error_response(StatusCode::BAD_REQUEST,
-                    &format!("minimum stake is {} sats ({} UDAG)", MIN_STAKE_SATS, MIN_STAKE_SATS / 100_000_000)));
-            }
-            if balance < stake_req.amount {
-                return Ok(error_response(StatusCode::BAD_REQUEST,
-                    &format!("insufficient balance: need {}, have {}", stake_req.amount, balance)));
-            }
+                let base_nonce = state.nonce(&sender);
+                let nonce = match mp.pending_nonce(&sender) {
+                    Some(max_pending) => max_pending + 1,
+                    None => base_nonce,
+                };
 
-            let mut tx = StakeTx {
-                from: sender,
-                amount: stake_req.amount,
-                nonce,
-                pub_key: sk.verifying_key().to_bytes(),
-                signature: Signature([0u8; 64]),
-            };
-            tx.signature = sk.sign(&tx.signable_bytes());
+                let balance = state.balance(&sender);
+                let pending_cost: u64 = mp.best(MAX_MEMPOOL_SCAN)
+                    .iter()
+                    .filter(|t| t.from() == sender)
+                    .map(|t| t.total_cost())
+                    .sum();
+                let total_needed = pending_cost.saturating_add(stake_req.amount);
 
-            let mut state = server.state.write().await;
-            match state.apply_stake_tx(&tx) {
-                Ok(()) => {
-                    json_response(StatusCode::OK, &serde_json::json!({
-                        "status": "staked",
-                        "address": sender.to_hex(),
-                        "amount": stake_req.amount,
-                        "amount_udag": stake_req.amount as f64 / 100_000_000.0,
-                    }))
+                if stake_req.amount < MIN_STAKE_SATS {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!("minimum stake is {} sats ({} UDAG)", MIN_STAKE_SATS, MIN_STAKE_SATS / 100_000_000)));
                 }
-                Err(e) => error_response(StatusCode::BAD_REQUEST, &e.to_string()),
-            }
+                if balance < total_needed {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!("insufficient balance: need {} sats (incl. {} pending), have {} sats",
+                            total_needed, pending_cost, balance)));
+                }
+
+                let mut stake_tx = StakeTx {
+                    from: sender,
+                    amount: stake_req.amount,
+                    nonce,
+                    pub_key: sk.verifying_key().to_bytes(),
+                    signature: Signature([0u8; 64]),
+                };
+                stake_tx.signature = sk.sign(&stake_tx.signable_bytes());
+                let tx = Transaction::Stake(stake_tx);
+                let tx_hash = tx.hash();
+
+                if !mp.insert(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                }
+
+                (tx, tx_hash, nonce)
+            };
+
+            // Broadcast to peers
+            server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+            let _ = server.tx_tx.send(tx);
+
+            json_response(StatusCode::OK, &serde_json::json!({
+                "status": "pending",
+                "tx_hash": hex_encode(&tx_hash),
+                "address": sender.to_hex(),
+                "amount": stake_req.amount,
+                "amount_udag": stake_req.amount as f64 / 100_000_000.0,
+                "nonce": nonce,
+                "note": "Stake transaction added to mempool. Will be applied when included in a finalized vertex."
+            }))
         }
 
         (&Method::POST, ["unstake"]) => {
@@ -521,30 +572,47 @@ async fn handle_request(
                 dag.current_round()
             };
 
-            let state_r = server.state.read().await;
-            let nonce = state_r.nonce(&sender);
-            drop(state_r);
+            // Build unstake transaction and add to mempool
+            let (tx, tx_hash, nonce) = {
+                let state = server.state.read().await;
+                let mut mp = server.mempool.write().await;
 
-            let mut tx = UnstakeTx {
-                from: sender,
-                nonce,
-                pub_key: sk.verifying_key().to_bytes(),
-                signature: Signature([0u8; 64]),
-            };
-            tx.signature = sk.sign(&tx.signable_bytes());
+                let base_nonce = state.nonce(&sender);
+                let nonce = match mp.pending_nonce(&sender) {
+                    Some(max_pending) => max_pending + 1,
+                    None => base_nonce,
+                };
 
-            let mut state = server.state.write().await;
-            match state.apply_unstake_tx(&tx, current_round) {
-                Ok(()) => {
-                    let unlock_at = current_round + ultradag_coin::UNSTAKE_COOLDOWN_ROUNDS;
-                    json_response(StatusCode::OK, &serde_json::json!({
-                        "status": "unstaking",
-                        "address": sender.to_hex(),
-                        "unlock_at_round": unlock_at,
-                    }))
+                let mut unstake_tx = UnstakeTx {
+                    from: sender,
+                    nonce,
+                    pub_key: sk.verifying_key().to_bytes(),
+                    signature: Signature([0u8; 64]),
+                };
+                unstake_tx.signature = sk.sign(&unstake_tx.signable_bytes());
+                let tx = Transaction::Unstake(unstake_tx);
+                let tx_hash = tx.hash();
+
+                if !mp.insert(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
                 }
-                Err(e) => error_response(StatusCode::BAD_REQUEST, &e.to_string()),
-            }
+
+                (tx, tx_hash, nonce)
+            };
+
+            // Broadcast to peers
+            server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+            let _ = server.tx_tx.send(tx);
+
+            let unlock_at = current_round + ultradag_coin::UNSTAKE_COOLDOWN_ROUNDS;
+            json_response(StatusCode::OK, &serde_json::json!({
+                "status": "pending",
+                "tx_hash": hex_encode(&tx_hash),
+                "address": sender.to_hex(),
+                "unlock_at_round": unlock_at,
+                "nonce": nonce,
+                "note": "Unstake transaction added to mempool. Will be applied when included in a finalized vertex."
+            }))
         }
 
         (&Method::GET, ["stake", addr_hex]) => {

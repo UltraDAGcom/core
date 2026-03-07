@@ -26,15 +26,30 @@ impl Mempool {
             return false;
         }
 
+        // Reject transactions with fee below minimum (spam prevention)
+        if tx.fee() < crate::constants::MIN_FEE_SATS {
+            return false;
+        }
+
         // If mempool is full, try to evict lowest-fee transaction
         if self.txs.len() >= MAX_MEMPOOL_SIZE {
-            // Find lowest-fee transaction
+            // Find lowest-fee transaction (stake/unstake have 0 fee)
             if let Some((lowest_hash, lowest_fee)) = self.txs.iter()
-                .map(|(h, t)| (*h, t.fee))
+                .map(|(h, t)| {
+                    let fee = match t {
+                        Transaction::Transfer(tx) => tx.fee,
+                        Transaction::Stake(_) | Transaction::Unstake(_) => 0,
+                    };
+                    (*h, fee)
+                })
                 .min_by_key(|(_, fee)| *fee)
             {
+                let new_fee = match &tx {
+                    Transaction::Transfer(tx) => tx.fee,
+                    Transaction::Stake(_) | Transaction::Unstake(_) => 0,
+                };
                 // Only evict if new transaction has higher fee
-                if tx.fee > lowest_fee {
+                if new_fee > lowest_fee {
                     self.txs.remove(&lowest_hash);
                 } else {
                     // Mempool full and new tx has lower/equal fee - reject
@@ -53,9 +68,20 @@ impl Mempool {
     }
 
     /// Get the best transactions for a block (sorted by fee descending).
+    /// Transfers sorted by fee, stake/unstake transactions have priority 0.
     pub fn best(&self, max: usize) -> Vec<Transaction> {
         let mut txs: Vec<&Transaction> = self.txs.values().collect();
-        txs.sort_by(|a, b| b.fee.cmp(&a.fee));
+        txs.sort_by(|a, b| {
+            let fee_a = match a {
+                Transaction::Transfer(tx) => tx.fee,
+                Transaction::Stake(_) | Transaction::Unstake(_) => 0,
+            };
+            let fee_b = match b {
+                Transaction::Transfer(tx) => tx.fee,
+                Transaction::Stake(_) | Transaction::Unstake(_) => 0,
+            };
+            fee_b.cmp(&fee_a)
+        });
         txs.into_iter().take(max).cloned().collect()
     }
 
@@ -74,14 +100,14 @@ impl Mempool {
 
     /// Count pending transactions from a specific sender address.
     pub fn pending_count(&self, from: &crate::Address) -> u64 {
-        self.txs.values().filter(|tx| &tx.from == from).count() as u64
+        self.txs.values().filter(|tx| &tx.from() == from).count() as u64
     }
 
     /// Get the highest nonce for a sender in the mempool, if any.
     pub fn pending_nonce(&self, from: &crate::Address) -> Option<u64> {
         self.txs.values()
-            .filter(|tx| &tx.from == from)
-            .map(|tx| tx.nonce)
+            .filter(|tx| &tx.from() == from)
+            .map(|tx| tx.nonce())
             .max()
     }
 
@@ -119,20 +145,21 @@ impl Default for Mempool {
 mod tests {
     use super::*;
     use crate::address::{Address, SecretKey, Signature};
+    use crate::tx::TransferTx;
 
     fn make_tx(fee: u64, nonce: u64) -> Transaction {
         let sk = SecretKey::generate();
-        let mut tx = Transaction {
+        let mut transfer = TransferTx {
             from: sk.address(),
             to: Address::ZERO,
             amount: 100,
-            fee,
+            fee: crate::constants::MIN_FEE_SATS + fee, // Add to MIN_FEE_SATS to ensure valid fees
             nonce,
             pub_key: sk.verifying_key().to_bytes(),
             signature: Signature([0u8; 64]),
         };
-        tx.signature = sk.sign(&tx.signable_bytes());
-        tx
+        transfer.signature = sk.sign(&transfer.signable_bytes());
+        Transaction::Transfer(transfer)
     }
 
     #[test]
@@ -189,6 +216,7 @@ mod tests {
 
     #[test]
     fn best_returns_sorted_by_fee_descending() {
+        use crate::constants::MIN_FEE_SATS;
         let mut pool = Mempool::new();
         pool.insert(make_tx(5, 0));
         pool.insert(make_tx(20, 1));
@@ -196,9 +224,13 @@ mod tests {
 
         let best = pool.best(10);
         assert_eq!(best.len(), 3);
-        assert_eq!(best[0].fee, 20);
-        assert_eq!(best[1].fee, 10);
-        assert_eq!(best[2].fee, 5);
+        // Extract fees from Transaction enum
+        let fee0 = if let Transaction::Transfer(ref t) = best[0] { t.fee } else { 0 };
+        let fee1 = if let Transaction::Transfer(ref t) = best[1] { t.fee } else { 0 };
+        let fee2 = if let Transaction::Transfer(ref t) = best[2] { t.fee } else { 0 };
+        assert_eq!(fee0, MIN_FEE_SATS + 20);
+        assert_eq!(fee1, MIN_FEE_SATS + 10);
+        assert_eq!(fee2, MIN_FEE_SATS + 5);
     }
 
     #[test]

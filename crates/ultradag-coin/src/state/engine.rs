@@ -115,7 +115,12 @@ impl StateEngine {
         // Apply to a snapshot first to ensure atomicity
         let mut snapshot = self.clone();
 
-        let total_fees: u64 = vertex.block.transactions.iter().map(|tx| tx.fee).sum();
+        let total_fees: u64 = vertex.block.transactions.iter().map(|tx| {
+            match tx {
+                crate::tx::Transaction::Transfer(t) => t.fee,
+                crate::tx::Transaction::Stake(_) | crate::tx::Transaction::Unstake(_) => 0,
+            }
+        }).sum();
         let total_round_reward = crate::constants::block_reward(vertex.block.coinbase.height);
         let proposer = &vertex.block.coinbase.to;
         let total_stake = snapshot.total_staked();
@@ -170,32 +175,55 @@ impl StateEngine {
             }
 
             // Check balance
-            let sender_balance = snapshot.balance(&tx.from);
+            let sender_balance = snapshot.balance(&tx.from());
             if sender_balance < tx.total_cost() {
                 return Err(CoinError::InsufficientBalance {
-                    address: tx.from,
+                    address: tx.from(),
                     required: tx.total_cost(),
                     available: sender_balance,
                 });
             }
 
             // Check nonce
-            let expected_nonce = snapshot.nonce(&tx.from);
-            if tx.nonce != expected_nonce {
+            let expected_nonce = snapshot.nonce(&tx.from());
+            if tx.nonce() != expected_nonce {
                 return Err(CoinError::InvalidNonce {
                     expected: expected_nonce,
-                    got: tx.nonce,
+                    got: tx.nonce(),
                 });
             }
 
-            // Debit sender
-            snapshot.debit(&tx.from, tx.total_cost());
-            snapshot.increment_nonce(&tx.from);
-
-            // Credit recipient
-            snapshot.credit(&tx.to, tx.amount);
-
-            // Fee already included in coinbase
+            // Apply transaction based on type
+            match tx {
+                crate::tx::Transaction::Transfer(transfer_tx) => {
+                    // Debit sender (amount + fee)
+                    snapshot.debit(&transfer_tx.from, transfer_tx.total_cost());
+                    snapshot.increment_nonce(&transfer_tx.from);
+                    // Credit recipient
+                    snapshot.credit(&transfer_tx.to, transfer_tx.amount);
+                    // Fee already included in coinbase
+                }
+                crate::tx::Transaction::Stake(stake_tx) => {
+                    // Debit liquid balance
+                    snapshot.debit(&stake_tx.from, stake_tx.amount);
+                    // Credit stake account
+                    let stake = snapshot.stake_accounts.entry(stake_tx.from).or_default();
+                    stake.staked += stake_tx.amount;
+                    stake.unlock_at_round = None;
+                    // Increment nonce
+                    snapshot.increment_nonce(&stake_tx.from);
+                }
+                crate::tx::Transaction::Unstake(unstake_tx) => {
+                    // Start cooldown period
+                    let stake = snapshot.stake_accounts.entry(unstake_tx.from).or_default();
+                    if stake.staked == 0 {
+                        return Err(CoinError::NoStakeToUnstake);
+                    }
+                    stake.unlock_at_round = Some(vertex.round + crate::tx::UNSTAKE_COOLDOWN_ROUNDS);
+                    // Increment nonce
+                    snapshot.increment_nonce(&unstake_tx.from);
+                }
+            }
         }
 
         // Update last finalized round
@@ -465,16 +493,31 @@ impl StateEngine {
         account.nonce += 1;
     }
 
-    /// Save state to disk
-    pub fn save(&self, path: &std::path::Path) -> Result<(), crate::persistence::PersistenceError> {
-        let snapshot = crate::state::persistence::StateSnapshot {
+    /// Create a snapshot of the current state (for checkpoints).
+    pub fn snapshot(&self) -> crate::state::persistence::StateSnapshot {
+        crate::state::persistence::StateSnapshot {
             accounts: self.accounts.iter().map(|(k, v)| (*k, v.clone())).collect(),
             stake_accounts: self.stake_accounts.iter().map(|(k, v)| (*k, v.clone())).collect(),
             active_validator_set: self.active_validator_set.clone(),
             current_epoch: self.current_epoch,
             total_supply: self.total_supply,
             last_finalized_round: self.last_finalized_round,
-        };
+        }
+    }
+
+    /// Load state from a snapshot (for fast-sync from checkpoint).
+    pub fn load_snapshot(&mut self, snapshot: crate::state::persistence::StateSnapshot) {
+        self.accounts = snapshot.accounts.into_iter().collect();
+        self.stake_accounts = snapshot.stake_accounts.into_iter().collect();
+        self.active_validator_set = snapshot.active_validator_set;
+        self.current_epoch = snapshot.current_epoch;
+        self.total_supply = snapshot.total_supply;
+        self.last_finalized_round = snapshot.last_finalized_round;
+    }
+
+    /// Save state to disk
+    pub fn save(&self, path: &std::path::Path) -> Result<(), crate::persistence::PersistenceError> {
+        let snapshot = self.snapshot();
         snapshot.save(path)
     }
 
@@ -523,7 +566,7 @@ mod tests {
     use crate::tx::{CoinbaseTx, Transaction};
 
     fn make_signed_tx(sk: &SecretKey, to: Address, amount: u64, fee: u64, nonce: u64) -> Transaction {
-        let mut tx = Transaction {
+        let mut transfer = crate::tx::TransferTx {
             from: sk.address(),
             to,
             amount,
@@ -532,8 +575,8 @@ mod tests {
             pub_key: sk.verifying_key().to_bytes(),
             signature: Signature([0u8; 64]),
         };
-        tx.signature = sk.sign(&tx.signable_bytes());
-        tx
+        transfer.signature = sk.sign(&transfer.signable_bytes());
+        Transaction::Transfer(transfer)
     }
 
     fn make_vertex_for(
@@ -543,7 +586,12 @@ mod tests {
         txs: Vec<Transaction>,
         sk: &SecretKey,
     ) -> DagVertex {
-        let total_fees: u64 = txs.iter().map(|tx| tx.fee).sum();
+        let total_fees: u64 = txs.iter().map(|tx| {
+            match tx {
+                Transaction::Transfer(t) => t.fee,
+                _ => 0,
+            }
+        }).sum();
         let reward = crate::constants::block_reward(height);
         let coinbase = CoinbaseTx {
             to: *proposer,

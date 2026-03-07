@@ -20,7 +20,7 @@ async fn tcp_pair() -> (tokio::net::TcpStream, tokio::net::TcpStream) {
 }
 
 fn make_real_tx(sk: &SecretKey) -> Transaction {
-    let mut tx = Transaction {
+    let mut transfer = ultradag_coin::TransferTx {
         from: sk.address(),
         to: Address::ZERO,
         amount: 1000,
@@ -29,8 +29,8 @@ fn make_real_tx(sk: &SecretKey) -> Transaction {
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
     };
-    tx.signature = sk.sign(&tx.signable_bytes());
-    tx
+    transfer.signature = sk.sign(&transfer.signable_bytes());
+    Transaction::Transfer(transfer)
 }
 
 fn make_real_vertex(sk: &SecretKey, round: u64) -> DagVertex {
@@ -129,10 +129,10 @@ async fn transaction_roundtrip() {
     let sk = SecretKey::from_bytes([20u8; 32]);
     let tx = make_real_tx(&sk);
     let original_hash = tx.hash();
-    let original_from = tx.from;
-    let original_amount = tx.amount;
-    let original_fee = tx.fee;
-    let original_nonce = tx.nonce;
+    let original_from = tx.from();
+    let original_amount = tx.amount();
+    let original_fee = tx.fee();
+    let original_nonce = tx.nonce();
 
     let (server, client) = tcp_pair().await;
     let (_, server_writer) = split_connection(server, "s".into());
@@ -144,10 +144,14 @@ async fn transaction_roundtrip() {
     match received {
         Message::NewTx(t) => {
             assert_eq!(t.hash(), original_hash);
-            assert_eq!(t.from, original_from);
-            assert_eq!(t.amount, original_amount);
-            assert_eq!(t.fee, original_fee);
-            assert_eq!(t.nonce, original_nonce);
+            assert_eq!(t.from(), original_from);
+            assert_eq!(t.nonce(), original_nonce);
+            if let ultradag_coin::Transaction::Transfer(ref transfer) = t {
+                assert_eq!(transfer.amount, original_amount);
+                assert_eq!(transfer.fee, original_fee);
+            } else {
+                panic!("expected Transfer variant");
+            }
             assert!(t.verify_signature(), "signature must still be valid");
         }
         other => panic!("expected NewTx, got {:?}", other),

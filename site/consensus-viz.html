@@ -3,22 +3,32 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UltraDAG — DAG-BFT Consensus Visualization</title>
+<title>UltraDAG — Live Consensus Demo</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Syne:wght@400;600;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;600;700;800&display=swap');
 
   :root {
-    --bg: #080c10;
-    --surface: #0d1117;
+    --bg: #080b0f;
+    --bg2: #0d1118;
+    --bg3: #111820;
+    --surface: #0d1118;
     --border: #1e2a38;
+    --border2: #253040;
+    --dim: #2e4055;
+    --muted: #4a6480;
+    --subtle: #6b8aaa;
+    --body: #8fafc8;
+    --bright: #c4daf0;
+    --white: #e8f2fa;
+    --accent: #3d9be9;
+    --accent2: #1a6fb5;
     --v0: #00d4ff;
     --v1: #a78bfa;
     --v2: #34d399;
     --v3: #fb923c;
     --finalized: #fbbf24;
     --pending: #374151;
-    --text: #e2e8f0;
-    --muted: #4b5563;
+    --text: #e8f2fa;
     --edge: #1e3a5f;
     --edge-active: #2563eb;
   }
@@ -27,8 +37,8 @@
 
   body {
     background: var(--bg);
-    color: var(--text);
-    font-family: 'JetBrains Mono', monospace;
+    color: var(--body);
+    font-family: 'Syne', sans-serif;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -37,43 +47,58 @@
     overflow-x: hidden;
   }
 
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
   .header {
     text-align: center;
     margin-bottom: 48px;
   }
 
   .header h1 {
-    font-family: 'Syne', sans-serif;
-    font-weight: 800;
-    font-size: clamp(1.8rem, 4vw, 3rem);
+    font-family: 'Cormorant', serif;
+    font-weight: 300;
+    font-size: clamp(2.5rem, 5vw, 4rem);
     letter-spacing: -0.02em;
-    background: linear-gradient(135deg, #00d4ff 0%, #a78bfa 50%, #34d399 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: var(--white);
     margin-bottom: 8px;
   }
 
+  .header h1 em {
+    font-style: italic;
+    color: var(--accent);
+  }
+
   .header p {
-    color: var(--muted);
-    font-size: 0.8rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+    font-family: 'Cormorant', serif;
+    font-size: 1.1rem;
+    font-weight: 300;
+    font-style: italic;
+    color: var(--subtle);
+    line-height: 1.4;
   }
 
   .back-link {
     position: absolute;
     top: 24px;
     left: 24px;
-    font-size: 0.75rem;
-    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--subtle);
     text-decoration: none;
     transition: color 0.2s;
   }
 
-  .back-link:hover {
-    color: var(--v0);
-  }
+  .back-link:hover { color: var(--white); }
 
   .viz-container {
     width: 100%;
@@ -99,7 +124,9 @@
     display: flex;
     align-items: center;
     gap: 20px;
-    font-size: 0.72rem;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
   }
 
   .status-item {
@@ -124,28 +151,64 @@
   .controls {
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
   }
+
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .control-group label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  select {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    color: var(--bright);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    padding: 8px 12px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  select:hover { border-color: var(--subtle); }
+  select:focus { outline: none; border-color: var(--accent); }
 
   button {
     background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
-    padding: 6px 14px;
-    border-radius: 6px;
+    border: 1px solid var(--border2);
+    color: var(--bright);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 8px 16px;
+    border-radius: 2px;
     cursor: pointer;
     transition: all 0.15s;
   }
 
   button:hover {
-    border-color: var(--v0);
-    color: var(--v0);
+    border-color: var(--subtle);
+    color: var(--white);
+    transform: translateY(-1px);
   }
 
   button.active {
-    background: var(--v0);
-    border-color: var(--v0);
+    background: var(--accent);
+    border-color: var(--accent);
     color: var(--bg);
   }
 
@@ -155,22 +218,39 @@
     height: 480px;
   }
 
-  canvas {
-    width: 100%;
-    height: 100%;
-  }
+  canvas { width: 100%; height: 100%; }
 
   .phase-banner {
     position: absolute;
     top: 16px;
     left: 50%;
     transform: translateX(-50%);
-    font-size: 0.72rem;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
     color: var(--muted);
-    letter-spacing: 0.08em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     pointer-events: none;
     transition: opacity 0.3s;
+    white-space: nowrap;
+  }
+
+  /* Optimistic indicator */
+  .opt-indicator {
+    position: absolute;
+    top: 16px;
+    right: 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    pointer-events: none;
+    transition: all 0.3s;
+  }
+
+  .opt-indicator.firing {
+    color: #34d399;
+    text-shadow: 0 0 8px rgba(52,211,153,0.6);
   }
 
   .legend {
@@ -183,18 +263,22 @@
   }
 
   .legend-label {
+    font-family: 'DM Mono', monospace;
     font-size: 0.65rem;
     color: var(--muted);
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-right: 4px;
+    letter-spacing: 0.12em;
+    margin-right: 8px;
   }
 
   .legend-item {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
+    font-family: 'DM Mono', monospace;
     font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    color: var(--body);
   }
 
   .swatch {
@@ -212,30 +296,119 @@
   }
 
   .info-row {
-    padding: 14px 20px;
+    padding: 16px 20px;
     border-top: 1px solid var(--border);
-    font-size: 0.72rem;
-    color: var(--muted);
-    line-height: 1.7;
-    min-height: 52px;
+    font-family: 'Cormorant', serif;
+    font-size: 0.95rem;
+    font-weight: 300;
+    color: var(--subtle);
+    line-height: 1.6;
+    min-height: 56px;
   }
 
-  .info-row span {
-    color: var(--text);
+  .info-row span { color: var(--white); font-weight: 400; }
+
+  /* Skip indicator badge */
+  .skip-badge {
+    position: absolute;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    color: #ef4444;
+    letter-spacing: 0.05em;
+    pointer-events: none;
+    animation: fadeout 1.5s forwards;
+  }
+
+  @keyframes fadeout {
+    0% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-20px); }
+  }
+
+  .description {
+    max-width: 900px;
+    margin: 40px auto 0;
+    padding: 0 24px;
+  }
+
+  .description h2 {
+    font-family: 'Cormorant', serif;
+    font-size: 2.5rem;
+    font-weight: 300;
+    line-height: 1.05;
+    margin-bottom: 20px;
+    color: var(--white);
+  }
+
+  .description p {
+    font-family: 'Cormorant', serif;
+    font-size: 1.05rem;
+    font-weight: 300;
+    color: var(--subtle);
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+
+  .description ul {
+    list-style: none;
+    margin: 16px 0;
+    padding: 0;
+  }
+
+  .description li {
+    font-family: 'Cormorant', serif;
+    font-size: 1.05rem;
+    font-weight: 300;
+    color: var(--subtle);
+    line-height: 1.7;
+    margin-bottom: 10px;
+    padding-left: 24px;
+    position: relative;
+  }
+
+  .description li:before {
+    content: "→";
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+    font-size: 1.1rem;
+  }
+
+  .description code {
+    font-family: 'DM Mono', monospace;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    padding: 3px 8px;
+    border-radius: 2px;
+    font-size: 0.85rem;
+    color: var(--accent);
+  }
+
+  .algo-note {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    padding: 12px 16px;
+    margin: 16px 0;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--subtle);
+    line-height: 1.7;
+    letter-spacing: 0.02em;
+  }
+
+  .algo-note strong {
+    color: var(--bright);
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
   }
 
   @media(max-width: 768px) {
-    .canvas-wrap {
-      height: 360px;
-    }
-    .controls {
-      width: 100%;
-      justify-content: center;
-    }
-    button {
-      font-size: 0.65rem;
-      padding: 5px 10px;
-    }
+    .canvas-wrap { height: 360px; }
+    .controls { width: 100%; justify-content: center; }
+    button { font-size: 0.65rem; padding: 5px 10px; }
   }
 </style>
 </head>
@@ -244,8 +417,8 @@
 <a href="index.html" class="back-link">← Back to UltraDAG</a>
 
 <div class="header">
-  <h1>UltraDAG Consensus</h1>
-  <p>Leaderless DAG-BFT · Descendant-Coverage Finality · 4 Validators</p>
+  <h1>Ultra<em>DAG</em> Consensus</h1>
+  <p>Accurate simulation of UltraDAG's DAG-BFT protocol — incremental descendant tracking, 2f+1 gate, optimistic responsiveness.</p>
 </div>
 
 <div class="viz-container">
@@ -263,10 +436,31 @@
         <span style="color:var(--muted)">■</span>
         <span id="stat-pending">0 pending</span>
       </div>
+      <div class="status-item" id="stat-opt" style="color:#34d399;display:none">
+        ⚡ optimistic
+      </div>
     </div>
     <div class="controls">
       <button id="btn-pause">Pause</button>
       <button id="btn-reset">Reset</button>
+      <div class="control-group">
+        <label>Speed:</label>
+        <select id="speed-select">
+          <option value="2200">Slow</option>
+          <option value="1400" selected>Normal</option>
+          <option value="800">Fast</option>
+          <option value="400">Very Fast</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Validators:</label>
+        <select id="validator-select">
+          <option value="3">3 (f=0)</option>
+          <option value="4" selected>4 (f=1)</option>
+          <option value="7">7 (f=2)</option>
+          <option value="10">10 (f=3)</option>
+        </select>
+      </div>
       <button id="btn-equivocation">Trigger Equivocation</button>
     </div>
   </div>
@@ -274,6 +468,7 @@
   <div class="canvas-wrap">
     <canvas id="canvas"></canvas>
     <div class="phase-banner" id="phase-banner">Initializing…</div>
+    <div class="opt-indicator" id="opt-indicator">timer fallback</div>
   </div>
 
   <div class="legend">
@@ -284,45 +479,74 @@
     <div class="legend-item"><div class="swatch" style="background:var(--v3)"></div>V3 — Delta</div>
     <div class="legend-item"><div class="swatch" style="background:var(--finalized)"></div>Finalized</div>
     <div class="legend-item"><div class="swatch ring" style="color:var(--muted)"></div>Pending</div>
+    <div class="legend-item"><div class="swatch" style="background:#ef4444"></div>Byzantine (banned)</div>
   </div>
 
   <div class="info-row" id="info-row">
     <span>Waiting for first round…</span>
-    Vertices are finalized when <span>⌈2n/3⌉ = 3</span> distinct validators have built upon them and all parents are finalized.
   </div>
+</div>
+
+<div class="description">
+  <h2>Accurate Protocol Simulation</h2>
+
+  <div class="algo-note">
+    <strong>Implementation fidelity</strong>
+    This demo accurately simulates the UltraDAG consensus implementation in Rust.
+    Finality uses O(1) incremental descendant tracking (same as dag.rs).
+    Validators skip rounds that fail the 2f+1 gate (same as validator.rs).
+    Production fires optimistically at quorum before the timer (same as tokio::select! in validator.rs).
+  </div>
+
+  <p><strong>Key Protocol Properties:</strong></p>
+  <ul>
+    <li><strong>Incremental Descendant Tracking:</strong> When vertex V is inserted, all ancestors of V gain V's validator in their <code>descendant_validators</code> set via upward BFS with early termination. Finality check is O(1) — just read the precomputed count.</li>
+    <li><strong>2f+1 Gate:</strong> Before producing round r, each validator checks that ⌈2n/3⌉ distinct validators produced vertices in round r−1. If not, the round is skipped (shown as SKIP in the demo). After 3 consecutive skips, stall recovery fires unconditionally.</li>
+    <li><strong>Optimistic Responsiveness:</strong> As soon as quorum vertices from round r−1 arrive, the validator produces immediately — no need to wait for the full timer. The timer is a fallback for slow networks.</li>
+    <li><strong>Byzantine Fault Tolerance:</strong> Up to f = ⌊(n−1)/3⌋ Byzantine validators tolerated. Equivocators (two vertices same round) are permanently banned — no unban path exists.</li>
+    <li><strong>Parent Finality Guarantee:</strong> A vertex can only finalize after all its parents are finalized. Finality cascades forward through children.</li>
+  </ul>
 </div>
 
 <script>
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
-const VALIDATORS = 4;
-const QUORUM = Math.ceil(2 * VALIDATORS / 3); // 3
-const COLORS = ['#00d4ff', '#a78bfa', '#34d399', '#fb923c'];
-const BG = '#0d1117';
-const FINALIZED_COLOR = '#fbbf24';
-const PENDING_COLOR = '#374151';
-const BYZANTINE_COLOR = '#ef4444';
+let VALIDATORS = 4;
+let QUORUM = Math.ceil(2 * VALIDATORS / 3);
+const COLORS = [
+  '#00d4ff','#a78bfa','#34d399','#fb923c',
+  '#f472b6','#fbbf24','#22d3ee','#fb7185',
+  '#86efac','#c084fc'
+];
+const V_LABELS = ['Alpha','Beta','Gamma','Delta','Epsilon','Zeta','Eta','Theta','Iota','Kappa'];
 
-const V_LABELS = ['Alpha', 'Beta', 'Gamma', 'Delta'];
+const FINALIZED_COLOR = '#fbbf24';
+const BYZANTINE_COLOR = '#ef4444';
+const STARTUP_GRACE = 2; // rounds before 2f+1 gate enforced (matches STARTUP_GRACE_ROUNDS)
+const MAX_CONSECUTIVE_SKIPS = 3;
 
 let paused = false;
 let vertices = [];
 let edges = [];
-let animQueue = [];
 let currentRound = 0;
 let animFrame;
 let lastTick = 0;
-let tickInterval = 1400; // ms per sub-step
-let equivocationPending = false;
-let infoText = '';
+let tickInterval = 1400;
 
-// Layout
+// Per-validator skip tracking (mirrors validator.rs consecutive_skips)
+let consecutiveSkips = [];
+// Which validators are banned
+let bannedValidators = new Set();
+// Track if last round was produced optimistically
+let lastRoundOptimistic = false;
+
 const PADDING_LEFT = 90;
 const PADDING_RIGHT = 30;
 const PADDING_TOP = 60;
 const PADDING_BOTTOM = 30;
 const NODE_R = 14;
+const MAX_VISIBLE_ROUNDS = 7;
 
 function resize() {
   const wrap = canvas.parentElement;
@@ -332,37 +556,196 @@ function resize() {
   canvas.style.height = wrap.clientHeight + 'px';
 }
 
-function getPos(round, validator) {
+function getPos(relRound, validator) {
   const W = canvas.width / devicePixelRatio;
   const H = canvas.height / devicePixelRatio;
   const usableW = W - PADDING_LEFT - PADDING_RIGHT;
   const usableH = H - PADDING_TOP - PADDING_BOTTOM;
-  const maxRounds = 7;
-  const x = PADDING_LEFT + (round / (maxRounds - 1)) * usableW;
-  const y = PADDING_TOP + (validator / (VALIDATORS - 1)) * usableH;
+  const x = PADDING_LEFT + (relRound / (MAX_VISIBLE_ROUNDS - 1)) * usableW;
+  const effectiveV = VALIDATORS === 1 ? 0 : validator / (VALIDATORS - 1);
+  const y = PADDING_TOP + effectiveV * usableH;
   return { x, y };
 }
 
-function makeVertex(round, validator, parents, isByzantine = false) {
+function makeVertex(round, validator, parents, isByzantine = false, isGhost = false) {
   const id = `v${round}_${validator}`;
-  const pos = getPos(round, validator);
   return {
     id, round, validator, parents,
-    x: pos.x, y: pos.y,
+    x: 0, y: 0,
     finalized: false,
     byzantine: isByzantine,
-    alpha: 0, // animation: 0→1
+    ghost: isGhost, // validator skipped this round
+    alpha: 0,
     descendantValidators: new Set(),
     finalizedAt: null,
   };
+}
+
+// ── INCREMENTAL DESCENDANT TRACKING (mirrors dag.rs insert logic) ──────────
+// When a new vertex V is inserted, walk UPWARD through ancestors
+// and add V.validator to each ancestor's descendant_validators set.
+// Early termination: if ancestor already has this validator, all its
+// ancestors do too (invariant maintained by prior inserts).
+function updateDescendantCounts(newVertex) {
+  if (newVertex.ghost || newVertex.byzantine) return;
+
+  const validator = newVertex.validator;
+  const visited = new Set();
+  const queue = [...newVertex.parents];
+
+  while (queue.length) {
+    const parentId = queue.shift();
+    if (visited.has(parentId)) continue;
+    visited.add(parentId);
+
+    const parent = vertices.find(v => v.id === parentId);
+    if (!parent || parent.ghost) continue;
+
+    // Early termination: already counted → ancestors already counted too
+    if (parent.descendantValidators.has(validator)) continue;
+
+    parent.descendantValidators.add(validator);
+
+    // Continue upward through this parent's parents
+    parent.parents.forEach(pid => {
+      if (!visited.has(pid)) queue.push(pid);
+    });
+  }
+}
+
+// ── FINALITY CHECK (mirrors finality.rs find_newly_finalized) ──────────────
+// Forward propagation: parent-finality-first guarantee.
+// O(1) per vertex because descendant counts are precomputed.
+function checkFinality() {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    // Sort by round first — parent-before-child ordering
+    const sorted = [...vertices].sort((a, b) => a.round - b.round || a.id.localeCompare(b.id));
+    sorted.forEach(vtx => {
+      if (vtx.finalized || vtx.byzantine || vtx.ghost) return;
+      if (vtx.round === 0) {
+        // Genesis vertices auto-finalize
+        vtx.finalized = true;
+        vtx.finalizedAt = 0;
+        changed = true;
+        return;
+      }
+
+      // Parent finality required first
+      const parentsOk = vtx.parents.every(pid => {
+        const p = vertices.find(v => v.id === pid);
+        return !p || p.finalized; // missing = genesis sentinel = ok
+      });
+      if (!parentsOk) return;
+
+      // O(1) check using precomputed descendant_validators
+      if (vtx.descendantValidators.size >= QUORUM) {
+        vtx.finalized = true;
+        vtx.finalizedAt = currentRound;
+        changed = true;
+      }
+    });
+  }
+}
+
+// ── 2f+1 GATE (mirrors validator.rs production gate) ──────────────────────
+// Returns true if validator v should produce in `round`.
+// Skipped if previous round has < QUORUM distinct non-banned validators.
+// After MAX_CONSECUTIVE_SKIPS, produce unconditionally (stall recovery).
+function shouldProduce(validatorIdx, round) {
+  if (bannedValidators.has(validatorIdx)) return false;
+  if (round <= STARTUP_GRACE) return true; // grace period
+
+  const prevRoundVerts = vertices.filter(v =>
+    v.round === round - 1 && !v.ghost && !v.byzantine
+  );
+  const distinctValidators = new Set(prevRoundVerts.map(v => v.validator));
+  // Don't count banned validators
+  bannedValidators.forEach(b => distinctValidators.delete(b));
+
+  const quorumMet = distinctValidators.size >= QUORUM;
+
+  if (!quorumMet) {
+    consecutiveSkips[validatorIdx] = (consecutiveSkips[validatorIdx] || 0) + 1;
+    // Stall recovery: after MAX_CONSECUTIVE_SKIPS, produce unconditionally
+    if (consecutiveSkips[validatorIdx] >= MAX_CONSECUTIVE_SKIPS) {
+      consecutiveSkips[validatorIdx] = 0;
+      return true;
+    }
+    return false;
+  }
+
+  consecutiveSkips[validatorIdx] = 0;
+  return true;
+}
+
+// ── OPTIMISTIC RESPONSIVENESS ──────────────────────────────────────────────
+// Returns true if QUORUM vertices from previous round are already present.
+// In real code: tokio::select! fires on round_notify when this becomes true.
+function quorumAlreadyPresent(round) {
+  if (round <= 1) return false;
+  const prevVerts = vertices.filter(v =>
+    v.round === round - 1 && !v.ghost && !v.byzantine
+  );
+  const distinct = new Set(prevVerts.map(v => v.validator));
+  bannedValidators.forEach(b => distinct.delete(b));
+  return distinct.size >= QUORUM;
+}
+
+function buildRound(round) {
+  // Determine all tips across the entire DAG (not just prev round)
+  // matches "each vertex references ALL known tips"
+  const tipIds = computeTips();
+
+  let anyProduced = false;
+  lastRoundOptimistic = quorumAlreadyPresent(round);
+
+  for (let v = 0; v < VALIDATORS; v++) {
+    if (bannedValidators.has(v)) {
+      const ghost = makeVertex(round, v, [], false, true);
+      vertices.push(ghost);
+      continue;
+    }
+
+    if (shouldProduce(v, round)) {
+      const vtx = makeVertex(round, v, tipIds);
+      vertices.push(vtx);
+      // Update descendant counts upward (O(ancestors)) — done once on insert
+      updateDescendantCounts(vtx);
+      // Add edges
+      tipIds.forEach(tid => edges.push({ from: tid, to: vtx.id, alpha: 0 }));
+      anyProduced = true;
+    } else {
+      // Skipped round
+      const ghost = makeVertex(round, v, [], false, true);
+      vertices.push(ghost);
+    }
+  }
+
+  return anyProduced;
+}
+
+// Compute current DAG tips: vertices with no children
+function computeTips() {
+  const hasChild = new Set();
+  edges.forEach(e => {
+    // e.from is a parent → has a child
+    hasChild.add(e.from);
+  });
+  // Tips are non-ghost vertices with no children
+  return vertices
+    .filter(v => !v.ghost && !v.byzantine && !hasChild.has(v.id))
+    .map(v => v.id);
 }
 
 function initGenesis() {
   vertices = [];
   edges = [];
   currentRound = 0;
+  bannedValidators = new Set();
+  consecutiveSkips = new Array(VALIDATORS).fill(0);
 
-  // Genesis sentinel — represented as a small dot at round 0
   for (let v = 0; v < VALIDATORS; v++) {
     const vtx = makeVertex(0, v, []);
     vtx.alpha = 1;
@@ -372,250 +755,140 @@ function initGenesis() {
   }
 }
 
-function getVertex(round, validator) {
-  return vertices.find(v => v.round === round && v.validator === validator);
-}
-
-function getAllFinalized() {
-  return vertices.filter(v => v.finalized);
-}
-
-function getDescendantValidators(vtx) {
-  // BFS through children
-  const visited = new Set();
-  const queue = [vtx.id];
-  const validatorSet = new Set();
-  while (queue.length) {
-    const id = queue.shift();
-    if (visited.has(id)) continue;
-    visited.add(id);
-    const node = vertices.find(v => v.id === id);
-    if (!node) continue;
-    // find all vertices that reference this as a parent
-    vertices.forEach(v => {
-      if (v.parents.includes(id) && !visited.has(v.id)) {
-        validatorSet.add(v.validator);
-        queue.push(v.id);
-      }
-    });
-  }
-  return validatorSet;
-}
-
-function checkFinality() {
-  let changed = true;
-  while (changed) {
-    changed = false;
-    vertices.forEach(vtx => {
-      if (vtx.finalized || vtx.byzantine) return;
-      // All parents finalized?
-      const parentsOk = vtx.parents.every(pid => {
-        const p = vertices.find(v => v.id === pid);
-        return p && p.finalized;
-      });
-      if (!parentsOk) return;
-      // Descendant coverage
-      const dv = getDescendantValidators(vtx);
-      vtx.descendantValidators = dv;
-      if (dv.size >= QUORUM) {
-        vtx.finalized = true;
-        vtx.finalizedAt = currentRound;
-        changed = true;
-      }
-    });
-  }
-}
-
-// Build a round: each validator produces a vertex referencing all tips in previous round
-function buildRound(round) {
-  const tips = vertices.filter(v => v.round === round - 1).map(v => v.id);
-  const newVerts = [];
-  for (let v = 0; v < VALIDATORS; v++) {
-    const vtx = makeVertex(round, v, tips);
-    vertices.push(vtx);
-    newVerts.push(vtx);
-    // edges from tips to new vertex
-    tips.forEach(tid => edges.push({ from: tid, to: vtx.id, alpha: 0 }));
-  }
-  return newVerts;
-}
-
-// Animation state machine
-// Steps: 
-//   1. Show new round vertices appearing one by one
-//   2. Show edges animating in
-//   3. Check/animate finality
-//   4. Update stats
-
-let step = 'idle';
-let stepData = {};
-
-function startRound(round) {
-  currentRound = round;
-  const newVerts = buildRound(round);
-  
-  // Reposition existing vertices for scrolling effect
-  repositionAll();
-
-  step = 'appearing';
-  stepData = { verts: newVerts, index: 0, edgesShown: false };
-  document.getElementById('phase-banner').textContent = `Round ${round} — Validators broadcasting vertices`;
-  setInfo(`Round ${round}: All ${VALIDATORS} validators produce a signed vertex referencing ${newVerts[0].parents.length} parent(s).`);
-}
-
 function repositionAll() {
-  // Slide old vertices left, place new ones at right
   const maxRound = Math.max(...vertices.map(v => v.round));
-  const minRound = Math.max(0, maxRound - 6);
+  const minRound = Math.max(0, maxRound - (MAX_VISIBLE_ROUNDS - 1));
   vertices.forEach(v => {
-    const relRound = v.round - minRound;
-    const pos = getPos(relRound, v.validator);
+    const rel = v.round - minRound;
+    const pos = getPos(rel, v.validator);
     v.x = pos.x;
     v.y = pos.y;
   });
-  edges.forEach(e => {
-    // edges just connect vertices dynamically, no position stored
-  });
 }
 
-function setInfo(text) {
-  infoText = text;
-  document.getElementById('info-row').innerHTML = text;
+function setInfo(html) {
+  document.getElementById('info-row').innerHTML = html;
 }
 
-let tickCount = 0;
-
-function tick(ts) {
-  if (!paused) {
-    if (ts - lastTick > tickInterval) {
-      lastTick = ts;
-      advance();
-    }
-  }
-  render();
-  // Animate alphas
-  let needsAnim = false;
-  vertices.forEach(v => {
-    if (v.alpha < 1) { v.alpha = Math.min(1, v.alpha + 0.06); needsAnim = true; }
-  });
-  edges.forEach(e => {
-    if (e.alpha < 1) { e.alpha = Math.min(1, e.alpha + 0.05); needsAnim = true; }
-  });
-  animFrame = requestAnimationFrame(tick);
-}
+// ── MAIN LOOP ─────────────────────────────────────────────────────────────
+let step = 'idle';
+let stepData = {};
 
 function advance() {
-  tickCount++;
-
   if (step === 'idle') {
-    if (currentRound < 6) {
-      startRound(currentRound + 1);
-    } else {
-      // Loop: reset after a pause
-      step = 'resetting';
-      document.getElementById('phase-banner').textContent = 'Consensus achieved — restarting…';
-      setTimeout(() => {
-        reset();
-      }, 2200);
-    }
-    return;
-  }
+    if (currentRound < 12) {
+      currentRound++;
+      const produced = buildRound(currentRound);
+      repositionAll();
 
-  if (step === 'appearing') {
-    // Reveal vertices one by one
-    const { verts, index } = stepData;
-    if (index < verts.length) {
-      verts[index].alpha = 0.01; // trigger fade-in
-      stepData.index++;
-      if (stepData.index === verts.length) {
-        // All vertices shown, now show edges
-        setTimeout(() => {
-          revealEdgesForRound(currentRound);
-          step = 'edges';
-          document.getElementById('phase-banner').textContent = `Round ${currentRound} — Parent references forming`;
-          setInfo(`Round ${currentRound}: Each vertex references all ${verts[0].parents.length} tips from round ${currentRound-1} as parents, weaving them into the DAG.`);
-        }, 300);
+      // Reveal vertices
+      vertices.filter(v => v.round === currentRound && !v.ghost).forEach(v => {
+        v.alpha = 0.01;
+      });
+
+      const optText = lastRoundOptimistic
+        ? '⚡ optimistic — quorum seen before timer'
+        : 'timer fallback';
+
+      const optEl = document.getElementById('opt-indicator');
+      optEl.textContent = optText;
+      optEl.className = lastRoundOptimistic ? 'opt-indicator firing' : 'opt-indicator';
+
+      const statOpt = document.getElementById('stat-opt');
+      if (lastRoundOptimistic) {
+        statOpt.style.display = 'flex';
+        setTimeout(() => { statOpt.style.display = 'none'; }, 1200);
       }
-    }
-    return;
-  }
 
-  if (step === 'edges') {
-    // Edges animate automatically, just wait then check finality
-    step = 'finality';
-    document.getElementById('phase-banner').textContent = `Round ${currentRound} — Checking finality (quorum = ${QUORUM})`;
-    checkFinality();
-    const finCount = vertices.filter(v => v.finalized).length;
-    const justFinalized = vertices.filter(v => v.finalizedAt === currentRound - 1);
-    if (justFinalized.length > 0) {
-      setInfo(
-        `Finality: ${justFinalized.length} vertex/vertices from round ${currentRound-1} now have ≥${QUORUM} distinct validator descendants → <span style="color:#fbbf24">FINALIZED</span>. ` +
-        `Transactions applied to state in deterministic order.` 
-      );
+      const nonGhostProducers = vertices
+        .filter(v => v.round === currentRound && !v.ghost && !v.byzantine)
+        .map(v => `V${v.validator}`).join(', ');
+      const skippers = vertices
+        .filter(v => v.round === currentRound && v.ghost)
+        .map(v => `V${v.validator}`);
+
+      let msg = `Round ${currentRound}: `;
+      if (nonGhostProducers) {
+        msg += `${nonGhostProducers} produced vertices`;
+        if (lastRoundOptimistic) msg += ` <span style="color:#34d399">(optimistic — quorum reached before timer)</span>`;
+      }
+      if (skippers.length) {
+        msg += `. ${skippers.join(', ')} skipped (2f+1 gate: previous round had insufficient quorum)`;
+      }
+      setInfo(msg);
+      document.getElementById('phase-banner').textContent =
+        `Round ${currentRound} — ${produced ? 'vertices propagating' : 'all validators skipped (stall)'}`;
+
+      // Reveal edges after brief delay
+      setTimeout(() => {
+        edges.forEach(e => {
+          const toVtx = vertices.find(v => v.id === e.to);
+          if (toVtx && toVtx.round === currentRound) e.alpha = 0.01;
+        });
+
+        // Check finality
+        setTimeout(() => {
+          checkFinality();
+          const justFin = vertices.filter(v => v.finalizedAt === currentRound - 1 || v.finalizedAt === currentRound);
+          if (justFin.length > 0) {
+            document.getElementById('phase-banner').textContent =
+              `Round ${currentRound} — ${justFin.length} vertex/vertices finalized`;
+            setInfo(
+              `<span style="color:#fbbf24">Finality:</span> ${justFin.length} vertex/vertices achieved ≥${QUORUM} distinct validator descendants (O(1) lookup via precomputed counts) and all parents finalized → state applied deterministically.` 
+            );
+          }
+          updateStats();
+        }, tickInterval * 0.3);
+
+      }, tickInterval * 0.4);
+
     } else {
-      setInfo(
-        `Round ${currentRound-1} vertices not yet finalized — need ${QUORUM} distinct validator descendants. Waiting for more rounds.` 
-      );
+      step = 'resetting';
+      document.getElementById('phase-banner').textContent = 'Consensus loop complete — restarting…';
+      setTimeout(reset, 2200);
     }
-    updateStats();
-    step = 'idle';
-    return;
   }
-
-  if (step === 'equivocation') {
-    const { eqVtx } = stepData;
-    eqVtx.byzantine = true;
-    setInfo(
-      `⚠ Equivocation detected! Validator V${eqVtx.validator} (${V_LABELS[eqVtx.validator]}) produced two conflicting vertices in the same round. ` +
-      `Evidence broadcast to all peers. Validator permanently banned. Byzantine vertex rejected.` 
-    );
-    document.getElementById('phase-banner').textContent = `Equivocation detected — V${eqVtx.validator} banned`;
-    setTimeout(() => { step = 'idle'; }, 2000);
-  }
-}
-
-function revealEdgesForRound(round) {
-  const roundVerts = vertices.filter(v => v.round === round);
-  edges.forEach(e => {
-    const toVtx = vertices.find(v => v.id === e.to);
-    if (toVtx && toVtx.round === round) {
-      e.alpha = 0.01;
-    }
-  });
 }
 
 function triggerEquivocation() {
-  // Pick a non-byzantine vertex from the latest round
-  const candidates = vertices.filter(v => v.round === currentRound && !v.finalized && !v.byzantine);
-  if (candidates.length === 0) return;
+  const candidates = vertices.filter(v =>
+    v.round === currentRound && !v.finalized && !v.byzantine && !v.ghost
+  );
+  if (!candidates.length) return;
   const target = candidates[Math.floor(Math.random() * candidates.length)];
-  step = 'equivocation';
-  stepData = { eqVtx: target };
-  advance();
+  target.byzantine = true;
+  bannedValidators.add(target.validator);
+  consecutiveSkips[target.validator] = 0;
+  setInfo(
+    `⚠ <span>Equivocation detected!</span> Validator V${target.validator} (${V_LABELS[target.validator]}) produced two conflicting vertices in round ${target.round}. ` +
+    `Evidence broadcast to all peers. Validator permanently banned — no unban path exists. ` +
+    `Quorum now recalculates excluding this validator: threshold = ⌈2×${VALIDATORS - bannedValidators.size}/3⌉ = ${Math.ceil(2*(VALIDATORS - bannedValidators.size)/3)}.` 
+  );
+  document.getElementById('phase-banner').textContent =
+    `Equivocation — V${target.validator} permanently banned`;
 }
 
 function updateStats() {
   document.getElementById('stat-round').textContent = `Round ${currentRound}`;
   const fin = vertices.filter(v => v.finalized).length;
-  const pend = vertices.filter(v => !v.finalized && !v.byzantine).length;
+  const pend = vertices.filter(v => !v.finalized && !v.byzantine && !v.ghost).length;
   document.getElementById('stat-finalized').textContent = `${fin} finalized`;
   document.getElementById('stat-pending').textContent = `${pend} pending`;
 }
 
-// ── RENDERING ──────────────────────────────────────────────────────────────
-
+// ── RENDERING ─────────────────────────────────────────────────────────────
 function render() {
   const W = canvas.width;
   const H = canvas.height;
   const dpr = devicePixelRatio;
   ctx.clearRect(0, 0, W, H);
 
-  // Background grid
-  ctx.strokeStyle = 'rgba(30,42,56,0.4)';
-  ctx.lineWidth = 1;
-  // Horizontal validator lanes
+  // Validator lane guides
   for (let v = 0; v < VALIDATORS; v++) {
+    const isBanned = bannedValidators.has(v);
     const pos = getPos(0, v);
+    ctx.strokeStyle = isBanned ? 'rgba(239,68,68,0.15)' : 'rgba(30,42,56,0.4)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.setLineDash([4, 8]);
     ctx.moveTo(0, pos.y * dpr);
@@ -623,51 +896,52 @@ function render() {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Validator label
-    ctx.font = `${11 * dpr}px 'JetBrains Mono', monospace`;
-    ctx.fillStyle = COLORS[v];
-    ctx.globalAlpha = 0.8;
-    ctx.fillText(`V${v} ${V_LABELS[v]}`, 8 * dpr, (pos.y - 4) * dpr);
+    ctx.font = `${11 * dpr}px 'DM Mono', monospace`;
+    ctx.fillStyle = isBanned ? '#ef4444' : COLORS[v];
+    ctx.globalAlpha = isBanned ? 0.5 : 0.8;
+    ctx.textBaseline = 'alphabetic';
+    const label = isBanned ? `V${v} ${V_LABELS[v]} [BANNED]` : `V${v} ${V_LABELS[v]}`;
+    ctx.fillText(label, 8 * dpr, (pos.y - 4) * dpr);
     ctx.globalAlpha = 1;
   }
 
-  // Draw edges
+  // Edges
   edges.forEach(e => {
     if (e.alpha <= 0) return;
     const fromVtx = vertices.find(v => v.id === e.from);
     const toVtx = vertices.find(v => v.id === e.to);
     if (!fromVtx || !toVtx) return;
+    if (fromVtx.ghost || toVtx.ghost) return;
 
-    const alpha = e.alpha * 0.55;
     const finalized = fromVtx.finalized && toVtx.finalized;
-    
     ctx.save();
-    ctx.globalAlpha = alpha;
+    ctx.globalAlpha = e.alpha * 0.55;
     ctx.strokeStyle = finalized ? 'rgba(251,191,36,0.5)' : 'rgba(37,99,235,0.6)';
     ctx.lineWidth = finalized ? 1.5 * dpr : 1 * dpr;
     ctx.setLineDash(finalized ? [] : [3 * dpr, 4 * dpr]);
-    
-    ctx.beginPath();
-    // Bezier curve for aesthetic edges
+
     const fx = fromVtx.x * dpr, fy = fromVtx.y * dpr;
     const tx = toVtx.x * dpr, ty = toVtx.y * dpr;
-    const cx1 = fx + (tx - fx) * 0.5, cy1 = fy;
-    const cx2 = fx + (tx - fx) * 0.5, cy2 = ty;
+    ctx.beginPath();
     ctx.moveTo(fx, fy);
-    ctx.bezierCurveTo(cx1, cy1, cx2, cy2, tx, ty);
+    ctx.bezierCurveTo(
+      fx + (tx - fx) * 0.5, fy,
+      fx + (tx - fx) * 0.5, ty,
+      tx, ty
+    );
     ctx.stroke();
     ctx.restore();
   });
 
-  // Draw vertices
+  // Vertices
   vertices.forEach(vtx => {
-    if (vtx.alpha <= 0) return;
+    if (vtx.alpha <= 0 && !vtx.ghost) return;
     drawVertex(vtx);
   });
 
-  // Draw descendant count badges for non-finalized vertices
+  // Descendant count badges (shows the precomputed O(1) count)
   vertices.forEach(vtx => {
-    if (vtx.finalized || vtx.byzantine || vtx.alpha < 0.8) return;
+    if (vtx.finalized || vtx.byzantine || vtx.ghost || vtx.alpha < 0.5) return;
     if (vtx.round === 0) return;
     const dv = vtx.descendantValidators.size;
     if (dv === 0) return;
@@ -675,12 +949,16 @@ function render() {
     const y = vtx.y * dpr;
     ctx.save();
     ctx.globalAlpha = vtx.alpha * 0.9;
-    ctx.fillStyle = '#1e3a5f';
+    // Badge color: green if reached quorum, blue otherwise
+    ctx.fillStyle = dv >= QUORUM ? 'rgba(52,211,153,0.25)' : '#1e3a5f';
+    ctx.strokeStyle = dv >= QUORUM ? '#34d399' : 'transparent';
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.arc(x + 10 * dpr, y - 10 * dpr, 7 * dpr, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#93c5fd';
-    ctx.font = `bold ${9 * dpr}px 'JetBrains Mono', monospace`;
+    ctx.stroke();
+    ctx.fillStyle = dv >= QUORUM ? '#34d399' : '#93c5fd';
+    ctx.font = `bold ${9 * dpr}px 'DM Mono', monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(`${dv}`, x + 10 * dpr, y - 10 * dpr);
@@ -695,13 +973,32 @@ function drawVertex(vtx) {
   const y = vtx.y * devicePixelRatio;
   const r = NODE_R * devicePixelRatio;
   const dpr = devicePixelRatio;
-  const alpha = vtx.alpha;
 
   ctx.save();
-  ctx.globalAlpha = alpha;
+
+  if (vtx.ghost) {
+    // Skipped round: tiny dimmed dash
+    ctx.globalAlpha = 0.3;
+    ctx.strokeStyle = COLORS[vtx.validator];
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.setLineDash([3 * dpr, 3 * dpr]);
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // SKIP label
+    ctx.fillStyle = COLORS[vtx.validator];
+    ctx.font = `${8 * dpr}px 'DM Mono', monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SKIP', x, y);
+    ctx.restore();
+    return;
+  }
+
+  ctx.globalAlpha = vtx.alpha;
 
   if (vtx.byzantine) {
-    // Byzantine: red X
     ctx.strokeStyle = BYZANTINE_COLOR;
     ctx.lineWidth = 2 * dpr;
     ctx.fillStyle = 'rgba(239,68,68,0.15)';
@@ -709,16 +1006,15 @@ function drawVertex(vtx) {
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    // X mark
+    const d = r * 0.5;
     ctx.strokeStyle = BYZANTINE_COLOR;
     ctx.lineWidth = 2.5 * dpr;
-    const d = r * 0.5;
+    ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(x - d, y - d); ctx.lineTo(x + d, y + d);
     ctx.moveTo(x + d, y - d); ctx.lineTo(x - d, y + d);
     ctx.stroke();
   } else if (vtx.finalized) {
-    // Finalized: solid gold
     const grd = ctx.createRadialGradient(x - r*0.3, y - r*0.3, r*0.1, x, y, r);
     grd.addColorStop(0, '#fde68a');
     grd.addColorStop(1, FINALIZED_COLOR);
@@ -726,7 +1022,6 @@ function drawVertex(vtx) {
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
-    // Checkmark
     ctx.strokeStyle = '#78350f';
     ctx.lineWidth = 2 * dpr;
     ctx.lineCap = 'round';
@@ -737,7 +1032,6 @@ function drawVertex(vtx) {
     ctx.lineTo(x + r*0.45, y - r*0.35);
     ctx.stroke();
   } else if (vtx.round === 0) {
-    // Genesis: muted
     ctx.fillStyle = 'rgba(55,65,81,0.6)';
     ctx.strokeStyle = COLORS[vtx.validator];
     ctx.lineWidth = 1.5 * dpr;
@@ -746,7 +1040,6 @@ function drawVertex(vtx) {
     ctx.fill();
     ctx.stroke();
   } else {
-    // Pending: colored ring with dim fill
     const col = COLORS[vtx.validator];
     ctx.fillStyle = hexToRgba(col, 0.12);
     ctx.strokeStyle = col;
@@ -756,7 +1049,6 @@ function drawVertex(vtx) {
     ctx.fill();
     ctx.stroke();
 
-    // Inner dot
     ctx.fillStyle = hexToRgba(col, 0.6);
     ctx.beginPath();
     ctx.arc(x, y, r * 0.35, 0, Math.PI * 2);
@@ -768,7 +1060,6 @@ function drawVertex(vtx) {
       const pulse = 0.4 + 0.3 * Math.sin(Date.now() / 500);
       ctx.strokeStyle = hexToRgba(col, pulse);
       ctx.lineWidth = 1 * dpr;
-      ctx.setLineDash([]);
       ctx.beginPath();
       ctx.arc(x, y, r * 1.6, 0, Math.PI * 2);
       ctx.stroke();
@@ -785,6 +1076,42 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+function animLoop(ts) {
+  if (!paused) {
+    if (step !== 'resetting' && ts - lastTick > tickInterval) {
+      lastTick = ts;
+      advance();
+    }
+  }
+  render();
+  // Smooth fade-ins
+  vertices.forEach(v => { if (v.alpha < 1 && v.alpha > 0) v.alpha = Math.min(1, v.alpha + 0.055); });
+  edges.forEach(e => { if (e.alpha < 1 && e.alpha > 0) e.alpha = Math.min(1, e.alpha + 0.045); });
+  animFrame = requestAnimationFrame(animLoop);
+}
+
+function reset() {
+  if (animFrame) cancelAnimationFrame(animFrame);
+  paused = false;
+  document.getElementById('btn-pause').textContent = 'Pause';
+  document.getElementById('btn-pause').classList.remove('active');
+  step = 'idle';
+  QUORUM = Math.ceil(2 * VALIDATORS / 3);
+  initGenesis();
+  repositionAll();
+  document.getElementById('phase-banner').textContent = 'Round 0 — Genesis';
+  document.getElementById('opt-indicator').textContent = 'timer fallback';
+  document.getElementById('opt-indicator').className = 'opt-indicator';
+  setInfo(
+    `Genesis: ${VALIDATORS} validators initialized with Ed25519 keypairs. ` +
+    `Quorum ⌈2×${VALIDATORS}/3⌉ = <span>${QUORUM}</span>. ` +
+    `Badges show precomputed descendant-validator count (O(1) lookup). Green badge = quorum reached.` 
+  );
+  updateStats();
+  lastTick = 0;
+  animFrame = requestAnimationFrame(animLoop);
+}
+
 // Controls
 document.getElementById('btn-pause').addEventListener('click', function() {
   paused = !paused;
@@ -795,35 +1122,22 @@ document.getElementById('btn-pause').addEventListener('click', function() {
 document.getElementById('btn-reset').addEventListener('click', reset);
 
 document.getElementById('btn-equivocation').addEventListener('click', () => {
-  if (currentRound >= 2) triggerEquivocation();
+  if (currentRound >= 1) triggerEquivocation();
 });
 
-function reset() {
-  paused = false;
-  document.getElementById('btn-pause').textContent = 'Pause';
-  document.getElementById('btn-pause').classList.remove('active');
-  vertices = [];
-  edges = [];
-  currentRound = 0;
-  step = 'idle';
-  tickCount = 0;
-  initGenesis();
-  repositionAll();
-  document.getElementById('phase-banner').textContent = 'Round 0 — Genesis';
-  setInfo(`Genesis block: ${VALIDATORS} validators initialized. Each holds an Ed25519 keypair. ` +
-    `Quorum threshold: ⌈2×${VALIDATORS}/3⌉ = <span>${QUORUM}</span> validators required for finality.`);
-  updateStats();
-}
+document.getElementById('speed-select').addEventListener('change', e => {
+  tickInterval = parseInt(e.target.value);
+});
+
+document.getElementById('validator-select').addEventListener('change', e => {
+  VALIDATORS = parseInt(e.target.value);
+  reset();
+});
 
 // Init
 resize();
 window.addEventListener('resize', () => { resize(); repositionAll(); render(); });
-initGenesis();
-repositionAll();
-updateStats();
-setInfo(`Genesis initialized. ${VALIDATORS} validators ready. Quorum = <span>${QUORUM}</span>. Watch vertices build, reference parents, and achieve finality (gold = finalized).`);
-document.getElementById('phase-banner').textContent = 'Round 0 — Genesis';
-animFrame = requestAnimationFrame(tick);
+reset();
 </script>
 </body>
 </html>

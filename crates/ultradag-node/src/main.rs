@@ -69,6 +69,10 @@ struct Args {
     /// WARNING: Significantly increases memory and disk usage over time.
     #[arg(long)]
     archive: bool,
+
+    /// Skip fast-sync on startup. Use local state only.
+    #[arg(long)]
+    skip_fast_sync: bool,
 }
 
 fn default_data_dir() -> String {
@@ -233,7 +237,10 @@ async fn main() {
         sk
     };
 
-    let server = Arc::new(NodeServer::new(args.port));
+    let mut server_inner = NodeServer::new(args.port);
+    server_inner.set_data_dir(data_dir.clone());
+    server_inner.set_validator_sk(validator_sk.clone());
+    let server = Arc::new(server_inner);
 
     // Load persisted state
     load_state(&server, &data_dir).await;
@@ -341,17 +348,29 @@ async fn main() {
                 warn!("Use --seed <addr:port> to connect to a specific peer.");
             }
         });
-    } else {
-        // Connect to explicit seed peers (no retry — immediate fire-and-forget)
-        for seed in &seeds {
-            let s = server.clone();
-            let addr = seed.clone();
-            tokio::spawn(async move {
-                if let Err(e) = s.connect_to(&addr).await {
-                    error!("Failed to connect to seed {}: {}", addr, e);
+    } else if !seeds.is_empty() {
+        // Connect to explicit seed peers with retry
+        let server_clone = server.clone();
+        let seed_list = seeds.clone();
+        tokio::spawn(async move {
+            for addr in &seed_list {
+                if connect_with_retry(&server_clone, addr, 4).await {
+                    info!("Connected to seed {}", addr);
                 }
-            });
-        }
+            }
+        });
+    }
+
+    // Attempt fast-sync from checkpoint if we're behind
+    if !args.skip_fast_sync {
+        let server_clone = server.clone();
+        tokio::spawn(async move {
+            // Wait for peer connections to establish
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            server_clone.request_fast_sync().await;
+        });
+    } else {
+        info!("Fast-sync disabled (--skip-fast-sync)");
     }
 
     // Start validator loop
@@ -378,6 +397,30 @@ async fn main() {
                     .peers
                     .broadcast(&ultradag_network::Message::GetPeers, "")
                     .await;
+            }
+        });
+    }
+
+    // Periodic reconnection: if peer count drops below threshold,
+    // re-attempt connections to seed/bootstrap nodes. This ensures nodes recover
+    // from network partitions, deploy restarts, and transient failures.
+    if !seeds.is_empty() {
+        let reconnect_server = server.clone();
+        let reconnect_seeds = seeds.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            interval.tick().await; // skip immediate tick
+            loop {
+                interval.tick().await;
+                let peer_count = reconnect_server.peers.connected_count().await;
+                if peer_count < 3 {
+                    info!("Low peer count ({}) — re-attempting seed connections...", peer_count);
+                    for addr in &reconnect_seeds {
+                        if let Err(e) = reconnect_server.connect_to(addr).await {
+                            warn!("Reconnect to {} failed: {}", addr, e);
+                        }
+                    }
+                }
             }
         });
     }

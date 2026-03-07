@@ -133,7 +133,7 @@ impl Message {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ultradag_coin::{Address, Block, BlockHeader, CoinbaseTx, Signature, Transaction};
+    use ultradag_coin::{Address, Block, BlockHeader, CoinbaseTx, Signature, Transaction, TransferTx};
 
     fn test_block() -> Block {
         let header = BlockHeader {
@@ -156,7 +156,7 @@ mod tests {
     }
 
     fn test_tx() -> Transaction {
-        Transaction {
+        Transaction::Transfer(TransferTx {
             from: Address::ZERO,
             to: Address::ZERO,
             amount: 100,
@@ -164,7 +164,7 @@ mod tests {
             nonce: 0,
             pub_key: [0u8; 32],
             signature: Signature([0u8; 64]),
-        }
+        })
     }
 
     /// Helper: encode a message, verify 4-byte length prefix, decode body, return decoded.
@@ -239,8 +239,12 @@ mod tests {
         let decoded = Message::decode(&encoded[4..]).unwrap();
         match decoded {
             Message::NewTx(t) => {
-                assert_eq!(t.amount, 100);
-                assert_eq!(t.fee, 1);
+                if let ultradag_coin::Transaction::Transfer(ref transfer) = t {
+                    assert_eq!(transfer.amount, 100);
+                    assert_eq!(transfer.fee, 1);
+                } else {
+                    panic!("expected Transfer variant");
+                }
             }
             _ => panic!("expected NewTx"),
         }

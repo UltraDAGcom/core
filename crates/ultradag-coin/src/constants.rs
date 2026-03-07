@@ -19,6 +19,10 @@ pub const GENESIS_TIMESTAMP: i64 = 1741132800; // 2025-03-05T00:00:00Z
 /// Maximum transactions per block
 pub const MAX_TXS_PER_BLOCK: usize = 10_000;
 
+/// Minimum transaction fee to prevent mempool spam.
+/// 10,000 sats = 0.0001 UDAG. Cost to fill 10K-tx mempool: 1 UDAG.
+pub const MIN_FEE_SATS: u64 = 10_000;
+
 /// Coinbase maturity: coinbase outputs can't be spent for N blocks
 pub const COINBASE_MATURITY: u64 = 100;
 

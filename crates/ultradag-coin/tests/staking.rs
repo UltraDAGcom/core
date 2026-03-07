@@ -35,7 +35,7 @@ fn make_vertex(
     reward: u64,
 ) -> DagVertex {
     let proposer = proposer_sk.address();
-    let total_fees: u64 = txs.iter().map(|tx| tx.fee).sum();
+    let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
     let coinbase = CoinbaseTx {
         to: proposer,
         amount: reward + total_fees,

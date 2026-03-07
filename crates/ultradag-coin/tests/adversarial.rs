@@ -10,7 +10,7 @@
 
 use ultradag_coin::{
     Address, BlockDag, DagVertex, FinalityTracker, Mempool, SecretKey, Signature, StateEngine,
-    Transaction,
+    Transaction, TransferTx,
     block::block::Block,
     block::header::BlockHeader,
     consensus::dag::DagInsertError,
@@ -23,7 +23,7 @@ use ultradag_coin::{
 // ────────────────────────────────────────────────────────────
 
 fn make_signed_tx(sk: &SecretKey, to: Address, amount: u64, fee: u64, nonce: u64) -> Transaction {
-    let mut tx = Transaction {
+    let mut tx = TransferTx {
         from: sk.address(),
         to,
         amount,
@@ -33,7 +33,7 @@ fn make_signed_tx(sk: &SecretKey, to: Address, amount: u64, fee: u64, nonce: u64
         signature: Signature([0u8; 64]),
     };
     tx.signature = sk.sign(&tx.signable_bytes());
-    tx
+    Transaction::Transfer(tx)
 }
 
 fn make_vertex(
@@ -44,7 +44,7 @@ fn make_vertex(
     txs: Vec<Transaction>,
     sk: &SecretKey,
 ) -> DagVertex {
-    let total_fees: u64 = txs.iter().map(|tx| tx.fee).sum();
+    let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
     let reward = constants::block_reward(height);
     let coinbase = CoinbaseTx {
         to: *proposer,

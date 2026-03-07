@@ -27,7 +27,7 @@ Transaction ordering is deterministic: finalized vertices are sorted by (round, 
 - **Validator rewards**: Proportional to stake when staking is active
   - Pre-staking fallback: each validator receives full block reward
   - Post-staking: total round reward split proportionally by stake
-- **Minimum stake**: 1,000 UDAG to become validator
+- **Minimum stake**: 10,000 UDAG to become validator
 - **Unstaking cooldown**: 2,016 rounds (~1 week)
 - **Slashing**: 50% stake burn on equivocation
 
@@ -164,12 +164,12 @@ HTTP RPC runs on P2P port + 1000 (e.g., P2P 9333 → RPC 10333).
 cargo test --workspace --release
 ```
 
-**318 tests passing** (2 ignored performance benchmarks)
+**394 tests passing** (all pass, none ignored)
 
-- ultradag-coin: 111 unit + 167 integration tests
-- ultradag-network: 31 unit + 10 integration tests
+- ultradag-coin: 116 unit + 241 integration tests
+- ultradag-network: 25 unit + 12 integration tests
 
-Test coverage includes: consensus safety, Byzantine fault tolerance, cryptographic correctness, double-spend prevention, staking lifecycle, supply invariants, state persistence, crash recovery.
+Test coverage includes: consensus safety, Byzantine fault tolerance, cryptographic correctness, double-spend prevention, staking lifecycle, supply invariants, state persistence, crash recovery, checkpoint production, fast-sync, equivocation evidence retention.
 
 ## Architecture
 
@@ -183,11 +183,10 @@ Test coverage includes: consensus safety, Byzantine fault tolerance, cryptograph
 
 ## Known Limitations
 
-- **Finality algorithm**: O(V²) complexity — 10K vertices takes ~47 seconds. Acceptable at current scale (<10K vertices), needs optimization before mainnet with >100K vertices.
 - **Pre-staking emission**: Total emission scales with validator count until first validator stakes. After staking activates, emission is fixed per round.
-- **No DAG pruning**: Unbounded growth. Pruning (keep last N finalized rounds) is planned.
 - **No per-peer rate limiting**: Acceptable for current permissioned validator set.
-- **Validator set**: Currently permissioned (hardcoded bootstrap nodes). Permissionless staking via epoch reconfiguration is on roadmap.
+- **Round synchronization**: Nodes produce at independent round numbers, preventing in-round quorum. Finality happens via descendant accumulation across rounds.
+- **Vertex ordering**: O(V²) for the ordering step (not finality). Acceptable for <=21 validators.
 
 ## Cryptography
 

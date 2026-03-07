@@ -1,10 +1,20 @@
 use serde::{Deserialize, Serialize};
 
 use crate::address::{Address, Signature};
+use crate::tx::{StakeTx, UnstakeTx};
+
+/// Unified transaction type supporting transfers, staking, and unstaking.
+/// All variants go through consensus and are included in DAG vertices.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Transaction {
+    Transfer(TransferTx),
+    Stake(StakeTx),
+    Unstake(UnstakeTx),
+}
 
 /// A transaction transferring UDAG from one address to another.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Transaction {
+pub struct TransferTx {
     pub from: Address,
     pub to: Address,
     pub amount: u64,
@@ -17,6 +27,96 @@ pub struct Transaction {
 }
 
 impl Transaction {
+    /// Compute the transaction hash (its unique identifier).
+    pub fn hash(&self) -> [u8; 32] {
+        match self {
+            Transaction::Transfer(tx) => tx.hash(),
+            Transaction::Stake(tx) => tx.hash(),
+            Transaction::Unstake(tx) => tx.hash(),
+        }
+    }
+
+    /// Verify the transaction signature.
+    pub fn verify_signature(&self) -> bool {
+        match self {
+            Transaction::Transfer(tx) => tx.verify_signature(),
+            Transaction::Stake(tx) => tx.verify_signature(),
+            Transaction::Unstake(tx) => tx.verify_signature(),
+        }
+    }
+
+    /// Get the sender address.
+    pub fn from(&self) -> Address {
+        match self {
+            Transaction::Transfer(tx) => tx.from,
+            Transaction::Stake(tx) => tx.from,
+            Transaction::Unstake(tx) => tx.from,
+        }
+    }
+
+    /// Get the transaction nonce.
+    pub fn nonce(&self) -> u64 {
+        match self {
+            Transaction::Transfer(tx) => tx.nonce,
+            Transaction::Stake(tx) => tx.nonce,
+            Transaction::Unstake(tx) => tx.nonce,
+        }
+    }
+
+    /// Get the fee (0 for stake/unstake).
+    pub fn fee(&self) -> u64 {
+        match self {
+            Transaction::Transfer(tx) => tx.fee,
+            Transaction::Stake(_) | Transaction::Unstake(_) => 0,
+        }
+    }
+
+    /// Get the amount (0 for unstake).
+    pub fn amount(&self) -> u64 {
+        match self {
+            Transaction::Transfer(tx) => tx.amount,
+            Transaction::Stake(tx) => tx.amount,
+            Transaction::Unstake(_) => 0,
+        }
+    }
+
+    /// Get the recipient address (None for stake/unstake).
+    pub fn to(&self) -> Option<Address> {
+        match self {
+            Transaction::Transfer(tx) => Some(tx.to),
+            Transaction::Stake(_) | Transaction::Unstake(_) => None,
+        }
+    }
+
+    /// Get the sender's public key.
+    pub fn pub_key(&self) -> [u8; 32] {
+        match self {
+            Transaction::Transfer(tx) => tx.pub_key,
+            Transaction::Stake(tx) => tx.pub_key,
+            Transaction::Unstake(tx) => tx.pub_key,
+        }
+    }
+
+    /// Get the signable bytes for signature verification.
+    pub fn signable_bytes(&self) -> Vec<u8> {
+        match self {
+            Transaction::Transfer(tx) => tx.signable_bytes(),
+            Transaction::Stake(tx) => tx.signable_bytes(),
+            Transaction::Unstake(tx) => tx.signable_bytes(),
+        }
+    }
+
+    /// Get the total cost (amount + fee for transfers, amount for stake, 0 for unstake).
+    pub fn total_cost(&self) -> u64 {
+        match self {
+            Transaction::Transfer(tx) => tx.total_cost(),
+            Transaction::Stake(tx) => tx.amount,
+            Transaction::Unstake(_) => 0,
+        }
+    }
+}
+
+impl TransferTx {
     /// Compute the transaction hash (its unique identifier).
     pub fn hash(&self) -> [u8; 32] {
         let mut hasher = blake3::Hasher::new();
@@ -86,7 +186,7 @@ mod tests {
     use super::*;
 
     fn make_signed_tx(sk: &crate::address::SecretKey, amount: u64, fee: u64, nonce: u64) -> Transaction {
-        let mut tx = Transaction {
+        let mut transfer = TransferTx {
             from: sk.address(),
             to: Address::ZERO,
             amount,
@@ -95,8 +195,8 @@ mod tests {
             pub_key: sk.verifying_key().to_bytes(),
             signature: Signature([0u8; 64]),
         };
-        tx.signature = sk.sign(&tx.signable_bytes());
-        tx
+        transfer.signature = sk.sign(&transfer.signable_bytes());
+        Transaction::Transfer(transfer)
     }
 
     fn make_tx(amount: u64, fee: u64, nonce: u64) -> Transaction {
@@ -130,18 +230,26 @@ mod tests {
     fn signable_bytes_is_consistent() {
         let sk = crate::address::SecretKey::from_bytes([5u8; 32]);
         let tx = make_signed_tx(&sk, 50, 5, 3);
-        assert_eq!(tx.signable_bytes(), tx.signable_bytes());
-        // Should be NETWORK_ID (19) + from (32) + to (32) + amount (8) + fee (8) + nonce (8) = 107 bytes
-        assert_eq!(tx.signable_bytes().len(), 107);
+        if let Transaction::Transfer(ref transfer) = tx {
+            assert_eq!(transfer.signable_bytes(), transfer.signable_bytes());
+            // Should be NETWORK_ID (19) + from (32) + to (32) + amount (8) + fee (8) + nonce (8) = 107 bytes
+            assert_eq!(transfer.signable_bytes().len(), 107);
+        } else {
+            panic!("Expected Transfer variant");
+        }
     }
 
     #[test]
     fn signable_bytes_excludes_signature() {
         let sk = crate::address::SecretKey::from_bytes([5u8; 32]);
-        let mut tx1 = make_signed_tx(&sk, 50, 5, 0);
-        let tx2_signable = tx1.signable_bytes();
-        tx1.signature = Signature([0xff; 64]);
-        assert_eq!(tx2_signable, tx1.signable_bytes());
+        let tx1 = make_signed_tx(&sk, 50, 5, 0);
+        if let Transaction::Transfer(mut transfer) = tx1 {
+            let tx2_signable = transfer.signable_bytes();
+            transfer.signature = Signature([0xff; 64]);
+            assert_eq!(tx2_signable, transfer.signable_bytes());
+        } else {
+            panic!("Expected Transfer variant");
+        }
     }
 
     #[test]
@@ -168,18 +276,28 @@ mod tests {
     fn verify_signature_wrong_key() {
         let sk1 = crate::address::SecretKey::generate();
         let sk2 = crate::address::SecretKey::generate();
-        let mut tx = make_signed_tx(&sk1, 100, 10, 0);
+        let tx = make_signed_tx(&sk1, 100, 10, 0);
         // Replace pub_key with wrong key
-        tx.pub_key = sk2.verifying_key().to_bytes();
-        assert!(!tx.verify_signature());
+        let tampered_tx = if let Transaction::Transfer(mut transfer) = tx {
+            transfer.pub_key = sk2.verifying_key().to_bytes();
+            Transaction::Transfer(transfer)
+        } else {
+            panic!("Expected Transfer variant");
+        };
+        assert!(!tampered_tx.verify_signature());
     }
 
     #[test]
     fn verify_signature_tampered_amount() {
         let sk = crate::address::SecretKey::generate();
-        let mut tx = make_signed_tx(&sk, 100, 10, 0);
-        tx.amount = 999;
-        assert!(!tx.verify_signature());
+        let tx = make_signed_tx(&sk, 100, 10, 0);
+        let tampered_tx = if let Transaction::Transfer(mut transfer) = tx {
+            transfer.amount = 999;
+            Transaction::Transfer(transfer)
+        } else {
+            panic!("Expected Transfer variant");
+        };
+        assert!(!tampered_tx.verify_signature());
     }
 
     #[test]

@@ -10,7 +10,6 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates curl && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/ultradag-node /usr/local/bin/ultradag-node
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-COPY testnet-validators.txt /etc/ultradag/validators.txt
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /data
 EXPOSE 9333 10333
 ENTRYPOINT ["docker-entrypoint.sh"]

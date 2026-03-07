@@ -164,7 +164,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <!-- ABSTRACT -->
   <div class="abstract">
     <div class="abstract-label">Abstract</div>
-    <p>UltraDAG is a minimal cryptocurrency built on a leaderless DAG-BFT consensus protocol. The entire consensus core is 781 lines of Rust across five files. The protocol achieves Byzantine fault tolerance through descendant coverage finality — a vertex is finalized when 2f+1 distinct validators have built on top of it. This implicit voting mechanism eliminates leader election, view changes, and explicit vote messages. The system has been validated through 337 automated tests (all passing) and a 4-node Fly.io testnet with 1800+ consensus rounds. UltraDAG demonstrates that a complete, working cryptocurrency with a 21 million supply cap, halving schedule, and validator staking can be built with radical simplicity.</p>
+    <p>UltraDAG is a minimal cryptocurrency built on a leaderless DAG-BFT consensus protocol. The entire consensus core is 1,100 lines of Rust across five files. The protocol achieves Byzantine fault tolerance through descendant coverage finality — a vertex is finalized when 2f+1 distinct validators have built on top of it. This implicit voting mechanism eliminates leader election, view changes, and explicit vote messages. The system has been validated through 373 automated tests (all passing) and a 4-node Fly.io testnet with 1800+ consensus rounds. UltraDAG demonstrates that a complete, working cryptocurrency with a 21 million supply cap, halving schedule, and validator staking can be built with radical simplicity.</p>
   </div>
 
   <!-- TOC -->
@@ -229,16 +229,16 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <p>Everything else in this paper &mdash; the round gate, stall recovery, deterministic ordering, state derivation &mdash; is implementation detail required to make these three sentences operational. The protocol&rsquo;s correctness can be reasoned about entirely from these three rules.</p>
 
   <h3>2.2 Consensus Core Size</h3>
-  <p>The complete consensus implementation is contained in five files totaling <strong>1,475 lines</strong> of Rust, of which <strong>781 lines are production code</strong> and 694 are inline unit tests:</p>
+  <p>The complete consensus implementation is contained in five files totaling <strong>1,887 lines</strong> of Rust, of which <strong>1,100 lines are production code</strong> and 787 are inline unit tests:</p>
   <table>
     <thead><tr><th>File</th><th>Production</th><th>Tests</th><th>Total</th></tr></thead>
     <tbody>
-      <tr><td><code>dag.rs</code></td><td>369</td><td>253</td><td>622</td></tr>
-      <tr><td><code>finality.rs</code></td><td>175</td><td>163</td><td>338</td></tr>
-      <tr><td><code>ordering.rs</code></td><td>54</td><td>98</td><td>152</td></tr>
-      <tr><td><code>validator_set.rs</code></td><td>93</td><td>38</td><td>131</td></tr>
       <tr><td><code>vertex.rs</code></td><td>90</td><td>142</td><td>232</td></tr>
-      <tr><td><strong>Total</strong></td><td><strong>781</strong></td><td><strong>694</strong></td><td><strong>1,475</strong></td></tr>
+      <tr><td><code>dag.rs</code></td><td>609</td><td>288</td><td>897</td></tr>
+      <tr><td><code>finality.rs</code></td><td>212</td><td>163</td><td>375</td></tr>
+      <tr><td><code>ordering.rs</code></td><td>69</td><td>98</td><td>167</td></tr>
+      <tr><td><code>validator_set.rs</code></td><td>120</td><td>96</td><td>216</td></tr>
+      <tr><td><strong>Total</strong></td><td><strong>1,100</strong></td><td><strong>787</strong></td><td><strong>1,887</strong></td></tr>
     </tbody>
   </table>
   <p>For comparison:</p>
@@ -248,7 +248,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
       <tr><td>Narwhal/Tusk (Mysten Labs)</td><td>~15,000</td></tr>
       <tr><td>Bullshark</td><td>~20,000 (incl. Narwhal)</td></tr>
       <tr><td>Shoal++</td><td>~30,000 (incl. Bullshark + pipelining + reputation)</td></tr>
-      <tr><td><strong>UltraDAG</strong></td><td><strong>781</strong></td></tr>
+      <tr><td><strong>UltraDAG</strong></td><td><strong>1,100</strong></td></tr>
     </tbody>
   </table>
   <p>This is not an accident. It is the result of deliberate omissions.</p>
@@ -261,7 +261,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 
   <h3>2.4 The Minimalism Claim</h3>
   <p><strong>UltraDAG is not optimized for maximum throughput. It is optimized for minimum correct implementation.</strong></p>
-  <p>The 50x reduction in consensus code (781 vs. ~30,000 lines) directly reduces the attack surface. Every line of consensus code is a potential source of consensus bugs &mdash; the most catastrophic class of failure in a distributed ledger. A protocol that can be fully described in three sentences can be fully audited by a single engineer in a single day. This property is worth more than any throughput benchmark for networks where correctness is the primary requirement.</p>
+  <p>The 27x reduction in consensus code (1,100 vs. ~30,000 lines) directly reduces the attack surface. Every line of consensus code is a potential source of consensus bugs &mdash; the most catastrophic class of failure in a distributed ledger. A protocol that can be fully described in three sentences can be fully audited by a single engineer in a single day. This property is worth more than any throughput benchmark for networks where correctness is the primary requirement.</p>
 
   <!-- 3. SYSTEM MODEL -->
   <h2 id="s3"><span class="sec-num">3.</span> System Model</h2>
@@ -410,7 +410,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 
   <p>If at least &lceil;2n/3&rceil; validators are honest and connected (after GST), the protocol makes progress. Each honest validator produces one vertex per round. After GST, vertices propagate within &delta; time. A vertex produced in round r accumulates honest descendants in rounds r+1 and r+2, reaching the finality threshold within 2&ndash;3 rounds.</p>
   <p>The <strong>stall recovery mechanism</strong> ensures liveness during bootstrap: after 3 consecutive round skips (due to the 2f+1 gate), a validator produces unconditionally. The implementation is 8 lines of Rust &mdash; compare to Shoal++&rsquo;s ~2,000-line reputation-based leader recovery.</p>
-  <p><strong>Observed empirically:</strong> In testnet with 4 validators and 2&ndash;5 second rounds, finality lag stabilizes at 2&ndash;3 rounds through 200+ rounds of operation.</p>
+  <p><strong>Theoretical:</strong> With 4 validators producing at the same round, finality lag should stabilize at 2&ndash;3 rounds. In practice, round desynchronization between nodes currently increases this lag (see Section 14).</p>
 
   <!-- 8. EQUIVOCATION HANDLING -->
   <h2 id="s8"><span class="sec-num">8.</span> Equivocation Handling</h2>
@@ -473,7 +473,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 
   <div class="callout">
     <div class="callout-label">Genesis Transparency</div>
-    <p>The developer allocation is credited at genesis to a deterministic address (<code>SecretKey::from_bytes([0xDE; 32])</code>). This allocation is visible and auditable from block 0. There is no VC funding, no presale, and no hidden allocations. The 5% developer allocation is the only non-mined supply.</p>
+    <p>The developer allocation is credited at genesis to a deterministic address derived from the seed <code>"ultradag-dev-addr-testnet-v1"</code>. This allocation is visible and auditable from block 0. There is no VC funding, no presale, and no hidden allocations. The 5% developer allocation is the only non-mined supply. For mainnet, this will be replaced with an offline-generated keypair stored in a hardware wallet.</p>
   </div>
 
   <h3>10.3 Validator Staking</h3>
@@ -532,6 +532,10 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
       <tr><td><code>GetParents</code></td><td>Request</td><td>Request specific vertices by hash (missing parent resolution)</td></tr>
       <tr><td><code>ParentVertices</code></td><td>Response</td><td>Requested parent vertices for DAG convergence</td></tr>
       <tr><td><code>EquivocationEvidence</code></td><td>Broadcast</td><td>Two conflicting vertices as proof</td></tr>
+      <tr><td><code>CheckpointProposal</code></td><td>Broadcast</td><td>Validator proposes checkpoint, requests co-signatures</td></tr>
+      <tr><td><code>CheckpointSignatureMsg</code></td><td>Broadcast</td><td>Co-signature on a verified checkpoint</td></tr>
+      <tr><td><code>GetCheckpoint</code></td><td>Request</td><td>Request latest checkpoint for fast-sync</td></tr>
+      <tr><td><code>CheckpointSync</code></td><td>Response</td><td>Checkpoint + suffix + state for new node sync</td></tr>
       <tr><td><code>Ping / Pong</code></td><td>Keepalive</td><td>Connection liveness</td></tr>
     </tbody>
   </table>
@@ -552,6 +556,13 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 
   <h3>12.4 Configured Validator Count</h3>
   <p>The <code>--validators N</code> flag fixes the quorum threshold at &lceil;2N/3&rceil; regardless of dynamic registrations. This prevents phantom validator inflation &mdash; a class of bugs where stale registrations raise the quorum beyond what active validators can satisfy.</p>
+
+  <h3>12.5 Checkpointing and Fast-Sync</h3>
+  <p>Every <code>CHECKPOINT_INTERVAL</code> finalized rounds (default: 1,000), validators produce a signed checkpoint capturing the <code>state_root</code> (Blake3 hash of the full state snapshot), the <code>dag_tip</code> (hash of the last finalized vertex), and the <code>total_supply</code>. Checkpoints require quorum (&lceil;2n/3&rceil;) validator signatures to be accepted.</p>
+  
+  <p>New nodes fast-sync by requesting the latest accepted checkpoint from a peer, verifying the quorum signatures and <code>state_root</code> integrity, applying the state snapshot, and inserting the suffix DAG from <code>checkpoint.round</code> to present. This reduces sync time from O(all history) to O(suffix since last checkpoint).</p>
+  
+  <p>Equivocation evidence is stored in a separate, permanently retained store that survives DAG pruning, ensuring slashing proofs remain available regardless of how much history has been pruned. The <code>--archive</code> flag disables pruning entirely for archive nodes and block explorers.</p>
 
   <!-- 13. SECURITY ANALYSIS -->
   <h2 id="s13"><span class="sec-num">13.</span> Security Analysis</h2>
@@ -583,7 +594,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 
   <h3>Resolved Limitations</h3>
   <ul>
-    <li><strong>✅ Finality performance:</strong> O(V&sup2;) &rarr; O(1) via incremental descendant tracking + forward propagation (10K vertices: 47s &rarr; 21ms, 2,238x faster).</li>
+    <li><strong>✅ Finality performance:</strong> O(V&sup2;) &rarr; O(1) via incremental descendant tracking + forward propagation (10K vertices: 47s &rarr; 21ms, 2238x faster).</li>
     <li><strong>✅ Optimistic responsiveness:</strong> Validators produce immediately when quorum is reached via <code>tokio::select!</code> on vertex notifications. Timer fires as fallback. Sub-second finality under normal conditions.</li>
     <li><strong>✅ Epoch-based validator reconfiguration:</strong> Dynamic validator set transitions every 210,000 rounds. <code>sync_epoch_validators()</code> bridges StateEngine active set to FinalityTracker allowlist at epoch boundaries. Quorum intersection maintained across transitions.</li>
   </ul>
@@ -591,20 +602,21 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <!-- 14. TESTNET RESULTS -->
   <h2 id="s14"><span class="sec-num">14.</span> Testnet Results</h2>
 
-  <p>A 4-node Fly.io testnet has been validated through 1800+ consensus rounds:</p>
+  <p>A 4-node Fly.io testnet (ams region) runs continuously with permissioned validator set:</p>
 
   <table>
     <thead><tr><th>Metric</th><th>Value</th></tr></thead>
     <tbody>
-      <tr><td>Last finalized round</td><td>1863</td></tr>
-      <tr><td>Validator count</td><td>4 (stable with permissioned set)</td></tr>
-      <tr><td>DAG vertices</td><td>1955</td></tr>
-      <tr><td>Finality lag</td><td>2 rounds (typical)</td></tr>
+      <tr><td>DAG round</td><td>330+</td></tr>
+      <tr><td>Last finalized round</td><td>182</td></tr>
+      <tr><td>Validator count</td><td>4 (permissioned allowlist)</td></tr>
       <tr><td>Genesis supply</td><td>2,050,000 UDAG (dev 1,050,000 + faucet 1,000,000)</td></tr>
-      <tr><td>Peers</td><td>13</td></tr>
+      <tr><td>Current supply</td><td>2,059,550 UDAG</td></tr>
+      <tr><td>Avg round time</td><td>5.0s (timer fallback)</td></tr>
+      <tr><td>Tests passing</td><td>373</td></tr>
     </tbody>
   </table>
-  <p>The testnet demonstrates stable 2&ndash;3 round finality latency with permissioned validator set management.</p>
+  <p><strong>Known issue:</strong> Nodes currently produce at independent round numbers due to asynchronous startup, preventing in-round quorum. Finality happens via descendant accumulation across rounds, resulting in elevated finality lag. Round synchronization is planned to address this.</p>
 
   <!-- 15. MINIMALISM VS THROUGHPUT -->
   <h2 id="s15"><span class="sec-num">15.</span> Minimalism vs. <em>Throughput</em></h2>
@@ -623,12 +635,11 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   </table>
   <p>By comparison, Narwhal decouples data availability from ordering &mdash; validators disseminate transaction batches continuously between rounds, so throughput scales with bandwidth rather than round timing. Under identical hardware, Narwhal achieves 100,000+ TPS by saturating network bandwidth independent of consensus latency.</p>
   <p><strong>No pipelining.</strong> In UltraDAG, consensus and DAG construction are sequential. Shoal++ pipelines these operations: while round r&rsquo;s vertices are being finalized, round r+1&rsquo;s vertices are already being built and disseminated, approximately halving effective finality latency.</p>
-  <p><strong>No optimistic responsiveness.</strong> UltraDAG always waits for the round timer. Protocols with optimistic responsiveness (HotStuff, Shoal++) can advance at network speed &mdash; completing a round in one RTT (~100ms on a LAN) rather than waiting for the full timer duration (1&ndash;5 seconds). This gives UltraDAG a finality floor of 3 &times; round_duration, while responsive protocols can achieve 3 &times; network_RTT.</p>
 
   <h3>15.2 Why These Tradeoffs Are Acceptable</h3>
   <p><strong>Modest per-node transaction volume.</strong> IoT devices generate transactions at rates measured in transactions per second, not thousands. A sensor reporting readings every 5 seconds, a smart meter settling micropayments every minute &mdash; these workloads fit comfortably within a single vertex per round.</p>
-  <p><strong>Device constraints favor auditability.</strong> An embedded device that participates as a light client or validator must be able to understand and verify the consensus protocol. A protocol with 781 lines of consensus logic can be compiled to a small binary, audited on the target platform, and reasoned about in resource-constrained environments. A protocol with 30,000 lines cannot.</p>
-  <p><strong>Code complexity is attack surface.</strong> The 50x reduction from Shoal++ to UltraDAG directly reduces the number of places where a bug could cause a safety violation, liveness failure, or state divergence. For networks where the cost of a consensus bug exceeds the cost of lower throughput, this tradeoff is unambiguously correct.</p>
+  <p><strong>Device constraints favor auditability.</strong> An embedded device that participates as a light client or validator must be able to understand and verify the consensus protocol. A protocol with 1,100 lines of consensus logic can be compiled to a small binary, audited on the target platform, and reasoned about in resource-constrained environments. A protocol with 30,000 lines cannot.</p>
+  <p><strong>Code complexity is attack surface.</strong> The 27x reduction from Shoal++ to UltraDAG directly reduces the number of places where a bug could cause a safety violation, liveness failure, or state divergence. For networks where the cost of a consensus bug exceeds the cost of lower throughput, this tradeoff is unambiguously correct.</p>
   <p><strong>Round timing is tunable.</strong> The <code>--round-ms</code> flag allows operators to choose their position on the latency-throughput curve. A 1-second round with 4 validators can handle 40,000 TPS theoretical max, which exceeds most L1 chains in production today.</p>
 
   <!-- 16. COMPARISON -->
@@ -642,7 +653,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
       <tr><td><strong>Finality</strong></td><td>3 phases</td><td>2 phases</td><td>Pipeline</td><td>Wave-based</td><td>Separate</td><td>2 rounds</td><td>1 round</td><td><strong>Desc. coverage</strong></td></tr>
       <tr><td><strong>Votes</strong></td><td>Explicit</td><td>Explicit</td><td>Threshold</td><td>Implicit</td><td>Mixed</td><td>Implicit</td><td>Implicit</td><td><strong>Implicit</strong></td></tr>
       <tr><td><strong>Messages</strong></td><td>O(n&sup2;)</td><td>O(n&sup2;)</td><td>O(n)</td><td>O(n)</td><td>O(n)</td><td>O(n)</td><td>O(n)</td><td><strong>O(n)</strong></td></tr>
-      <tr><td><strong>Consensus code</strong></td><td>~5,000</td><td>~10,000</td><td>~8,000</td><td>~10,000</td><td>~15,000</td><td>~20,000</td><td>~30,000</td><td><strong>781</strong></td></tr>
+      <tr><td><strong>Consensus code</strong></td><td>~5,000</td><td>~10,000</td><td>~8,000</td><td>~10,000</td><td>~15,000</td><td>~20,000</td><td>~30,000</td><td><strong>1,100</strong></td></tr>
       <tr><td><strong>3-sentence rule?</strong></td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td><strong>Yes</strong></td></tr>
       <tr><td><strong>Separate mempool</strong></td><td>No</td><td>No</td><td>No</td><td>No</td><td>Yes</td><td>Yes</td><td>Yes</td><td><strong>No</strong></td></tr>
       <tr><td><strong>Responsive</strong></td><td>No</td><td>No</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>Yes</td><td><strong>Yes</strong></td></tr>
@@ -667,7 +678,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 
   <h3>Completed Optimizations</h3>
   <ul>
-    <li><strong>✅ Incremental descendant tracking</strong> &mdash; O(1) finality checks with 2,238x performance improvement (1ms for 1K vertices, 21ms for 10K vertices)</li>
+    <li><strong>✅ Incremental descendant tracking</strong> &mdash; O(1) finality checks with 2238x performance improvement (1ms for 1K vertices, 21ms for 10K vertices)</li>
     <li><strong>✅ Optimistic responsiveness</strong> &mdash; validators produce at network speed when quorum is reached; timer fires as fallback for guaranteed progress</li>
     <li><strong>✅ Epoch-based validator reconfiguration</strong> &mdash; dynamic validator set transitions every 210,000 rounds via <code>sync_epoch_validators()</code>; active set capped at 21 validators</li>
     <li><strong>✅ DAG pruning</strong> &mdash; automatic pruning of vertices older than 1000 rounds prevents unbounded memory growth</li>
@@ -678,9 +689,9 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <!-- 18. CONCLUSION -->
   <h2 id="s18"><span class="sec-num">18.</span> Conclusion</h2>
 
-  <p>UltraDAG demonstrates that a complete, working cryptocurrency can be built on a leaderless DAG-BFT consensus protocol with minimal complexity. The entire consensus core &mdash; 781 lines of Rust across five files &mdash; implements DAG construction, BFT finality via descendant coverage, deterministic ordering, validator management, and Ed25519-signed vertices. The protocol can be stated in three sentences and fully audited in a day.</p>
-  <p>The protocol&rsquo;s safety relies on the standard BFT quorum intersection property &mdash; the same foundation used by PBFT, Tendermint, and HotStuff &mdash; applied to an implicit voting mechanism where DAG topology replaces explicit vote messages. While a formal safety proof remains future work, the system has been thoroughly tested with <strong>370 automated tests</strong> (all passing) and validated on a 4-node Fly.io testnet through 1800+ consensus rounds with stable finality.</p>
-  <p><strong>UltraDAG is not the fastest DAG-BFT protocol. It is the simplest correct one.</strong> For networks where auditability, small binary size, and minimal attack surface matter more than maximum throughput &mdash; IoT micropayments, embedded systems, resource-constrained validators &mdash; this is the right tradeoff.</p>
+  <p>UltraDAG demonstrates that a complete, working cryptocurrency can be built on a leaderless DAG-BFT consensus protocol with minimal complexity. The entire consensus core — 1,100 lines of Rust across five files — implements DAG construction, BFT finality via descendant coverage, deterministic ordering, validator management, and Ed25519-signed vertices. The protocol can be stated in three sentences and fully audited in a day.</p>
+  <p>The protocol’s safety relies on the standard BFT quorum intersection property — the same foundation used by PBFT, Tendermint, and HotStuff — applied to an implicit voting mechanism where DAG topology replaces explicit vote messages. While a formal safety proof remains future work, the system has been thoroughly tested with <strong>373 automated tests</strong> (all passing) and validated on a 4-node Fly.io testnet. Round synchronization between nodes is a known area for improvement (see Section 14).</p>
+  <p><strong>UltraDAG is not the fastest DAG-BFT protocol. It is the simplest correct one.</strong> For networks where auditability, small binary size, and minimal attack surface matter more than maximum throughput — IoT micropayments, embedded systems, resource-constrained validators — this is the right tradeoff.</p>
 
   <!-- REFERENCES -->
   <h2 style="font-size:24px">References</h2>

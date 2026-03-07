@@ -32,7 +32,12 @@ impl Block {
 
     /// Total fees collected in this block.
     pub fn total_fees(&self) -> u64 {
-        self.transactions.iter().map(|tx| tx.fee).sum()
+        self.transactions.iter().map(|tx| {
+            match tx {
+                Transaction::Transfer(t) => t.fee,
+                Transaction::Stake(_) | Transaction::Unstake(_) => 0,
+            }
+        }).sum()
     }
 }
 
@@ -93,7 +98,7 @@ mod tests {
 
     fn make_tx(amount: u64, fee: u64) -> Transaction {
         let sk = crate::address::SecretKey::generate();
-        let mut tx = Transaction {
+        let mut transfer = crate::tx::TransferTx {
             from: sk.address(),
             to: Address::ZERO,
             amount,
@@ -102,8 +107,8 @@ mod tests {
             pub_key: sk.verifying_key().to_bytes(),
             signature: Signature([0u8; 64]),
         };
-        tx.signature = sk.sign(&tx.signable_bytes());
-        tx
+        transfer.signature = sk.sign(&transfer.signable_bytes());
+        Transaction::Transfer(transfer)
     }
 
     #[test]

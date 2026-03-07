@@ -1,0 +1,30 @@
+Starting monitor at 2026-03-07 17:53:30 +04. Interval: 60s. Log: /Users/johan/Projects/15_UltraDAG/TESTNET_8HR_LOG.jsonl
+[0h0m] Check 1 | N1:dag=232 fin=229 lag=3 v=258 p=13 | N2:dag=232 fin=229 lag=3 v=258 p=11 | N3:dag=232 fin=229 lag=3 v=300 p=11 | N4:dag=232 fin=229 lag=3 v=258 p=11 | max_lag=3
+Waiting 60s ............
+[0h1m] Check 2 | N1:dag=232 fin=229 lag=3 v=258 p=13 | N2:dag=232 fin=229 lag=3 v=258 p=11 | N3:dag=232 fin=229 lag=3 v=300 p=11 | N4:dag=232 fin=229 lag=3 v=258 p=11 | max_lag=3
+Waiting 60s ............
+[0h2m] Check 3 | N1:dag=232 fin=229 lag=3 v=258 p=13 | N2:dag=232 fin=229 lag=3 v=258 p=11 | N3:dag=232 fin=229 lag=3 v=300 p=11 | N4:dag=232 fin=229 lag=3 v=258 p=11 | max_lag=3
+Waiting 60s ............
+[0h3m] Check 4 | N1:dag=232 fin=229 lag=3 v=258 p=13 | N2:dag=232 fin=229 lag=3 v=258 p=11 | N3:dag=232 fin=229 lag=3 v=300 p=11 | N4:dag=232 fin=229 lag=3 v=258 p=11 | max_lag=3
+Waiting 60s ............
+[0h4m] Check 5 | N1:dag=232 fin=229 lag=3 v=258 p=13 | N2:dag=232 fin=229 lag=3 v=258 p=11 | N3:dag=232 fin=229 lag=3 v=300 p=11 | N4:dag=232 fin=229 lag=3 v=258 p=11 | max_lag=3
+Waiting 60s ............
+WARN: Supply decreased! 0 < 206245000000000
+WARN: Large supply jump! +2062450 UDAG
+[0h5m] Check 6 | N1:dag=0 fin=0 lag=0 v=0 p=0 | N2:dag=232 fin=229 lag=3 v=259 p=10 | N3:dag=232 fin=229 lag=3 v=301 p=9 | N4:dag=232 fin=229 lag=3 v=259 p=9 | max_lag=3
+Waiting 60s ............
+WARN: Lag spike! Node 1: 100 (prev 3)
+WARN: Supply decreased! 205040000000000 < 206245000000000
+WARN: Large supply jump! +12050 UDAG
+[0h6m] Check 7 | N1:dag=107 fin=7 lag=100 v=115 p=9 | N2:dag=107 fin=7 lag=100 v=115 p=11 | N3:dag=232 fin=229 lag=3 v=311 p=9 | N4:dag=232 fin=229 lag=3 v=269 p=9 | max_lag=100
+Waiting 60s ............
+WARN: Lag spike! Node 1: 112 (prev 3)
+WARN: Supply decreased! 205040000000000 < 206245000000000
+WARN: Large supply jump! +12050 UDAG
+[0h7m] Check 8 | N1:dag=119 fin=7 lag=112 v=140 p=11 | N2:dag=119 fin=7 lag=112 v=140 p=11 | N3:dag=120 fin=7 lag=113 v=141 p=11 | N4:dag=232 fin=229 lag=3 v=269 p=9 | max_lag=113
+Waiting 60s ............
+WARN: Large supply jump! +24250 UDAG
+WARN: Large supply jump! +150 UDAG
+WARN: Supply decreased! 206245000000000 < 208685000000000
+[0h8m] Check 9 | N1:dag=319 fin=317 lag=2 v=738 p=11 | N2:dag=320 fin=318 lag=2 v=741 p=11 | N3:dag=320 fin=318 lag=2 v=742 p=11 | N4:dag=232 fin=229 lag=3 v=269 p=9 | max_lag=3
+Waiting 60s ............

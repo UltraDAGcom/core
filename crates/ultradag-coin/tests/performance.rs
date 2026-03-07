@@ -11,7 +11,7 @@ fn make_vertex(
     parents: Vec<[u8; 32]>,
 ) -> DagVertex {
     let proposer = proposer_sk.address();
-    let total_fees: u64 = txs.iter().map(|tx| tx.fee).sum();
+    let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
     let reward = constants::block_reward(height);
     let coinbase = CoinbaseTx {
         to: proposer,

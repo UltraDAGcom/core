@@ -9,6 +9,9 @@ primary_region = "ams"
   RPC_PORT = "10333"
   DATA_DIR = "/data"
   VALIDATORS = "4"
+  SEED = "137.66.57.226:9333 169.155.54.169:9333 169.155.55.151:9333"
+  NO_BOOTSTRAP = "true"
+  CLEAN_STATE = "true"
 
 [mounts]
   source = "ultradag_data"
@@ -22,11 +25,11 @@ primary_region = "ams"
   min_machines_running = 1
 
   [[http_service.checks]]
-    grace_period = "60s"
-    interval = "15s"
+    grace_period = "120s"
+    interval = "30s"
     method = "GET"
     path = "/status"
-    timeout = "5s"
+    timeout = "10s"
 
 [[services]]
   internal_port = 9333

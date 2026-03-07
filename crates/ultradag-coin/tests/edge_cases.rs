@@ -10,7 +10,7 @@ use ultradag_coin::constants::*;
 // ============================================================================
 
 fn make_signed_tx(sk: &SecretKey, to: Address, amount: u64, fee: u64, nonce: u64) -> Transaction {
-    let mut tx = Transaction {
+    let mut transfer = TransferTx {
         from: sk.address(),
         to,
         amount,
@@ -19,8 +19,8 @@ fn make_signed_tx(sk: &SecretKey, to: Address, amount: u64, fee: u64, nonce: u64
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
     };
-    tx.signature = sk.sign(&tx.signable_bytes());
-    tx
+    transfer.signature = sk.sign(&transfer.signable_bytes());
+    Transaction::Transfer(transfer)
 }
 
 fn make_vertex(
@@ -31,7 +31,7 @@ fn make_vertex(
     parents: Vec<[u8; 32]>,
 ) -> DagVertex {
     let proposer = proposer_sk.address();
-    let total_fees: u64 = txs.iter().map(|tx| tx.fee).sum();
+    let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
     let reward = block_reward(height);
     let coinbase = ultradag_coin::CoinbaseTx {
         to: proposer,

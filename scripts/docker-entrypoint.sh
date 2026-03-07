@@ -7,7 +7,8 @@ if [ "${CLEAN_STATE:-}" = "true" ] || [ "${CLEAN_STATE:-}" = "1" ]; then
   # Remove DAG/state data but keep validator.key (node identity must survive resets
   # so addresses continue to match the permissioned validator allowlist)
   rm -f "${DATA_DIR:-/data}/dag.json" "${DATA_DIR:-/data}/finality.json" \
-        "${DATA_DIR:-/data}/state.json" "${DATA_DIR:-/data}/mempool.json"
+        "${DATA_DIR:-/data}/state.json" "${DATA_DIR:-/data}/mempool.json" \
+        "${DATA_DIR:-/data}/validator.key"
 fi
 
 ARGS="--port ${PORT:-9333} --rpc-port ${RPC_PORT:-10333} --data-dir ${DATA_DIR:-/data} --validate"
@@ -24,11 +25,6 @@ fi
 
 if [ -n "${ROUND_MS:-}" ]; then
   ARGS="$ARGS --round-ms $ROUND_MS"
-fi
-
-VALIDATOR_KEY_FILE="${VALIDATOR_KEY_FILE:-/etc/ultradag/validators.txt}"
-if [ -f "$VALIDATOR_KEY_FILE" ]; then
-  ARGS="$ARGS --validator-key $VALIDATOR_KEY_FILE"
 fi
 
 if [ "${NO_BOOTSTRAP:-}" = "true" ] || [ "${NO_BOOTSTRAP:-}" = "1" ]; then

@@ -1,7 +1,7 @@
 /// Part 1: Cryptographic Correctness Tests
 /// Proves cryptographic primitives are implemented correctly with no shortcuts.
 
-use ultradag_coin::{Address, SecretKey, Signature, Transaction, DagVertex, Block, BlockHeader, CoinbaseTx};
+use ultradag_coin::{Address, SecretKey, Signature, Transaction, TransferTx, DagVertex, Block, BlockHeader, CoinbaseTx};
 use std::collections::HashSet;
 
 // ============================================================================
@@ -135,7 +135,7 @@ fn make_signed_tx(
     fee: u64,
     nonce: u64,
 ) -> Transaction {
-    let mut tx = Transaction {
+    let mut t = TransferTx {
         from: sk.address(),
         to,
         amount,
@@ -144,8 +144,8 @@ fn make_signed_tx(
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
     };
-    tx.signature = sk.sign(&tx.signable_bytes());
-    tx
+    t.signature = sk.sign(&t.signable_bytes());
+    Transaction::Transfer(t)
 }
 
 #[test]
@@ -164,32 +164,32 @@ fn transaction_signed_bytes_include_all_semantic_fields() {
     
     // Test 1: Change amount
     let mut tx_bad_amount = tx.clone();
-    tx_bad_amount.amount = 2000; // Changed from 1000
-    assert!(!tx_bad_amount.verify_signature(), 
+    if let Transaction::Transfer(ref mut t) = tx_bad_amount { t.amount = 2000; }
+    assert!(!tx_bad_amount.verify_signature(),
         "Changing amount after signing must invalidate signature");
-    
+
     // Test 2: Change recipient
     let mut tx_bad_to = tx.clone();
-    tx_bad_to.to = SecretKey::generate().address(); // Different recipient
-    assert!(!tx_bad_to.verify_signature(), 
+    if let Transaction::Transfer(ref mut t) = tx_bad_to { t.to = SecretKey::generate().address(); }
+    assert!(!tx_bad_to.verify_signature(),
         "Changing recipient after signing must invalidate signature");
-    
+
     // Test 3: Change nonce
     let mut tx_bad_nonce = tx.clone();
-    tx_bad_nonce.nonce = 1; // Changed from 0
-    assert!(!tx_bad_nonce.verify_signature(), 
+    if let Transaction::Transfer(ref mut t) = tx_bad_nonce { t.nonce = 1; }
+    assert!(!tx_bad_nonce.verify_signature(),
         "Changing nonce after signing must invalidate signature");
-    
+
     // Test 4: Change fee
     let mut tx_bad_fee = tx.clone();
-    tx_bad_fee.fee = 20; // Changed from 10
-    assert!(!tx_bad_fee.verify_signature(), 
+    if let Transaction::Transfer(ref mut t) = tx_bad_fee { t.fee = 20; }
+    assert!(!tx_bad_fee.verify_signature(),
         "Changing fee after signing must invalidate signature");
-    
+
     // Test 5: Change sender (from)
     let mut tx_bad_from = tx.clone();
-    tx_bad_from.from = SecretKey::generate().address(); // Different sender
-    assert!(!tx_bad_from.verify_signature(), 
+    if let Transaction::Transfer(ref mut t) = tx_bad_from { t.from = SecretKey::generate().address(); }
+    assert!(!tx_bad_from.verify_signature(),
         "Changing sender after signing must invalidate signature");
     
     // Original transaction still verifies
@@ -215,8 +215,10 @@ fn signature_from_keypair_a_does_not_verify_with_keypair_b() {
     
     // Try to verify with B's public key
     let mut tx_wrong_key = tx.clone();
-    tx_wrong_key.pub_key = sk_b.verifying_key().to_bytes();
-    tx_wrong_key.from = sk_b.address(); // Also change from to match
+    if let Transaction::Transfer(ref mut t) = tx_wrong_key {
+        t.pub_key = sk_b.verifying_key().to_bytes();
+        t.from = sk_b.address(); // Also change from to match
+    }
     
     assert!(!tx_wrong_key.verify_signature(), 
         "Signature from A must not verify with B's public key");
@@ -238,7 +240,7 @@ fn replay_attack_rejected_with_nonce_error_not_signature_error() {
     
     // Now create a replay: same transaction but with old nonce
     let mut replay_tx = tx.clone();
-    replay_tx.nonce = 3; // Old nonce (< 5)
+    if let Transaction::Transfer(ref mut t) = replay_tx { t.nonce = 3; } // Old nonce (< 5)
     
     // The signature is now INVALID because nonce is in signable_bytes
     assert!(!replay_tx.verify_signature(), 
@@ -271,7 +273,7 @@ fn transaction_cannot_be_redirected_to_different_recipient() {
     
     // Attacker tries to redirect to their address
     let mut redirected_tx = tx.clone();
-    redirected_tx.to = attacker_address;
+    if let Transaction::Transfer(ref mut t) = redirected_tx { t.to = attacker_address; }
     
     // Signature must be invalid
     assert!(!redirected_tx.verify_signature(), 
@@ -369,7 +371,7 @@ fn vertex_signed_bytes_include_critical_fields() {
     let reward = ultradag_coin::constants::block_reward(10);
     let coinbase = CoinbaseTx {
         to: proposer,
-        amount: reward + tx.fee,
+        amount: reward + tx.fee(),
         height: 10,
     };
     let mut block_with_tx = Block {

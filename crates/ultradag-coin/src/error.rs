@@ -46,4 +46,7 @@ pub enum CoinError {
 
     #[error("stake below minimum: need {minimum}, got {got}")]
     BelowMinStake { minimum: u64, got: u64 },
+
+    #[error("no stake to unstake")]
+    NoStakeToUnstake,
 }

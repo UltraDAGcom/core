@@ -5,4 +5,4 @@ pub mod transaction;
 
 pub use pool::Mempool;
 pub use stake::{StakeTx, UnstakeTx, MIN_STAKE_SATS, UNSTAKE_COOLDOWN_ROUNDS};
-pub use transaction::{CoinbaseTx, Transaction};
+pub use transaction::{CoinbaseTx, Transaction, TransferTx};

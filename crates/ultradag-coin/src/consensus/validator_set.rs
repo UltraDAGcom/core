@@ -80,17 +80,18 @@ impl ValidatorSet {
     /// BFT quorum threshold: ceil(2n/3).
     /// When `configured_validators` is set, uses that as `n` to prevent
     /// phantom registrations from inflating the threshold.
-    /// Returns usize::MAX if fewer than min_validators are registered.
+    /// Returns usize::MAX if fewer than min_validators are known.
+    /// When `configured_validators` is set, uses that count for the min check
+    /// (the operator has declared the expected validator count).
     pub fn quorum_threshold(&self) -> usize {
-        let registered = self.validators.len();
-        if registered < self.min_validators {
+        let effective_count = match self.configured_validators {
+            Some(configured) => configured,
+            None => self.validators.len(),
+        };
+        if effective_count < self.min_validators {
             return usize::MAX;
         }
-        let n = match self.configured_validators {
-            Some(configured) => configured,
-            None => registered,
-        };
-        (2 * n + 2) / 3
+        (2 * effective_count + 2) / 3
     }
 
     pub fn has_quorum(&self, count: usize) -> bool {

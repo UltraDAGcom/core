@@ -1,10 +1,10 @@
 use ultradag_coin::{
     Address, BlockDag, DagVertex, FinalityTracker, Mempool, SecretKey, Signature, StateEngine,
-    Transaction,
+    Transaction, TransferTx,
 };
 
 fn make_signed_tx(sk: &SecretKey, to: Address, amount: u64, fee: u64, nonce: u64) -> Transaction {
-    let mut tx = Transaction {
+    let mut transfer = TransferTx {
         from: sk.address(),
         to,
         amount,
@@ -13,8 +13,8 @@ fn make_signed_tx(sk: &SecretKey, to: Address, amount: u64, fee: u64, nonce: u64
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
     };
-    tx.signature = sk.sign(&tx.signable_bytes());
-    tx
+    transfer.signature = sk.sign(&transfer.signable_bytes());
+    Transaction::Transfer(transfer)
 }
 
 /// unique_id ensures different block hashes even with the same round
@@ -168,6 +168,7 @@ fn test_state_engine_persistence() {
 
 #[test]
 fn test_mempool_persistence() {
+    use ultradag_coin::constants::MIN_FEE_SATS;
     let temp_dir = std::env::temp_dir();
     let path = temp_dir.join("test_mempool_persistence.json");
     
@@ -176,9 +177,9 @@ fn test_mempool_persistence() {
     let sk1 = SecretKey::generate();
     let sk2 = SecretKey::generate();
     
-    let tx1 = make_signed_tx(&sk1, sk2.address(), 100, 10, 0);
-    let tx2 = make_signed_tx(&sk1, sk2.address(), 200, 20, 1);
-    let tx3 = make_signed_tx(&sk2, sk1.address(), 50, 5, 0);
+    let tx1 = make_signed_tx(&sk1, sk2.address(), 100, MIN_FEE_SATS + 10, 0);
+    let tx2 = make_signed_tx(&sk1, sk2.address(), 200, MIN_FEE_SATS + 20, 1);
+    let tx3 = make_signed_tx(&sk2, sk1.address(), 50, MIN_FEE_SATS + 5, 0);
     
     mempool.insert(tx1.clone());
     mempool.insert(tx2.clone());
@@ -239,7 +240,8 @@ fn test_complete_node_state_persistence() {
     state.apply_vertex(&v3).unwrap();
     
     // Add transactions to mempool
-    let tx = make_signed_tx(&sk1, sk2.address(), 100, 10, 1);
+    use ultradag_coin::constants::MIN_FEE_SATS;
+    let tx = make_signed_tx(&sk1, sk2.address(), 100, MIN_FEE_SATS + 10, 1);
     mempool.insert(tx.clone());
     
     // Save all components
