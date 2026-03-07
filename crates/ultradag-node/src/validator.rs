@@ -40,6 +40,11 @@ pub async fn validator_loop(
     let mut consecutive_skips = 0u32;
     let mut in_recovery = false;
     const MAX_SKIPS_BEFORE_RECOVERY: u32 = 3;
+    // Minimum time between vertex productions to prevent runaway optimistic loops.
+    // During sync bursts, hundreds of round_notify fire, but we should never produce
+    // faster than this cooldown to avoid CPU saturation and health check failures.
+    let min_production_interval = Duration::from_millis(round_duration.as_millis() as u64 / 2).max(Duration::from_secs(1));
+    let mut last_production = tokio::time::Instant::now() - round_duration;
 
     loop {
         // Optimistic responsiveness: produce early when notified (peer vertex arrived),
@@ -52,6 +57,11 @@ pub async fn validator_loop(
             }
             _ = server.round_notify.notified() => {
                 timer_fired = false;
+                // Enforce minimum cooldown between productions
+                let elapsed = last_production.elapsed();
+                if elapsed < min_production_interval {
+                    continue;
+                }
             }
         }
 
@@ -292,6 +302,8 @@ pub async fn validator_loop(
                 }
             }
         }
+
+        last_production = tokio::time::Instant::now();
 
         info!(
             "Produced vertex hash={} round={} height={}",
