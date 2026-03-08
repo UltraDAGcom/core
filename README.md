@@ -38,7 +38,7 @@ Transaction ordering is deterministic: finalized vertices are sorted by (round, 
 
 - **Max supply**: 21,000,000 UDAG (hard cap enforced in state engine)
 - **Halving**: every 210,000 rounds (~2.5 months at 30s design target, ~12 days at 5s testnet)
-- **Initial block reward**: 50 UDAG per round (total emission per round, split among validators)
+- **Initial block reward**: 50 UDAG per vertex (each validator earns 50 UDAG per block produced)
 - **Developer allocation**: 1,050,000 UDAG (5%) allocated at genesis
   - Funds protocol development. No VC funding. No presale.
   - Deterministic testnet address (see `constants.rs` for seed)

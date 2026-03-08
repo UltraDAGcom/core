@@ -127,7 +127,7 @@ Successfully implemented the unified `Transaction` enum to fix the staking propa
 
 Same as stake, but:
 - Sets `unlock_at_round` instead of crediting stake
-- Funds return after cooldown period (2,016 rounds ≈ 1 week)
+- Funds return after cooldown period (2,016 rounds ≈ 2.8 hours at 5s rounds)
 
 ---
 

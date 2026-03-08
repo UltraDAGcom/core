@@ -193,3 +193,129 @@
   Node 4: round= 236 fin= 235 lag= 1 peers= 3 supply=2,081,750 ✅
   Round 235: 4 vertices ✅
 
+[2026-03-08 21:58:45] Sample #115
+  Node 1: round= 386 fin= 385 lag= 1 peers= 3 supply=2,111,950 ✅
+  Node 2: round= 387 fin= 386 lag= 1 peers= 3 supply=2,112,050 ✅
+  Node 3: round= 387 fin= 386 lag= 1 peers= 3 supply=2,112,050 ✅
+  Node 4: round= 387 fin= 386 lag= 1 peers= 3 supply=2,112,150 ✅
+  Round 386: 4 vertices ✅
+
+[2026-03-08 22:03:48] Sample #116
+  Node 1: round= 536 fin= 535 lag= 1 peers= 3 supply=2,142,250 ✅
+  Node 2: round= 536 fin= 535 lag= 1 peers= 3 supply=2,142,250 ✅
+  Node 3: round= 536 fin= 535 lag= 1 peers= 3 supply=2,142,250 ✅
+  Node 4: round= 536 fin= 535 lag= 1 peers= 3 supply=2,142,350 ✅
+  Round 536: 4 vertices ✅
+
+[2026-03-08 22:08:51] Sample #117
+  Node 1: round= 686 fin= 685 lag= 1 peers= 3 supply=2,172,550 ✅
+  Node 2: round= 686 fin= 685 lag= 1 peers= 3 supply=2,172,550 ✅
+  Node 3: round= 687 fin= 686 lag= 1 peers= 3 supply=2,172,650 ✅
+  Node 4: round= 687 fin= 686 lag= 1 peers= 3 supply=2,172,650 ✅
+  Round 686: 4 vertices ✅
+
+[2026-03-08 22:13:55] Sample #118
+  Node 1: round= 837 fin= 836 lag= 1 peers= 3 supply=2,202,800 ✅
+  Node 2: round= 837 fin= 836 lag= 1 peers= 3 supply=2,202,900 ✅
+  Node 3: round= 837 fin= 836 lag= 1 peers= 3 supply=2,202,900 ✅
+  Node 4: round= 838 fin= 836 lag= 2 peers= 3 supply=2,202,900 ✅
+  Round 837: 4 vertices ✅
+
+[2026-03-08 22:18:58] Sample #119
+  Node 1: round= 988 fin= 987 lag= 1 peers= 3 supply=2,233,050 ✅
+  Node 2: round= 988 fin= 987 lag= 1 peers= 3 supply=2,233,150 ✅
+  Node 3: round= 988 fin= 987 lag= 1 peers= 3 supply=2,233,150 ✅
+  Node 4: round= 988 fin= 987 lag= 1 peers= 3 supply=2,233,150 ✅
+  Round 988: 4 vertices ✅
+
+[2026-03-08 22:24:01] Sample #120
+  Node 1: round=1138 fin=1137 lag= 1 peers= 3 supply=2,263,400 ✅
+  Node 2: round=1139 fin=1138 lag= 1 peers= 3 supply=2,263,500 ✅
+  Node 3: round=1139 fin=1138 lag= 1 peers= 3 supply=2,263,500 ✅
+  Node 4: round=1139 fin=1138 lag= 1 peers= 3 supply=2,263,500 ✅
+  Round 1138: 4 vertices ✅
+
+[2026-03-08 22:29:04] Sample #121
+  Node 1: round=1288 fin=1287 lag= 1 peers= 3 supply=2,293,600 ✅
+  Node 2: round=1289 fin=1288 lag= 1 peers= 3 supply=2,293,800 ✅
+  Node 3: round=1289 fin=1288 lag= 1 peers= 3 supply=2,293,800 ✅
+  Node 4: round=1289 fin=1288 lag= 1 peers= 3 supply=2,293,900 ✅
+  Round 1288: 4 vertices ✅
+
+[2026-03-08 22:34:08] Sample #122
+  Node 1: round=1439 fin=1438 lag= 1 peers= 3 supply=2,323,950 ✅
+  Node 2: round=1439 fin=1438 lag= 1 peers= 3 supply=2,323,950 ✅
+  Node 3: round=1440 fin=1439 lag= 1 peers= 3 supply=2,324,050 ✅
+  Node 4: round=1440 fin=1439 lag= 1 peers= 3 supply=2,324,050 ✅
+  Round 1439: 4 vertices ✅
+
+[2026-03-08 22:39:12] Sample #123
+  Node 1: round=1592 fin=1591 lag= 1 peers= 3 supply=2,354,450 ✅
+  Node 2: round=1592 fin=1591 lag= 1 peers= 3 supply=2,354,450 ✅
+  Node 3: round=1592 fin=1591 lag= 1 peers= 3 supply=2,354,550 ✅
+  Node 4: round=1592 fin=1591 lag= 1 peers= 3 supply=2,354,550 ✅
+  Round 1592: 4 vertices ✅
+
+[2026-03-08 22:44:15] Sample #124
+  Node 1: round=1743 fin=1742 lag= 1 peers= 3 supply=2,384,750 ✅
+  Node 2: round=1743 fin=1742 lag= 1 peers= 3 supply=2,384,750 ✅
+  Node 3: round=1744 fin=1743 lag= 1 peers= 3 supply=2,384,850 ✅
+  Node 4: round=1744 fin=1743 lag= 1 peers= 3 supply=2,384,850 ✅
+  Round 1743: 4 vertices ✅
+
+[2026-03-08 22:49:18] Sample #125
+  Node 1: round=1894 fin=1893 lag= 1 peers= 3 supply=2,414,950 ✅
+  Node 2: round=1894 fin=1893 lag= 1 peers= 3 supply=2,415,050 ✅
+  Node 3: round=1895 fin=1894 lag= 1 peers= 3 supply=2,415,150 ✅
+  Node 4: round=1895 fin=1894 lag= 1 peers= 3 supply=2,415,150 ✅
+  Round 1894: 4 vertices ✅
+
+[2026-03-08 22:54:22] Sample #126
+  Node 1: round=2045 fin=2044 lag= 1 peers= 3 supply=2,445,250 ✅
+  Node 2: round=2046 fin=2045 lag= 1 peers= 3 supply=2,445,350 ✅
+  Node 3: round=2046 fin=2045 lag= 1 peers= 3 supply=2,445,350 ✅
+  Node 4: round=2046 fin=2045 lag= 1 peers= 3 supply=2,445,450 ✅
+  Round 2045: 4 vertices ✅
+
+[2026-03-08 22:59:24] Sample #127
+  Node 1: round=2197 fin=2196 lag= 1 peers= 3 supply=2,475,550 ✅
+  Node 2: round=2197 fin=2196 lag= 1 peers= 3 supply=2,475,650 ✅
+  Node 3: round=2198 fin=2197 lag= 1 peers= 3 supply=2,475,750 ✅
+  Node 4: round=2198 fin=2197 lag= 1 peers= 3 supply=2,475,750 ✅
+  Round 2197: 4 vertices ✅
+
+[2026-03-08 23:04:28] Sample #128
+  Node 1: round=2341 fin=2340 lag= 1 peers= 3 supply=2,505,500 ✅
+  Node 2: round=2342 fin=2340 lag= 2 peers= 3 supply=2,505,500 ✅
+  Node 3: round=2342 fin=2341 lag= 1 peers= 3 supply=2,505,750 ✅
+  Node 4: round=2343 fin=2342 lag= 1 peers= 3 supply=2,505,900 ✅
+  Round 2342: 4 vertices ✅
+
+[2026-03-08 23:09:36] Sample #129
+  Node 1: round=2443 fin=2442 lag= 1 peers= 3 supply=2,527,200 ✅
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: round=2445 fin=2444 lag= 1 peers= 3 supply=2,527,600 ✅
+  Node 4: round=2445 fin=2444 lag= 1 peers= 3 supply=2,527,600 ✅
+  Round 2444: 4 vertices ✅
+
+[2026-03-08 23:14:48] Sample #130
+  Node 1: round=2506 fin=2497 lag= 9 peers= 3 supply=2,538,200 ✅
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: round=2508 fin=2497 lag=11 peers= 3 supply=2,538,200 [HIGH_LAG] ⚠️
+  Node 4: CRASHED or UNREACHABLE ❌
+  Round 2509: 3 vertices ✅
+
+[2026-03-08 23:20:12] Sample #131
+  Node 1: round=2571 fin=2497 lag=74 peers= 3 supply=2,538,200 [HIGH_LAG] ⚠️
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: round=2573 fin=2497 lag=76 peers= 3 supply=2,538,200 [HIGH_LAG] ⚠️
+  Node 4: CRASHED or UNREACHABLE ❌
+  Round 2574: 3 vertices ✅
+
+[2026-03-08 23:25:34] Sample #132
+  Node 1: round=2635 fin=2497 lag=138 peers= 3 supply=2,538,200 [HIGH_LAG] ⚠️
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: round=2639 fin=2497 lag=142 peers= 3 supply=2,538,200 [HIGH_LAG] ⚠️
+  Node 4: CRASHED or UNREACHABLE ❌
+  Round 2640: 3 vertices ✅
+

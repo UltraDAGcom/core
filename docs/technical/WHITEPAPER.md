@@ -726,4 +726,4 @@ UltraDAG is not the fastest DAG-BFT protocol. It is the simplest correct one. Fo
 
 ---
 
-*UltraDAG is open source software. The protocol specification and implementation are available at github.com/ultradag/core.*
+*UltraDAG is open source software. The protocol specification and implementation are available at github.com/UltraDAGcom/core.*

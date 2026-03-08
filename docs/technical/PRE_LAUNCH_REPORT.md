@@ -526,7 +526,7 @@ if let Some(round) = engine.last_finalized_round {
 
 **Staking Claims**:
 - ❌ "Min stake: 1,000 UDAG" — **WRONG** (should be 10,000)
-- ✅ "~1 week cooldown" — Correct (2,016 rounds ≈ 1 week)
+- ✅ "~2.8 hours cooldown" — Correct (2,016 rounds × 5s = 2.8 hours)
 - ❌ Does NOT mention 50% slash — Should add this
 - ❌ Does NOT mention proportional rewards — Should add this
 
@@ -545,7 +545,7 @@ if let Some(round) = engine.last_finalized_round {
 
 **Section 10.3 Validator Staking**:
 - ❌ "Minimum stake: 1,000 UDAG" — **WRONG** (should be 10,000)
-- ✅ "Unstaking cooldown: 2,016 rounds (~1 week)" — Correct
+- ✅ "Unstaking cooldown: 2,016 rounds (~2.8 hours at 5s rounds)" — Correct
 - ✅ "Slashing penalty: 50% on equivocation" — Correct
 - ✅ "Reward distribution: Proportional to stake" — Correct
 

@@ -155,7 +155,7 @@ All 7 documented endpoints respond correctly:
 | Endpoint | Status | Notes |
 |----------|--------|-------|
 | `GET /status` | OK | Returns round, peers, validators, supply, accounts, DAG stats |
-| `GET /balance/:addr` | OK | Returns balance (sats), nonce, balance_tdag |
+| `GET /balance/:addr` | OK | Returns balance (sats), nonce, balance_udag |
 | `GET /mempool` | OK | Returns JSON array (empty when no pending txs) |
 | `GET /round/:n` | OK | Returns array of vertices with hash, validator, reward, tx_count |
 | `GET /keygen` | OK | Returns address + secret_key |

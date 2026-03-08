@@ -54,7 +54,7 @@ UltraDAG is designed to run on minimal hardware:
 ### 1. Clone and Build
 
 ```bash
-git clone https://github.com/ultradag/core.git ultradag
+git clone https://github.com/UltraDAGcom/core.git ultradag
 cd ultradag
 cargo build --release --bin ultradag-node
 ```
@@ -66,6 +66,8 @@ Build time: ~5-10 minutes on a modern machine.
 ```bash
 curl https://ultradag-node-1.fly.dev/keygen
 ```
+
+> **⚠️ SECURITY WARNING:** Never use `/keygen` for mainnet wallets — the server sees your private key. This endpoint is for testnet convenience only. For mainnet, use the dashboard or SDK for local key generation.
 
 Save the output:
 ```json
@@ -88,7 +90,7 @@ curl -X POST https://ultradag-node-1.fly.dev/faucet \
   -d '{"address": "YOUR_ADDRESS_HERE"}'
 ```
 
-The faucet gives 100 UDAG per request. Repeat 100 times or ask in Telegram @ultra_dag for a larger allocation.
+> **Note:** The faucet is testnet-only and provides 100 UDAG per request. Repeat 100 times or ask in Telegram @ultra_dag for a larger allocation.
 
 ### 4. Stake Your Tokens
 
@@ -131,7 +133,7 @@ Your node will:
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/ultradag/core.git ultradag
+git clone https://github.com/UltraDAGcom/core.git ultradag
 cd ultradag
 ```
 
@@ -178,7 +180,7 @@ ultradag-node [OPTIONS]
 
 OPTIONS:
   --port <PORT>              P2P port [default: 9333]
-  --rpc-port <RPC_PORT>      RPC API port [default: 10333]
+  --rpc-port <RPC_PORT>      RPC API port [default: P2P port + 1000, e.g., 10333]
   --data-dir <DATA_DIR>      Data directory [default: ./data]
   --validators <N>           Expected validator count [default: 21]
   --seed <ADDR>              Seed peer address (can specify multiple)
@@ -252,7 +254,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
 
 # Clone and build
-git clone https://github.com/ultradag/core.git ultradag
+git clone https://github.com/UltraDAGcom/core.git ultradag
 cd ultradag
 cargo build --release --bin ultradag-node
 
@@ -728,7 +730,7 @@ Validators can be slashed for:
 ## Community
 
 - **Telegram:** @ultra_dag — Ask questions, share monitoring results
-- **GitHub:** https://github.com/ultradag/core — Report issues, contribute code
+- **GitHub:** https://github.com/UltraDAGcom/core — Report issues, contribute code
 - **Testnet Status:** https://testnet.ultradag.com — Live network stats
 
 ---

@@ -6,6 +6,17 @@
 **Website**: UltraDAG.com  
 **Repository**: github.com/UltraDAGcom/core
 
+## Recent Updates (March 2026)
+
+**Documentation Refinement:**
+- Fixed unstake cooldown duration: 2,016 rounds = ~2.8 hours at 5s rounds (was incorrectly listed as ~1 week)
+- Unified GitHub URLs to `github.com/UltraDAGcom/core` across all documentation
+- Added security warning for `/keygen` endpoint (never use for mainnet - server sees private key)
+- Fixed `balance_tdag` → `balance_udag` in RPC response examples
+- Documented `/faucet` as testnet-only with 100 UDAG per request limit
+- Clarified RPC port default formula: P2P port + 1000 (e.g., 9333 → 10333)
+- Clarified emission schedule: 50 UDAG per vertex (not per round total)
+
 ---
 
 ## What Makes UltraDAG Different
@@ -243,7 +254,7 @@ When a vertex fails insertion due to missing parents, the node:
 
 ### Supply
 - Max supply: 21,000,000 UDAG (1 UDAG = 100,000,000 sats)
-- Initial block reward: 50 UDAG per round (total emission, split among validators)
+- Initial block reward: 50 UDAG per vertex (each validator earns 50 UDAG per block produced)
 - Halving: every 210,000 rounds
 - Default round time: 5 seconds (configurable via `--round-ms`)
 
