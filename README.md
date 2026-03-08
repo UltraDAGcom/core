@@ -1,8 +1,26 @@
 # UltraDAG
 
+[![Bug Bounty](https://img.shields.io/badge/Bug%20Bounty-500k%20UDAG-success)](./security/bug-bounty/PROGRAM.md)
+[![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./security/POLICY.md)
+[![Testnet](https://img.shields.io/badge/Testnet-Live-green)](https://ultradag-node-1.fly.dev/status)
+[![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-informational)](./LICENSE)
+
 A DAG-BFT cryptocurrency for permissioned networks and IoT applications. Built in Rust.
 
 **Ed25519 signatures. DAG-BFT consensus. Blake3 hashing. 21M max supply. Validator staking.**
+
+## 🔒 Security & Bug Bounty
+
+**Active Bug Bounty Program:** We're offering up to **50,000 UDAG** for critical vulnerabilities!
+
+- 🔴 **Critical:** 10,000 - 50,000 UDAG
+- 🟠 **High:** 5,000 - 10,000 UDAG  
+- 🟡 **Medium:** 1,000 - 5,000 UDAG
+- 🟢 **Low:** 100 - 1,000 UDAG
+
+**[View Full Program →](./security/bug-bounty/PROGRAM.md)** | **[Quick Start Guide →](./security/bug-bounty/GUIDE.md)**
+
+All rewards tracked publicly and convertible to mainnet tokens at launch.
 
 ## What is UltraDAG
 
