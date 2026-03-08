@@ -11,8 +11,6 @@ pub struct RateLimiter {
     ip_requests: Arc<DashMap<IpAddr, RwLock<(u32, Instant)>>>,
     /// Global connection counter
     active_connections: Arc<RwLock<u32>>,
-    /// IP blacklist: IP -> (violation_count, ban_until)
-    blacklist: Arc<DashMap<IpAddr, RwLock<(u32, Instant)>>>,
 }
 
 /// Rate limit configuration per endpoint
@@ -31,26 +29,19 @@ impl RateLimit {
     }
 }
 
-/// Predefined rate limits for different endpoints (AGGRESSIVE)
+/// Predefined rate limits for different endpoints
 pub mod limits {
     use super::*;
 
-    // Re-export RateLimit for external use
-    pub use super::RateLimit;
-
-    pub const TX: RateLimit = RateLimit::new(3, 60);            // 3 tx/min (tightened)
+    pub const TX: RateLimit = RateLimit::new(10, 60);           // 10 tx/min
     pub const FAUCET: RateLimit = RateLimit::new(1, 600);       // 1 faucet/10min
-    pub const STATUS: RateLimit = RateLimit::new(20, 60);       // 20 status/min (tightened)
-    pub const STAKE: RateLimit = RateLimit::new(2, 60);         // 2 stake/min (tightened)
-    pub const UNSTAKE: RateLimit = RateLimit::new(2, 60);       // 2 unstake/min (tightened)
-    pub const GLOBAL: RateLimit = RateLimit::new(30, 60);       // 30 total/min (tightened)
+    pub const STATUS: RateLimit = RateLimit::new(60, 60);       // 60 status/min
+    pub const STAKE: RateLimit = RateLimit::new(5, 60);         // 5 stake/min
+    pub const UNSTAKE: RateLimit = RateLimit::new(5, 60);       // 5 unstake/min
+    pub const GLOBAL: RateLimit = RateLimit::new(100, 60);      // 100 total/min
     
-    pub const MAX_CONCURRENT_CONNECTIONS: u32 = 500;             // Reduced from 1000
-    pub const MAX_CONNECTIONS_PER_IP: u32 = 5;                   // Reduced from 10
-    
-    // Blacklist thresholds
-    pub const BLACKLIST_THRESHOLD: u32 = 10;                     // Ban after 10 violations
-    pub const BLACKLIST_DURATION_SECS: u64 = 3600;               // 1 hour ban
+    pub const MAX_CONCURRENT_CONNECTIONS: u32 = 1000;
+    pub const MAX_CONNECTIONS_PER_IP: u32 = 10;
 }
 
 impl RateLimiter {
@@ -58,50 +49,11 @@ impl RateLimiter {
         Self {
             ip_requests: Arc::new(DashMap::new()),
             active_connections: Arc::new(RwLock::new(0)),
-            blacklist: Arc::new(DashMap::new()),
-        }
-    }
-
-    /// Check if IP is blacklisted
-    pub fn is_blacklisted(&self, ip: IpAddr) -> bool {
-        if let Some(entry) = self.blacklist.get(&ip) {
-            let data = entry.read();
-            let now = Instant::now();
-            if now < data.1 {
-                return true; // Still banned
-            }
-        }
-        false
-    }
-
-    /// Record a rate limit violation and potentially blacklist the IP
-    fn record_violation(&self, ip: IpAddr) {
-        let now = Instant::now();
-        let ban_until = now + Duration::from_secs(limits::BLACKLIST_DURATION_SECS);
-        
-        let entry = self.blacklist.entry(ip).or_insert_with(|| RwLock::new((0, now)));
-        let mut data = entry.write();
-        
-        // Reset count if previous ban expired
-        if now >= data.1 {
-            data.0 = 0;
-        }
-        
-        data.0 += 1;
-        
-        // Ban if threshold exceeded
-        if data.0 >= limits::BLACKLIST_THRESHOLD {
-            data.1 = ban_until;
         }
     }
 
     /// Check if request is allowed under rate limit
     pub fn check_rate_limit(&self, ip: IpAddr, limit: RateLimit) -> bool {
-        // Check blacklist first
-        if self.is_blacklisted(ip) {
-            return false;
-        }
-        
         let now = Instant::now();
         
         // Get or create entry for this IP
@@ -119,9 +71,6 @@ impl RateLimiter {
             data.0 += 1;
             true
         } else {
-            // Record violation for potential blacklisting
-            drop(data); // Release lock before recording violation
-            self.record_violation(ip);
             false
         }
     }
@@ -169,21 +118,6 @@ impl RateLimiter {
             let guard = data.read();
             now.duration_since(guard.1) < Duration::from_secs(600) // Keep for 10 min
         });
-        
-        // Cleanup expired blacklist entries
-        self.blacklist.retain(|_, data| {
-            let guard = data.read();
-            now < guard.1 || (now.duration_since(guard.1) < Duration::from_secs(3600))
-        });
-    }
-    
-    /// Get blacklist statistics
-    pub fn blacklist_count(&self) -> usize {
-        let now = Instant::now();
-        self.blacklist.iter().filter(|entry| {
-            let data = entry.value().read();
-            now < data.1 // Currently banned
-        }).count()
     }
 }
 

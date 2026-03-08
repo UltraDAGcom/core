@@ -1,7 +1,6 @@
 mod rpc;
 mod validator;
 mod rate_limit;
-mod resource_monitor;
 
 use std::path::PathBuf;
 use std::sync::Arc;
