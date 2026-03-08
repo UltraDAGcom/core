@@ -1628,7 +1628,7 @@ async function requestFaucet() {
     const res = await fetch(nodeUrl + '/faucet', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address: w.address })
+      body: JSON.stringify({ address: w.address, amount: 10000000000 })
     });
     
     if (!res.ok) {
