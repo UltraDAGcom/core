@@ -150,10 +150,23 @@ pub async fn validator_loop(
             }
         }
 
-        // Get DAG tips for parent references
+        // Get parent references: use ALL vertices from the previous round (not just tips).
+        // This creates dense round-to-round edges in the DAG, ensuring descendant sets
+        // grow quickly for fast finality. Using tips() alone typically yields only 1 parent
+        // (our own last vertex), creating parallel linear chains with poor finality.
         let dag_tips = {
             let dag = server.dag.read().await;
-            dag.tips()
+            let prev_round = dag_round.saturating_sub(1);
+            let prev_round_parents: Vec<[u8; 32]> = dag
+                .vertices_in_round(prev_round)
+                .iter()
+                .map(|v| v.hash())
+                .collect();
+            if prev_round_parents.is_empty() {
+                dag.tips() // Fallback for round 1 or empty DAG
+            } else {
+                prev_round_parents
+            }
         };
 
         // Snapshot mempool

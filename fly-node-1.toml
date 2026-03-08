@@ -11,7 +11,7 @@ primary_region = "ams"
   VALIDATORS = "5"
   SEED = "137.66.57.226:9333 169.155.54.169:9333 169.155.55.151:9333 84.247.10.2:9333"
   NO_BOOTSTRAP = "true"
-  # CLEAN_STATE = "true"
+  CLEAN_STATE = "true"
 
 [mounts]
   source = "ultradag_data"
