@@ -2,7 +2,9 @@
 # Extended 24-48 hour testnet monitoring script
 # Logs node status every 5 minutes and checks for issues
 
-LOG_FILE="scripts/extended_monitor.log"
+# Get script directory and set log file path
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_FILE="$SCRIPT_DIR/extended_monitor.log"
 DURATION_HOURS=${1:-24}  # Default 24 hours, can override
 INTERVAL_SECONDS=300      # 5 minutes
 
