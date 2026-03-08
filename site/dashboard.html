@@ -1596,7 +1596,7 @@ function copyRecvAddr() {
   const addr = document.getElementById('recv-addr').textContent;
   if (addr === 'Select a wallet above') return;
   navigator.clipboard.writeText(addr);
-  showToast('Address copied to clipboard');
+  toast('Address copied to clipboard');
 }
 
 function updateFaucetAddr() {
@@ -1638,7 +1638,7 @@ async function requestFaucet() {
     
     const data = await res.json();
     status.innerHTML = `<span style="color:var(--green)">✓ Success! Sent ${formatUdag(data.amount)} UDAG</span>`;
-    showToast('Faucet request successful!');
+    toast('Faucet request successful!');
     
     // Refresh balance after 3 seconds
     setTimeout(() => {
@@ -2652,7 +2652,7 @@ function copyText(text) {
   navigator.clipboard.writeText(text).then(() => toast('Copied to clipboard', 'ok'));
 }
 
-function toast(msg, type) {
+function toast(msg, type='success') {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.className = 'toast toast-' + type + ' show';
