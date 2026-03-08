@@ -13,8 +13,7 @@
 - Secondary: [Contact info]
 
 **Validator Coordination:**
-- Discord: [Channel]
-- Telegram: [Group]
+- Telegram: @ultra_dag
 
 ---
 

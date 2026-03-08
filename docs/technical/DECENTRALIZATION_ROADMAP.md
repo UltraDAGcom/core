@@ -31,7 +31,7 @@ Testnet (Now) → Mainnet Launch → 6 Months → 12 Months → Founder Exit Com
 ### Operational Decentralization
 - [ ] **Core contributor team** - Hire/recruit 2-3 developers (can be part-time)
 - [ ] **Documentation** - Everything documented so others can maintain it
-- [ ] **Community channels** - Discord/Telegram with active moderators
+- [ ] **Community channels** - Telegram with active moderators
 - [ ] **Bug bounty program** - External security researchers engaged ✅
 
 ### Financial Decentralization
@@ -76,7 +76,7 @@ Testnet (Now) → Mainnet Launch → 6 Months → 12 Months → Founder Exit Com
 **Goal:** Build a self-sustaining community that doesn't depend on you.
 
 ### Community Building
-- [ ] **Active Discord/Telegram** - 1000+ members, daily activity
+- [ ] **Active Telegram** - 1000+ members, daily activity
 - [ ] **Community moderators** - 5-10 trusted moderators
 - [ ] **Developer community** - 10+ external contributors
 - [ ] **Content creators** - Community members creating content
@@ -285,7 +285,7 @@ Testnet (Now) → Mainnet Launch → 6 Months → 12 Months → Founder Exit Com
 1. **Project Lead** - Overall direction, community face
 2. **Technical Lead** - Architecture, code review, releases
 3. **DevOps Lead** - Infrastructure, monitoring, incidents
-4. **Community Manager** - Discord, Twitter, support
+4. **Community Manager** - Telegram, Twitter, support
 5. **Developer Relations** - Ecosystem growth, integrations
 
 ### Hiring Strategy
@@ -423,7 +423,7 @@ Before you can safely exit, verify:
 - [ ] Recruit 1-2 core developers
 - [ ] Set up treasury multisig structure
 - [ ] Document everything
-- [ ] Build community (Discord, Telegram)
+- [ ] Build community (Telegram)
 
 ### Months 4-6 (Pre-Mainnet)
 - [ ] Hire technical lead

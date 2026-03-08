@@ -72,7 +72,7 @@
 **Recommended channels:**
 - GitHub README.md (add badge and link)
 - Twitter/X announcement
-- Discord/Telegram community
+- Telegram community (@ultra_dag)
 - Reddit (r/cryptocurrency, r/crypto)
 - HackerOne/Bugcrowd (cross-post)
 - Security researcher communities

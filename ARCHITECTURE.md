@@ -156,6 +156,7 @@ This gives a total ordering of all finalized transactions without requiring a le
 - Validator creates two vertices for the same round
 - Detection: Other validators see conflicting vertices with same (round, author)
 - Penalty: Immediate slashing (50% stake burned), removal from active set
+- Evidence is stored permanently in a separate `evidence_store` that is never pruned, ensuring a banned validator cannot re-enter the active set even after DAG pruning or node restart
 
 **Censorship:**
 - Malicious validator refuses to include certain transactions
@@ -260,18 +261,19 @@ UltraDAG uses **optimistic responsiveness**: proceed as fast as the network allo
 
 ### Adaptive Round Duration
 
-The `ROUND_DURATION_MS` constant (2500ms) is a *target*, not a hard requirement.
+The `ROUND_DURATION_MS` constant (5000ms) is a **fallback timer**, not a hard requirement.
 
-**Fast path:**
+**Fast path (optimistic responsiveness):**
 - If 2f+1 validators create vertices quickly → round completes in <2.5s
 - Next round starts immediately
+- Timer is bypassed entirely
 
-**Slow path:**
-- If network is congested → some validators take >2.5s
-- Round completes when 2f+1 vertices are received
+**Slow path (fallback):**
+- If network is congested → timer fires at 5 seconds
+- Round completes when 2f+1 vertices are received or timer expires
 - Next round starts when ready
 
-This adapts to actual network conditions without manual tuning.
+This adapts to actual network conditions without manual tuning. The 5-second timer is a maximum wait; the observed round time is typically ~2.5 seconds due to optimistic responsiveness.
 
 ---
 
@@ -727,8 +729,8 @@ Node is synced
 ### Throughput
 
 **Theoretical maximum:**
-- 4 validators × 1,000 tx/block × 0.4 blocks/sec = 1,600 tx/sec
-- 21 validators × 1,000 tx/block × 0.4 blocks/sec = 8,400 tx/sec
+- 4 vertices/round × 1,000 tx/vertex ÷ 2.5s/round = 1,600 tx/sec
+- 21 vertices/round × 1,000 tx/vertex ÷ 2.5s/round = 8,400 tx/sec
 
 **Actual (observed on testnet):**
 - ~500-800 tx/sec sustained
@@ -777,28 +779,6 @@ Node is synced
 
 ---
 
-## Future Improvements
-
-### Short-term (Next 6 Months)
-
-- **Parallel signature verification** — Use Rayon to verify signatures in parallel
-- **Mempool sharding** — Partition mempool by sender address for better concurrency
-- **RPC batching** — Allow submitting multiple transactions in one request
-
-### Medium-term (6-12 Months)
-
-- **Smart contracts** — WASM-based VM for programmable transactions
-- **Light clients** — SPV-style proofs for mobile wallets
-- **Cross-shard transactions** — Partition state across multiple shards
-
-### Long-term (12+ Months)
-
-- **Zero-knowledge proofs** — Privacy-preserving transactions
-- **Interoperability** — Bridge to Ethereum, Bitcoin
-- **Formal verification** — Machine-checked proof of consensus safety
-
----
-
 ## References
 
 **DAG-BFT:**
@@ -820,7 +800,7 @@ Node is synced
 
 If this document doesn't answer your question, please:
 1. Open a GitHub issue with the "documentation" label
-2. Ask in Discord #development
+2. Ask in Telegram @ultra_dag
 3. Submit a PR improving this document
 
 UltraDAG's architecture is designed to be understandable. If it's not, that's a bug.

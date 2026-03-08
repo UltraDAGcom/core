@@ -91,16 +91,16 @@ All rewards tracked publicly and convertible to mainnet tokens at launch.
 - Crypto-native community
 - Higher quality submissions
 
-**Alternative:** Just announce on their Discord/community channels
+**Alternative:** Just announce on their Telegram/community channels
 
 ### 🎯 Secondary Channels (Medium Priority)
 
-#### 6. **Discord Servers**
+#### 6. **Telegram Groups**
 **Communities to join and announce:**
-- Blockchain security servers
+- Blockchain security groups
 - Ethereum security
 - General security researcher communities
-- Your own Discord (if you have one)
+- Your own Telegram group (@ultra_dag)
 
 **Message template:**
 ```
@@ -216,7 +216,7 @@ Best,
 
 ### Week 2: Amplify
 - [ ] Post on Reddit (r/crypto, r/cryptocurrency)
-- [ ] Join and announce in Discord servers
+- [ ] Join and announce in Telegram groups
 - [ ] Post on LinkedIn
 - [ ] Submit to Hacker News
 
@@ -276,7 +276,7 @@ Best,
 ## Budget for Promotion
 
 **Free channels:** $0
-- Twitter, Reddit, GitHub, Discord, Telegram, LinkedIn
+- Twitter, Reddit, GitHub, Telegram, LinkedIn
 
 **Paid options (optional):**
 - Immunefi listing: ~$500-1000/month

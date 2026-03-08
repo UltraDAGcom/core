@@ -88,7 +88,7 @@ curl -X POST https://ultradag-node-1.fly.dev/faucet \
   -d '{"address": "YOUR_ADDRESS_HERE"}'
 ```
 
-The faucet gives 100 UDAG per request. Repeat 100 times or ask in Discord for a larger allocation.
+The faucet gives 100 UDAG per request. Repeat 100 times or ask in Telegram @ultra_dag for a larger allocation.
 
 ### 4. Stake Your Tokens
 
@@ -727,7 +727,7 @@ Validators can be slashed for:
 
 ## Community
 
-- **Discord:** [Join here](#) — Ask questions, share monitoring results
+- **Telegram:** @ultra_dag — Ask questions, share monitoring results
 - **GitHub:** https://github.com/ultradag/core — Report issues, contribute code
 - **Testnet Status:** https://testnet.ultradag.com — Live network stats
 
@@ -737,7 +737,7 @@ Validators can be slashed for:
 
 1. **Run your validator** for at least 24 hours
 2. **Monitor finality lag** — should stay at 1-2 rounds
-3. **Join Discord** — Introduce yourself in #testnet
+3. **Join Telegram** — Introduce yourself at @ultra_dag
 4. **Participate in governance** — Vote on proposals
 5. **Report issues** — Help improve the network
 

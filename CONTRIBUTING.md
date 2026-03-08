@@ -430,7 +430,7 @@ New to the codebase? Start here. These issues are well-scoped, achievable, and d
 
 ## Community
 
-- **Discord:** [Join here](#) — Ask questions, discuss proposals, share testnet results
+- **Telegram:** @ultra_dag — Ask questions, discuss proposals, share testnet results
 - **GitHub Discussions:** For longer-form technical discussions
 - **Testnet:** https://testnet.ultradag.com — Run a validator, test governance
 
@@ -440,7 +440,7 @@ New to the codebase? Start here. These issues are well-scoped, achievable, and d
 
 If something in this guide is unclear, that's a bug in the documentation. Please:
 1. Open an issue with the "documentation" label
-2. Ask in Discord #development channel
+2. Ask in Telegram @ultra_dag
 3. Submit a PR improving this guide
 
 UltraDAG is built by people like you. Welcome to the community.
