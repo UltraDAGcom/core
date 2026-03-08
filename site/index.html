@@ -425,32 +425,100 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 <section id="run">
   <div class="section-inner">
     <p class="section-tag reveal">Run a Node</p>
-    <h2 class="reveal">Start validating<br><em>in 60 seconds.</em></h2>
-    <p class="section-lead reveal">One binary, no configuration files, automatic peer discovery.</p>
+    <h2 class="reveal">Download & run<br><em>in 60 seconds.</em></h2>
+    <p class="section-lead reveal">Pre-built binaries for Linux and macOS. One command to start validating.</p>
 
+    <!-- Download Buttons -->
+    <div style="display:flex;gap:20px;margin:48px 0;flex-wrap:wrap" class="reveal">
+      <a href="https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-linux-x86_64.tar.gz" style="display:flex;flex-direction:column;align-items:center;padding:24px 36px;background:linear-gradient(135deg,#1a6fb5 0%,#3d9be9 100%);color:white;text-decoration:none;border-radius:4px;transition:transform .2s;min-width:180px;box-shadow:0 4px 12px rgba(61,155,233,0.2)">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:12px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        <span style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:4px">Linux</span>
+        <span style="font-family:'DM Mono',monospace;font-size:11px;opacity:0.9">x86_64</span>
+      </a>
+      
+      <a href="https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-macos-arm64.tar.gz" style="display:flex;flex-direction:column;align-items:center;padding:24px 36px;background:linear-gradient(135deg,#1a6fb5 0%,#3d9be9 100%);color:white;text-decoration:none;border-radius:4px;transition:transform .2s;min-width:180px;box-shadow:0 4px 12px rgba(61,155,233,0.2)">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:12px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        <span style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:4px">macOS</span>
+        <span style="font-family:'DM Mono',monospace;font-size:11px;opacity:0.9">Apple Silicon</span>
+      </a>
+
+      <a href="https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-macos-x86_64.tar.gz" style="display:flex;flex-direction:column;align-items:center;padding:24px 36px;background:linear-gradient(135deg,#1a6fb5 0%,#3d9be9 100%);color:white;text-decoration:none;border-radius:4px;transition:transform .2s;min-width:180px;box-shadow:0 4px 12px rgba(61,155,233,0.2)">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:12px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        <span style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:4px">macOS</span>
+        <span style="font-family:'DM Mono',monospace;font-size:11px;opacity:0.9">Intel</span>
+      </a>
+    </div>
+
+    <!-- Linux Instructions -->
+    <div class="code-section reveal" style="margin-bottom:32px">
+      <div class="code-header">
+        <div class="code-dots"><div class="code-dot"></div><div class="code-dot"></div><div class="code-dot"></div></div>
+        <span class="code-label">Linux Installation</span>
+      </div>
+      <pre><span class="cm"># Download and extract</span>
+<span class="kw">curl</span> -L https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-linux-x86_64.tar.gz | <span class="kw">tar</span> xz
+
+<span class="cm"># Generate validator key</span>
+<span class="kw">head</span> -c <span class="num">32</span> /dev/urandom | <span class="kw">base64</span> > validator.key
+
+<span class="cm"># Run node (testnet)</span>
+<span class="kw">./ultradag-node-linux-x86_64</span> \
+  --validator validator.key \
+  --seed https://ultradag-node-1.fly.dev \
+  --seed https://ultradag-node-2.fly.dev \
+  --rpc-port <span class="num">10333</span>
+
+<span class="cm"># Check status</span>
+<span class="kw">curl</span> <span class="str">http://localhost:10333/status</span></pre>
+    </div>
+
+    <!-- macOS Instructions -->
     <div class="code-section reveal">
       <div class="code-header">
         <div class="code-dots"><div class="code-dot"></div><div class="code-dot"></div><div class="code-dot"></div></div>
-        <span class="code-label">Terminal</span>
+        <span class="code-label">macOS Installation</span>
       </div>
-      <pre><span class="cm"># Build the node</span>
-<span class="kw">cargo</span> build --release -p ultradag-node
+      <pre><span class="cm"># Download and extract (Apple Silicon)</span>
+<span class="kw">curl</span> -L https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-macos-arm64.tar.gz | <span class="kw">tar</span> xz
 
-<span class="cm"># Start validating (generates a keypair automatically)</span>
-<span class="kw">cargo</span> run --release -p ultradag-node -- --port <span class="num">9333</span> --validate
+<span class="cm"># Generate validator key</span>
+<span class="kw">head</span> -c <span class="num">32</span> /dev/urandom | <span class="kw">base64</span> > validator.key
 
-<span class="cm"># Connect a second validator to the first</span>
-<span class="kw">cargo</span> run --release -p ultradag-node -- --port <span class="num">9334</span> --seed <span class="str">127.0.0.1:9333</span> --validate
+<span class="cm"># Run node (testnet)</span>
+<span class="kw">./ultradag-node-macos-arm64</span> \
+  --validator validator.key \
+  --seed https://ultradag-node-1.fly.dev \
+  --seed https://ultradag-node-2.fly.dev \
+  --rpc-port <span class="num">10333</span>
 
-<span class="cm"># Check chain status via HTTP RPC</span>
-<span class="kw">curl</span> <span class="str">http://127.0.0.1:10333/status</span>
+<span class="cm"># Check status</span>
+<span class="kw">curl</span> <span class="str">http://localhost:10333/status</span></pre>
+    </div>
 
-<span class="cm"># Generate a new keypair</span>
-<span class="kw">curl</span> <span class="str">http://127.0.0.1:10333/keygen</span>
-
-<span class="cm"># Send UDAG coins</span>
-<span class="kw">curl</span> -X POST <span class="str">http://127.0.0.1:10333/tx</span> \
-  -d <span class="str">'{"from_secret":"&lt;sk_hex&gt;","to":"&lt;addr_hex&gt;","amount":5000000000,"fee":100000}'</span></pre>
+    <!-- Additional Info -->
+    <div style="margin-top:48px;padding:32px;background:var(--bg3);border:1px solid var(--border2);border-radius:2px" class="reveal">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin-bottom:16px">What You Get</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:24px">
+        <div>
+          <p style="font-family:'Cormorant',serif;font-size:16px;color:var(--body);line-height:1.7;margin:0">
+            ✓ <strong style="color:var(--bright)">Automatic sync</strong> from testnet<br>
+            ✓ <strong style="color:var(--bright)">Start earning</strong> block rewards immediately<br>
+            ✓ <strong style="color:var(--bright)">HTTP RPC</strong> on port 10333<br>
+            ✓ <strong style="color:var(--bright)">Bounded storage</strong> (~100MB after sync)
+          </p>
+        </div>
+        <div>
+          <p style="font-family:'Cormorant',serif;font-size:16px;color:var(--body);line-height:1.7;margin:0">
+            ✓ <strong style="color:var(--bright)">No configuration</strong> files needed<br>
+            ✓ <strong style="color:var(--bright)">Automatic peer</strong> discovery<br>
+            ✓ <strong style="color:var(--bright)">Fast finality</strong> in ~10 seconds<br>
+            ✓ <strong style="color:var(--bright)">Production ready</strong> for mainnet
+          </p>
+        </div>
+      </div>
+      <p style="font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle);margin:24px 0 0;padding-top:20px;border-top:1px solid var(--border2)">
+        <strong style="color:var(--bright)">Build from source:</strong> <span class="kw">git clone</span> https://github.com/UltraDAGcom/core && <span class="kw">cargo build --release</span>
+      </p>
     </div>
   </div>
 </section>
