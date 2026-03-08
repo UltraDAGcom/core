@@ -132,7 +132,26 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
   <div class="nodes-section">
     <h2 class="section-title">Validator Nodes</h2>
     <div class="nodes-grid" id="nodes-grid">
-      <!-- Nodes populated by JavaScript -->
+      <!-- Nodes 1-4 populated by JavaScript -->
+    </div>
+    <div class="nodes-grid" style="margin-top:20px">
+      <div class="node-card online">
+        <div class="node-header">
+          <div class="node-name">Node 5 (VPS)</div>
+          <div class="node-status online">HTTP Only</div>
+        </div>
+        <div class="node-metrics">
+          <div class="node-metric">
+            <div class="node-metric-label">IP</div>
+            <div class="node-metric-value" style="font-size:14px">84.247.10.2</div>
+          </div>
+          <div class="node-metric">
+            <div class="node-metric-label">Port</div>
+            <div class="node-metric-value">9333 / 10333</div>
+          </div>
+        </div>
+        <div class="node-url">No HTTPS — use <code style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:var(--bg3);padding:2px 6px;border-radius:2px">curl http://84.247.10.2:10333/status</code></div>
+      </div>
     </div>
   </div>
 
@@ -157,7 +176,8 @@ const NODES = [
   { name: 'Node 2', url: 'https://ultradag-node-2.fly.dev' },
   { name: 'Node 3', url: 'https://ultradag-node-3.fly.dev' },
   { name: 'Node 4', url: 'https://ultradag-node-4.fly.dev' },
-  { name: 'Node 5 (VPS)', url: 'http://84.247.10.2:10333' }
+  // Node 5 (VPS at 84.247.10.2:10333) is HTTP-only, cannot be fetched from HTTPS page (mixed content)
+  // Access directly: curl http://84.247.10.2:10333/status
 ];
 
 let nodeData = {};
