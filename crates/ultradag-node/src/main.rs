@@ -125,44 +125,59 @@ async fn load_state(server: &NodeServer, data_dir: &std::path::Path) {
     let state_path = data_dir.join("state.json");
     let mempool_path = data_dir.join("mempool.json");
 
+    info!("Loading state from: {}", data_dir.display());
+
     if BlockDag::exists(&dag_path) {
         match BlockDag::load(&dag_path) {
             Ok(dag) => {
+                let current_round = dag.current_round();
+                info!("Loaded DAG from disk: current_round={}", current_round);
                 *server.dag.write().await = dag;
-                info!("Loaded DAG from disk");
             }
             Err(e) => warn!("Failed to load DAG: {}", e),
         }
+    } else {
+        info!("No DAG state file found, starting fresh");
     }
 
     if FinalityTracker::exists(&finality_path) {
         match FinalityTracker::load(&finality_path, 3) {
             Ok(fin) => {
+                let last_fin = fin.last_finalized_round();
+                info!("Loaded finality state from disk: last_finalized_round={}", last_fin);
                 *server.finality.write().await = fin;
-                info!("Loaded finality state from disk");
             }
             Err(e) => warn!("Failed to load finality: {}", e),
         }
+    } else {
+        info!("No finality state file found, starting fresh");
     }
 
     if StateEngine::exists(&state_path) {
         match StateEngine::load(&state_path) {
             Ok(state) => {
+                let supply = state.total_supply();
+                let last_round = state.last_finalized_round();
+                info!("Loaded state engine from disk: total_supply={}, last_finalized_round={:?}", supply, last_round);
                 *server.state.write().await = state;
-                info!("Loaded state engine from disk");
             }
             Err(e) => warn!("Failed to load state: {}", e),
         }
+    } else {
+        info!("No state file found, starting fresh");
     }
 
     if Mempool::exists(&mempool_path) {
         match Mempool::load(&mempool_path) {
             Ok(mp) => {
+                let tx_count = mp.len();
+                info!("Loaded mempool from disk: {} transactions", tx_count);
                 *server.mempool.write().await = mp;
-                info!("Loaded mempool from disk");
             }
             Err(e) => warn!("Failed to load mempool: {}", e),
         }
+    } else {
+        info!("No mempool file found, starting fresh");
     }
 }
 

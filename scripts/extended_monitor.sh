@@ -16,6 +16,8 @@ echo "" | tee -a "$LOG_FILE"
 
 END_TIME=$(($(date +%s) + ($DURATION_HOURS * 3600)))
 SAMPLE=0
+PREV_ROUND=0
+PREV_SUPPLY=0
 
 while [ $(date +%s) -lt $END_TIME ]; do
     SAMPLE=$((SAMPLE + 1))
@@ -24,6 +26,9 @@ while [ $(date +%s) -lt $END_TIME ]; do
     echo "[$TIMESTAMP] Sample #$SAMPLE" | tee -a "$LOG_FILE"
     
     # Check all 4 nodes
+    ROUND_ROLLBACK=false
+    SUPPLY_DROP=false
+    
     for n in 1 2 3 4; do
         STATUS=$(curl -s --max-time 10 "https://ultradag-node-$n.fly.dev/status" 2>/dev/null)
         
@@ -52,11 +57,40 @@ try:
     issues_str = ' [' + ','.join(issues) + ']' if issues else ''
     
     print(f'  Node $n: round={dag:4d} fin={fin:4d} lag={lag:2d} peers={peers:2d} supply={supply:,.0f}{issues_str} {status_icon}')
+    
+    # Output round and supply for rollback detection (always output, will filter in shell)
+    print(f'NODE$n:ROUND:{dag}')
+    print(f'NODE$n:SUPPLY:{int(supply)}')
 except Exception as e:
     print(f'  Node $n: Parse error - {e}')
-" | tee -a "$LOG_FILE"
+" | tee -a "$LOG_FILE" | {
+                # Capture round and supply from node 1 output only
+                while IFS= read -r line; do
+                    if [[ $line == NODE1:ROUND:* ]]; then
+                        CURRENT_ROUND_CHECK=${line#NODE1:ROUND:}
+                        if [ $PREV_ROUND -gt 0 ] && [ $CURRENT_ROUND_CHECK -lt $PREV_ROUND ]; then
+                            ROUND_ROLLBACK=true
+                        fi
+                        PREV_ROUND=$CURRENT_ROUND_CHECK
+                    elif [[ $line == NODE1:SUPPLY:* ]]; then
+                        CURRENT_SUPPLY=${line#NODE1:SUPPLY:}
+                        if [ $PREV_SUPPLY -gt 0 ] && [ $CURRENT_SUPPLY -lt $((PREV_SUPPLY - 100000)) ]; then
+                            SUPPLY_DROP=true
+                        fi
+                        PREV_SUPPLY=$CURRENT_SUPPLY
+                    fi
+                done
+            }
         fi
     done
+    
+    # Alert on rollback or supply drop
+    if [ "$ROUND_ROLLBACK" = true ]; then
+        echo "  🚨 ALERT: ROUND ROLLBACK DETECTED! Network may have restarted from old state." | tee -a "$LOG_FILE"
+    fi
+    if [ "$SUPPLY_DROP" = true ]; then
+        echo "  🚨 ALERT: SUPPLY DROP DETECTED! Possible state rollback or corruption." | tee -a "$LOG_FILE"
+    fi
     
     # Check vertex density for recent rounds
     CURRENT_ROUND=$(curl -s "https://ultradag-node-1.fly.dev/status" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['dag_round'])" 2>/dev/null)
