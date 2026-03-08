@@ -7,23 +7,23 @@ pub const COIN: u64 = 100_000_000;
 /// Initial block reward: 50 UDAG
 pub const INITIAL_REWARD_SATS: u64 = 50 * COIN;
 
-/// Reward halves every 210,000 blocks
+/// Reward halves every 210,000 rounds
 pub const HALVING_INTERVAL: u64 = 210_000;
 
-/// Target block time: 30 seconds
+/// Target round time: 30 seconds (configurable via --round-ms)
 pub const TARGET_BLOCK_TIME_SECS: u64 = 30;
 
-/// Genesis block timestamp
+/// Genesis timestamp
 pub const GENESIS_TIMESTAMP: i64 = 1741132800; // 2025-03-05T00:00:00Z
 
-/// Maximum transactions per block
+/// Maximum transactions per vertex
 pub const MAX_TXS_PER_BLOCK: usize = 10_000;
 
 /// Minimum transaction fee to prevent mempool spam.
 /// 10,000 sats = 0.0001 UDAG. Cost to fill 10K-tx mempool: 1 UDAG.
 pub const MIN_FEE_SATS: u64 = 10_000;
 
-/// Coinbase maturity: coinbase outputs can't be spent for N blocks
+/// Coinbase maturity: coinbase outputs can't be spent for N rounds
 pub const COINBASE_MATURITY: u64 = 100;
 
 /// Network identifier included in all signatures to prevent cross-network replay attacks.
@@ -31,7 +31,7 @@ pub const COINBASE_MATURITY: u64 = 100;
 pub const NETWORK_ID: &[u8] = b"ultradag-testnet-v1";
 
 /// Developer allocation: 5% of total supply allocated at genesis.
-/// Funds protocol development. Visible and auditable from block 0.
+/// Funds protocol development. Visible and auditable from round 0.
 /// Total: 1,050,000 UDAG (5% of 21,000,000 UDAG max supply).
 pub const DEV_ALLOCATION_SATS: u64 = 1_050_000 * COIN;
 
@@ -95,7 +95,7 @@ pub fn faucet_keypair() -> crate::address::SecretKey {
     crate::address::SecretKey::from_bytes(FAUCET_SEED)
 }
 
-/// Calculate block reward for a given block height.
+/// Calculate round reward for a given round height.
 pub fn block_reward(height: u64) -> u64 {
     let halvings = height / HALVING_INTERVAL;
     if halvings >= 64 {

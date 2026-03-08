@@ -28,19 +28,21 @@ UltraDAG is a DAG-BFT consensus protocol designed for permissioned networks and 
 
 ## How It Works
 
-In UltraDAG, each validator produces one vertex per round (default 5 seconds). Each vertex references all known tips from the previous round, forming a DAG structure where multiple validators produce blocks concurrently. A vertex achieves finality when 2/3+ of validators have produced at least one descendant of it. This provides immediate, deterministic finality without waiting for confirmations.
+In UltraDAG, each validator produces one vertex per round. Each vertex references all known tips from the previous round, forming a DAG structure where multiple validators produce blocks concurrently. A vertex achieves finality when 2/3+ of validators have produced at least one descendant of it. This provides immediate, deterministic finality without waiting for confirmations.
+
+**Round duration:** Design target is 30 seconds, but configurable via `--round-ms` flag. Testnet currently runs at 5 seconds for faster testing.
 
 Transaction ordering is deterministic: finalized vertices are sorted by (round, topological depth, hash) before applying to state. This ensures all nodes derive identical account balances from the same set of finalized vertices.
 
 ## Tokenomics
 
 - **Max supply**: 21,000,000 UDAG (hard cap enforced in state engine)
-- **Halving**: every 210,000 rounds (~1 year at 5s rounds)
+- **Halving**: every 210,000 rounds (~2.5 months at 30s design target, ~12 days at 5s testnet)
 - **Initial block reward**: 50 UDAG per round (total emission per round, split among validators)
 - **Developer allocation**: 1,050,000 UDAG (5%) allocated at genesis
   - Funds protocol development. No VC funding. No presale.
-  - Deterministic address: `SecretKey::from_bytes([0xDE; 32])`
-  - Visible and auditable from block 0
+  - Deterministic testnet address (see `constants.rs` for seed)
+  - Visible and auditable from round 0
 - **Faucet reserve**: 1,000,000 UDAG at genesis (testnet only)
 - **Validator rewards**: Proportional to stake when staking is active
   - Pre-staking fallback: each validator receives full block reward
