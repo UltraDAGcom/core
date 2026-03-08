@@ -178,10 +178,11 @@ async function fetchNodeStatus(node) {
     const data = await response.json();
     return {
       online: true,
-      round: data.last_finalized_round || 0,
-      lag: data.finality_lag || 0,
+      round: data.dag_round || 0,
+      finalized: data.last_finalized_round || 0,
+      lag: (data.dag_round || 0) - (data.last_finalized_round || 0),
       supply: data.total_supply || 0,
-      validators: data.active_validators?.length || 0,
+      validators: data.validator_count || 0,
       peers: data.peer_count || 0
     };
   } catch (error) {
