@@ -1964,7 +1964,8 @@ async function loadGovernance() {
     }
     
     if (proposalsRes.ok) {
-      proposals = await proposalsRes.json();
+      const proposalsData = await proposalsRes.json();
+      proposals = proposalsData.proposals || [];
     }
     
     renderGovernanceUI();
@@ -1986,7 +1987,7 @@ function renderGovernanceUI() {
   
   updateMyVotingPower();
   
-  document.getElementById('gov-quorum').textContent = (governanceConfig.quorum_threshold * 100).toFixed(1);
+  document.getElementById('gov-quorum').textContent = (governanceConfig.quorum_percent || 0).toFixed(1);
   
   renderActiveProposals(activeProposals);
   renderProposalHistory(pastProposals);
