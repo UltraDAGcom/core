@@ -63,7 +63,24 @@ h1{font-size:48px;color:var(--white);margin-bottom:12px;font-weight:700}
 </head>
 <body>
 
-<div class="container">
+<!-- NAV -->
+<nav id="nav" style="position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(8,11,15,.9);backdrop-filter:blur(12px)">
+  <a href="index.html" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:400;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px">
+    <div style="width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center"><div style="width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)"></div></div>
+    UltraDAG
+  </a>
+  <ul style="display:flex;align-items:center;gap:32px;list-style:none">
+    <li><a href="whitepaper.html" style="font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none">Whitepaper</a></li>
+    <li><a href="docs.html" style="font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none">Docs</a></li>
+    <li><a href="testnet.html" style="font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--white);text-decoration:none">Testnet</a></li>
+    <li><a href="consensus-viz.html" style="font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none">Consensus Demo</a></li>
+    <li><a href="index.html#sdks" style="font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none">SDKs</a></li>
+    <li><a href="https://github.com/UltraDAGcom/core" target="_blank" style="font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none">GitHub</a></li>
+    <li><a href="dashboard.html" style="font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);text-decoration:none;border:1px solid var(--accent2);padding:8px 18px;border-radius:2px">Dashboard</a></li>
+  </ul>
+</nav>
+
+<div class="container" style="padding-top:80px">
   <div class="header">
     <h1>UltraDAG Testnet</h1>
     <div class="subtitle">Live Network Status</div>
@@ -109,11 +126,12 @@ h1{font-size:48px;color:var(--white);margin-bottom:12px;font-weight:700}
 
   <div class="footer">
     <div class="footer-links">
-      <a href="/">Home</a>
-      <a href="/dashboard.html">Dashboard</a>
-      <a href="/whitepaper.html">Whitepaper</a>
-      <a href="https://github.com/ultradag/core" target="_blank">GitHub</a>
-      <a href="https://discord.gg/ultradag" target="_blank">Discord</a>
+      <a href="index.html">Home</a>
+      <a href="dashboard.html">Dashboard</a>
+      <a href="whitepaper.html">Whitepaper</a>
+      <a href="docs.html">Docs</a>
+      <a href="consensus-viz.html">Consensus Demo</a>
+      <a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a>
     </div>
     <div class="footer-note">
       UltraDAG Testnet • Data refreshes every 5 seconds
@@ -126,7 +144,8 @@ const NODES = [
   { name: 'Node 1', url: 'https://ultradag-node-1.fly.dev' },
   { name: 'Node 2', url: 'https://ultradag-node-2.fly.dev' },
   { name: 'Node 3', url: 'https://ultradag-node-3.fly.dev' },
-  { name: 'Node 4', url: 'https://ultradag-node-4.fly.dev' }
+  { name: 'Node 4', url: 'https://ultradag-node-4.fly.dev' },
+  { name: 'Node 5 (VPS)', url: 'http://84.247.10.2:10333' }
 ];
 
 let nodeData = {};

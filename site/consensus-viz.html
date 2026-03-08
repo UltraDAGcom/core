@@ -85,21 +85,6 @@
     line-height: 1.4;
   }
 
-  .back-link {
-    position: absolute;
-    top: 24px;
-    left: 24px;
-    font-family: 'DM Mono', monospace;
-    font-size: 0.7rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--subtle);
-    text-decoration: none;
-    transition: color 0.2s;
-  }
-
-  .back-link:hover { color: var(--white); }
-
   .viz-container {
     width: 100%;
     max-width: 900px;
@@ -414,7 +399,24 @@
 </head>
 <body>
 
-<a href="index.html" class="back-link">← Back to UltraDAG</a>
+<!-- NAV -->
+<nav id="nav" style="position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(8,11,15,.9);backdrop-filter:blur(12px)">
+  <a href="index.html" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:400;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px">
+    <div style="width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center"><div style="width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)"></div></div>
+    UltraDAG
+  </a>
+  <ul style="display:flex;align-items:center;gap:32px;list-style:none">
+    <li><a href="whitepaper.html" style="font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none">Whitepaper</a></li>
+    <li><a href="docs.html" style="font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none">Docs</a></li>
+    <li><a href="testnet.html" style="font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none">Testnet</a></li>
+    <li><a href="consensus-viz.html" style="font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--white);text-decoration:none">Consensus Demo</a></li>
+    <li><a href="index.html#sdks" style="font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none">SDKs</a></li>
+    <li><a href="https://github.com/UltraDAGcom/core" target="_blank" style="font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none">GitHub</a></li>
+    <li><a href="dashboard.html" style="font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);text-decoration:none;border:1px solid var(--accent2);padding:8px 18px;border-radius:2px">Dashboard</a></li>
+  </ul>
+</nav>
+
+<div style="height:80px"></div>
 
 <div class="header">
   <h1>Ultra<em>DAG</em> Consensus</h1>
@@ -1139,5 +1141,19 @@ resize();
 window.addEventListener('resize', () => { resize(); repositionAll(); render(); });
 reset();
 </script>
+
+<!-- FOOTER -->
+<footer style="text-align:center;padding:48px 24px;border-top:1px solid var(--border);margin-top:48px">
+  <div style="display:flex;justify-content:center;gap:32px;margin-bottom:16px;flex-wrap:wrap">
+    <a href="index.html" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle);text-decoration:none">Home</a>
+    <a href="dashboard.html" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle);text-decoration:none">Dashboard</a>
+    <a href="whitepaper.html" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle);text-decoration:none">Whitepaper</a>
+    <a href="docs.html" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle);text-decoration:none">Docs</a>
+    <a href="testnet.html" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle);text-decoration:none">Testnet</a>
+    <a href="https://github.com/UltraDAGcom/core" target="_blank" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle);text-decoration:none">GitHub</a>
+  </div>
+  <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--dim)">MIT / Apache-2.0</div>
+</footer>
+
 </body>
 </html>

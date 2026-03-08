@@ -4,7 +4,7 @@
 **Positioning:** First minimal L1 with pruning + fast finality that can actually run on IoT hardware. Bitcoin-style minimalism meets DAG for the machine economy.
 
 **Website**: UltraDAG.com  
-**Repository**: github.com/ultradag/core
+**Repository**: github.com/UltraDAGcom/core
 
 ---
 
@@ -136,7 +136,8 @@ sdk/
 site/
   index.html              # Landing page (features, tokenomics, SDKs, run a node)
   dashboard.html          # Web dashboard SPA (faucet, wallet, explorer, mempool, staking, governance)
-  testnet.html            # Live testnet status monitor (auto-refresh, per-node cards)
+  docs.html               # Documentation (API reference, SDK quickstart, node guide, staking, architecture)
+  testnet.html            # Live testnet status monitor (5 nodes, auto-refresh, per-node cards)
   consensus-viz.html      # Interactive DAG-BFT consensus simulator
   whitepaper.html         # Whitepaper page
 loadtest.sh               # Load testing script
