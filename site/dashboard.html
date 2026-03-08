@@ -676,6 +676,7 @@ body::before {
   <div class="tab-mob" data-tab="send">Send</div>
   <div class="tab-mob" data-tab="dag">Explorer</div>
   <div class="tab-mob" data-tab="validator">Validator</div>
+  <div class="tab-mob" data-tab="governance">Governance</div>
 </div>
 
 <!-- LAYOUT -->
@@ -703,10 +704,14 @@ body::before {
       DAG Explorer
     </div>
     <div class="nav-item" data-tab="validator">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      Validator
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      <span>Validator</span>
     </div>
-
+    <div class="nav-item" data-tab="governance">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span>Governance</span>
+      <span class="badge" id="gov-badge" style="display:none">0</span>
+    </div>
   </nav>
 
   <!-- MAIN -->
@@ -854,6 +859,32 @@ body::before {
                   Coming soon
                 </div>
               </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <span class="card-title">Testnet Faucet</span>
+              <span class="badge" style="background:var(--glow);color:var(--accent);border:1px solid var(--accent2);padding:4px 10px;font-size:10px;letter-spacing:0.1em">TESTNET</span>
+            </div>
+            <div class="card-body">
+              <div class="field">
+                <label class="label">Request testnet tokens</label>
+                <div style="background:var(--bg3);border:1px solid var(--border);padding:14px 16px;margin-bottom:16px;font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle)">
+                  Get 100 UDAG testnet tokens instantly. No login required.
+                </div>
+              </div>
+              <div class="field">
+                <label class="label">Recipient Wallet</label>
+                <select class="select" id="faucet-wallet" onchange="updateFaucetAddr()"></select>
+              </div>
+              <div class="field">
+                <label class="label">Address</label>
+                <div class="addr-box" id="faucet-addr" style="cursor:default">
+                  Select a wallet above
+                </div>
+              </div>
+              <button class="btn btn-primary btn-full" id="faucet-btn" onclick="requestFaucet()" disabled>Request 100 UDAG</button>
+              <div id="faucet-status" style="margin-top:12px;font-family:'DM Mono',monospace;font-size:11px;text-align:center"></div>
             </div>
           </div>
         </div>
@@ -1012,6 +1043,118 @@ body::before {
       </div>
     </div>
 
+    <!-- GOVERNANCE -->
+    <div class="tab-panel" id="panel-governance">
+      <div id="gov-offline" class="empty" style="padding:80px">
+        <div class="empty-icon">&#x25CE;</div>
+        <div class="empty-text">Connect to a node to view governance</div>
+      </div>
+      <div id="gov-content" style="display:none">
+        <div class="page-header">
+          <div>
+            <div class="page-eyebrow">DAO Governance</div>
+            <div class="page-title">Gover<em>nance</em></div>
+            <div class="page-sub">Stake-weighted on-chain voting</div>
+          </div>
+          <button class="btn btn-sm" onclick="loadGovernance()">Refresh</button>
+        </div>
+
+        <!-- Stats strip -->
+        <div class="g4" style="margin-bottom:24px">
+          <div class="stat">
+            <div class="stat-label">Active Proposals</div>
+            <div class="stat-val accent" id="gov-active-count">--</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Total Votes Cast</div>
+            <div class="stat-val" id="gov-total-votes">--</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Your Voting Power</div>
+            <div class="stat-val green" id="gov-my-power">--</div>
+            <div class="stat-sub">UDAG</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Quorum Threshold</div>
+            <div class="stat-val" id="gov-quorum">--</div>
+            <div class="stat-sub">%</div>
+          </div>
+        </div>
+
+        <!-- Active Proposals -->
+        <div class="card" style="margin-bottom:24px">
+          <div class="card-head">
+            <span class="card-title">Active Proposals</span>
+          </div>
+          <div id="active-proposals-list">
+            <div class="empty">No active proposals</div>
+          </div>
+        </div>
+
+        <!-- Submit Proposal -->
+        <div class="card" style="margin-bottom:24px">
+          <div class="card-head"><span class="card-title">Submit New Proposal</span></div>
+          <div class="card-body">
+            <div id="submit-locked" style="display:none">
+              <div class="empty">
+                <div class="empty-icon">&#x1f512;</div>
+                <div class="empty-text">Unlock keystore to submit proposals</div>
+              </div>
+            </div>
+            <div id="submit-form">
+              <div class="field">
+                <label class="label">Proposal Type</label>
+                <select class="input" id="proposal-type" onchange="updateProposalForm()">
+                  <option value="text">Text Proposal</option>
+                  <option value="parameter">Parameter Change</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="label">Title</label>
+                <input class="input" id="proposal-title" placeholder="Brief proposal title" maxlength="100">
+              </div>
+              <div class="field">
+                <label class="label">Description</label>
+                <textarea class="textarea" id="proposal-description" placeholder="Detailed proposal description" rows="4"></textarea>
+              </div>
+              <div id="param-fields" style="display:none">
+                <div class="field">
+                  <label class="label">Parameter Name</label>
+                  <input class="input" id="proposal-param-name" placeholder="e.g. block_reward">
+                </div>
+                <div class="field">
+                  <label class="label">New Value</label>
+                  <input class="input" id="proposal-param-value" placeholder="New parameter value">
+                </div>
+              </div>
+              <div class="field">
+                <label class="label">Voting Period (blocks)</label>
+                <input class="input" type="number" id="proposal-duration" value="1000" min="100">
+                <div class="help">Minimum 100 blocks (~17 minutes at 10s/block)</div>
+              </div>
+              <div class="field">
+                <label class="label">Submitting Wallet</label>
+                <select class="input" id="proposal-wallet">
+                  <option>No wallets available</option>
+                </select>
+                <div class="help">Minimum fee: 100,000 sats (0.001 UDAG)</div>
+              </div>
+              <button class="btn btn-primary" onclick="submitProposal()">Submit Proposal</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Proposal History -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Proposal History</span>
+          </div>
+          <div id="proposal-history-list">
+            <div class="empty">No past proposals</div>
+          </div>
+        </div>
+      </div>
+    </div>
 
   </div><!-- /main -->
 </div><!-- /layout -->
@@ -1041,7 +1184,13 @@ let dagPollTimer = null;
 let currentExploreRound = -1;
 let lastStatus = null;
 
+// Governance state
+let proposals = [];
+let governanceConfig = null;
+let myVotes = new Map();
+
 const STORAGE_KEY = 'ultradag_keystore';
+const VOTES_STORAGE_KEY = 'ultradag_votes';
 
 // ========================================
 // CRYPTO (Web Crypto API)
@@ -1174,6 +1323,10 @@ function onKeystoreUnlocked() {
   populateSendSelects();
   refreshPortfolio();
   checkValidatorStatus();
+  populateProposalWallets();
+  document.getElementById('submit-locked').style.display = 'none';
+  document.getElementById('submit-form').style.display = '';
+  if (connected) loadGovernance();
 }
 
 function onKeystoreLocked() {
@@ -1187,6 +1340,9 @@ function onKeystoreLocked() {
   document.getElementById('wallet-list').innerHTML = '';
   document.getElementById('wallet-detail').innerHTML = '<div class="empty"><div class="empty-icon">&#x1f512;</div><div class="empty-text">Keystore locked</div></div>';
   document.getElementById('val-wallets').innerHTML = '<div class="empty">Keystore locked</div>';
+  document.getElementById('submit-locked').style.display = '';
+  document.getElementById('submit-form').style.display = 'none';
+  if (connected) loadGovernance();
 }
 
 function toggleLock() { if (keystore) lockKeystore(); }
@@ -1324,7 +1480,8 @@ function populateSendSelects() {
   ).join('');
   document.getElementById('send-from').innerHTML = opts || '<option>No wallets</option>';
   document.getElementById('recv-wallet').innerHTML = opts || '<option>No wallets</option>';
-  updateSendInfo(); updateRecvAddr();
+  document.getElementById('faucet-wallet').innerHTML = opts || '<option>No wallets</option>';
+  updateSendInfo(); updateRecvAddr(); updateFaucetAddr();
 }
 
 async function updateSendInfo() {
@@ -1349,17 +1506,83 @@ async function updateSendInfo() {
 }
 
 function updateRecvAddr() {
-  const idx = parseInt(document.getElementById('recv-wallet').value);
-  if (isNaN(idx) || !keystore || !keystore.wallets[idx]) {
-    document.getElementById('recv-addr').textContent = 'Select a wallet above';
+  const sel = document.getElementById('recv-wallet');
+  const addr = document.getElementById('recv-addr');
+  if (!keystore || !sel.value) {
+    addr.textContent = 'Select a wallet above';
     return;
   }
-  document.getElementById('recv-addr').textContent = keystore.wallets[idx].address;
+  const w = keystore.wallets[parseInt(sel.value)];
+  addr.textContent = w.address;
 }
 
 function copyRecvAddr() {
   const addr = document.getElementById('recv-addr').textContent;
-  if (addr && addr.length === 64) copyText(addr);
+  if (addr === 'Select a wallet above') return;
+  navigator.clipboard.writeText(addr);
+  showToast('Address copied to clipboard');
+}
+
+function updateFaucetAddr() {
+  const sel = document.getElementById('faucet-wallet');
+  const addr = document.getElementById('faucet-addr');
+  const btn = document.getElementById('faucet-btn');
+  if (!keystore || !sel.value) {
+    addr.textContent = 'Select a wallet above';
+    btn.disabled = true;
+    return;
+  }
+  const w = keystore.wallets[parseInt(sel.value)];
+  addr.textContent = w.address;
+  btn.disabled = !connected;
+}
+
+async function requestFaucet() {
+  const sel = document.getElementById('faucet-wallet');
+  const btn = document.getElementById('faucet-btn');
+  const status = document.getElementById('faucet-status');
+  
+  if (!keystore || !sel.value || !connected) return;
+  
+  const w = keystore.wallets[parseInt(sel.value)];
+  btn.disabled = true;
+  status.innerHTML = '<span style="color:var(--accent)">Requesting tokens...</span>';
+  
+  try {
+    const res = await fetch(nodeUrl + '/faucet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: w.address })
+    });
+    
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Faucet request failed');
+    }
+    
+    const data = await res.json();
+    status.innerHTML = `<span style="color:var(--green)">✓ Success! Sent ${formatUdag(data.amount)} UDAG</span>`;
+    showToast('Faucet request successful!');
+    
+    // Refresh balance after 3 seconds
+    setTimeout(() => {
+      if (selectedWallet === parseInt(sel.value)) {
+        loadWalletBalance();
+      }
+    }, 3000);
+    
+    // Clear status after 10 seconds
+    setTimeout(() => {
+      status.innerHTML = '';
+      btn.disabled = false;
+    }, 10000);
+  } catch (err) {
+    status.innerHTML = `<span style="color:var(--red)">✗ ${err.message}</span>`;
+    setTimeout(() => {
+      status.innerHTML = '';
+      btn.disabled = false;
+    }, 5000);
+  }
 }
 
 async function sendTransaction() {
@@ -1698,6 +1921,338 @@ async function checkValidatorStatus() {
 }
 
 // ========================================
+// GOVERNANCE
+// ========================================
+
+function loadVotesFromStorage() {
+  const raw = localStorage.getItem(VOTES_STORAGE_KEY);
+  if (raw) {
+    try {
+      const obj = JSON.parse(raw);
+      myVotes = new Map(Object.entries(obj));
+    } catch {}
+  }
+}
+
+function saveVotesToStorage() {
+  const obj = Object.fromEntries(myVotes);
+  localStorage.setItem(VOTES_STORAGE_KEY, JSON.stringify(obj));
+}
+
+async function loadGovernance() {
+  if (!connected) return;
+  try {
+    const [configRes, proposalsRes] = await Promise.all([
+      fetch(nodeUrl + '/governance/config'),
+      fetch(nodeUrl + '/proposals')
+    ]);
+    
+    if (configRes.ok) {
+      governanceConfig = await configRes.json();
+    }
+    
+    if (proposalsRes.ok) {
+      proposals = await proposalsRes.json();
+    }
+    
+    renderGovernanceUI();
+  } catch (err) {
+    toast('Failed to load governance data', 'err');
+  }
+}
+
+function renderGovernanceUI() {
+  if (!connected || !governanceConfig) return;
+  
+  const activeProposals = proposals.filter(p => p.status === 'active');
+  const pastProposals = proposals.filter(p => p.status !== 'active');
+  
+  document.getElementById('gov-active-count').textContent = activeProposals.length;
+  
+  const totalVotes = proposals.reduce((sum, p) => sum + (p.yes_votes || 0) + (p.no_votes || 0), 0);
+  document.getElementById('gov-total-votes').textContent = totalVotes;
+  
+  updateMyVotingPower();
+  
+  document.getElementById('gov-quorum').textContent = (governanceConfig.quorum_threshold * 100).toFixed(1);
+  
+  renderActiveProposals(activeProposals);
+  renderProposalHistory(pastProposals);
+  updateGovBadge(activeProposals.length);
+}
+
+async function updateMyVotingPower() {
+  if (!keystore || !connected) {
+    document.getElementById('gov-my-power').textContent = '--';
+    return;
+  }
+  
+  let totalPower = 0;
+  for (const w of keystore.wallets) {
+    try {
+      const res = await fetch(nodeUrl + '/balance/' + w.address);
+      const data = await res.json();
+      totalPower += data.balance;
+    } catch {}
+  }
+  
+  document.getElementById('gov-my-power').textContent = formatUdag(totalPower);
+}
+
+function renderActiveProposals(activeProposals) {
+  const el = document.getElementById('active-proposals-list');
+  
+  if (!activeProposals.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-sub">No active proposals</div></div>';
+    return;
+  }
+  
+  el.innerHTML = activeProposals.map(p => {
+    const totalVotes = (p.yes_votes || 0) + (p.no_votes || 0);
+    const yesPercent = totalVotes > 0 ? ((p.yes_votes || 0) / totalVotes * 100).toFixed(1) : 0;
+    const noPercent = totalVotes > 0 ? ((p.no_votes || 0) / totalVotes * 100).toFixed(1) : 0;
+    const myVote = myVotes.get(p.id);
+    const canVote = keystore && connected;
+    
+    return `
+      <div class="card-body" style="border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px">
+          <div>
+            <div style="font-family:'Cormorant',serif;font-size:20px;font-weight:300;color:var(--white);margin-bottom:4px">${esc(p.title)}</div>
+            <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:0.04em;text-transform:uppercase">
+              Proposal #${p.id} · ${p.proposal_type} · Ends at block ${p.end_block}
+            </div>
+          </div>
+          <div style="font-family:'DM Mono',monospace;font-size:11px;padding:4px 10px;background:var(--accent-dim);border:1px solid rgba(139,92,246,0.3);color:var(--accent);letter-spacing:0.06em;text-transform:uppercase">
+            ${p.status}
+          </div>
+        </div>
+        <div style="font-family:'Cormorant',serif;font-size:16px;font-weight:300;color:var(--subtle);line-height:1.6;margin-bottom:16px">
+          ${esc(p.description)}
+        </div>
+        ${p.proposal_type === 'parameter' ? `
+          <div style="background:var(--bg3);border:1px solid var(--border);padding:12px;margin-bottom:16px;font-family:'DM Mono',monospace;font-size:12px">
+            <div style="color:var(--dim);margin-bottom:4px">Parameter Change:</div>
+            <div style="color:var(--white)"><strong>${esc(p.parameter_name || '')}</strong> → ${esc(p.parameter_value || '')}</div>
+          </div>
+        ` : ''}
+        <div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-family:'DM Mono',monospace;font-size:11px">
+            <span style="color:var(--green)">YES ${yesPercent}%</span>
+            <span style="color:var(--red)">NO ${noPercent}%</span>
+          </div>
+          <div style="height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;display:flex">
+            <div style="width:${yesPercent}%;background:var(--green);transition:width 0.3s"></div>
+            <div style="width:${noPercent}%;background:var(--red);transition:width 0.3s"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--dim)">
+            <span>${formatUdag(p.yes_votes || 0)} UDAG</span>
+            <span>${formatUdag(p.no_votes || 0)} UDAG</span>
+          </div>
+        </div>
+        ${myVote ? `
+          <div style="padding:10px;background:var(--bg3);border:1px solid var(--border);font-family:'DM Mono',monospace;font-size:11px;color:var(--subtle);text-align:center;letter-spacing:0.04em">
+            You voted: <strong style="color:${myVote === 'yes' ? 'var(--green)' : 'var(--red)'}">${myVote.toUpperCase()}</strong>
+          </div>
+        ` : canVote ? `
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" style="flex:1;background:var(--green-dim);border-color:rgba(34,197,94,0.3);color:var(--green)" onclick="castVote('${p.id}', true)">Vote YES</button>
+            <button class="btn btn-sm" style="flex:1;background:var(--red-dim);border-color:rgba(239,68,68,0.3);color:var(--red)" onclick="castVote('${p.id}', false)">Vote NO</button>
+          </div>
+        ` : `
+          <div style="padding:10px;background:var(--bg3);border:1px solid var(--border);font-family:'DM Mono',monospace;font-size:11px;color:var(--dim);text-align:center;letter-spacing:0.04em">
+            Unlock keystore to vote
+          </div>
+        `}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderProposalHistory(pastProposals) {
+  const el = document.getElementById('proposal-history-list');
+  
+  if (!pastProposals.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-sub">No past proposals</div></div>';
+    return;
+  }
+  
+  el.innerHTML = pastProposals.map(p => {
+    const totalVotes = (p.yes_votes || 0) + (p.no_votes || 0);
+    const yesPercent = totalVotes > 0 ? ((p.yes_votes || 0) / totalVotes * 100).toFixed(1) : 0;
+    const noPercent = totalVotes > 0 ? ((p.no_votes || 0) / totalVotes * 100).toFixed(1) : 0;
+    
+    let statusColor = 'var(--dim)';
+    if (p.status === 'passed') statusColor = 'var(--green)';
+    else if (p.status === 'rejected') statusColor = 'var(--red)';
+    else if (p.status === 'expired') statusColor = 'var(--yellow)';
+    
+    return `
+      <div class="card-body" style="border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
+          <div style="font-family:'Cormorant',serif;font-size:18px;font-weight:300;color:var(--subtle)">${esc(p.title)}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:11px;padding:4px 10px;background:var(--bg3);border:1px solid var(--border);color:${statusColor};letter-spacing:0.06em;text-transform:uppercase">
+            ${p.status}
+          </div>
+        </div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:0.04em;text-transform:uppercase;margin-bottom:12px">
+          Proposal #${p.id} · ${p.proposal_type}
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-family:'DM Mono',monospace;font-size:11px">
+          <span style="color:var(--green)">YES ${yesPercent}%</span>
+          <span style="color:var(--red)">NO ${noPercent}%</span>
+        </div>
+        <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;display:flex">
+          <div style="width:${yesPercent}%;background:var(--green)"></div>
+          <div style="width:${noPercent}%;background:var(--red)"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function castVote(proposalId, vote) {
+  if (!keystore || !connected) {
+    toast('Unlock keystore to vote', 'err');
+    return;
+  }
+  
+  if (!keystore.wallets.length) {
+    toast('No wallets in keystore', 'err');
+    return;
+  }
+  
+  const wallet = keystore.wallets[0];
+  
+  try {
+    const res = await fetch(nodeUrl + '/vote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        proposal_id: proposalId,
+        vote: vote,
+        voter_secret: wallet.secret_key
+      })
+    });
+    
+    const data = await res.json();
+    
+    if (data.error) {
+      toast('Vote failed: ' + data.error, 'err');
+      return;
+    }
+    
+    myVotes.set(proposalId, vote ? 'yes' : 'no');
+    saveVotesToStorage();
+    
+    toast('Vote cast successfully', 'ok');
+    
+    setTimeout(() => loadGovernance(), 1000);
+  } catch (err) {
+    toast('Vote failed: ' + err.message, 'err');
+  }
+}
+
+async function submitProposal() {
+  if (!keystore || !connected) {
+    toast('Unlock keystore and connect to node', 'err');
+    return;
+  }
+  
+  const walletIdx = parseInt(document.getElementById('proposal-wallet').value);
+  if (isNaN(walletIdx) || !keystore.wallets[walletIdx]) {
+    toast('Select a wallet', 'err');
+    return;
+  }
+  
+  const wallet = keystore.wallets[walletIdx];
+  const proposalType = document.getElementById('proposal-type').value;
+  const title = document.getElementById('proposal-title').value.trim();
+  const description = document.getElementById('proposal-description').value.trim();
+  const duration = parseInt(document.getElementById('proposal-duration').value);
+  
+  if (!title || !description) {
+    toast('Title and description required', 'err');
+    return;
+  }
+  
+  if (duration < 100) {
+    toast('Duration must be at least 100 blocks', 'err');
+    return;
+  }
+  
+  const payload = {
+    proposal_type: proposalType,
+    title: title,
+    description: description,
+    duration: duration,
+    proposer_secret: wallet.secret_key
+  };
+  
+  if (proposalType === 'parameter') {
+    const paramName = document.getElementById('proposal-param-name').value.trim();
+    const paramValue = document.getElementById('proposal-param-value').value.trim();
+    
+    if (!paramName || !paramValue) {
+      toast('Parameter name and value required', 'err');
+      return;
+    }
+    
+    payload.parameter_name = paramName;
+    payload.parameter_value = paramValue;
+  }
+  
+  try {
+    const res = await fetch(nodeUrl + '/proposal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    const data = await res.json();
+    
+    if (data.error) {
+      toast('Proposal failed: ' + data.error, 'err');
+      return;
+    }
+    
+    toast('Proposal submitted successfully', 'ok');
+    
+    document.getElementById('proposal-title').value = '';
+    document.getElementById('proposal-description').value = '';
+    document.getElementById('proposal-param-name').value = '';
+    document.getElementById('proposal-param-value').value = '';
+    
+    setTimeout(() => loadGovernance(), 1000);
+  } catch (err) {
+    toast('Proposal submission failed: ' + err.message, 'err');
+  }
+}
+
+function updateProposalForm() {
+  const type = document.getElementById('proposal-type').value;
+  document.getElementById('param-fields').style.display = type === 'parameter' ? '' : 'none';
+}
+
+function populateProposalWallets() {
+  if (!keystore) return;
+  const opts = keystore.wallets.map((w, i) =>
+    `<option value="${i}">${esc(w.name)} (${formatUdag(0)} UDAG)</option>`
+  ).join('');
+  document.getElementById('proposal-wallet').innerHTML = opts || '<option>No wallets</option>';
+}
+
+function updateGovBadge(count) {
+  const badge = document.getElementById('gov-badge');
+  if (count > 0) {
+    badge.textContent = count;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// ========================================
 // NODE CONNECTION
 // ========================================
 
@@ -1720,6 +2275,9 @@ async function connectNode() {
     if (keystore) { refreshPortfolio(); updateSendInfo(); checkValidatorStatus(); }
     loadMempool();
     loadFinalizedRounds();
+    document.getElementById('gov-offline').style.display = 'none';
+    document.getElementById('gov-content').style.display = '';
+    loadGovernance();
   } catch (e) {
     connected = false;
     updateConnectionUI(false);
@@ -1777,6 +2335,7 @@ function switchTab(tab) {
   if (tab === 'send' && keystore) { populateSendSelects(); updateSendInfo(); }
   if (tab === 'dag' && connected) { loadMempool(); loadFinalizedRounds(); }
   if (tab === 'validator' && keystore) checkValidatorStatus();
+  if (tab === 'governance' && connected) loadGovernance();
 }
 
 document.querySelectorAll('.nav-item, .tab-mob').forEach(el => {
@@ -2034,6 +2593,7 @@ document.getElementById('round-input').addEventListener('keydown', e => {
 
 (function init() {
   loadKeystoreFromStorage();
+  loadVotesFromStorage();
   connectNode();
 })();
 </script>

@@ -1,0 +1,29 @@
+app = 'ultradag-node-9'
+primary_region = 'sea'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[http_service]
+  internal_port = 10333
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+[[http_service.checks]]
+  grace_period = "30s"
+  interval = "15s"
+  method = "GET"
+  timeout = "5s"
+  path = "/status"
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'

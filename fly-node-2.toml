@@ -8,10 +8,10 @@ primary_region = "ams"
   PORT = "9333"
   RPC_PORT = "10333"
   DATA_DIR = "/data"
-  VALIDATORS = "4"
-  SEED = "206.51.242.223:9333 169.155.54.169:9333 169.155.55.151:9333"
+  VALIDATORS = "5"
+  SEED = "206.51.242.223:9333 169.155.54.169:9333 169.155.55.151:9333 84.247.10.2:9333"
   NO_BOOTSTRAP = "true"
-  CLEAN_STATE = "true"
+  # CLEAN_STATE = "true"
 
 [mounts]
   source = "ultradag_data"
@@ -28,7 +28,7 @@ primary_region = "ams"
     grace_period = "120s"
     interval = "30s"
     method = "GET"
-    path = "/status"
+    path = "/health"
     timeout = "10s"
 
 [[services]]
@@ -40,9 +40,4 @@ primary_region = "ams"
 
   [[services.ports]]
     port = 9333
-
-  [[services.tcp_checks]]
-    interval = "15s"
-    timeout = "5s"
-    grace_period = "60s"
 

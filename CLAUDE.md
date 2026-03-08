@@ -282,6 +282,14 @@ When a vertex fails insertion due to missing parents, the node:
 - `UNSTAKE_COOLDOWN_ROUNDS` = 2,016 rounds — Cooldown period before unstake completes (~1 week)
 - `OBSERVER_REWARD_PERCENT` = 20 — Reward percentage for staked-but-not-active validators
 - `NETWORK_ID` = `b"ultradag-testnet-v1"` — Network identifier for signature domain separation
+- `MIN_STAKE_TO_PROPOSE` = 50,000 UDAG — Minimum stake required to submit a governance proposal
+- `GOVERNANCE_VOTING_PERIOD_ROUNDS` = 120,960 rounds — Voting period (~3.5 days at 2.5s/round)
+- `GOVERNANCE_QUORUM_NUMERATOR` / `GOVERNANCE_QUORUM_DENOMINATOR` = 10/100 — 10% quorum of total staked supply
+- `GOVERNANCE_APPROVAL_NUMERATOR` / `GOVERNANCE_APPROVAL_DENOMINATOR` = 66/100 — 66% supermajority approval threshold
+- `GOVERNANCE_EXECUTION_DELAY_ROUNDS` = 2,016 rounds — Execution delay after proposal passes (~1.4 hours)
+- `MAX_ACTIVE_PROPOSALS` = 20 — Maximum simultaneous active proposals
+- `PROPOSAL_TITLE_MAX_BYTES` = 128 — Maximum proposal title length
+- `PROPOSAL_DESCRIPTION_MAX_BYTES` = 4096 — Maximum proposal description length
 
 ## ultradag-network Architecture
 

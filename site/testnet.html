@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UltraDAG Testnet Status</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080b0f;--bg2:#0d1118;--bg3:#111820;
+  --border:#1e2a38;--border2:#253040;
+  --dim:#2e4055;--muted:#4a6480;--subtle:#6b8aaa;
+  --body:#8fafc8;--bright:#c4daf0;--white:#e8f2fa;
+  --accent:#3d9be9;--accent2:#1a6fb5;
+  --glow:rgba(61,155,233,0.12);--glow2:rgba(61,155,233,0.04);
+  --green:#4ade80;--red:#f87171;--yellow:#fbbf24;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--body);font-family:'Syne',sans-serif;font-size:16px;line-height:1.6;overflow-x:hidden;padding:24px}
+
+.container{max-width:1400px;margin:0 auto}
+.header{text-align:center;margin-bottom:48px}
+h1{font-size:48px;color:var(--white);margin-bottom:12px;font-weight:700}
+.subtitle{font-family:'DM Mono',monospace;font-size:14px;color:var(--subtle);letter-spacing:.1em}
+.live-indicator{display:inline-flex;align-items:center;gap:8px;margin-top:16px;padding:8px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:4px}
+.live-dot{width:8px;height:8px;background:var(--green);border-radius:50%;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;margin-bottom:48px}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:24px;transition:border-color .3s}
+.stat-card:hover{border-color:var(--accent2)}
+.stat-label{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.stat-value{font-size:32px;font-weight:700;color:var(--white);margin-bottom:4px}
+.stat-sub{font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle)}
+
+.nodes-section{margin-bottom:48px}
+.section-title{font-size:24px;color:var(--white);margin-bottom:24px;font-weight:600}
+.nodes-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}
+.node-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px;position:relative}
+.node-card.online{border-color:var(--green)}
+.node-card.offline{border-color:var(--red);opacity:.6}
+.node-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.node-name{font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--white)}
+.node-status{font-family:'DM Mono',monospace;font-size:11px;padding:4px 10px;border-radius:3px;text-transform:uppercase;letter-spacing:.1em}
+.node-status.online{background:rgba(74,222,128,.15);color:var(--green);border:1px solid rgba(74,222,128,.3)}
+.node-status.offline{background:rgba(248,113,113,.15);color:var(--red);border:1px solid rgba(248,113,113,.3)}
+.node-metrics{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.node-metric{display:flex;flex-direction:column}
+.node-metric-label{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
+.node-metric-value{font-size:18px;font-weight:600;color:var(--bright)}
+.node-url{font-family:'DM Mono',monospace;font-size:11px;color:var(--subtle);margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+
+.footer{text-align:center;padding:48px 24px;border-top:1px solid var(--border);margin-top:48px}
+.footer-links{display:flex;justify-content:center;gap:32px;margin-bottom:16px;flex-wrap:wrap}
+.footer-links a{font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle);text-decoration:none;transition:color .2s}
+.footer-links a:hover{color:var(--accent)}
+.footer-note{font-family:'DM Mono',monospace;font-size:11px;color:var(--dim)}
+
+.error-message{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:var(--red);padding:16px;border-radius:6px;margin-bottom:24px;font-family:'DM Mono',monospace;font-size:13px}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>UltraDAG Testnet</h1>
+    <div class="subtitle">Live Network Status</div>
+    <div class="live-indicator">
+      <div class="live-dot"></div>
+      <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--green)">LIVE</span>
+      <span style="color:var(--dim);margin:0 8px">•</span>
+      <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle)">Auto-refresh: 5s</span>
+    </div>
+  </div>
+
+  <div id="error-container"></div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">Current Round</div>
+      <div class="stat-value" id="current-round">—</div>
+      <div class="stat-sub">Consensus round number</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Finality Lag</div>
+      <div class="stat-value" id="finality-lag">—</div>
+      <div class="stat-sub">Rounds behind tip</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Supply</div>
+      <div class="stat-value" id="total-supply">—</div>
+      <div class="stat-sub" id="total-supply-udag">— UDAG</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Active Validators</div>
+      <div class="stat-value" id="validator-count">—</div>
+      <div class="stat-sub">Participating in consensus</div>
+    </div>
+  </div>
+
+  <div class="nodes-section">
+    <h2 class="section-title">Validator Nodes</h2>
+    <div class="nodes-grid" id="nodes-grid">
+      <!-- Nodes populated by JavaScript -->
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-links">
+      <a href="/">Home</a>
+      <a href="/dashboard.html">Dashboard</a>
+      <a href="/whitepaper.html">Whitepaper</a>
+      <a href="https://github.com/ultradag/core" target="_blank">GitHub</a>
+      <a href="https://discord.gg/ultradag" target="_blank">Discord</a>
+    </div>
+    <div class="footer-note">
+      UltraDAG Testnet • Data refreshes every 5 seconds
+    </div>
+  </div>
+</div>
+
+<script>
+const NODES = [
+  { name: 'Node 1', url: 'https://ultradag-node-1.fly.dev' },
+  { name: 'Node 2', url: 'https://ultradag-node-2.fly.dev' },
+  { name: 'Node 3', url: 'https://ultradag-node-3.fly.dev' },
+  { name: 'Node 4', url: 'https://ultradag-node-4.fly.dev' }
+];
+
+let nodeData = {};
+let errorCount = 0;
+
+async function fetchNodeStatus(node) {
+  try {
+    const response = await fetch(`${node.url}/status`, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(5000)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return {
+      online: true,
+      round: data.last_finalized_round || 0,
+      lag: data.finality_lag || 0,
+      supply: data.total_supply || 0,
+      validators: data.active_validators?.length || 0,
+      peers: data.peer_count || 0
+    };
+  } catch (error) {
+    console.error(`Failed to fetch ${node.name}:`, error);
+    return {
+      online: false,
+      round: 0,
+      lag: 0,
+      supply: 0,
+      validators: 0,
+      peers: 0,
+      error: error.message
+    };
+  }
+}
+
+async function updateAllNodes() {
+  const promises = NODES.map(async (node) => {
+    const status = await fetchNodeStatus(node);
+    nodeData[node.name] = { ...node, ...status };
+  });
+  
+  await Promise.all(promises);
+  renderNodes();
+  updateGlobalStats();
+}
+
+function renderNodes() {
+  const grid = document.getElementById('nodes-grid');
+  grid.innerHTML = '';
+  
+  NODES.forEach(node => {
+    const data = nodeData[node.name];
+    if (!data) return;
+    
+    const card = document.createElement('div');
+    card.className = `node-card ${data.online ? 'online' : 'offline'}`;
+    
+    card.innerHTML = `
+      <div class="node-header">
+        <div class="node-name">${node.name}</div>
+        <div class="node-status ${data.online ? 'online' : 'offline'}">
+          ${data.online ? 'Online' : 'Offline'}
+        </div>
+      </div>
+      <div class="node-metrics">
+        <div class="node-metric">
+          <div class="node-metric-label">Round</div>
+          <div class="node-metric-value">${data.online ? data.round.toLocaleString() : '—'}</div>
+        </div>
+        <div class="node-metric">
+          <div class="node-metric-label">Lag</div>
+          <div class="node-metric-value">${data.online ? data.lag : '—'}</div>
+        </div>
+        <div class="node-metric">
+          <div class="node-metric-label">Validators</div>
+          <div class="node-metric-value">${data.online ? data.validators : '—'}</div>
+        </div>
+        <div class="node-metric">
+          <div class="node-metric-label">Peers</div>
+          <div class="node-metric-value">${data.online ? data.peers : '—'}</div>
+        </div>
+      </div>
+      <div class="node-url">${node.url.replace('https://', '')}</div>
+    `;
+    
+    grid.appendChild(card);
+  });
+}
+
+function updateGlobalStats() {
+  const onlineNodes = Object.values(nodeData).filter(n => n.online);
+  
+  if (onlineNodes.length === 0) {
+    showError('All nodes are currently offline. Retrying...');
+    errorCount++;
+    if (errorCount > 3) {
+      document.getElementById('current-round').textContent = '—';
+      document.getElementById('finality-lag').textContent = '—';
+      document.getElementById('total-supply').textContent = '—';
+      document.getElementById('total-supply-udag').textContent = '— UDAG';
+      document.getElementById('validator-count').textContent = '—';
+    }
+    return;
+  }
+  
+  errorCount = 0;
+  hideError();
+  
+  // Use the node with highest round (most up-to-date)
+  const bestNode = onlineNodes.reduce((best, node) => 
+    node.round > best.round ? node : best
+  );
+  
+  document.getElementById('current-round').textContent = bestNode.round.toLocaleString();
+  document.getElementById('finality-lag').textContent = bestNode.lag;
+  
+  const supplySats = bestNode.supply;
+  const supplyUdag = (supplySats / 100_000_000).toFixed(2);
+  document.getElementById('total-supply').textContent = supplySats.toLocaleString();
+  document.getElementById('total-supply-udag').textContent = `${parseFloat(supplyUdag).toLocaleString()} UDAG`;
+  
+  document.getElementById('validator-count').textContent = bestNode.validators;
+}
+
+function showError(message) {
+  const container = document.getElementById('error-container');
+  container.innerHTML = `<div class="error-message">${message}</div>`;
+}
+
+function hideError() {
+  document.getElementById('error-container').innerHTML = '';
+}
+
+// Initial load
+updateAllNodes();
+
+// Auto-refresh every 5 seconds
+setInterval(updateAllNodes, 5000);
+</script>
+
+</body>
+</html>

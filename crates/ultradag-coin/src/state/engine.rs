@@ -44,6 +44,12 @@ pub struct StateEngine {
     active_validator_set: Vec<Address>,
     /// Current epoch number (round / EPOCH_LENGTH_ROUNDS).
     current_epoch: u64,
+    /// All proposals ever created, keyed by proposal ID.
+    proposals: HashMap<u64, crate::governance::Proposal>,
+    /// Votes cast: (proposal_id, voter_address) -> vote (true=for, false=against).
+    votes: HashMap<(u64, Address), bool>,
+    /// Monotonically increasing proposal counter.
+    next_proposal_id: u64,
 }
 
 impl StateEngine {
@@ -55,6 +61,9 @@ impl StateEngine {
             last_finalized_round: None,
             active_validator_set: Vec::new(),
             current_epoch: 0,
+            proposals: HashMap::new(),
+            votes: HashMap::new(),
+            next_proposal_id: 0,
         }
     }
 
@@ -118,6 +127,8 @@ impl StateEngine {
         let total_fees: u64 = vertex.block.transactions.iter().map(|tx| {
             match tx {
                 crate::tx::Transaction::Transfer(t) => t.fee,
+                crate::tx::Transaction::CreateProposal(t) => t.fee,
+                crate::tx::Transaction::Vote(t) => t.fee,
                 crate::tx::Transaction::Stake(_) | crate::tx::Transaction::Unstake(_) => 0,
             }
         }).sum();
@@ -223,6 +234,16 @@ impl StateEngine {
                     // Increment nonce
                     snapshot.increment_nonce(&unstake_tx.from);
                 }
+                crate::tx::Transaction::CreateProposal(proposal_tx) => {
+                    if let Err(e) = snapshot.apply_create_proposal(proposal_tx, vertex.round) {
+                        return Err(e);
+                    }
+                }
+                crate::tx::Transaction::Vote(vote_tx) => {
+                    if let Err(e) = snapshot.apply_vote(vote_tx, vertex.round) {
+                        return Err(e);
+                    }
+                }
             }
         }
 
@@ -235,6 +256,9 @@ impl StateEngine {
             snapshot.recalculate_active_set();
             snapshot.current_epoch = new_epoch;
         }
+
+        // Tick governance to update proposal statuses
+        snapshot.tick_governance(vertex.round);
 
         // Supply invariant check (debug builds only)
         // sum(liquid balances) + sum(staked) == total_supply
@@ -493,6 +517,219 @@ impl StateEngine {
         account.nonce += 1;
     }
 
+    // ========================================
+    // GOVERNANCE
+    // ========================================
+
+    /// Apply a CreateProposal transaction.
+    pub fn apply_create_proposal(
+        &mut self,
+        tx: &crate::governance::CreateProposalTx,
+        current_round: u64,
+    ) -> Result<(), CoinError> {
+        // 1. Verify signature
+        if !tx.verify_signature() {
+            return Err(CoinError::InvalidSignature);
+        }
+
+        // 2. Check nonce
+        let expected_nonce = self.nonce(&tx.from);
+        if tx.nonce != expected_nonce {
+            return Err(CoinError::InvalidNonce {
+                expected: expected_nonce,
+                got: tx.nonce,
+            });
+        }
+
+        // 3. Check fee >= MIN_FEE_SATS
+        if tx.fee < crate::constants::MIN_FEE_SATS {
+            return Err(CoinError::FeeTooLow);
+        }
+
+        // 4. Check proposer stake >= MIN_STAKE_TO_PROPOSE
+        let proposer_stake = self.stake_of(&tx.from);
+        if proposer_stake < crate::constants::MIN_STAKE_TO_PROPOSE {
+            return Err(CoinError::InsufficientStakeToPropose);
+        }
+
+        // 5. Check title length
+        if tx.title.len() > crate::constants::PROPOSAL_TITLE_MAX_BYTES {
+            return Err(CoinError::ProposalTitleTooLong);
+        }
+
+        // 6. Check description length
+        if tx.description.len() > crate::constants::PROPOSAL_DESCRIPTION_MAX_BYTES {
+            return Err(CoinError::ProposalDescriptionTooLong);
+        }
+
+        // 7. Check proposal_id == next_proposal_id (sequential, no gaps)
+        if tx.proposal_id != self.next_proposal_id {
+            return Err(CoinError::InvalidProposalId);
+        }
+
+        // 8. Check active proposal count
+        let active_count = self.proposals.values()
+            .filter(|p| matches!(p.status, crate::governance::ProposalStatus::Active))
+            .count();
+        if active_count >= crate::constants::MAX_ACTIVE_PROPOSALS {
+            return Err(CoinError::TooManyActiveProposals);
+        }
+
+        // 9. Deduct fee from proposer balance
+        let balance = self.balance(&tx.from);
+        if balance < tx.fee {
+            return Err(CoinError::InsufficientBalance {
+                address: tx.from,
+                required: tx.fee,
+                available: balance,
+            });
+        }
+        self.debit(&tx.from, tx.fee);
+
+        // 10. Increment nonce
+        self.increment_nonce(&tx.from);
+
+        // 11. Create proposal
+        let proposal = crate::governance::Proposal {
+            id: tx.proposal_id,
+            proposer: tx.from,
+            title: tx.title.clone(),
+            description: tx.description.clone(),
+            proposal_type: tx.proposal_type.clone(),
+            voting_starts: current_round,
+            voting_ends: current_round + crate::constants::GOVERNANCE_VOTING_PERIOD_ROUNDS,
+            votes_for: 0,
+            votes_against: 0,
+            status: crate::governance::ProposalStatus::Active,
+        };
+
+        // 12. Insert into proposals
+        self.proposals.insert(tx.proposal_id, proposal);
+
+        // 13. Increment next_proposal_id
+        self.next_proposal_id += 1;
+
+        Ok(())
+    }
+
+    /// Apply a Vote transaction.
+    pub fn apply_vote(
+        &mut self,
+        tx: &crate::governance::VoteTx,
+        current_round: u64,
+    ) -> Result<(), CoinError> {
+        // 1. Verify signature
+        if !tx.verify_signature() {
+            return Err(CoinError::InvalidSignature);
+        }
+
+        // 2. Check nonce
+        let expected_nonce = self.nonce(&tx.from);
+        if tx.nonce != expected_nonce {
+            return Err(CoinError::InvalidNonce {
+                expected: expected_nonce,
+                got: tx.nonce,
+            });
+        }
+
+        // 3. Check fee >= MIN_FEE_SATS
+        if tx.fee < crate::constants::MIN_FEE_SATS {
+            return Err(CoinError::FeeTooLow);
+        }
+
+        // 4. Check proposal exists
+        let proposal = self.proposals.get(&tx.proposal_id)
+            .ok_or(CoinError::ProposalNotFound)?;
+
+        // 5. Check proposal.is_voting_open(current_round)
+        if !proposal.is_voting_open(current_round) {
+            return Err(CoinError::VotingClosed);
+        }
+
+        // 6. Check (tx.proposal_id, tx.from) not in self.votes
+        if self.votes.contains_key(&(tx.proposal_id, tx.from)) {
+            return Err(CoinError::AlreadyVoted);
+        }
+
+        // 7. Get voter's staked amount — this is the vote weight
+        let vote_weight = self.stake_of(&tx.from);
+
+        // 8. Deduct fee from voter balance
+        let balance = self.balance(&tx.from);
+        if balance < tx.fee {
+            return Err(CoinError::InsufficientBalance {
+                address: tx.from,
+                required: tx.fee,
+                available: balance,
+            });
+        }
+        self.debit(&tx.from, tx.fee);
+
+        // 9. Increment nonce
+        self.increment_nonce(&tx.from);
+
+        // 10. Add vote weight to proposal.votes_for or votes_against
+        let proposal = self.proposals.get_mut(&tx.proposal_id).unwrap();
+        if tx.vote {
+            proposal.votes_for += vote_weight;
+        } else {
+            proposal.votes_against += vote_weight;
+        }
+
+        // 11. Insert (proposal_id, from) -> vote into self.votes
+        self.votes.insert((tx.proposal_id, tx.from), tx.vote);
+
+        Ok(())
+    }
+
+    /// Called at the end of each finalized round.
+    /// Checks all active proposals and updates their status.
+    pub fn tick_governance(&mut self, current_round: u64) {
+        let total_staked = self.total_staked();
+        let mut to_update = vec![];
+        
+        for (id, proposal) in &self.proposals {
+            if matches!(proposal.status, crate::governance::ProposalStatus::Active)
+                && current_round > proposal.voting_ends
+            {
+                let new_status = if proposal.has_passed(total_staked) {
+                    crate::governance::ProposalStatus::PassedPending {
+                        execute_at_round: current_round + crate::constants::GOVERNANCE_EXECUTION_DELAY_ROUNDS,
+                    }
+                } else {
+                    crate::governance::ProposalStatus::Rejected
+                };
+                to_update.push((*id, new_status));
+            }
+        }
+        
+        for (id, status) in to_update {
+            if let Some(p) = self.proposals.get_mut(&id) {
+                p.status = status;
+            }
+        }
+    }
+
+    /// Get all proposals (for RPC).
+    pub fn proposals(&self) -> &HashMap<u64, crate::governance::Proposal> {
+        &self.proposals
+    }
+
+    /// Get a specific proposal by ID.
+    pub fn proposal(&self, id: u64) -> Option<&crate::governance::Proposal> {
+        self.proposals.get(&id)
+    }
+
+    /// Get vote for a specific (proposal_id, voter).
+    pub fn get_vote(&self, proposal_id: u64, voter: &Address) -> Option<bool> {
+        self.votes.get(&(proposal_id, *voter)).copied()
+    }
+
+    /// Get the next proposal ID that will be assigned.
+    pub fn next_proposal_id(&self) -> u64 {
+        self.next_proposal_id
+    }
+
     /// Create a snapshot of the current state (for checkpoints).
     pub fn snapshot(&self) -> crate::state::persistence::StateSnapshot {
         crate::state::persistence::StateSnapshot {
@@ -502,6 +739,9 @@ impl StateEngine {
             current_epoch: self.current_epoch,
             total_supply: self.total_supply,
             last_finalized_round: self.last_finalized_round,
+            proposals: self.proposals.iter().map(|(k, v)| (*k, v.clone())).collect(),
+            votes: self.votes.iter().map(|(k, v)| (*k, *v)).collect(),
+            next_proposal_id: self.next_proposal_id,
         }
     }
 
@@ -513,6 +753,9 @@ impl StateEngine {
         self.current_epoch = snapshot.current_epoch;
         self.total_supply = snapshot.total_supply;
         self.last_finalized_round = snapshot.last_finalized_round;
+        self.proposals = snapshot.proposals.into_iter().collect();
+        self.votes = snapshot.votes.into_iter().collect();
+        self.next_proposal_id = snapshot.next_proposal_id;
     }
 
     /// Save state to disk
@@ -533,6 +776,9 @@ impl StateEngine {
             current_epoch: snapshot.current_epoch,
             total_supply: snapshot.total_supply,
             last_finalized_round: snapshot.last_finalized_round,
+            proposals: snapshot.proposals.into_iter().collect(),
+            votes: snapshot.votes.into_iter().collect(),
+            next_proposal_id: snapshot.next_proposal_id,
         };
         // Reconcile epoch after loading stale snapshot
         if let Some(round) = engine.last_finalized_round {

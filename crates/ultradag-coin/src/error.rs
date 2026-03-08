@@ -49,4 +49,31 @@ pub enum CoinError {
 
     #[error("no stake to unstake")]
     NoStakeToUnstake,
+
+    #[error("fee too low")]
+    FeeTooLow,
+
+    #[error("insufficient stake to propose: need {}", crate::constants::MIN_STAKE_TO_PROPOSE)]
+    InsufficientStakeToPropose,
+
+    #[error("proposal title too long")]
+    ProposalTitleTooLong,
+
+    #[error("proposal description too long")]
+    ProposalDescriptionTooLong,
+
+    #[error("invalid proposal ID")]
+    InvalidProposalId,
+
+    #[error("too many active proposals")]
+    TooManyActiveProposals,
+
+    #[error("proposal not found")]
+    ProposalNotFound,
+
+    #[error("voting is closed")]
+    VotingClosed,
+
+    #[error("already voted on this proposal")]
+    AlreadyVoted,
 }

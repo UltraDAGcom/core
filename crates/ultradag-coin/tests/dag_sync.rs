@@ -130,11 +130,12 @@ fn test_04_deep_chain_resolves_incrementally() {
     let sk = SecretKey::generate();
     let mut chain = Vec::new();
 
-    // Build chain: v0 (genesis) -> v1 -> v2 -> ... -> v59
+    // Build chain: v0 (genesis) -> v1 -> v2 -> ... -> v14
+    // (kept within MAX_FUTURE_ROUNDS=10 reach when inserting sequentially)
     let v0 = make_vertex(0, 1, vec![[0u8; 32]], &sk);
     chain.push(v0.clone());
 
-    for i in 1..60u64 {
+    for i in 1..15u64 {
         let parent_hash = chain.last().unwrap().hash();
         let v = make_vertex(i, i + 1, vec![parent_hash], &sk);
         chain.push(v);
@@ -142,9 +143,9 @@ fn test_04_deep_chain_resolves_incrementally() {
 
     let mut dag = BlockDag::new();
 
-    // Try to insert the last vertex — should fail with MissingParents
-    let last = chain.last().unwrap().clone();
-    let result = dag.try_insert(last);
+    // Try to insert a vertex with missing parents (round 5, within future limit from round 0)
+    let v5 = chain[4].clone(); // round 5
+    let result = dag.try_insert(v5);
     assert!(matches!(result, Err(DagInsertError::MissingParents(_))));
 
     // Insert all vertices in order — they should all succeed
@@ -153,7 +154,7 @@ fn test_04_deep_chain_resolves_incrementally() {
         assert!(matches!(result, Ok(true) | Ok(false)), "Vertex insert should not error");
     }
 
-    assert_eq!(dag.len(), 60);
+    assert_eq!(dag.len(), 15);
 }
 
 #[test]

@@ -434,6 +434,9 @@ mod tests {
             current_epoch: 0,
             total_supply: 1_000_000_000,
             last_finalized_round: Some(1000),
+            proposals: vec![],
+            votes: vec![],
+            next_proposal_id: 0,
         };
         
         let msg = Message::CheckpointSync {

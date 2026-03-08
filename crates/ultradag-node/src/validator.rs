@@ -111,10 +111,15 @@ pub async fn validator_loop(
                 continue;
             }
         } else if consecutive_skips >= MAX_SKIPS_BEFORE_RECOVERY || in_recovery {
-            // Enter or stay in recovery mode — produce unconditionally every round
+            // Enter or stay in recovery mode — produce unconditionally every round.
+            // IMPORTANT: only produce on timer ticks in recovery mode. Notifications
+            // would cause rapid production (runaway loop with optimistic responsiveness).
             if !in_recovery {
                 warn!("Entering stall recovery mode after {} skips — producing unconditionally until quorum resumes", consecutive_skips);
                 in_recovery = true;
+            }
+            if !timer_fired {
+                continue; // In recovery, wait for timer — don't produce on notifications
             }
             // Check if quorum has resumed so we can exit recovery
             let (has_quorum, _, _) = has_prev_round_quorum(&server, dag_round).await;

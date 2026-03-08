@@ -72,14 +72,32 @@ impl PeerRegistry {
     }
 
     /// Broadcast a message to all connected peers except `exclude`.
+    /// Automatically removes peers that fail to send (broken connections).
     pub async fn broadcast(&self, msg: &Message, exclude: &str) {
-        let writers = self.writers.read().await;
-        for (addr, writer) in writers.iter() {
-            if addr == exclude {
-                continue;
+        let mut dead_peers = Vec::new();
+        {
+            let writers = self.writers.read().await;
+            for (addr, writer) in writers.iter() {
+                if addr == exclude {
+                    continue;
+                }
+                if let Err(e) = writer.send(msg).await {
+                    warn!("Failed to send to {}: {} — removing dead peer", addr, e);
+                    dead_peers.push(addr.clone());
+                }
             }
-            if let Err(e) = writer.send(msg).await {
-                warn!("Failed to send to {}: {}", addr, e);
+        }
+        // Remove dead peers outside the read lock
+        if !dead_peers.is_empty() {
+            let mut writers = self.writers.write().await;
+            for addr in &dead_peers {
+                writers.remove(addr);
+            }
+            drop(writers);
+            // Also clean up listen addr tracking
+            let mut listen_addrs = self.connected_listen_addrs.write().await;
+            for addr in &dead_peers {
+                listen_addrs.remove(addr);
             }
         }
     }

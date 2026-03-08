@@ -35,6 +35,8 @@ impl Block {
         self.transactions.iter().map(|tx| {
             match tx {
                 Transaction::Transfer(t) => t.fee,
+                Transaction::CreateProposal(t) => t.fee,
+                Transaction::Vote(t) => t.fee,
                 Transaction::Stake(_) | Transaction::Unstake(_) => 0,
             }
         }).sum()

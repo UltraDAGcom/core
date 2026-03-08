@@ -4,6 +4,7 @@ pub mod consensus;
 pub mod constants;
 pub mod error;
 pub mod block_producer;
+pub mod governance;
 pub mod persistence;
 pub mod safety;
 pub mod state;

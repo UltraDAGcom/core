@@ -94,6 +94,10 @@ impl NodeServer {
         self.peers.broadcast(&Message::GetCheckpoint { min_round: our_round }, "").await;
     }
 
+    /// Maximum number of concurrent peer connections to prevent resource exhaustion.
+    /// Must be high enough for all validators (inbound + outbound) plus some observers.
+    const MAX_PEERS: usize = 16;
+
     /// Start listening for incoming connections.
     pub async fn listen(&self) -> std::io::Result<()> {
         let listener = TcpListener::bind(format!("[::]:{}", self.port)).await?;
@@ -102,6 +106,26 @@ impl NodeServer {
         loop {
             let (stream, addr) = listener.accept().await?;
             let addr_str = addr.to_string();
+
+            // Reject connections beyond the peer limit
+            let current_peers = self.peers.connected_count().await;
+            if current_peers >= Self::MAX_PEERS {
+                warn!("Rejecting connection from {} — peer limit ({}) reached", addr_str, Self::MAX_PEERS);
+                drop(stream);
+                continue;
+            }
+
+            // Deduplicate: reject if we already have a connection from the same IP.
+            // Different address formats (.internal, .fly.dev, IPv6, public IP) resolve
+            // to the same node and create wasteful duplicate connections.
+            let remote_ip = addr.ip().to_string();
+            let existing_addrs = self.peers.connected_addrs().await;
+            let already_connected = existing_addrs.iter().any(|a| a.contains(&remote_ip));
+            if already_connected {
+                drop(stream);
+                continue;
+            }
+
             info!("Incoming connection from {}", addr_str);
 
             let (reader, writer) = split_connection(stream, addr_str.clone());
@@ -292,8 +316,6 @@ async fn try_connect_peer(
     }
 
     // Check if we already have a connection to this listen address
-    // (covers both outbound connections keyed by listen addr AND
-    // inbound connections registered via Hello)
     if peers.is_listen_addr_connected(&addr).await {
         return;
     }
@@ -303,8 +325,34 @@ async fn try_connect_peer(
         return;
     }
 
+    // Resolve DNS to IP and check if we're already connected to this IP
+    // (prevents duplicate connections via .internal / .fly.dev / IPv6 / public IP)
+    if let Ok(mut resolved) = tokio::net::lookup_host(&addr).await {
+        if let Some(socket_addr) = resolved.next() {
+            let resolved_ip = socket_addr.ip().to_string();
+            let existing = peers.connected_addrs().await;
+            for existing_addr in &existing {
+                if existing_addr.contains(&resolved_ip) {
+                    return; // Already connected to this IP
+                }
+            }
+        }
+    }
+
     match tokio::net::TcpStream::connect(&addr).await {
         Ok(stream) => {
+            // After connecting, check the remote IP for dedup
+            if let Ok(remote) = stream.peer_addr() {
+                let remote_ip = remote.ip().to_string();
+                let existing = peers.connected_addrs().await;
+                for existing_addr in &existing {
+                    if existing_addr.contains(&remote_ip) {
+                        info!("Peer discovery: skipping {} — already connected to IP {}", addr, remote_ip);
+                        return;
+                    }
+                }
+            }
+
             info!("Peer discovery: connected to {}", addr);
             peers.add_known(addr.clone()).await;
             peers.add_connected_listen_addr(addr.clone()).await;
@@ -361,6 +409,11 @@ async fn handle_peer(
 
     loop {
         let msg = reader.recv().await?;
+
+        // Yield to the runtime after each message so other tasks (RPC, validator loop)
+        // get a chance to run. Without this, a burst of messages from one peer can
+        // starve the entire runtime.
+        tokio::task::yield_now().await;
 
         match msg {
             Message::Hello { version: _, height, listen_port } => {
@@ -456,6 +509,15 @@ async fn handle_peer(
                 let vertex_hash = vertex.hash();
                 let validator = vertex.validator;
                 let round = vertex.round;
+
+                // Reject vertices from validators not in our allowlist (if one is set)
+                {
+                    let fin_r = finality.read().await;
+                    if !fin_r.validator_set().is_allowed(&validator) {
+                        warn!("Rejected vertex from non-allowlisted validator {}.. round={}", &validator.to_hex()[..8], round);
+                        continue;
+                    }
+                }
 
                 // Atomic equivocation check + insert (no TOCTOU race)
                 let insert_result = {
@@ -567,7 +629,11 @@ async fn handle_peer(
             }
 
             Message::GetDagVertices { from_round, max_count } => {
-                let dag_r = dag.read().await;
+                // Use try_read to avoid blocking if DAG is locked by validator/sync
+                let Some(dag_r) = dag.try_read().ok() else {
+                    warn!("GetDagVertices: DAG lock contended, skipping for {}", peer_addr);
+                    continue;
+                };
                 let mut vertices = Vec::new();
                 for round in from_round..from_round + max_count as u64 {
                     for v in dag_r.vertices_in_round(round) {
@@ -920,7 +986,8 @@ async fn handle_peer(
             }
 
             Message::GetCheckpoint { min_round } => {
-                // Check disk for accepted checkpoints first, then in-memory pending
+                // Rate-limit checkpoint sync — it's expensive (locks DAG + state).
+                // Use try_read to avoid blocking if locks are contended.
                 let checkpoint = ultradag_coin::persistence::load_latest_checkpoint(data_dir)
                     .filter(|cp| cp.round >= min_round)
                     .or_else(|| {
@@ -932,8 +999,12 @@ async fn handle_peer(
                     });
 
                 if let Some(checkpoint) = checkpoint {
-                    // Collect suffix: all vertices from checkpoint.round to current
-                    let dag_r = dag.read().await;
+                    // Use try_read to avoid blocking — if locks are held, skip this request.
+                    // The peer will retry and eventually get served.
+                    let Some(dag_r) = dag.try_read().ok() else {
+                        warn!("GetCheckpoint: DAG lock contended, skipping for {}", peer_addr);
+                        continue;
+                    };
                     let current_round = dag_r.current_round();
                     let mut suffix_vertices = Vec::new();
                     for r in checkpoint.round..=current_round {
@@ -942,16 +1013,20 @@ async fn handle_peer(
                         }
                     }
                     drop(dag_r);
-                    
-                    // Get state snapshot
-                    let state_snapshot = state.read().await.snapshot();
-                    
+
+                    let Some(state_r) = state.try_read().ok() else {
+                        warn!("GetCheckpoint: state lock contended, skipping for {}", peer_addr);
+                        continue;
+                    };
+                    let state_snapshot = state_r.snapshot();
+                    drop(state_r);
+
                     let _ = peers.send_to(&peer_addr, &Message::CheckpointSync {
                         checkpoint,
                         suffix_vertices,
                         state_at_checkpoint: state_snapshot,
                     }).await;
-                    
+
                     info!("Sent checkpoint sync for round {} to {}", min_round, peer_addr);
                 }
             }

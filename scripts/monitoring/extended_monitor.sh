@@ -41,7 +41,7 @@ import sys, json
 try:
     d = json.load(sys.stdin)
     dag = d['dag_round']
-    fin = d.get('last_finalized_round', 0)
+    fin = d.get('last_finalized_round') or 0
     lag = dag - fin
     peers = d.get('peer_count', 0)
     supply = d.get('total_supply', 0) / 100000000

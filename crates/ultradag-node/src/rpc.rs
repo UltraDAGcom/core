@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::net::SocketAddr;
+use std::time::Duration;
 
 use http_body_util::{BodyExt, Full};
 use hyper::body::{Bytes, Incoming};
@@ -11,7 +12,31 @@ use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tracing::{error, info, warn};
 
+/// Timeout for RPC lock acquisition — prevents blocking when P2P sync holds write locks.
+const RPC_LOCK_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Acquire a read lock with timeout. Returns 503 if the lock can't be acquired.
+macro_rules! read_lock_or_503 {
+    ($lock:expr) => {
+        match tokio::time::timeout(RPC_LOCK_TIMEOUT, $lock.read()).await {
+            Ok(guard) => guard,
+            Err(_) => return Ok(error_response(StatusCode::SERVICE_UNAVAILABLE, "node busy, try again")),
+        }
+    };
+}
+
+/// Acquire a write lock with timeout. Returns 503 if the lock can't be acquired.
+macro_rules! write_lock_or_503 {
+    ($lock:expr) => {
+        match tokio::time::timeout(RPC_LOCK_TIMEOUT, $lock.write()).await {
+            Ok(guard) => guard,
+            Err(_) => return Ok(error_response(StatusCode::SERVICE_UNAVAILABLE, "node busy, try again")),
+        }
+    };
+}
+
 use ultradag_coin::{Address, SecretKey, Signature, Transaction, TransferTx, StakeTx, UnstakeTx, MIN_STAKE_SATS};
+use ultradag_coin::governance::{CreateProposalTx, VoteTx, ProposalType};
 use ultradag_network::{Message, NodeServer};
 use crate::rate_limit::{RateLimiter, limits};
 
@@ -37,6 +62,22 @@ fn json_response(status: StatusCode, body: &impl Serialize) -> Response<BoxBody>
 
 fn error_response(status: StatusCode, msg: &str) -> Response<BoxBody> {
     json_response(status, &serde_json::json!({"error": msg}))
+}
+
+/// Parse a 64-hex-char secret key string into a SecretKey.
+fn parse_secret_key(hex: &str) -> Result<SecretKey, &'static str> {
+    if hex.len() != 64 {
+        return Err("secret key must be 64 hex chars (32 bytes)");
+    }
+    if hex.contains('\0') || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("invalid hex in secret key");
+    }
+    let mut bytes = [0u8; 32];
+    for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
+        let s = std::str::from_utf8(chunk).map_err(|_| "invalid hex")?;
+        bytes[i] = u8::from_str_radix(s, 16).map_err(|_| "invalid hex")?;
+    }
+    Ok(SecretKey::from_bytes(bytes))
 }
 
 #[derive(Serialize)]
@@ -104,6 +145,29 @@ struct UnstakeRequest {
     secret_key: String,
 }
 
+#[derive(Deserialize)]
+struct ProposalRequest {
+    proposer_secret: String,
+    title: String,
+    description: String,
+    proposal_type: String,
+    #[serde(default)]
+    parameter_name: Option<String>,
+    #[serde(default)]
+    parameter_value: Option<String>,
+    #[serde(default)]
+    fee: Option<u64>,
+}
+
+#[derive(Deserialize)]
+struct VoteRequest {
+    voter_secret: String,
+    proposal_id: u64,
+    vote: bool,
+    #[serde(default)]
+    fee: Option<u64>,
+}
+
 #[derive(Serialize)]
 struct StakeInfoResponse {
     address: String,
@@ -167,12 +231,31 @@ async fn handle_request(
     }
 
     let response = match (method, path.as_slice()) {
+        // Lock-free health check for Fly.io proxy — never blocks on DAG/state locks
+        (&Method::GET, ["health"]) => {
+            json_response(StatusCode::OK, &serde_json::json!({"status": "ok"}))
+        }
+
         (&Method::GET, ["status"]) => {
-            let state = server.state.read().await;
-            let mp = server.mempool.read().await;
+            // Acquire each lock briefly with timeout to avoid blocking when
+            // P2P sync handlers hold write locks.
+            let (last_finalized_round, total_supply, account_count, total_staked, active_stakers_len) = {
+                let state = read_lock_or_503!(server.state);
+                (state.last_finalized_round(), state.total_supply(), state.account_count(), state.total_staked(), state.active_stakers().len())
+            };
+            let mempool_size = {
+                let mp = read_lock_or_503!(server.mempool);
+                mp.len()
+            };
             let peers = server.peers.connected_count().await;
-            let dag = server.dag.read().await;
-            let fin = server.finality.read().await;
+            let (dag_vertices, dag_round, dag_tips_len) = {
+                let dag = read_lock_or_503!(server.dag);
+                (dag.len(), dag.current_round(), dag.tips().len())
+            };
+            let (finalized_count, validator_count) = {
+                let fin = read_lock_or_503!(server.finality);
+                (fin.finalized_count(), fin.validator_count())
+            };
             let connected_addrs = server.peers.connected_listen_addrs().await;
             let bootstrap_connected = ultradag_network::TESTNET_BOOTSTRAP_NODES
                 .iter()
@@ -180,18 +263,18 @@ async fn handle_request(
             json_response(
                 StatusCode::OK,
                 &StatusResponse {
-                    last_finalized_round: state.last_finalized_round(),
+                    last_finalized_round,
                     peer_count: peers,
-                    mempool_size: mp.len(),
-                    total_supply: state.total_supply(),
-                    account_count: state.account_count(),
-                    dag_vertices: dag.len(),
-                    dag_round: dag.current_round(),
-                    dag_tips: dag.tips().len(),
-                    finalized_count: fin.finalized_count(),
-                    validator_count: fin.validator_count(),
-                    total_staked: state.total_staked(),
-                    active_stakers: state.active_stakers().len(),
+                    mempool_size,
+                    total_supply,
+                    account_count,
+                    dag_vertices,
+                    dag_round,
+                    dag_tips: dag_tips_len,
+                    finalized_count,
+                    validator_count,
+                    total_staked,
+                    active_stakers: active_stakers_len,
                     bootstrap_connected,
                 },
             )
@@ -201,7 +284,7 @@ async fn handle_request(
             let Some(addr) = Address::from_hex(addr_hex) else {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address hex (need 64 chars)"));
             };
-            let state = server.state.read().await;
+            let state = read_lock_or_503!(server.state);
             let balance = state.balance(&addr);
             let nonce = state.nonce(&addr);
             json_response(
@@ -219,7 +302,7 @@ async fn handle_request(
             let Ok(round) = round_str.parse::<u64>() else {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid round"));
             };
-            let dag = server.dag.read().await;
+            let dag = read_lock_or_503!(server.dag);
             let vertices = dag.vertices_in_round(round);
             if vertices.is_empty() {
                 return Ok(error_response(StatusCode::NOT_FOUND, "no vertices in round"));
@@ -295,8 +378,8 @@ async fn handle_request(
             // Hold mempool write lock for the entire sequence to prevent
             // concurrent requests from getting the same nonce.
             let (tx, tx_hash, nonce) = {
-                let state = server.state.read().await;
-                let mut mp = server.mempool.write().await;
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
 
                 // Compute nonce: highest pending + 1, or state nonce if no pending
                 let base_nonce = state.nonce(&sender);
@@ -367,7 +450,7 @@ async fn handle_request(
         }
 
         (&Method::GET, ["mempool"]) => {
-            let mp = server.mempool.read().await;
+            let mp = read_lock_or_503!(server.mempool);
             let txs: Vec<serde_json::Value> = mp.best(100).iter().map(|tx| {
                 match tx {
                     Transaction::Transfer(t) => serde_json::json!({
@@ -390,6 +473,24 @@ async fn handle_request(
                         "type": "unstake",
                         "hash": hex_encode(&tx.hash()),
                         "from": t.from.to_hex(),
+                        "nonce": t.nonce,
+                    }),
+                    Transaction::CreateProposal(t) => serde_json::json!({
+                        "type": "create_proposal",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "proposal_id": t.proposal_id,
+                        "title": t.title,
+                        "fee": t.fee,
+                        "nonce": t.nonce,
+                    }),
+                    Transaction::Vote(t) => serde_json::json!({
+                        "type": "vote",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "proposal_id": t.proposal_id,
+                        "vote": t.vote,
+                        "fee": t.fee,
                         "nonce": t.nonce,
                     }),
                 }
@@ -427,8 +528,8 @@ async fn handle_request(
             let fee = ultradag_coin::constants::MIN_FEE_SATS; // must meet minimum fee
 
             let (tx, tx_hash, nonce) = {
-                let state = server.state.read().await;
-                let mut mp = server.mempool.write().await;
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
 
                 let base_nonce = state.nonce(&faucet_addr);
                 let nonce = match mp.pending_nonce(&faucet_addr) {
@@ -554,8 +655,8 @@ async fn handle_request(
 
             // Build stake transaction and add to mempool (will be included in next vertex)
             let (tx, tx_hash, nonce) = {
-                let state = server.state.read().await;
-                let mut mp = server.mempool.write().await;
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
 
                 let base_nonce = state.nonce(&sender);
                 let nonce = match mp.pending_nonce(&sender) {
@@ -656,14 +757,14 @@ async fn handle_request(
             let sender = sk.address();
 
             let current_round = {
-                let dag = server.dag.read().await;
+                let dag = read_lock_or_503!(server.dag);
                 dag.current_round()
             };
 
             // Build unstake transaction and add to mempool
             let (tx, tx_hash, nonce) = {
-                let state = server.state.read().await;
-                let mut mp = server.mempool.write().await;
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
 
                 let base_nonce = state.nonce(&sender);
                 let nonce = match mp.pending_nonce(&sender) {
@@ -707,7 +808,7 @@ async fn handle_request(
             let Some(addr) = Address::from_hex(addr_hex) else {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address hex"));
             };
-            let state = server.state.read().await;
+            let state = read_lock_or_503!(server.state);
             let staked = state.stake_of(&addr);
             let stake_acct = state.stake_account(&addr);
             let unlock_at = stake_acct.and_then(|s| s.unlock_at_round);
@@ -722,7 +823,7 @@ async fn handle_request(
         }
 
         (&Method::GET, ["validators"]) => {
-            let state = server.state.read().await;
+            let state = read_lock_or_503!(server.state);
             let stakers = state.active_stakers();
             let validators: Vec<ValidatorInfo> = stakers.iter().map(|addr| {
                 let staked = state.stake_of(addr);
@@ -749,6 +850,241 @@ async fn handle_request(
                     "address": addr.to_hex(),
                 }),
             )
+        }
+
+        // ====== Governance POST endpoints ======
+
+        (&Method::POST, ["proposal"]) => {
+            let body = req.collect().await?.to_bytes();
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large"));
+            }
+            let Ok(prop_req) = serde_json::from_slice::<ProposalRequest>(&body) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    "invalid JSON: need {proposer_secret, title, description, proposal_type}"));
+            };
+
+            let sk = match parse_secret_key(&prop_req.proposer_secret) {
+                Ok(sk) => sk,
+                Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, e)),
+            };
+            let sender = sk.address();
+
+            let proposal_type = match prop_req.proposal_type.as_str() {
+                "text" => ProposalType::TextProposal,
+                "parameter" => {
+                    let Some(param) = prop_req.parameter_name else {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "parameter_name required for parameter change"));
+                    };
+                    let Some(value) = prop_req.parameter_value else {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "parameter_value required for parameter change"));
+                    };
+                    ProposalType::ParameterChange { param, new_value: value }
+                }
+                _ => return Ok(error_response(StatusCode::BAD_REQUEST, "proposal_type must be 'text' or 'parameter'")),
+            };
+
+            let fee = prop_req.fee.unwrap_or(ultradag_coin::constants::MIN_FEE_SATS);
+
+            let (tx, tx_hash, proposal_id) = {
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
+
+                let base_nonce = state.nonce(&sender);
+                let nonce = match mp.pending_nonce(&sender) {
+                    Some(max_pending) => max_pending + 1,
+                    None => base_nonce,
+                };
+
+                let balance = state.balance(&sender);
+                if balance < fee {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!("insufficient balance for fee: need {}, have {}", fee, balance)));
+                }
+
+                let proposal_id = state.next_proposal_id();
+
+                let mut create_tx = CreateProposalTx {
+                    from: sender,
+                    proposal_id,
+                    title: prop_req.title.clone(),
+                    description: prop_req.description.clone(),
+                    proposal_type,
+                    fee,
+                    nonce,
+                    pub_key: sk.verifying_key().to_bytes(),
+                    signature: Signature([0u8; 64]),
+                };
+                create_tx.signature = sk.sign(&create_tx.signable_bytes());
+                let tx = Transaction::CreateProposal(create_tx);
+                let tx_hash = tx.hash();
+
+                if !mp.insert(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                }
+
+                (tx, tx_hash, proposal_id)
+            };
+
+            server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+            let _ = server.tx_tx.send(tx);
+
+            json_response(StatusCode::OK, &serde_json::json!({
+                "status": "pending",
+                "tx_hash": hex_encode(&tx_hash),
+                "proposal_id": proposal_id,
+                "proposer": sender.to_hex(),
+                "title": prop_req.title,
+                "note": "Proposal transaction added to mempool. Will be created when included in a finalized vertex."
+            }))
+        }
+
+        (&Method::POST, ["vote"]) => {
+            let body = req.collect().await?.to_bytes();
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large"));
+            }
+            let Ok(vote_req) = serde_json::from_slice::<VoteRequest>(&body) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    "invalid JSON: need {voter_secret, proposal_id, vote}"));
+            };
+
+            let sk = match parse_secret_key(&vote_req.voter_secret) {
+                Ok(sk) => sk,
+                Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, e)),
+            };
+            let sender = sk.address();
+            let fee = vote_req.fee.unwrap_or(ultradag_coin::constants::MIN_FEE_SATS);
+
+            let (tx, tx_hash) = {
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
+
+                let base_nonce = state.nonce(&sender);
+                let nonce = match mp.pending_nonce(&sender) {
+                    Some(max_pending) => max_pending + 1,
+                    None => base_nonce,
+                };
+
+                let balance = state.balance(&sender);
+                if balance < fee {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!("insufficient balance for fee: need {}, have {}", fee, balance)));
+                }
+
+                let mut vote_tx = VoteTx {
+                    from: sender,
+                    proposal_id: vote_req.proposal_id,
+                    vote: vote_req.vote,
+                    fee,
+                    nonce,
+                    pub_key: sk.verifying_key().to_bytes(),
+                    signature: Signature([0u8; 64]),
+                };
+                vote_tx.signature = sk.sign(&vote_tx.signable_bytes());
+                let tx = Transaction::Vote(vote_tx);
+                let tx_hash = tx.hash();
+
+                if !mp.insert(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                }
+
+                (tx, tx_hash)
+            };
+
+            server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+            let _ = server.tx_tx.send(tx);
+
+            json_response(StatusCode::OK, &serde_json::json!({
+                "status": "pending",
+                "tx_hash": hex_encode(&tx_hash),
+                "proposal_id": vote_req.proposal_id,
+                "voter": sender.to_hex(),
+                "vote": if vote_req.vote { "yes" } else { "no" },
+                "note": "Vote transaction added to mempool. Will be applied when included in a finalized vertex."
+            }))
+        }
+
+        // ====== Governance GET endpoints ======
+
+        (&Method::GET, ["governance", "config"]) => {
+            json_response(
+                StatusCode::OK,
+                &serde_json::json!({
+                    "min_stake_to_propose": ultradag_coin::constants::MIN_STAKE_TO_PROPOSE,
+                    "min_stake_to_propose_udag": ultradag_coin::constants::MIN_STAKE_TO_PROPOSE as f64 / 100_000_000.0,
+                    "voting_period_rounds": ultradag_coin::constants::GOVERNANCE_VOTING_PERIOD_ROUNDS,
+                    "quorum_percent": (ultradag_coin::constants::GOVERNANCE_QUORUM_NUMERATOR as f64 / ultradag_coin::constants::GOVERNANCE_QUORUM_DENOMINATOR as f64) * 100.0,
+                    "approval_percent": (ultradag_coin::constants::GOVERNANCE_APPROVAL_NUMERATOR as f64 / ultradag_coin::constants::GOVERNANCE_APPROVAL_DENOMINATOR as f64) * 100.0,
+                    "execution_delay_rounds": ultradag_coin::constants::GOVERNANCE_EXECUTION_DELAY_ROUNDS,
+                    "max_active_proposals": ultradag_coin::constants::MAX_ACTIVE_PROPOSALS,
+                }),
+            )
+        }
+
+        (&Method::GET, ["proposals"]) => {
+            let state = read_lock_or_503!(server.state);
+            let proposals: Vec<serde_json::Value> = state.proposals()
+                .values()
+                .map(|p| serde_json::json!({
+                    "id": p.id,
+                    "proposer": p.proposer.to_hex(),
+                    "title": p.title,
+                    "description": p.description,
+                    "proposal_type": p.proposal_type,
+                    "voting_starts": p.voting_starts,
+                    "voting_ends": p.voting_ends,
+                    "votes_for": p.votes_for,
+                    "votes_for_udag": p.votes_for as f64 / 100_000_000.0,
+                    "votes_against": p.votes_against,
+                    "votes_against_udag": p.votes_against as f64 / 100_000_000.0,
+                    "status": p.status,
+                }))
+                .collect();
+            json_response(StatusCode::OK, &serde_json::json!({
+                "count": proposals.len(),
+                "proposals": proposals,
+            }))
+        }
+
+        (&Method::GET, ["proposal", id_str]) => {
+            let Ok(id) = id_str.parse::<u64>() else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid proposal ID"));
+            };
+            let state = read_lock_or_503!(server.state);
+            let Some(p) = state.proposal(id) else {
+                return Ok(error_response(StatusCode::NOT_FOUND, "proposal not found"));
+            };
+            json_response(StatusCode::OK, &serde_json::json!({
+                "id": p.id,
+                "proposer": p.proposer.to_hex(),
+                "title": p.title,
+                "description": p.description,
+                "proposal_type": p.proposal_type,
+                "voting_starts": p.voting_starts,
+                "voting_ends": p.voting_ends,
+                "votes_for": p.votes_for,
+                "votes_for_udag": p.votes_for as f64 / 100_000_000.0,
+                "votes_against": p.votes_against,
+                "votes_against_udag": p.votes_against as f64 / 100_000_000.0,
+                "status": p.status,
+            }))
+        }
+
+        (&Method::GET, ["vote", id_str, addr_hex]) => {
+            let Ok(id) = id_str.parse::<u64>() else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid proposal ID"));
+            };
+            let Some(addr) = Address::from_hex(addr_hex) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address hex"));
+            };
+            let state = read_lock_or_503!(server.state);
+            let vote = state.get_vote(id, &addr);
+            json_response(StatusCode::OK, &serde_json::json!({
+                "proposal_id": id,
+                "voter": addr.to_hex(),
+                "vote": vote,
+            }))
         }
 
         _ => error_response(StatusCode::NOT_FOUND, "not found"),

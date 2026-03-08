@@ -20,6 +20,8 @@ pub fn create_block(
     let total_fees: u64 = txs.iter().map(|tx| {
         match tx {
             Transaction::Transfer(t) => t.fee,
+            Transaction::CreateProposal(t) => t.fee,
+            Transaction::Vote(t) => t.fee,
             Transaction::Stake(_) | Transaction::Unstake(_) => 0,
         }
     }).sum();

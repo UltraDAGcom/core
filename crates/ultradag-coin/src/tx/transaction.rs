@@ -2,14 +2,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::address::{Address, Signature};
 use crate::tx::{StakeTx, UnstakeTx};
+use crate::governance::{CreateProposalTx, VoteTx};
 
-/// Unified transaction type supporting transfers, staking, and unstaking.
+/// Unified transaction type supporting transfers, staking, unstaking, and governance.
 /// All variants go through consensus and are included in DAG vertices.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Transaction {
     Transfer(TransferTx),
     Stake(StakeTx),
     Unstake(UnstakeTx),
+    CreateProposal(CreateProposalTx),
+    Vote(VoteTx),
 }
 
 /// A transaction transferring UDAG from one address to another.
@@ -33,6 +36,8 @@ impl Transaction {
             Transaction::Transfer(tx) => tx.hash(),
             Transaction::Stake(tx) => tx.hash(),
             Transaction::Unstake(tx) => tx.hash(),
+            Transaction::CreateProposal(tx) => tx.hash(),
+            Transaction::Vote(tx) => tx.hash(),
         }
     }
 
@@ -42,6 +47,8 @@ impl Transaction {
             Transaction::Transfer(tx) => tx.verify_signature(),
             Transaction::Stake(tx) => tx.verify_signature(),
             Transaction::Unstake(tx) => tx.verify_signature(),
+            Transaction::CreateProposal(tx) => tx.verify_signature(),
+            Transaction::Vote(tx) => tx.verify_signature(),
         }
     }
 
@@ -51,6 +58,8 @@ impl Transaction {
             Transaction::Transfer(tx) => tx.from,
             Transaction::Stake(tx) => tx.from,
             Transaction::Unstake(tx) => tx.from,
+            Transaction::CreateProposal(tx) => tx.from,
+            Transaction::Vote(tx) => tx.from,
         }
     }
 
@@ -60,6 +69,8 @@ impl Transaction {
             Transaction::Transfer(tx) => tx.nonce,
             Transaction::Stake(tx) => tx.nonce,
             Transaction::Unstake(tx) => tx.nonce,
+            Transaction::CreateProposal(tx) => tx.nonce,
+            Transaction::Vote(tx) => tx.nonce,
         }
     }
 
@@ -67,6 +78,8 @@ impl Transaction {
     pub fn fee(&self) -> u64 {
         match self {
             Transaction::Transfer(tx) => tx.fee,
+            Transaction::CreateProposal(tx) => tx.fee,
+            Transaction::Vote(tx) => tx.fee,
             Transaction::Stake(_) | Transaction::Unstake(_) => 0,
         }
     }
@@ -76,7 +89,9 @@ impl Transaction {
         match self {
             Transaction::Transfer(tx) => tx.amount,
             Transaction::Stake(tx) => tx.amount,
-            Transaction::Unstake(_) => 0,
+            Transaction::Unstake(_)
+            | Transaction::CreateProposal(_)
+            | Transaction::Vote(_) => 0,
         }
     }
 
@@ -84,7 +99,10 @@ impl Transaction {
     pub fn to(&self) -> Option<Address> {
         match self {
             Transaction::Transfer(tx) => Some(tx.to),
-            Transaction::Stake(_) | Transaction::Unstake(_) => None,
+            Transaction::Stake(_)
+            | Transaction::Unstake(_)
+            | Transaction::CreateProposal(_)
+            | Transaction::Vote(_) => None,
         }
     }
 
@@ -94,6 +112,8 @@ impl Transaction {
             Transaction::Transfer(tx) => tx.pub_key,
             Transaction::Stake(tx) => tx.pub_key,
             Transaction::Unstake(tx) => tx.pub_key,
+            Transaction::CreateProposal(tx) => tx.pub_key,
+            Transaction::Vote(tx) => tx.pub_key,
         }
     }
 
@@ -103,6 +123,8 @@ impl Transaction {
             Transaction::Transfer(tx) => tx.signable_bytes(),
             Transaction::Stake(tx) => tx.signable_bytes(),
             Transaction::Unstake(tx) => tx.signable_bytes(),
+            Transaction::CreateProposal(tx) => tx.signable_bytes(),
+            Transaction::Vote(tx) => tx.signable_bytes(),
         }
     }
 
@@ -111,6 +133,8 @@ impl Transaction {
         match self {
             Transaction::Transfer(tx) => tx.total_cost(),
             Transaction::Stake(tx) => tx.amount,
+            Transaction::CreateProposal(tx) => tx.fee,
+            Transaction::Vote(tx) => tx.fee,
             Transaction::Unstake(_) => 0,
         }
     }

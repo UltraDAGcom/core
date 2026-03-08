@@ -38,6 +38,8 @@ impl Mempool {
                 .map(|(h, t)| {
                     let fee = match t {
                         Transaction::Transfer(tx) => tx.fee,
+                        Transaction::CreateProposal(tx) => tx.fee,
+                        Transaction::Vote(tx) => tx.fee,
                         Transaction::Stake(_) | Transaction::Unstake(_) => 0,
                     };
                     (*h, fee)
@@ -46,6 +48,8 @@ impl Mempool {
             {
                 let new_fee = match &tx {
                     Transaction::Transfer(tx) => tx.fee,
+                    Transaction::CreateProposal(tx) => tx.fee,
+                    Transaction::Vote(tx) => tx.fee,
                     Transaction::Stake(_) | Transaction::Unstake(_) => 0,
                 };
                 // Only evict if new transaction has higher fee
@@ -74,10 +78,14 @@ impl Mempool {
         txs.sort_by(|a, b| {
             let fee_a = match a {
                 Transaction::Transfer(tx) => tx.fee,
+                Transaction::CreateProposal(tx) => tx.fee,
+                Transaction::Vote(tx) => tx.fee,
                 Transaction::Stake(_) | Transaction::Unstake(_) => 0,
             };
             let fee_b = match b {
                 Transaction::Transfer(tx) => tx.fee,
+                Transaction::CreateProposal(tx) => tx.fee,
+                Transaction::Vote(tx) => tx.fee,
                 Transaction::Stake(_) | Transaction::Unstake(_) => 0,
             };
             fee_b.cmp(&fee_a)

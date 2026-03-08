@@ -18,6 +18,12 @@ pub struct StateSnapshot {
     pub current_epoch: u64,
     pub total_supply: u64,
     pub last_finalized_round: Option<u64>,
+    #[serde(default)]
+    pub proposals: Vec<(u64, crate::governance::Proposal)>,
+    #[serde(default)]
+    pub votes: Vec<((u64, Address), bool)>,
+    #[serde(default)]
+    pub next_proposal_id: u64,
 }
 
 impl StateSnapshot {

@@ -159,6 +159,9 @@ fn test_07_state_root_is_deterministic() {
         current_epoch: 0,
         total_supply: 1_000_000,
         last_finalized_round: Some(100),
+        proposals: vec![],
+        votes: vec![],
+        next_proposal_id: 0,
     };
 
     let snapshot2 = StateSnapshot {
@@ -168,6 +171,9 @@ fn test_07_state_root_is_deterministic() {
         current_epoch: 0,
         total_supply: 1_000_000,
         last_finalized_round: Some(100),
+        proposals: vec![],
+        votes: vec![],
+        next_proposal_id: 0,
     };
 
     let root1 = compute_state_root(&snapshot1);

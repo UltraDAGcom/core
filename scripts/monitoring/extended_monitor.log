@@ -1,0 +1,14 @@
+=== UltraDAG Extended Monitoring Started ===
+Duration: 24 hours
+Interval: 300 seconds (5 minutes)
+Start time: Sun Mar  8 19:16:10 +04 2026
+
+[2026-03-08 19:16:10] Sample #1
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: round=  99 fin=  81 lag=18 peers=25 supply=2,055,600 [HIGH_LAG] ⚠️
+NODE2:ROUND:99
+NODE2:SUPPLY:2055600
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: round= 104 fin=  92 lag=12 peers=26 supply=2,056,950 [HIGH_LAG] ⚠️
+NODE4:ROUND:104
+NODE4:SUPPLY:2056950

@@ -178,6 +178,12 @@ impl BlockDag {
             return Ok(false);
         }
 
+        // Reject vertices claiming rounds too far in the future
+        const MAX_FUTURE_ROUNDS: u64 = 10;
+        if vertex.round > self.current_round + MAX_FUTURE_ROUNDS {
+            return Ok(false);
+        }
+
         // Reject vertices with timestamps too far in the future (>5 minutes)
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

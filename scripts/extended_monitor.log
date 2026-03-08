@@ -1,167 +1,195 @@
-=== UltraDAG Extended Monitoring Started ===
-Duration: 24 hours
-Interval: 300 seconds (5 minutes)
-Start time: Sun Mar  8 13:15:19 +04 2026
+[2026-03-08 18:48:30] Sample #85
+  Node 1: round=1045 fin=1045 lag= 0 peers=11 supply=2,276,400 ✅
+  Node 2: round=1046 fin=1045 lag= 1 peers=14 supply=2,276,400 ✅
+  Node 3: round=1046 fin= 109 lag=937 peers=15 supply=2,276,450 [HIGH_LAG] ⚠️
+  Node 4: round=1046 fin= 109 lag=937 peers=17 supply=2,276,450 [HIGH_LAG] ⚠️
+  Round 1045: 5 vertices ✅
 
-[2026-03-08 13:15:19] Sample #1
-  Node 1: round=1089 fin=1089 lag= 0 peers= 8 supply=2,240,300 ✅
-NODE1:ROUND:1089
-NODE1:SUPPLY:2240300
-  Node 2: round=1089 fin=1089 lag= 0 peers= 7 supply=2,240,300 ✅
-NODE2:ROUND:1089
-NODE2:SUPPLY:2240300
-  Node 3: round=1089 fin=1089 lag= 0 peers=12 supply=2,240,300 ✅
-NODE3:ROUND:1089
-NODE3:SUPPLY:2240300
-  Node 4: round=1090 fin=1089 lag= 1 peers=11 supply=2,240,450 ✅
-NODE4:ROUND:1090
-NODE4:SUPPLY:2240450
-  Round 1089: 4 vertices ✅
+[2026-03-08 18:53:32] Sample #86
+  Node 1: round=1167 fin=1166 lag= 1 peers=11 supply=2,308,200 ✅
+  Node 2: round=1167 fin=1166 lag= 1 peers=12 supply=2,308,200 ✅
+  Node 3: round=1167 fin=1166 lag= 1 peers=14 supply=2,308,200 ✅
+  Node 4: CRASHED or UNREACHABLE ❌
+  Round 1170: 4 vertices ✅
 
-[2026-03-08 13:17:11] Sample #66
-  Node 1: round=1134 fin=1133 lag= 1 peers= 8 supply=2,248,150 ✅
-  Node 2: round=1134 fin=1133 lag= 1 peers= 7 supply=2,248,150 ✅
-  Node 3: round=1134 fin=1133 lag= 1 peers=12 supply=2,248,150 ✅
-  Node 4: round=1134 fin=1133 lag= 1 peers=11 supply=2,248,150 ✅
-  Round 1133: 4 vertices ✅
-
-[2026-03-08 13:20:23] Sample #2
-  Node 1: round=1211 fin=1210 lag= 1 peers= 8 supply=2,261,550 ✅
-NODE1:ROUND:1211
-NODE1:SUPPLY:2261550
-  Node 2: round=1211 fin=1210 lag= 1 peers= 7 supply=2,261,550 ✅
-NODE2:ROUND:1211
-NODE2:SUPPLY:2261550
-  Node 3: round=1211 fin=1210 lag= 1 peers=12 supply=2,261,550 ✅
-NODE3:ROUND:1211
-NODE3:SUPPLY:2261550
-  Node 4: round=1211 fin=1210 lag= 1 peers=11 supply=2,261,550 ✅
-NODE4:ROUND:1211
-NODE4:SUPPLY:2261550
-  Round 1210: 3 vertices ✅
-
-[2026-03-08 13:22:13] Sample #67
-  Node 1: round=1255 fin=1254 lag= 1 peers= 8 supply=2,269,250 ✅
-  Node 2: round=1255 fin=1254 lag= 1 peers= 7 supply=2,269,250 ✅
-  Node 3: round=1255 fin=1254 lag= 1 peers=12 supply=2,269,250 ✅
-  Node 4: round=1255 fin=1254 lag= 1 peers=11 supply=2,269,250 ✅
-  Round 1254: 3 vertices ✅
-
-[2026-03-08 13:25:25] Sample #3
-  Node 1: round=1331 fin=1331 lag= 0 peers= 8 supply=2,282,700 ✅
-NODE1:ROUND:1331
-NODE1:SUPPLY:2282700
-  Node 2: round=1331 fin=1331 lag= 0 peers= 7 supply=2,282,700 ✅
-NODE2:ROUND:1331
-NODE2:SUPPLY:2282700
-  Node 3: round=1332 fin=1331 lag= 1 peers=12 supply=2,282,750 ✅
-NODE3:ROUND:1332
-NODE3:SUPPLY:2282750
-  Node 4: round=1332 fin=1331 lag= 1 peers=11 supply=2,282,850 ✅
-NODE4:ROUND:1332
-NODE4:SUPPLY:2282850
-  Round 1332: 3 vertices ✅
-
-[2026-03-08 13:27:16] Sample #68
-  Node 1: round=1376 fin=1375 lag= 1 peers= 8 supply=2,290,550 ✅
-  Node 2: round=1376 fin=1375 lag= 1 peers= 7 supply=2,290,550 ✅
-  Node 3: round=1376 fin=1375 lag= 1 peers=12 supply=2,290,550 ✅
-  Node 4: round=1376 fin=1375 lag= 1 peers=11 supply=2,290,550 ✅
-  Round 1376: 3 vertices ✅
-
-[2026-03-08 13:30:29] Sample #4
-  Node 1: round=1455 fin=1454 lag= 1 peers= 8 supply=2,304,050 ✅
-NODE1:ROUND:1455
-NODE1:SUPPLY:2304050
-  Node 2: round=1455 fin=1454 lag= 1 peers= 7 supply=2,304,050 ✅
-NODE2:ROUND:1455
-NODE2:SUPPLY:2304050
-  Node 3: round=1456 fin=1455 lag= 1 peers=12 supply=2,304,250 ✅
-NODE3:ROUND:1456
-NODE3:SUPPLY:2304250
-  Node 4: round=1457 fin=1457 lag= 0 peers=11 supply=2,304,500 ✅
-NODE4:ROUND:1457
-NODE4:SUPPLY:2304500
-  Round 1456: 3 vertices ✅
-
-[2026-03-08 13:32:19] Sample #69
-  Node 1: round=1499 fin=1498 lag= 1 peers= 8 supply=2,311,750 ✅
-  Node 2: round=1499 fin=1498 lag= 1 peers= 7 supply=2,311,750 ✅
-  Node 3: round=1499 fin=1498 lag= 1 peers=12 supply=2,311,750 ✅
-  Node 4: round=1499 fin=1498 lag= 1 peers=11 supply=2,311,750 ✅
-  Round 1498: 3 vertices ✅
-
-[2026-03-08 13:35:36] Sample #5
-  Node 1: round=1578 fin=1577 lag= 1 peers= 8 supply=2,325,650 ✅
-NODE1:ROUND:1578
-NODE1:SUPPLY:2325650
-  Node 2: round=1578 fin=1577 lag= 1 peers= 7 supply=2,325,650 ✅
-NODE2:ROUND:1578
-NODE2:SUPPLY:2325650
-  Node 3: round=1579 fin=1578 lag= 1 peers=12 supply=2,325,750 ✅
-NODE3:ROUND:1579
-NODE3:SUPPLY:2325750
-  Node 4: round=1579 fin=1578 lag= 1 peers=11 supply=2,325,750 ✅
-NODE4:ROUND:1579
-NODE4:SUPPLY:2325750
-  Round 1578: 3 vertices ✅
-
-[2026-03-08 13:37:22] Sample #70
-  Node 1: round=1620 fin=1619 lag= 1 peers= 8 supply=2,333,050 ✅
-  Node 2: round=1621 fin=1620 lag= 1 peers= 7 supply=2,333,150 ✅
-  Node 3: round=1621 fin=1620 lag= 1 peers=12 supply=2,333,150 ✅
-  Node 4: round=1621 fin=1620 lag= 1 peers=11 supply=2,333,150 ✅
-  Round 1620: 3 vertices ✅
-
-[2026-03-08 13:40:42] Sample #6
-  Node 1: round=1700 fin=1699 lag= 1 peers= 8 supply=2,347,050 ✅
-NODE1:ROUND:1700
-NODE1:SUPPLY:2347050
-  Node 2: round=1700 fin=1699 lag= 1 peers= 7 supply=2,347,050 ✅
-NODE2:ROUND:1700
-NODE2:SUPPLY:2347050
-  Node 3: round=1701 fin=1699 lag= 2 peers=12 supply=2,347,050 ✅
-NODE3:ROUND:1701
-NODE3:SUPPLY:2347050
-  Node 4: round=1701 fin=1699 lag= 2 peers=11 supply=2,347,050 ✅
-NODE4:ROUND:1701
-NODE4:SUPPLY:2347050
-  Round 1700: 3 vertices ✅
-
-[2026-03-08 13:42:26] Sample #71
-  Node 1: round=1743 fin=1742 lag= 1 peers= 8 supply=2,354,550 ✅
-  Node 2: round=1743 fin=1742 lag= 1 peers= 7 supply=2,354,550 ✅
-  Node 3: round=1743 fin=1742 lag= 1 peers=12 supply=2,354,550 ✅
-  Node 4: round=1744 fin=1743 lag= 1 peers=11 supply=2,354,750 ✅
-  Round 1743: 4 vertices ✅
-
-[2026-03-08 15:29:28] Sample #7
+[2026-03-08 18:58:44] Sample #87
   Node 1: CRASHED or UNREACHABLE ❌
   Node 2: CRASHED or UNREACHABLE ❌
   Node 3: CRASHED or UNREACHABLE ❌
   Node 4: CRASHED or UNREACHABLE ❌
-[2026-03-08 16:47:01] Sample #72
+  Round 1302: 1 vertices ⚠️
+
+[2026-03-08 19:04:26] Sample #88
+  Node 1: round=1418 fin= 190 lag=1228 peers=10 supply=2,332,050 [HIGH_LAG] ⚠️
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: CRASHED or UNREACHABLE ❌
+  Round 1428: 2 vertices ⚠️
+
+[2026-03-08 19:09:57] Sample #89
   Node 1: CRASHED or UNREACHABLE ❌
   Node 2: CRASHED or UNREACHABLE ❌
   Node 3: CRASHED or UNREACHABLE ❌
   Node 4: CRASHED or UNREACHABLE ❌
 
-[2026-03-08 17:16:29] Sample #73
+[2026-03-08 19:16:13] Sample #90
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: round= 100 fin=  81 lag=19 peers=25 supply=2,055,600 [HIGH_LAG] ⚠️
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: round= 104 fin=  92 lag=12 peers=26 supply=2,056,950 [HIGH_LAG] ⚠️
+
+[2026-03-08 19:22:17] Sample #91
   Node 1: CRASHED or UNREACHABLE ❌
   Node 2: CRASHED or UNREACHABLE ❌
   Node 3: CRASHED or UNREACHABLE ❌
   Node 4: CRASHED or UNREACHABLE ❌
 
+[2026-03-08 19:28:33] Sample #92
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: CRASHED or UNREACHABLE ❌
+  Round 68: 1 vertices ⚠️
 
-[2026-03-08 17:22:47] Sample #74
+[2026-03-08 19:34:05] Sample #93
   Node 1: CRASHED or UNREACHABLE ❌
   Node 2: CRASHED or UNREACHABLE ❌
   Node 3: CRASHED or UNREACHABLE ❌
   Node 4: CRASHED or UNREACHABLE ❌
-[2026-03-08 17:23:29] Sample #8
+
+[2026-03-08 19:41:06] Sample #94
   Node 1: CRASHED or UNREACHABLE ❌
   Node 2: CRASHED or UNREACHABLE ❌
   Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: round= 108 fin=  78 lag=30 peers=21 supply=2,055,600 [HIGH_LAG] ⚠️
 
+[2026-03-08 19:47:17] Sample #95
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
   Node 4: CRASHED or UNREACHABLE ❌
+
+[2026-03-08 19:53:34] Sample #96
+  Node 1: round= 101 fin=  77 lag=24 peers=20 supply=2,058,650 [HIGH_LAG] ⚠️
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: CRASHED or UNREACHABLE ❌
+
+[2026-03-08 19:59:42] Sample #97
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: round=  78 fin=  68 lag=10 peers=16 supply=2,055,600 ✅
+  Round -1: 1 vertices ⚠️
+
+[2026-03-08 20:05:38] Sample #98
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: round=  97 fin=  78 lag=19 peers=10 supply=2,056,250 [HIGH_LAG] ⚠️
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: round=  96 fin=  76 lag=20 peers= 8 supply=2,056,050 [HIGH_LAG] ⚠️
+
+[2026-03-08 20:11:40] Sample #99
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Round -1: 1 vertices ⚠️
+
+[2026-03-08 20:17:12] Sample #100
+  Node 1: round= 104 fin=  78 lag=26 peers=24 supply=2,057,050 [HIGH_LAG] ⚠️
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: CRASHED or UNREACHABLE ❌
+
+[2026-03-08 20:25:19] Sample #101
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: CRASHED or UNREACHABLE ❌
+
+[2026-03-08 20:31:37] Sample #102
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: round=  97 fin=  76 lag=21 peers=11 supply=2,056,300 [HIGH_LAG] ⚠️
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: round=  97 fin=  76 lag=21 peers=11 supply=2,056,300 [HIGH_LAG] ⚠️
+
+[2026-03-08 20:38:59] Sample #103
+  Node 1: round=  89 fin=  68 lag=21 peers=13 supply=2,053,900 [HIGH_LAG] ⚠️
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: Parse error - 'dag_round'
+  Node 4: CRASHED or UNREACHABLE ❌
+  Round 93: 1 vertices ⚠️
+
+[2026-03-08 20:44:53] Sample #104
+  Node 1: round=  96 fin=  76 lag=20 peers=20 supply=2,056,850 [HIGH_LAG] ⚠️
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: round= 103 fin=  76 lag=27 peers=14 supply=2,056,850 [HIGH_LAG] ⚠️
+  Round 95: 1 vertices ⚠️
+
+[2026-03-08 20:50:28] Sample #105
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Round -1: 1 vertices ⚠️
+
+[2026-03-08 20:55:46] Sample #106
+  Node 1: round=  90 fin=  77 lag=13 peers=21 supply=2,055,600 [HIGH_LAG] ⚠️
+  Node 2: round= 108 fin=  77 lag=31 peers=20 supply=2,055,600 [HIGH_LAG] ⚠️
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: round= 125 fin=  76 lag=49 peers=17 supply=2,055,500 [HIGH_LAG] ⚠️
+  Round 90: 1 vertices ⚠️
+
+[2026-03-08 21:01:05] Sample #107
+  Node 1: Parse error - 'dag_round'
+  Node 2: round=  70 fin=  68 lag= 2 peers= 9 supply=2,057,100 ✅
+  Node 3: round=  34 fin=  11 lag=23 peers=10 supply=2,054,200 [HIGH_LAG] ⚠️
+  Node 4: round= 100 fin=  68 lag=32 peers=10 supply=2,057,100 [HIGH_LAG] ⚠️
+
+[2026-03-08 21:06:13] Sample #108
+  Node 1: round= 126 fin=  97 lag=29 peers=10 supply=2,057,400 [HIGH_LAG] ⚠️
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: round= 127 fin=  85 lag=42 peers= 7 supply=2,056,000 [HIGH_LAG] ⚠️
+
+[2026-03-08 21:11:51] Sample #109
+  Node 1: round= 133 fin=  91 lag=42 peers= 8 supply=2,057,100 [HIGH_LAG] ⚠️
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: round= 197 fin= 101 lag=96 peers= 8 supply=2,058,500 [HIGH_LAG] ⚠️
+  Round 137: 1 vertices ⚠️
+
+[2026-03-08 21:17:15] Sample #110
+  Node 1: round=  12 fin=  12 lag= 0 peers=12 supply=2,051,000 ✅
+  Node 2: round=  12 fin=  12 lag= 0 peers=13 supply=2,051,000 ✅
+  Node 3: round=  12 fin=  12 lag= 0 peers= 9 supply=2,051,000 ✅
+  Node 4: round=  12 fin=  12 lag= 0 peers=10 supply=2,051,000 ✅
+  Round 11: 1 vertices ⚠️
+
+[2026-03-08 21:22:17] Sample #111
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: round=  76 fin=  53 lag=23 peers=13 supply=2,058,250 [HIGH_LAG] ⚠️
+  Node 3: round=  74 fin=  52 lag=22 peers= 9 supply=2,058,250 [HIGH_LAG] ⚠️
+  Node 4: round=  63 fin=  53 lag=10 peers=10 supply=2,058,250 ✅
+
+[2026-03-08 21:43:23] Sample #112
+  Node 1: Parse error - 'dag_round'
+  Node 2: round=  64 fin=  56 lag= 8 peers= 5 supply=2,054,200 ✅
+  Node 3: round=  64 fin=  56 lag= 8 peers= 7 supply=2,054,200 ✅
+  Node 4: round=  64 fin=  56 lag= 8 peers= 7 supply=2,054,200 ✅
+
+[2026-03-08 21:48:32] Sample #113
+  Node 1: Parse error - 'dag_round'
+  Node 2: Parse error - 'dag_round'
+  Node 3: round= 123 fin=  73 lag=50 peers= 3 supply=2,055,000 [HIGH_LAG] ⚠️
+  Node 4: round=  73 fin=  72 lag= 1 peers= 3 supply=2,054,950 ✅
+  Round 72: 1 vertices ⚠️
+
+[2026-03-08 21:53:42] Sample #114
+  Node 1: round= 236 fin= 235 lag= 1 peers= 3 supply=2,081,650 ✅
+  Node 2: round= 236 fin= 235 lag= 1 peers= 3 supply=2,081,750 ✅
+  Node 3: round= 236 fin= 235 lag= 1 peers= 3 supply=2,081,750 ✅
+  Node 4: round= 236 fin= 235 lag= 1 peers= 3 supply=2,081,750 ✅
+  Round 235: 4 vertices ✅
 
