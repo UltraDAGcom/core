@@ -316,7 +316,9 @@ async fn main() {
     let rpc_port = args.rpc_port.unwrap_or(args.port + 1000);
     let rpc_server = server.clone();
     tokio::spawn(async move {
+        info!("Starting RPC server on port {}...", rpc_port);
         rpc::start_rpc(rpc_server, rpc_port).await;
+        error!("RPC server task exited unexpectedly!");
     });
 
     // Determine seed peers: explicit --seed, bootstrap nodes, or none
