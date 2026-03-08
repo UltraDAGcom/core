@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 /// Rate limiter for protecting RPC endpoints from abuse
 #[derive(Clone)]
 pub struct RateLimiter {
-    /// Per-IP request tracking: IP -> (request_count, window_start)
-    ip_requests: Arc<DashMap<IpAddr, RwLock<(u32, Instant)>>>,
+    /// Per-(IP, endpoint) request tracking: (IP, endpoint) -> (request_count, window_start)
+    ip_requests: Arc<DashMap<(IpAddr, &'static str), RwLock<(u32, Instant)>>>,
     /// Global connection counter
     active_connections: Arc<RwLock<u32>>,
 }
@@ -16,13 +16,15 @@ pub struct RateLimiter {
 /// Rate limit configuration per endpoint
 #[derive(Debug, Clone, Copy)]
 pub struct RateLimit {
+    pub name: &'static str,
     pub requests_per_window: u32,
     pub window_duration: Duration,
 }
 
 impl RateLimit {
-    pub const fn new(requests: u32, seconds: u64) -> Self {
+    pub const fn new(name: &'static str, requests: u32, seconds: u64) -> Self {
         Self {
+            name,
             requests_per_window: requests,
             window_duration: Duration::from_secs(seconds),
         }
@@ -33,12 +35,12 @@ impl RateLimit {
 pub mod limits {
     use super::*;
 
-    pub const TX: RateLimit = RateLimit::new(10, 60);           // 10 tx/min
-    pub const FAUCET: RateLimit = RateLimit::new(1, 600);       // 1 faucet/10min
-    pub const STAKE: RateLimit = RateLimit::new(5, 60);         // 5 stake/min
-    pub const UNSTAKE: RateLimit = RateLimit::new(5, 60);       // 5 unstake/min
-    pub const GLOBAL: RateLimit = RateLimit::new(100, 60);      // 100 total/min
-    
+    pub const TX: RateLimit = RateLimit::new("tx", 10, 60);           // 10 tx/min
+    pub const FAUCET: RateLimit = RateLimit::new("faucet", 1, 600);   // 1 faucet/10min
+    pub const STAKE: RateLimit = RateLimit::new("stake", 5, 60);      // 5 stake/min
+    pub const UNSTAKE: RateLimit = RateLimit::new("unstake", 5, 60);  // 5 unstake/min
+    pub const GLOBAL: RateLimit = RateLimit::new("global", 100, 60);  // 100 total/min
+
     pub const MAX_CONCURRENT_CONNECTIONS: u32 = 1000;
 }
 
@@ -53,9 +55,10 @@ impl RateLimiter {
     /// Check if request is allowed under rate limit
     pub fn check_rate_limit(&self, ip: IpAddr, limit: RateLimit) -> bool {
         let now = Instant::now();
-        
-        // Get or create entry for this IP
-        let entry = self.ip_requests.entry(ip).or_insert_with(|| RwLock::new((0, now)));
+        let key = (ip, limit.name);
+
+        // Get or create entry for this (IP, endpoint) pair
+        let entry = self.ip_requests.entry(key).or_insert_with(|| RwLock::new((0, now)));
         let mut data = entry.write();
         
         // Reset window if expired
@@ -94,7 +97,7 @@ impl RateLimiter {
     /// Cleanup expired entries (call periodically)
     pub fn cleanup_expired(&self) {
         let now = Instant::now();
-        self.ip_requests.retain(|_, data| {
+        self.ip_requests.retain(|_key, data| {
             let guard = data.read();
             now.duration_since(guard.1) < Duration::from_secs(600) // Keep for 10 min
         });
@@ -116,7 +119,7 @@ mod tests {
     fn test_rate_limit_allows_under_limit() {
         let limiter = RateLimiter::new();
         let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-        let limit = RateLimit::new(5, 60);
+        let limit = RateLimit::new("test", 5, 60);
 
         for _ in 0..5 {
             assert!(limiter.check_rate_limit(ip, limit));
@@ -127,12 +130,28 @@ mod tests {
     fn test_rate_limit_blocks_over_limit() {
         let limiter = RateLimiter::new();
         let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-        let limit = RateLimit::new(3, 60);
+        let limit = RateLimit::new("test", 3, 60);
 
         for _ in 0..3 {
             assert!(limiter.check_rate_limit(ip, limit));
         }
         assert!(!limiter.check_rate_limit(ip, limit));
+    }
+
+    #[test]
+    fn test_different_endpoints_have_separate_limits() {
+        let limiter = RateLimiter::new();
+        let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+
+        // Use up the "global" limit
+        let global = RateLimit::new("global", 2, 60);
+        assert!(limiter.check_rate_limit(ip, global));
+        assert!(limiter.check_rate_limit(ip, global));
+        assert!(!limiter.check_rate_limit(ip, global));
+
+        // "faucet" should still be allowed (separate bucket)
+        let faucet = RateLimit::new("faucet", 1, 600);
+        assert!(limiter.check_rate_limit(ip, faucet));
     }
 
     #[test]
