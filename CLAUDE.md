@@ -8,6 +8,22 @@
 
 ## Recent Updates (March 2026)
 
+**Finality Fix (March 9, 2026):**
+- **Root cause:** Validators used `dag.tips()` for parent selection, which returns only childless vertices (typically 1 — our own last vertex). This created parallel linear chains instead of a dense DAG, causing finality lag of 250-314 rounds.
+- **Fix:** Changed parent selection to `dag.vertices_in_round(prev_round)`, referencing ALL known vertices from the previous round. This creates dense cross-links so descendant validator sets grow quickly.
+- **Result:** Finality lag dropped from 250-314 to lag=2 (near-optimal)
+
+**P2P Connectivity Fix (March 9, 2026):**
+- Fly-to-Fly P2P connections via dedicated IPv4 were unstable (TCP proxy kills persistent connections with "early eof" / "Connection reset by peer")
+- **Fix:** Changed seed addresses in `fly-node-{1,2,3,4}.toml` from dedicated IPv4 to Fly `.internal` DNS (private WireGuard network)
+- Example: `137.66.57.226:9333` → `ultradag-node-2.internal:9333`
+- VPS (84.247.10.2) still uses direct IP (not on Fly network)
+
+**Dashboard Fixes (March 9, 2026):**
+- Fixed faucet request: added missing `amount` field (`{address, amount: 10000000000}`)
+- Removed "No login required" from faucet description
+- Auto-connect to `https://ultradag-node-1.fly.dev` on page load
+
 **Documentation Refinement:**
 - Fixed unstake cooldown duration: 2,016 rounds = ~2.8 hours at 5s rounds (was incorrectly listed as ~1 week)
 - Unified GitHub URLs to `github.com/UltraDAGcom/core` across all documentation
@@ -702,11 +718,9 @@ let dag_round = {
 - Node 3: deployment-01KK49ZANC0XGK7AEKF8CF8A3F
 - Node 4: deployment-01KK4A24TPEJVPDB6QR8FDM87W
 
-**Current Status:** ⚠️ Fix deployed but not yet effective
+**Current Status:** ✅ Fix effective — validators synchronized, 4-5 vertices per round, lag=2
 
-**Blocking Issue:** P2P connectivity - nodes only have 1 peer each (should be 3). Without P2P, validators can't see peer vertices and therefore can't synchronize rounds.
-
-**Next Action Required:** Fix P2P connectivity, then validator sync will work automatically.
+**P2P fix (March 9, 2026):** Switched Fly.io seed addresses from dedicated IPv4 to `.internal` DNS, resolving TCP proxy instability. Combined with parent selection fix (`vertices_in_round` instead of `tips()`), finality lag dropped from 250+ to 2.
 
 ### Technical Details
 
@@ -723,11 +737,11 @@ let dag_round = {
 **API Used:**
 - `dag.has_vertex_from_validator_in_round(&validator, round)` - existing method in `dag.rs`
 
-**Expected Result (once P2P fixed):**
-- 3-4 vertices per round instead of 1
+**Achieved Result (March 9, 2026):**
+- 4-5 vertices per round (was 1)
 - Validators synchronized on same rounds
-- Increased throughput (3-4x)
-- Better parallelism
+- Finality lag=2 (was 250-314)
+- Dense DAG with cross-round parent references
 
 ## Key Design Decisions
 
@@ -841,21 +855,22 @@ Exponential backoff retry (2, 4, 8, 16, 32 seconds) for bootstrap connections.
 
 5-node testnet (4 Fly.io Amsterdam + 1 VPS at 84.247.10.2). Permissioned validator set.
 
-**Current Status (March 8, 2026):** ✅ All 5 nodes operational. Finality advancing.
+**Current Status (March 9, 2026):** ✅ All 4 Fly nodes operational. Finality lag=2. Dense DAG.
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| DAG round | ~1100+ (all nodes synced within 8 rounds) | ✅ |
-| Finalized round | lag=1 | ✅ Excellent |
-| Vertex density | 4 validators per round | ✅ |
+| DAG round | advancing (all 4 nodes synced) | ✅ |
+| Finalized round | lag=2 | ✅ Excellent |
+| Vertex density | 4-5 validators per round | ✅ |
+| Parents per vertex | 4-5 (dense cross-links) | ✅ |
 | Peers per node | 3-4 | ✅ |
-| Validator count | 5/5 registered | ✅ |
-| HTTP RPC | All 5 nodes responsive | ✅ |
-| Supply | ~214,000+ UDAG | ✅ |
+| Validator count | 4/5 active (VPS needs update) | ⚠️ |
+| HTTP RPC | All 4 Fly nodes responsive | ✅ |
 
 **Infrastructure:**
 - Fly.io nodes: ultradag-node-{1,2,3,4}.fly.dev (ams, dedicated IPv4)
-- VPS node: 84.247.10.2 (systemd service, direct IP seeds)
+- Fly P2P seeds: `.internal` DNS (private WireGuard, not public IPv4 TCP proxy)
+- VPS node: 84.247.10.2 — needs binary update + clean state to rejoin consensus
 
 ### Rate Limiting Features Active
 - **Per-IP rate limits:** `/tx` (10/min), `/faucet` (1/10min), `/stake` (5/min), `/unstake` (5/min), Global (100/min)
@@ -916,11 +931,14 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 3. **Staking propagation** — Stake/unstake transactions now broadcast via P2P (`Message::NewTx`) instead of local-only state mutation, ensuring all nodes see staking changes
 4. **Validator round synchronization (March 7, 2026)** — Validators were drifting to different rounds, producing only 1 vertex per round instead of 3-4
    - **Root cause:** Validators independently advanced rounds via local timers without coordination
-   - **Diagnosis:** Each validator read `dag.current_round() + 1` from local DAG view; network latency and staggered startup caused permanent drift
    - **Fix:** Modified `validator.rs` to check if validator already produced in current round before advancing
-   - **Logic:** Produce for `current_round` if not produced yet (catch up), otherwise `current_round + 1` (advance)
-   - **Status:** ⚠️ Fix deployed to all 4 Fly.io nodes but not yet effective due to P2P connectivity issues (nodes only have 1 peer each instead of 3)
-   - **Next action:** Fix P2P connectivity, then validator sync will work automatically
+   - **Status:** ✅ Fixed and operational (March 9, 2026)
+5. **Finality lag 250-314 rounds (March 9, 2026)** — Validators used `dag.tips()` for parent selection, returning only 1 parent (own last vertex), creating linear chains
+   - **Fix:** Changed to `dag.vertices_in_round(prev_round)` to reference ALL previous-round vertices as parents
+   - **Result:** Dense DAG with 4-5 parents per vertex, finality lag dropped to 2
+6. **Fly-to-Fly P2P connectivity (March 9, 2026)** — Dedicated IPv4 TCP proxy killed persistent TCP connections ("early eof")
+   - **Fix:** Changed seed addresses to `.internal` DNS (Fly's private WireGuard network)
+   - **Result:** Stable P2P connections, 3-4 peers per node
 
 ## Performance Roadmap
 

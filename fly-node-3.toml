@@ -9,9 +9,9 @@ primary_region = "ams"
   RPC_PORT = "10333"
   DATA_DIR = "/data"
   VALIDATORS = "5"
-  SEED = "206.51.242.223:9333 137.66.57.226:9333 169.155.55.151:9333 84.247.10.2:9333"
+  SEED = "ultradag-node-1.internal:9333 ultradag-node-2.internal:9333 ultradag-node-4.internal:9333 84.247.10.2:9333"
   NO_BOOTSTRAP = "true"
-  CLEAN_STATE = "true"
+  # CLEAN_STATE = "true"
 
 [mounts]
   source = "ultradag_data"
