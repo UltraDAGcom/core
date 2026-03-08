@@ -815,6 +815,36 @@ Exponential backoff retry (2, 4, 8, 16, 32 seconds) for bootstrap connections.
 
 **Current state:** Testnet running cleanly after restart. All 4 nodes healthy and synchronized. Ready for comprehensive testing and extended monitoring.
 
+### Bug Bounty Program (Launched March 8, 2026)
+
+**Status:** 🟢 Active  
+**Total Pool:** 500,000 UDAG (mainnet allocation)  
+**Rewards Distributed:** 0 UDAG (as of March 8, 2026)
+
+UltraDAG is offering rewards for security researchers who discover and responsibly disclose vulnerabilities in the testnet. All rewards are tracked in `BOUNTY_LEDGER.md` and will be honored with mainnet UDAG tokens at launch.
+
+**Reward Tiers:**
+- 🔴 **Critical:** 10,000 - 50,000 UDAG (consensus breaks, network-wide failures, cryptographic breaks)
+- 🟠 **High:** 5,000 - 10,000 UDAG (DoS attacks, resource exhaustion, staking exploits)
+- 🟡 **Medium:** 1,000 - 5,000 UDAG (RPC vulnerabilities, rate limiting bypass, mempool manipulation)
+- 🟢 **Low:** 100 - 1,000 UDAG (input validation, performance issues, minor bugs)
+
+**How it works:**
+1. **Immediate testnet reward:** Hunters receive testnet UDAG within 24h of validation
+2. **Mainnet promise:** Reward tracked in `BOUNTY_LEDGER.md` with binding commitment
+3. **Vesting:** 25% unlocked at mainnet launch, 75% vested over 12 months
+4. **Claim:** Prove testnet address ownership, receive mainnet tokens
+
+**Documentation:**
+- Full program details: `BUG_BOUNTY.md`
+- Security policy: `SECURITY.md`
+- Hunter's guide: `docs/BUG_BOUNTY_GUIDE.md`
+- Reward ledger: `BOUNTY_LEDGER.md`
+
+**Submission:** Use GitHub Security Advisories for private disclosure (90-day embargo).
+
+**Target areas:** Consensus mechanism, P2P networking, state engine, staking, RPC endpoints, cryptography, resource management.
+
 ### Bugs Fixed (March 2026)
 1. **Quorum threshold overflow** — `configured_validators` not used for min check, causing `usize::MAX` threshold on clean-state nodes
 2. **Stall recovery oscillation** — `consecutive_skips` reset to 0 after recovery, causing 3-skip/1-produce cycle instead of sustained production
