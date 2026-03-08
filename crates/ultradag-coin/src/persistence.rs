@@ -2,6 +2,8 @@ use std::fs;
 use std::path::Path;
 use serde::{Serialize, Deserialize};
 
+pub mod monotonicity;
+
 /// Persistence error types
 #[derive(Debug, thiserror::Error)]
 pub enum PersistenceError {
@@ -16,6 +18,14 @@ pub fn save<T: Serialize>(data: &T, path: &Path) -> Result<(), PersistenceError>
     let json = serde_json::to_string_pretty(data)?;
     let tmp_path = path.with_extension("tmp");
     fs::write(&tmp_path, json)?;
+    fs::rename(&tmp_path, path)?;
+    Ok(())
+}
+
+/// Atomic write of raw bytes (used by monotonicity module)
+pub fn atomic_write(path: &Path, data: &[u8]) -> std::io::Result<()> {
+    let tmp_path = path.with_extension("tmp");
+    fs::write(&tmp_path, data)?;
     fs::rename(&tmp_path, path)?;
     Ok(())
 }

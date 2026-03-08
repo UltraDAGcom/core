@@ -120,17 +120,65 @@ async fn save_state(server: &NodeServer, data_dir: &std::path::Path) {
 
 /// Load all node state from disk if available.
 async fn load_state(server: &NodeServer, data_dir: &std::path::Path) {
+    use ultradag_coin::persistence::monotonicity::HighWaterMark;
+    
     let dag_path = data_dir.join("dag.json");
     let finality_path = data_dir.join("finality.json");
     let state_path = data_dir.join("state.json");
     let mempool_path = data_dir.join("mempool.json");
+    let hwm_path = HighWaterMark::path_in_dir(data_dir);
 
     info!("Loading state from: {}", data_dir.display());
+
+    // Load high-water mark for monotonicity checking
+    let hwm = match HighWaterMark::load_or_create(&hwm_path) {
+        Ok(hwm) => {
+            if hwm.current_round() > 0 {
+                info!("High-water mark: round {}", hwm.current_round());
+            }
+            hwm
+        }
+        Err(e) => {
+            error!("Failed to load high-water mark: {}", e);
+            error!("Cannot verify state monotonicity. Refusing to start.");
+            std::process::exit(1);
+        }
+    };
 
     if BlockDag::exists(&dag_path) {
         match BlockDag::load(&dag_path) {
             Ok(dag) => {
                 let current_round = dag.current_round();
+                
+                // CRITICAL: Verify monotonicity - prevent rollback
+                if let Err(e) = hwm.verify_monotonic(current_round) {
+                    error!("╔═══════════════════════════════════════════════════════╗");
+                    error!("║  🚨 STATE ROLLBACK DETECTED - REFUSING TO START 🚨   ║");
+                    error!("╚═══════════════════════════════════════════════════════╝");
+                    error!("");
+                    error!("Error: {}", e);
+                    error!("High-water mark: round {}", hwm.current_round());
+                    error!("Attempting to load: round {}", current_round);
+                    error!("Rollback amount: {} rounds", hwm.current_round() - current_round);
+                    error!("");
+                    error!("This indicates you are trying to load an old state file.");
+                    error!("Loading old state would cause a network rollback.");
+                    error!("");
+                    error!("POSSIBLE CAUSES:");
+                    error!("1. Deployment with old Docker image");
+                    error!("2. Restored from old backup");
+                    error!("3. State file corruption");
+                    error!("");
+                    error!("MANUAL INTERVENTION REQUIRED:");
+                    error!("1. Verify the state file is correct");
+                    error!("2. Check deployment configuration");
+                    error!("3. Consider fast-sync from network");
+                    error!("");
+                    error!("DO NOT bypass this check unless you understand the consequences.");
+                    std::process::exit(1);
+                }
+                
+                info!("✅ Monotonicity check passed: round {}", current_round);
                 info!("Loaded DAG from disk: current_round={}", current_round);
                 *server.dag.write().await = dag;
             }

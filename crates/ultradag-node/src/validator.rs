@@ -251,6 +251,28 @@ pub async fn validator_loop(
                 if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
                     warn!("Failed to apply finalized vertices to state: {}", e);
                 } else {
+                    // Update high-water mark after successful finalization
+                    let last_finalized_round = state_w.last_finalized_round().unwrap_or(0);
+                    if last_finalized_round > 0 {
+                        use ultradag_coin::persistence::monotonicity::HighWaterMark;
+                        let hwm_path = HighWaterMark::path_in_dir(&data_dir);
+                        
+                        match HighWaterMark::load_or_create(&hwm_path) {
+                            Ok(mut hwm) => {
+                                let state_snapshot = state_w.snapshot();
+                                let state_hash = ultradag_coin::consensus::compute_state_root(&state_snapshot);
+                                hwm.update(last_finalized_round, state_hash);
+                                
+                                if let Err(e) = hwm.save(&hwm_path) {
+                                    warn!("Failed to save high-water mark: {}", e);
+                                }
+                            }
+                            Err(e) => {
+                                warn!("Failed to load high-water mark for update: {}", e);
+                            }
+                        }
+                    }
+                    
                     // Epoch transition: sync active validator set to FinalityTracker
                     if state_w.epoch_just_changed(prev_round) {
                         sync_epoch_validators(&mut fin, &state_w);
@@ -265,7 +287,6 @@ pub async fn validator_loop(
                     }
                     
                     // Checkpoint generation: produce checkpoint at CHECKPOINT_INTERVAL
-                    let last_finalized_round = state_w.last_finalized_round().unwrap_or(0);
                     if last_finalized_round > 0 && last_finalized_round % ultradag_coin::CHECKPOINT_INTERVAL == 0 {
                         let state_snapshot = state_w.snapshot();
                         let state_root = ultradag_coin::consensus::compute_state_root(&state_snapshot);
