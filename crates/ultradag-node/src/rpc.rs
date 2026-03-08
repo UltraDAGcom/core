@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::net::SocketAddr;
 
 use http_body_util::{BodyExt, Full};
 use hyper::body::{Bytes, Incoming};
@@ -8,15 +9,19 @@ use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use ultradag_coin::{Address, SecretKey, Signature, Transaction, TransferTx, StakeTx, UnstakeTx, MIN_STAKE_SATS};
 use ultradag_network::{Message, NodeServer};
+use crate::rate_limit::{RateLimiter, limits};
 
 type BoxBody = Full<Bytes>;
 
 /// Max transactions to scan in mempool for pending cost calculation
 const MAX_MEMPOOL_SCAN: usize = 10_000;
+
+/// Max request body size (1MB)
+const MAX_REQUEST_SIZE: usize = 1_048_576;
 
 fn json_response(status: StatusCode, body: &impl Serialize) -> Response<BoxBody> {
     let json = serde_json::to_string_pretty(body).unwrap();
@@ -136,6 +141,8 @@ struct TxResponse {
 async fn handle_request(
     req: Request<Incoming>,
     server: Arc<NodeServer>,
+    rate_limiter: Arc<RateLimiter>,
+    client_ip: std::net::IpAddr,
 ) -> Result<Response<BoxBody>, hyper::Error> {
     // Handle CORS preflight
     if req.method() == Method::OPTIONS {
@@ -148,10 +155,18 @@ async fn handle_request(
             .unwrap());
     }
 
-    let path = req.uri().path().to_string();
-    let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    let method = req.method();
+    let path: Vec<&str> = req.uri().path().trim_matches('/').split('/').collect();
 
-    let response = match (req.method(), segments.as_slice()) {
+    // Check global rate limit
+    if !rate_limiter.check_rate_limit(client_ip, limits::GLOBAL) {
+        return Ok(error_response(
+            StatusCode::TOO_MANY_REQUESTS,
+            "rate limit exceeded: too many requests",
+        ));
+    }
+
+    let response = match (method, path.as_slice()) {
         (&Method::GET, ["status"]) => {
             let state = server.state.read().await;
             let mp = server.mempool.read().await;
@@ -221,7 +236,23 @@ async fn handle_request(
         }
 
         (&Method::POST, ["tx"]) => {
+            // Check endpoint-specific rate limit
+            if !rate_limiter.check_rate_limit(client_ip, limits::TX) {
+                return Ok(error_response(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "rate limit exceeded: too many tx requests",
+                ));
+            }
+
             let body = req.collect().await?.to_bytes();
+            
+            // Enforce request size limit
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    "request body too large (max 1MB)",
+                ));
+            }
             let Ok(send_req) = serde_json::from_slice::<SendTxRequest>(&body) else {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {secret_key, to, amount, fee}"));
             };
@@ -367,7 +398,22 @@ async fn handle_request(
         }
 
         (&Method::POST, ["faucet"]) => {
+            // Check endpoint-specific rate limit (strict for faucet)
+            if !rate_limiter.check_rate_limit(client_ip, limits::FAUCET) {
+                return Ok(error_response(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "rate limit exceeded: faucet limited to 1 request per 10 minutes",
+                ));
+            }
+
             let body = req.collect().await?.to_bytes();
+            
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    "request body too large (max 1MB)",
+                ));
+            }
             let Ok(faucet_req) = serde_json::from_slice::<FaucetRequest>(&body) else {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {address, amount}"));
             };
@@ -466,7 +512,22 @@ async fn handle_request(
         }
 
         (&Method::POST, ["stake"]) => {
+            // Check endpoint-specific rate limit
+            if !rate_limiter.check_rate_limit(client_ip, limits::STAKE) {
+                return Ok(error_response(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "rate limit exceeded: too many stake requests",
+                ));
+            }
+
             let body = req.collect().await?.to_bytes();
+            
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    "request body too large (max 1MB)",
+                ));
+            }
             let Ok(stake_req) = serde_json::from_slice::<StakeRequest>(&body) else {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {secret_key, amount}"));
             };
@@ -554,7 +615,22 @@ async fn handle_request(
         }
 
         (&Method::POST, ["unstake"]) => {
+            // Check endpoint-specific rate limit
+            if !rate_limiter.check_rate_limit(client_ip, limits::UNSTAKE) {
+                return Ok(error_response(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "rate limit exceeded: too many unstake requests",
+                ));
+            }
+
             let body = req.collect().await?.to_bytes();
+            
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    "request body too large (max 1MB)",
+                ));
+            }
             let Ok(unstake_req) = serde_json::from_slice::<UnstakeRequest>(&body) else {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {secret_key}"));
             };
@@ -681,6 +757,23 @@ async fn handle_request(
     Ok(response)
 }
 
+/// RAII guard to decrement connection count when dropped
+struct ConnectionGuard {
+    rate_limiter: Arc<RateLimiter>,
+}
+
+impl ConnectionGuard {
+    fn new(rate_limiter: Arc<RateLimiter>) -> Self {
+        Self { rate_limiter }
+    }
+}
+
+impl Drop for ConnectionGuard {
+    fn drop(&mut self) {
+        self.rate_limiter.remove_connection();
+    }
+}
+
 pub async fn start_rpc(server: Arc<NodeServer>, rpc_port: u16) {
     let listener = match TcpListener::bind(format!("[::]:{}", rpc_port)).await {
         Ok(l) => l,
@@ -692,8 +785,20 @@ pub async fn start_rpc(server: Arc<NodeServer>, rpc_port: u16) {
 
     info!("RPC server listening on http://0.0.0.0:{}", rpc_port);
 
+    let rate_limiter = Arc::new(RateLimiter::new());
+    
+    // Spawn cleanup task for rate limiter
+    let rate_limiter_cleanup = rate_limiter.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(300));
+        loop {
+            interval.tick().await;
+            rate_limiter_cleanup.cleanup_expired();
+        }
+    });
+
     loop {
-        let (stream, _) = match listener.accept().await {
+        let (stream, addr) = match listener.accept().await {
             Ok(s) => s,
             Err(e) => {
                 error!("RPC accept error: {}", e);
@@ -701,12 +806,29 @@ pub async fn start_rpc(server: Arc<NodeServer>, rpc_port: u16) {
             }
         };
 
+        // Extract client IP
+        let client_ip = match addr {
+            SocketAddr::V4(v4) => std::net::IpAddr::V4(*v4.ip()),
+            SocketAddr::V6(v6) => std::net::IpAddr::V6(*v6.ip()),
+        };
+
+        let rate_limiter_clone = rate_limiter.clone();
+        
+        // Check connection limits
+        if let Err(e) = rate_limiter_clone.add_connection() {
+            warn!("Connection rejected from {}: {}", client_ip, e);
+            continue;
+        }
+
         let server_clone = server.clone();
         tokio::spawn(async move {
+            let _guard = ConnectionGuard::new(rate_limiter_clone.clone());
+            
             let io = TokioIo::new(stream);
             let svc = service_fn(move |req| {
                 let s = server_clone.clone();
-                async move { handle_request(req, s).await }
+                let rl = rate_limiter_clone.clone();
+                async move { handle_request(req, s, rl, client_ip).await }
             });
             if let Err(e) = http1::Builder::new().serve_connection(io, svc).await {
                 if !e.is_incomplete_message() {

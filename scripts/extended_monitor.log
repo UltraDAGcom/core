@@ -32,3 +32,36 @@
   Node 4: round= 426 fin= 425 lag= 1 peers=11 supply=2,123,900 ✅
   Round 426: 4 vertices ✅
 
+[2026-03-08 01:36:59] Sample #15
+  Node 1: round= 548 fin= 546 lag= 2 peers= 5 supply=2,145,150 ✅
+  Node 2: round= 548 fin= 546 lag= 2 peers= 4 supply=2,145,150 ✅
+  Node 3: round= 548 fin= 546 lag= 2 peers= 6 supply=2,145,150 ✅
+  Node 4: round= 548 fin= 546 lag= 2 peers=11 supply=2,145,150 ✅
+  Round 547: 3 vertices ✅
+
+[2026-03-08 01:42:01] Sample #16
+  Node 1: round= 668 fin= 667 lag= 1 peers= 5 supply=2,166,300 ✅
+  Node 2: round= 668 fin= 667 lag= 1 peers= 4 supply=2,166,300 ✅
+  Node 3: round= 668 fin= 667 lag= 1 peers= 6 supply=2,166,300 ✅
+  Node 4: round= 668 fin= 667 lag= 1 peers=11 supply=2,166,300 ✅
+  Round 668: 4 vertices ✅
+
+[2026-03-08 01:47:05] Sample #17
+  Node 1: round= 790 fin= 788 lag= 2 peers= 5 supply=2,187,600 ✅
+  Node 2: round= 790 fin= 788 lag= 2 peers= 4 supply=2,187,600 ✅
+  Node 3: round= 790 fin= 788 lag= 2 peers= 6 supply=2,187,600 ✅
+  Node 4: round= 790 fin= 789 lag= 1 peers=11 supply=2,187,750 ✅
+  Round 789: 3 vertices ✅
+
+[2026-03-08 01:52:07] Sample #18
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: CRASHED or UNREACHABLE ❌
+
+[2026-03-08 02:47:46] Sample #19
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: CRASHED or UNREACHABLE ❌
+
