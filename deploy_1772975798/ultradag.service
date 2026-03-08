@@ -1,0 +1,23 @@
+[Unit]
+Description=UltraDAG Node
+After=network.target
+
+[Service]
+Type=simple
+User=johanmichel
+WorkingDirectory=/home/johanmichel/ultradag
+ExecStart=/home/johanmichel/ultradag/ultradag-node \
+    --validator /home/johanmichel/ultradag/validator.key \
+    --seed https://ultradag-node-1.fly.dev \
+    --seed https://ultradag-node-2.fly.dev \
+    --seed https://ultradag-node-3.fly.dev \
+    --seed https://ultradag-node-4.fly.dev \
+    --rpc-port 10333 \
+    --round-duration-ms 5000
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

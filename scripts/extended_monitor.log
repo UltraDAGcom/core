@@ -84,3 +84,84 @@ NODE4:ROUND:1457
 NODE4:SUPPLY:2304500
   Round 1456: 3 vertices ✅
 
+[2026-03-08 13:32:19] Sample #69
+  Node 1: round=1499 fin=1498 lag= 1 peers= 8 supply=2,311,750 ✅
+  Node 2: round=1499 fin=1498 lag= 1 peers= 7 supply=2,311,750 ✅
+  Node 3: round=1499 fin=1498 lag= 1 peers=12 supply=2,311,750 ✅
+  Node 4: round=1499 fin=1498 lag= 1 peers=11 supply=2,311,750 ✅
+  Round 1498: 3 vertices ✅
+
+[2026-03-08 13:35:36] Sample #5
+  Node 1: round=1578 fin=1577 lag= 1 peers= 8 supply=2,325,650 ✅
+NODE1:ROUND:1578
+NODE1:SUPPLY:2325650
+  Node 2: round=1578 fin=1577 lag= 1 peers= 7 supply=2,325,650 ✅
+NODE2:ROUND:1578
+NODE2:SUPPLY:2325650
+  Node 3: round=1579 fin=1578 lag= 1 peers=12 supply=2,325,750 ✅
+NODE3:ROUND:1579
+NODE3:SUPPLY:2325750
+  Node 4: round=1579 fin=1578 lag= 1 peers=11 supply=2,325,750 ✅
+NODE4:ROUND:1579
+NODE4:SUPPLY:2325750
+  Round 1578: 3 vertices ✅
+
+[2026-03-08 13:37:22] Sample #70
+  Node 1: round=1620 fin=1619 lag= 1 peers= 8 supply=2,333,050 ✅
+  Node 2: round=1621 fin=1620 lag= 1 peers= 7 supply=2,333,150 ✅
+  Node 3: round=1621 fin=1620 lag= 1 peers=12 supply=2,333,150 ✅
+  Node 4: round=1621 fin=1620 lag= 1 peers=11 supply=2,333,150 ✅
+  Round 1620: 3 vertices ✅
+
+[2026-03-08 13:40:42] Sample #6
+  Node 1: round=1700 fin=1699 lag= 1 peers= 8 supply=2,347,050 ✅
+NODE1:ROUND:1700
+NODE1:SUPPLY:2347050
+  Node 2: round=1700 fin=1699 lag= 1 peers= 7 supply=2,347,050 ✅
+NODE2:ROUND:1700
+NODE2:SUPPLY:2347050
+  Node 3: round=1701 fin=1699 lag= 2 peers=12 supply=2,347,050 ✅
+NODE3:ROUND:1701
+NODE3:SUPPLY:2347050
+  Node 4: round=1701 fin=1699 lag= 2 peers=11 supply=2,347,050 ✅
+NODE4:ROUND:1701
+NODE4:SUPPLY:2347050
+  Round 1700: 3 vertices ✅
+
+[2026-03-08 13:42:26] Sample #71
+  Node 1: round=1743 fin=1742 lag= 1 peers= 8 supply=2,354,550 ✅
+  Node 2: round=1743 fin=1742 lag= 1 peers= 7 supply=2,354,550 ✅
+  Node 3: round=1743 fin=1742 lag= 1 peers=12 supply=2,354,550 ✅
+  Node 4: round=1744 fin=1743 lag= 1 peers=11 supply=2,354,750 ✅
+  Round 1743: 4 vertices ✅
+
+[2026-03-08 15:29:28] Sample #7
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: CRASHED or UNREACHABLE ❌
+[2026-03-08 16:47:01] Sample #72
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: CRASHED or UNREACHABLE ❌
+
+[2026-03-08 17:16:29] Sample #73
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: CRASHED or UNREACHABLE ❌
+
+
+[2026-03-08 17:22:47] Sample #74
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: CRASHED or UNREACHABLE ❌
+[2026-03-08 17:23:29] Sample #8
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+
+  Node 4: CRASHED or UNREACHABLE ❌
+
