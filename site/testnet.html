@@ -71,6 +71,51 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
 .nav-links a.active{color:var(--white)}
 .nav-cta{color:var(--accent)!important;border:1px solid var(--accent2);padding:8px 18px;border-radius:2px;transition:background .2s!important}
 .nav-cta:hover{background:var(--glow)}
+
+/* RESPONSIVE */
+@media(max-width:900px){
+  nav{padding:0 24px;height:56px}
+  .nav-logo{font-size:18px}
+  .nav-logo-mark{width:24px;height:24px}
+  .nav-logo-mark::after{width:6px;height:6px}
+  .nav-links{display:none}
+  body{padding:16px}
+  .container{padding-top:72px!important}
+  h1{font-size:36px}
+  .subtitle{font-size:12px}
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:16px}
+  .stat-card{padding:20px}
+  .stat-value{font-size:28px}
+  .stat-sub{font-size:11px}
+  .nodes-grid{grid-template-columns:1fr;gap:16px}
+  .node-card{padding:16px}
+  .section-title{font-size:20px;margin-bottom:20px}
+  .footer{padding:32px 16px}
+  .footer-links{gap:16px}
+}
+@media(max-width:600px){
+  nav{padding:0 16px}
+  body{padding:12px}
+  .container{padding-top:68px!important}
+  h1{font-size:28px}
+  .subtitle{font-size:11px}
+  .live-indicator{font-size:11px;padding:6px 12px}
+  .stats-grid{grid-template-columns:1fr;gap:12px}
+  .stat-card{padding:16px}
+  .stat-label{font-size:10px}
+  .stat-value{font-size:24px}
+  .stat-sub{font-size:10px}
+  .section-title{font-size:18px}
+  .node-card{padding:14px}
+  .node-name{font-size:13px}
+  .node-status{font-size:10px;padding:3px 8px}
+  .node-metrics{gap:10px}
+  .node-metric-label{font-size:9px}
+  .node-metric-value{font-size:16px}
+  .node-url{font-size:10px}
+  .footer{padding:24px 12px}
+  .footer-links{flex-direction:column;gap:12px}
+}
 </style>
 </head>
 <body>

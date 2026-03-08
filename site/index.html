@@ -140,19 +140,53 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 .reveal-delay-3{transition-delay:.3s}
 
 /* RESPONSIVE */
+@media(max-width:1200px){
+  .hero-graphic{width:360px;height:360px}
+  .section-inner{padding:100px 32px}
+}
 @media(max-width:900px){
-  nav{padding:0 24px}
+  nav{padding:0 24px;height:56px}
+  .nav-logo{font-size:18px}
+  .nav-logo-mark{width:24px;height:24px}
+  .nav-logo-mark::after{width:6px;height:6px}
   .nav-links{display:none}
-  .hero{padding:100px 24px 60px}
+  .hero{padding:80px 24px 60px;min-height:auto}
   .hero-graphic{display:none}
-  h1{font-size:52px}
-  .features-grid,.token-grid{grid-template-columns:1fr!important}
+  h1{font-size:48px;line-height:1}
+  .hero-subtitle{font-size:18px;margin-bottom:32px}
+  .hero-actions{flex-direction:column;width:100%}
+  .btn-primary,.btn-secondary{width:100%;justify-content:center;padding:12px 24px}
+  .features-grid{grid-template-columns:1fr!important}
+  .feature{padding:32px 24px}
+  .token-grid{grid-template-columns:1fr!important}
   .stats-inner{grid-template-columns:repeat(2,1fr)}
-  .stat{border-right:none;border-bottom:1px solid var(--border)}
+  .stats-bar{padding:0 24px}
+  .stat{border-right:none;border-bottom:1px solid var(--border);padding:20px 16px}
+  .stat:nth-child(2n){border-right:none}
+  .stat:last-child{border-bottom:none}
+  .stat-value{font-size:28px}
   .section-inner,.cta-inner{padding:80px 24px}
+  h2{font-size:36px}
+  .section-lead{font-size:18px}
   .footer-inner{flex-direction:column;gap:24px;text-align:center}
-  .footer-links{flex-wrap:wrap;justify-content:center}
+  .footer-links{flex-wrap:wrap;justify-content:center;gap:16px}
   .install-box{flex-direction:column;gap:12px;text-align:left;font-size:11px}
+  .code-section{margin:0 -24px}
+}
+@media(max-width:600px){
+  nav{padding:0 16px}
+  .hero{padding:72px 16px 48px}
+  h1{font-size:40px}
+  .hero-eyebrow{font-size:10px}
+  .stats-inner{grid-template-columns:1fr}
+  .stat{border-bottom:1px solid var(--border)}
+  .section-inner,.cta-inner{padding:60px 16px}
+  h2{font-size:32px}
+  .feature{padding:24px 20px}
+  .feature h3{font-size:16px}
+  .feature p{font-size:15px}
+  .token-card{padding:24px 20px}
+  .token-value{font-size:28px}
 }
 </style>
 </head>

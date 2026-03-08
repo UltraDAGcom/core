@@ -621,13 +621,45 @@ body::before {
 .round-nav .input { width: 72px; text-align: center; padding: 6px 8px; font-size: 12px; }
 
 /* ── RESPONSIVE ── */
+@media (max-width: 1200px) {
+  .g3 { grid-template-columns: repeat(2, 1fr); }
+  .g4 { grid-template-columns: repeat(2, 1fr); }
+}
 @media (max-width: 900px) {
   .sidebar { display: none; }
   .g2, .g3, .g4 { grid-template-columns: 1fr; }
   .tab-bar-mobile { display: flex; }
-  .main { padding: 24px; }
-  .topbar { padding: 0 16px; }
-  .node-input { width: 140px; }
+  .main { padding: 20px; }
+  .topbar { padding: 0 16px; height: 56px; }
+  .logo { font-size: 18px; }
+  .logo-mark { width: 24px; height: 24px; }
+  .logo-mark::after { width: 6px; height: 6px; }
+  .node-input { width: 140px; font-size: 11px; }
+  .card { padding: 16px; }
+  .card-title { font-size: 11px; }
+  .metric-value { font-size: 28px; }
+  .metric-label { font-size: 10px; }
+  .table-wrap { overflow-x: auto; }
+  table { font-size: 11px; }
+  th, td { padding: 8px 10px; }
+  .status-badge { font-size: 9px; padding: 3px 8px; }
+  .round-nav .input { width: 60px; font-size: 11px; }
+}
+@media (max-width: 600px) {
+  .topbar { padding: 0 12px; }
+  .topbar-left { gap: 12px; }
+  .logo { font-size: 16px; }
+  .main { padding: 16px; }
+  .card { padding: 12px; }
+  .card-title { font-size: 10px; }
+  .metric-value { font-size: 24px; }
+  .metric-label { font-size: 9px; }
+  .metric-sub { font-size: 10px; }
+  table { font-size: 10px; }
+  th, td { padding: 6px 8px; }
+  .node-input { width: 120px; font-size: 10px; padding: 6px 10px; }
+  .btn { font-size: 10px; padding: 6px 12px; }
+  .tab-bar-mobile button { font-size: 10px; padding: 10px 12px; }
 }
 @media (min-width: 901px) {
   .tab-bar-mobile { display: none !important; }
