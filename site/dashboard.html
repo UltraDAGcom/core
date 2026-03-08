@@ -113,6 +113,19 @@ body::before {
 }
 .logo em { font-style: italic; color: var(--accent); }
 
+/* HAMBURGER MENU */
+.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;background:none;border:none;z-index:101}
+.hamburger span{width:24px;height:2px;background:var(--white);transition:all .3s;border-radius:2px}
+.hamburger.active span:nth-child(1){transform:rotate(45deg) translate(7px,7px)}
+.hamburger.active span:nth-child(2){opacity:0}
+.hamburger.active span:nth-child(3){transform:rotate(-45deg) translate(7px,-7px)}
+.mobile-menu{display:none;position:fixed;top:64px;left:0;right:0;background:rgba(8,11,15,.98);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:24px;z-index:99;max-height:0;overflow:hidden;transition:max-height .3s ease}
+.mobile-menu.active{max-height:500px}
+.mobile-menu ul{list-style:none;display:flex;flex-direction:column;gap:20px}
+.mobile-menu a{font-family:'DM Mono',monospace;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;display:block;padding:8px 0}
+.mobile-menu a:hover{color:var(--white)}
+.mobile-menu .nav-cta{display:inline-block;margin-top:8px}
+
 .node-bar {
   display: flex; align-items: center; gap: 8px;
   background: var(--bg2);
@@ -629,6 +642,8 @@ body::before {
   .sidebar { display: none; }
   .g2, .g3, .g4 { grid-template-columns: 1fr; }
   .tab-bar-mobile { display: flex; }
+  .hamburger{display:flex}
+  .mobile-menu{display:block;top:56px}
   .main { padding: 20px; }
   .topbar { padding: 0 16px; height: 56px; }
   .logo { font-size: 18px; }
@@ -705,12 +720,28 @@ body::before {
     <a href="docs.html" class="topbar-nav-link">Docs</a>
     <a href="testnet.html" class="topbar-nav-link">Testnet</a>
     <a href="whitepaper.html" class="topbar-nav-link">Whitepaper</a>
+    <button class="hamburger" id="hamburger" aria-label="Menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
     <div class="status-chip" id="statusChip">
       <div class="status-dot" id="statusDot"></div>
       <span id="statusText">Offline</span>
     </div>
     <button class="lock-btn" id="lockBtn" onclick="toggleLock()" style="display:none">Lock</button>
   </div>
+</div>
+
+<div class="mobile-menu" id="mobile-menu">
+  <ul>
+    <li><a href="index.html">Home</a></li>
+    <li><a href="whitepaper.html">Whitepaper</a></li>
+    <li><a href="docs.html">Docs</a></li>
+    <li><a href="testnet.html">Testnet</a></li>
+    <li><a href="consensus-viz.html">Consensus Demo</a></li>
+    <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+  </ul>
 </div>
 
 <!-- MOBILE TAB BAR -->
@@ -2631,6 +2662,14 @@ function toast(msg, type) {
 document.getElementById('round-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') exploreRound(parseInt(e.target.value));
 });
+
+// Hamburger menu
+const hamburger=document.getElementById('hamburger');
+const mobileMenu=document.getElementById('mobile-menu');
+if(hamburger && mobileMenu){
+  hamburger.addEventListener('click',()=>{hamburger.classList.toggle('active');mobileMenu.classList.toggle('active')});
+  mobileMenu.querySelectorAll('a').forEach(link=>{link.addEventListener('click',()=>{hamburger.classList.remove('active');mobileMenu.classList.remove('active')})});
+}
 
 // ========================================
 // INIT

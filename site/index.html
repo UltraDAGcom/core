@@ -39,6 +39,19 @@ nav.scrolled{border-color:var(--border);background:rgba(8,11,15,.9);backdrop-fil
 .nav-cta{color:var(--accent)!important;border:1px solid var(--accent2);padding:8px 18px;border-radius:2px;transition:background .2s!important}
 .nav-cta:hover{background:var(--glow)}
 
+/* HAMBURGER MENU */
+.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;background:none;border:none;z-index:101}
+.hamburger span{width:24px;height:2px;background:var(--white);transition:all .3s;border-radius:2px}
+.hamburger.active span:nth-child(1){transform:rotate(45deg) translate(7px,7px)}
+.hamburger.active span:nth-child(2){opacity:0}
+.hamburger.active span:nth-child(3){transform:rotate(-45deg) translate(7px,-7px)}
+.mobile-menu{display:none;position:fixed;top:64px;left:0;right:0;background:rgba(8,11,15,.98);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:24px;z-index:99;max-height:0;overflow:hidden;transition:max-height .3s ease}
+.mobile-menu.active{max-height:500px}
+.mobile-menu ul{list-style:none;display:flex;flex-direction:column;gap:20px}
+.mobile-menu a{font-family:'DM Mono',monospace;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;display:block;padding:8px 0}
+.mobile-menu a:hover{color:var(--white)}
+.mobile-menu .nav-cta{display:inline-block;margin-top:8px}
+
 /* HERO */
 .hero{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:120px 48px 80px;max-width:1200px;margin:0 auto}
 .hero-eyebrow{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);margin-bottom:32px;display:flex;align-items:center;gap:12px;opacity:0;animation:fadeUp .8s .2s forwards}
@@ -150,6 +163,8 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   .nav-logo-mark{width:24px;height:24px}
   .nav-logo-mark::after{width:6px;height:6px}
   .nav-links{display:none}
+  .hamburger{display:flex}
+  .mobile-menu{display:block;top:56px}
   .hero{padding:80px 24px 60px;min-height:auto}
   .hero-graphic{display:none}
   h1{font-size:48px;line-height:1}
@@ -210,7 +225,26 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
     <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
   </ul>
+  <button class="hamburger" id="hamburger" aria-label="Menu">
+    <span></span>
+    <span></span>
+    <span></span>
+  </button>
 </nav>
+
+<!-- MOBILE MENU -->
+<div class="mobile-menu" id="mobile-menu">
+  <ul>
+    <li><a href="#consensus">Why UltraDAG</a></li>
+    <li><a href="whitepaper.html">Whitepaper</a></li>
+    <li><a href="docs.html">Docs</a></li>
+    <li><a href="testnet.html">Testnet</a></li>
+    <li><a href="consensus-viz.html">Consensus Demo</a></li>
+    <li><a href="#sdks">SDKs</a></li>
+    <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+    <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
+  </ul>
+</div>
 
 <!-- HERO -->
 <div class="hero">
@@ -743,6 +777,21 @@ client.send_tx(kp.secret_key_hex, recipient, <span class="num">50_000_000</span>
 const nav = document.getElementById('nav');
 window.addEventListener('scroll', () => {
   nav.classList.toggle('scrolled', window.scrollY > 40);
+});
+
+// Hamburger menu
+const hamburger = document.getElementById('hamburger');
+const mobileMenu = document.getElementById('mobile-menu');
+hamburger.addEventListener('click', () => {
+  hamburger.classList.toggle('active');
+  mobileMenu.classList.toggle('active');
+});
+// Close menu when clicking a link
+mobileMenu.querySelectorAll('a').forEach(link => {
+  link.addEventListener('click', () => {
+    hamburger.classList.remove('active');
+    mobileMenu.classList.remove('active');
+  });
 });
 
 // Scroll reveal

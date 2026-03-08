@@ -326,3 +326,10 @@
   Node 4: CRASHED or UNREACHABLE ❌
   Round 2710: 1 vertices ⚠️
 
+[2026-03-08 23:37:02] Sample #134
+  Node 1: round=2755 fin=2436 lag=319 peers= 3 supply=2,538,800 [HIGH_LAG] ⚠️
+  Node 2: round=2471 fin=2465 lag= 6 peers= 2 supply=2,531,850 [LOW_PEERS] ⚠️
+  Node 3: round=2750 fin=2436 lag=314 peers= 3 supply=2,538,800 [HIGH_LAG] ⚠️
+  Node 4: round=2544 fin=2521 lag=23 peers= 4 supply=2,541,850 [HIGH_LAG] ⚠️
+  Round 2754: 1 vertices ⚠️
+

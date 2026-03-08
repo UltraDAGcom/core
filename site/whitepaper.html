@@ -40,6 +40,19 @@ nav.scrolled{border-color:var(--border);background:rgba(8,11,15,.9);backdrop-fil
 .nav-cta{color:var(--accent)!important;border:1px solid var(--accent2);padding:8px 18px;border-radius:2px;transition:background .2s!important}
 .nav-cta:hover{background:var(--glow)}
 
+/* HAMBURGER MENU */
+.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;background:none;border:none;z-index:101}
+.hamburger span{width:24px;height:2px;background:var(--white);transition:all .3s;border-radius:2px}
+.hamburger.active span:nth-child(1){transform:rotate(45deg) translate(7px,7px)}
+.hamburger.active span:nth-child(2){opacity:0}
+.hamburger.active span:nth-child(3){transform:rotate(-45deg) translate(7px,-7px)}
+.mobile-menu{display:none;position:fixed;top:64px;left:0;right:0;background:rgba(8,11,15,.98);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:24px;z-index:99;max-height:0;overflow:hidden;transition:max-height .3s ease}
+.mobile-menu.active{max-height:500px}
+.mobile-menu ul{list-style:none;display:flex;flex-direction:column;gap:20px}
+.mobile-menu a{font-family:'DM Mono',monospace;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;display:block;padding:8px 0}
+.mobile-menu a:hover{color:var(--white)}
+.mobile-menu .nav-cta{display:inline-block;margin-top:8px}
+
 /* PAPER CONTAINER */
 .paper{position:relative;z-index:1;max-width:820px;margin:0 auto;padding:120px 48px 80px}
 
@@ -124,6 +137,8 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   .nav-logo-mark{width:24px;height:24px}
   .nav-logo-mark::after{width:6px;height:6px}
   .nav-links{display:none}
+  .hamburger{display:flex}
+  .mobile-menu{display:block;top:56px}
   .paper{padding:80px 24px 60px;max-width:100%}
   .paper-title{font-size:40px}
   .paper-subtitle{font-size:16px}
@@ -187,7 +202,25 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
     <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
   </ul>
+  <button class="hamburger" id="hamburger" aria-label="Menu">
+    <span></span>
+    <span></span>
+    <span></span>
+  </button>
 </nav>
+
+<div class="mobile-menu" id="mobile-menu">
+  <ul>
+    <li><a href="index.html">Home</a></li>
+    <li><a href="whitepaper.html" class="active">Whitepaper</a></li>
+    <li><a href="docs.html">Docs</a></li>
+    <li><a href="testnet.html">Testnet</a></li>
+    <li><a href="consensus-viz.html">Consensus Demo</a></li>
+    <li><a href="index.html#sdks">SDKs</a></li>
+    <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+    <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
+  </ul>
+</div>
 
 <!-- CONTENT -->
 <div class="paper">
@@ -758,6 +791,13 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <div class="footer-note">MIT / Apache-2.0</div>
   </div>
 </footer>
+
+<script>
+const hamburger=document.getElementById('hamburger');
+const mobileMenu=document.getElementById('mobile-menu');
+hamburger.addEventListener('click',()=>{hamburger.classList.toggle('active');mobileMenu.classList.toggle('active')});
+mobileMenu.querySelectorAll('a').forEach(link=>{link.addEventListener('click',()=>{hamburger.classList.remove('active');mobileMenu.classList.remove('active')})});
+</script>
 
 <script>
 // Nav scroll
