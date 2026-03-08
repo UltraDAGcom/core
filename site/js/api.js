@@ -44,3 +44,11 @@ export async function sendTx({ from_secret, to, amount, fee }) {
     body: JSON.stringify({ from_secret, to, amount, fee }),
   });
 }
+
+export async function faucet(address, amount) {
+  return rpc('/faucet', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address, amount }),
+  });
+}

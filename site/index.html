@@ -146,7 +146,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   .hero{padding:100px 24px 60px}
   .hero-graphic{display:none}
   h1{font-size:52px}
-  .features-grid,.token-grid{grid-template-columns:1fr}
+  .features-grid,.token-grid{grid-template-columns:1fr!important}
   .stats-inner{grid-template-columns:repeat(2,1fr)}
   .stat{border-right:none;border-bottom:1px solid var(--border)}
   .section-inner,.cta-inner{padding:80px 24px}
@@ -172,7 +172,8 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <li><a href="#tokenomics">Tokenomics</a></li>
     <li><a href="whitepaper.html">Whitepaper</a></li>
     <li><a href="#run">Run a Node</a></li>
-    <li><a href="https://github.com/ultradag/ultradag" target="_blank">GitHub</a></li>
+    <li><a href="#sdks">SDKs</a></li>
+    <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
     <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
   </ul>
 </nav>
@@ -523,6 +524,87 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   </div>
 </section>
 
+<!-- SDKs -->
+<section id="sdks" style="background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
+  <div class="section-inner">
+    <p class="section-tag reveal">Developer Tools</p>
+    <h2 class="reveal">Official <em>SDKs.</em></h2>
+    <p class="section-lead reveal">Integrate UltraDAG into your application in minutes. Four official SDKs with local Ed25519 keygen, typed responses, and full test coverage.</p>
+
+    <div class="features-grid" style="grid-template-columns:repeat(4,1fr)">
+      <!-- Python -->
+      <div class="feature reveal">
+        <div class="feature-icon">Python</div>
+        <h3>Python SDK</h3>
+        <p>pip install ultradag. Uses PyNaCl + blake3. Ideal for IoT automation, scripting, and data pipelines.</p>
+        <div style="margin-top:16px">
+          <code style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:var(--bg);padding:4px 8px;border-radius:2px;border:1px solid var(--border)">pip install -e sdk/python/</code>
+        </div>
+      </div>
+      <!-- JavaScript -->
+      <div class="feature reveal reveal-delay-1">
+        <div class="feature-icon">JavaScript / TypeScript</div>
+        <h3>JS/TS SDK</h3>
+        <p>npm install ultradag. Uses @noble/ed25519 + blake3. Works in Node.js 18+ and browsers.</p>
+        <div style="margin-top:16px">
+          <code style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:var(--bg);padding:4px 8px;border-radius:2px;border:1px solid var(--border)">npm install ultradag</code>
+        </div>
+      </div>
+      <!-- Rust -->
+      <div class="feature reveal reveal-delay-2">
+        <div class="feature-icon">Rust</div>
+        <h3>Rust SDK</h3>
+        <p>Lightweight client crate. Uses reqwest + ed25519-dalek + blake3. Not the full node, just the client.</p>
+        <div style="margin-top:16px">
+          <code style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:var(--bg);padding:4px 8px;border-radius:2px;border:1px solid var(--border)">cargo add ultradag-sdk</code>
+        </div>
+      </div>
+      <!-- Go -->
+      <div class="feature reveal reveal-delay-3">
+        <div class="feature-icon">Go</div>
+        <h3>Go SDK</h3>
+        <p>Standard net/http + blake3. Zero external HTTP dependencies. Perfect for infrastructure tooling.</p>
+        <div style="margin-top:16px">
+          <code style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:var(--bg);padding:4px 8px;border-radius:2px;border:1px solid var(--border)">go get github.com/ultradag/sdk-go</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick example -->
+    <div class="code-section reveal" style="margin-top:48px">
+      <div class="code-header">
+        <div class="code-dots"><div class="code-dot"></div><div class="code-dot"></div><div class="code-dot"></div></div>
+        <span class="code-label">Python Quick Start</span>
+      </div>
+      <pre><span class="kw">from</span> ultradag <span class="kw">import</span> UltraDagClient, Keypair
+
+<span class="cm"># Connect to testnet</span>
+client = UltraDagClient(<span class="str">"https://ultradag-node-1.fly.dev"</span>)
+
+<span class="cm"># Generate a keypair (offline, no RPC needed)</span>
+kp = Keypair.generate()
+<span class="fn">print</span>(<span class="str">f"Address: </span>{kp.address}<span class="str">"</span>)
+
+<span class="cm"># Get testnet tokens</span>
+client.faucet(kp.address, <span class="num">100_000_000</span>)  <span class="cm"># 1 UDAG</span>
+
+<span class="cm"># Check balance</span>
+bal = client.get_balance(kp.address)
+<span class="fn">print</span>(<span class="str">f"Balance: </span>{bal.balance_tdag}<span class="str"> UDAG"</span>)
+
+<span class="cm"># Send transaction</span>
+client.send_tx(kp.secret_key_hex, recipient, <span class="num">50_000_000</span>, fee=<span class="num">10_000</span>)</pre>
+    </div>
+
+    <div style="text-align:center;margin-top:32px" class="reveal">
+      <a href="https://github.com/UltraDAGcom/core/tree/main/sdk" target="_blank" class="btn-secondary">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        View SDK Source on GitHub
+      </a>
+    </div>
+  </div>
+</section>
+
 <!-- COMMUNITY -->
 <section style="padding:120px 48px;background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
   <div class="section-inner">
@@ -560,9 +642,9 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
         <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin-bottom:16px">Open Source</div>
         <h3 style="font-family:'Cormorant',serif;font-size:24px;font-weight:400;color:var(--white);margin-bottom:12px">GitHub</h3>
         <p style="font-family:'Cormorant',serif;font-size:16px;color:var(--body);line-height:1.7;margin-bottom:24px">
-          Read the code, submit issues, contribute PRs. Clean Rust codebase with 235+ passing tests.
+          Read the code, submit issues, contribute PRs. Clean Rust codebase with 390+ passing tests.
         </p>
-        <a href="https://github.com/ultradag/core" target="_blank" style="display:inline-flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);text-decoration:none;transition:color .2s">
+        <a href="https://github.com/UltraDAGcom/core" target="_blank" style="display:inline-flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);text-decoration:none;transition:color .2s">
           View Repository <span style="font-size:14px">→</span>
         </a>
       </div>
@@ -586,7 +668,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
         <p style="font-family:'Cormorant',serif;font-size:16px;color:var(--body);line-height:1.7;margin-bottom:24px">
           Architecture deep-dive, validator guide, contributing guidelines. Everything you need to build.
         </p>
-        <a href="https://github.com/ultradag/core/blob/main/ARCHITECTURE.md" target="_blank" style="display:inline-flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);text-decoration:none;transition:color .2s">
+        <a href="https://github.com/UltraDAGcom/core/blob/main/ARCHITECTURE.md" target="_blank" style="display:inline-flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);text-decoration:none;transition:color .2s">
           Read Docs <span style="font-size:14px">→</span>
         </a>
       </div>
@@ -613,7 +695,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <ul class="footer-links">
       <li><a href="dashboard.html">Dashboard</a></li>
       <li><a href="whitepaper.html">Whitepaper</a></li>
-      <li><a href="https://github.com/ultradag/ultradag" target="_blank">GitHub</a></li>
+      <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
     </ul>
     <div class="footer-note">MIT / Apache-2.0</div>
   </div>

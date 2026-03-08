@@ -134,8 +134,10 @@ sdk/
   rust/                    # Rust SDK crate — reqwest + ed25519-dalek + blake3
   go/                      # Go SDK — net/http + lukechampine.com/blake3
 site/
-  index.html              # Landing page
-  wallet.html             # Web wallet (connects to node RPC: keygen, balance, send, DAG explorer)
+  index.html              # Landing page (features, tokenomics, SDKs, run a node)
+  dashboard.html          # Web dashboard SPA (faucet, wallet, explorer, mempool, staking, governance)
+  testnet.html            # Live testnet status monitor (auto-refresh, per-node cards)
+  consensus-viz.html      # Interactive DAG-BFT consensus simulator
   whitepaper.html         # Whitepaper page
 loadtest.sh               # Load testing script
 throughput_test.py        # Python throughput tester
@@ -557,11 +559,11 @@ cargo test --workspace
 
 ## Tests
 
-**394 tests passing** (all pass, zero failures, zero ignored):
+**448 tests passing** (all pass, zero failures, zero ignored):
 
 Run `cargo test --workspace --release` to verify:
 ```
-test result: ok. 394 passed; 0 failed; 0 ignored
+test result: ok. 448 passed; 0 failed; 0 ignored
 ```
 
 ### Test Breakdown by Crate:
@@ -778,6 +780,8 @@ The faucet creates real signed transactions that propagate through DAG consensus
 - **Genesis pre-fund**: 1,000,000 UDAG via `StateEngine::new_with_genesis()`
 - **Endpoint**: `POST /faucet` with `{address, amount}` — creates signed tx, inserts in mempool, broadcasts via NewTx
 - **Constants**: `FAUCET_SEED`, `FAUCET_PREFUND_SATS`, `faucet_keypair()` in `constants.rs`
+- **Dashboard UI**: Faucet card at top of dashboard.html — paste address, click "Get 100 UDAG", no login/email required
+- **Rate limiting**: 1 request per 10 minutes per IP (`limits::FAUCET`)
 
 ## Developer Allocation
 
@@ -823,23 +827,23 @@ Exponential backoff retry (2, 4, 8, 16, 32 seconds) for bootstrap connections.
 
 ## Testnet Status
 
-4-node Fly.io testnet (Amsterdam). Permissioned validator set.
+5-node testnet (4 Fly.io Amsterdam + 1 VPS at 84.247.10.2). Permissioned validator set.
 
-**Current Status (March 8, 2026, 06:56 UTC+4):** ✅ All nodes operational. Clean restart complete.
+**Current Status (March 8, 2026):** ✅ All 5 nodes operational. Finality advancing.
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| DAG round | 80-81 (all nodes synchronized) | ✅ |
-| Finalized round | 79-80 | ✅ |
-| Finality lag | 1 round | ✅ Excellent |
-| Vertex density | 4 validators per round | ✅ Optimal |
-| Peers per node | 4-8 | ✅ Full mesh |
-| Validator count | 4/4 active | ✅ |
-| HTTP RPC | All nodes responsive | ✅ |
-| Supply | 2,058,250-2,058,450 UDAG | ✅ |
-| DAG vertices | 168-172 total | ✅ |
+| DAG round | ~1100+ (all nodes synced within 8 rounds) | ✅ |
+| Finalized round | lag=1 | ✅ Excellent |
+| Vertex density | 4 validators per round | ✅ |
+| Peers per node | 3-4 | ✅ |
+| Validator count | 5/5 registered | ✅ |
+| HTTP RPC | All 5 nodes responsive | ✅ |
+| Supply | ~214,000+ UDAG | ✅ |
 
-**Latest deployment (March 8, 05:32):** Clean restart with stable rate limiting configuration.
+**Infrastructure:**
+- Fly.io nodes: ultradag-node-{1,2,3,4}.fly.dev (ams, dedicated IPv4)
+- VPS node: 84.247.10.2 (systemd service, direct IP seeds)
 
 ### Rate Limiting Features Active
 - **Per-IP rate limits:** `/tx` (10/min), `/faucet` (1/10min), `/stake` (5/min), `/unstake` (5/min), Global (100/min)
@@ -945,7 +949,7 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 - Nodes joining after pruning fetch from checkpoint + recent DAG
 - Full history available from archive nodes (optional deployment)
 
-**Current status:** Checkpoint infrastructure fully integrated and operational at runtime. All 394 tests passing.
+**Current status:** Checkpoint infrastructure fully integrated and operational at runtime. All 448 tests passing.
 
 **Completed implementation:**
 1. ✅ **Checkpoint data structures** - Checkpoint signing, verification, quorum acceptance
