@@ -1,0 +1,46 @@
+{
+  "name": "ultradag",
+  "version": "0.1.0",
+  "description": "JavaScript/TypeScript SDK for the UltraDAG node RPC API",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "ultradag",
+    "dag",
+    "blockchain",
+    "cryptocurrency",
+    "micropayments",
+    "iot"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@noble/ed25519": "^2.2.0",
+    "blake3": "^2.1.7"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

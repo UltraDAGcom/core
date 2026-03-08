@@ -11,3 +11,14 @@ wallet*.json
 nohup.out
 testnet_monitor.log
 testnet-validators.txt
+
+# SDK build artifacts
+sdk/python/.venv/
+sdk/python/__pycache__/
+sdk/python/*.egg-info/
+sdk/python/.pytest_cache/
+sdk/javascript/node_modules/
+sdk/javascript/dist/
+sdk/rust/target/
+sdk/go/ultradag/testdata/
+*.pyc

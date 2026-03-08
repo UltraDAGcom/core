@@ -128,6 +128,11 @@ crates/
   ultradag-coin/src/       # address/ block/ block_producer/ consensus/ state/ tx/ constants.rs error.rs
   ultradag-network/src/    # protocol/ peer/ node/
   ultradag-node/src/       # main.rs validator.rs rpc.rs bin/loadtest.rs
+sdk/
+  python/                  # Python SDK — pip install, pynacl + blake3 + requests
+  javascript/              # TypeScript SDK — npm, @noble/ed25519 + blake3
+  rust/                    # Rust SDK crate — reqwest + ed25519-dalek + blake3
+  go/                      # Go SDK — net/http + lukechampine.com/blake3
 site/
   index.html              # Landing page
   wallet.html             # Web wallet (connects to node RPC: keygen, balance, send, DAG explorer)
@@ -473,6 +478,42 @@ Default port: P2P port + 1000 (e.g., P2P 9333 → RPC 10333).
 | `/validators` | GET | List of active validators with stake amounts |
 
 All responses are JSON with CORS headers for browser wallet access.
+
+## SDKs
+
+Four official SDKs wrap the node's HTTP RPC API, each with local Ed25519 keygen + Blake3 address derivation:
+
+| SDK | Location | Install | Tests |
+|-----|----------|---------|-------|
+| **Python** | `sdk/python/` | `pip install -e sdk/python/` | `cd sdk/python && python -m pytest tests/` |
+| **JavaScript/TypeScript** | `sdk/javascript/` | `cd sdk/javascript && npm install` | `cd sdk/javascript && npm test` |
+| **Rust** | `sdk/rust/` | Add `ultradag-sdk` to `Cargo.toml` (workspace member) | `cargo test -p ultradag-sdk` |
+| **Go** | `sdk/go/` | `go get github.com/ultradag/sdk-go/ultradag` | `cd sdk/go && go test ./...` |
+
+### SDK Features (all languages):
+- **Local crypto**: Ed25519 keypair generation, signing, Blake3 address derivation (no RPC needed)
+- **All RPC endpoints**: status, balance, send tx, faucet, stake/unstake, governance (proposals, votes), peers, validators, mempool, rounds
+- **Type-safe responses**: Typed structs/classes for all API responses
+- **Error handling**: Custom error types with HTTP status and message
+- **Unit conversion**: `sats_to_udag()` / `udag_to_sats()` helpers (1 UDAG = 100,000,000 sats)
+
+### SDK Quick Start (Python example):
+```python
+from ultradag import UltraDagClient, Keypair
+
+client = UltraDagClient("https://ultradag-node-1.fly.dev")
+keypair = Keypair.generate()
+
+# Check status
+status = client.get_status()
+print(f"Round: {status.dag_round}, Finalized: {status.last_finalized_round}")
+
+# Get faucet funds (testnet)
+client.faucet(keypair.address, 100_000_000)  # 1 UDAG
+
+# Send transaction
+client.send_tx(keypair.secret_key_hex, recipient_address, 50_000_000, fee=10_000)
+```
 
 ## Commands
 
