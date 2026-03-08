@@ -14,6 +14,7 @@ use tracing::{error, info, warn};
 use ultradag_coin::{Address, SecretKey, Signature, Transaction, TransferTx, StakeTx, UnstakeTx, MIN_STAKE_SATS};
 use ultradag_network::{Message, NodeServer};
 use crate::rate_limit::{RateLimiter, limits};
+use crate::resource_monitor::ResourceMonitor;
 
 type BoxBody = Full<Bytes>;
 
@@ -142,8 +143,24 @@ async fn handle_request(
     req: Request<Incoming>,
     server: Arc<NodeServer>,
     rate_limiter: Arc<RateLimiter>,
+    resource_monitor: Arc<ResourceMonitor>,
     client_ip: std::net::IpAddr,
 ) -> Result<Response<BoxBody>, hyper::Error> {
+    // Record request for resource monitoring
+    resource_monitor.record_request();
+    
+    // Check if IP is blacklisted
+    if rate_limiter.is_blacklisted(client_ip) {
+        return Ok(error_response(
+            StatusCode::FORBIDDEN,
+            "IP address is blacklisted due to repeated rate limit violations",
+        ));
+    }
+    
+    // Apply throttling under high load
+    if let Some(delay) = resource_monitor.get_throttle_delay() {
+        tokio::time::sleep(delay).await;
+    }
     // Handle CORS preflight
     if req.method() == Method::OPTIONS {
         return Ok(Response::builder()
@@ -158,8 +175,25 @@ async fn handle_request(
     let method = req.method();
     let path: Vec<&str> = req.uri().path().trim_matches('/').split('/').collect();
 
-    // Check global rate limit
-    if !rate_limiter.check_rate_limit(client_ip, limits::GLOBAL) {
+    // Prioritize validator traffic (status and round queries) under high load
+    let is_priority_endpoint = matches!(path.as_slice(), ["status"] | ["round", _]);
+    
+    // Under critical load, only allow priority endpoints
+    if resource_monitor.is_critical_load() && !is_priority_endpoint {
+        return Ok(error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "system under critical load: only status/round queries allowed",
+        ));
+    }
+
+    // Check global rate limit (relaxed for priority endpoints)
+    let global_limit = if is_priority_endpoint {
+        limits::RateLimit::new(limits::GLOBAL.requests_per_window * 2, 60) // 2x limit for priority
+    } else {
+        limits::GLOBAL
+    };
+    
+    if !rate_limiter.check_rate_limit(client_ip, global_limit) {
         return Ok(error_response(
             StatusCode::TOO_MANY_REQUESTS,
             "rate limit exceeded: too many requests",
@@ -784,8 +818,12 @@ pub async fn start_rpc(server: Arc<NodeServer>, rpc_port: u16) {
     };
 
     info!("RPC server listening on http://0.0.0.0:{}", rpc_port);
+    info!("Rate limiting: AGGRESSIVE mode (3 tx/min, 30 global/min)");
+    info!("IP blacklisting: ENABLED (10 violations = 1 hour ban)");
+    info!("Resource monitoring: ENABLED (auto-throttling active)");
 
     let rate_limiter = Arc::new(RateLimiter::new());
+    let resource_monitor = Arc::new(ResourceMonitor::new());
     
     // Spawn cleanup task for rate limiter
     let rate_limiter_cleanup = rate_limiter.clone();
@@ -794,6 +832,21 @@ pub async fn start_rpc(server: Arc<NodeServer>, rpc_port: u16) {
         loop {
             interval.tick().await;
             rate_limiter_cleanup.cleanup_expired();
+        }
+    });
+    
+    // Spawn monitoring task for resource stats
+    let rate_limiter_stats = rate_limiter.clone();
+    let resource_monitor_stats = resource_monitor.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            let load = resource_monitor_stats.get_load();
+            let blacklisted = rate_limiter_stats.blacklist_count();
+            if load > 0.5 || blacklisted > 0 {
+                info!("Resource stats: load={:.2}, blacklisted_ips={}", load, blacklisted);
+            }
         }
     });
 
@@ -821,6 +874,7 @@ pub async fn start_rpc(server: Arc<NodeServer>, rpc_port: u16) {
         }
 
         let server_clone = server.clone();
+        let resource_monitor_clone = resource_monitor.clone();
         tokio::spawn(async move {
             let _guard = ConnectionGuard::new(rate_limiter_clone.clone());
             
@@ -828,7 +882,8 @@ pub async fn start_rpc(server: Arc<NodeServer>, rpc_port: u16) {
             let svc = service_fn(move |req| {
                 let s = server_clone.clone();
                 let rl = rate_limiter_clone.clone();
-                async move { handle_request(req, s, rl, client_ip).await }
+                let rm = resource_monitor_clone.clone();
+                async move { handle_request(req, s, rl, rm, client_ip).await }
             });
             if let Err(e) = http1::Builder::new().serve_connection(io, svc).await {
                 if !e.is_incomplete_message() {

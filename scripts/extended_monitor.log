@@ -97,3 +97,21 @@
   Node 3: CRASHED or UNREACHABLE ❌
   Node 4: CRASHED or UNREACHABLE ❌
 
+[2026-03-08 06:22:21] Sample #25
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: CRASHED or UNREACHABLE ❌
+
+[2026-03-08 06:28:27] Sample #26
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: round= 171 fin= 151 lag=20 peers= 7 supply=2,060,850 [HIGH_LAG] ⚠️
+
+[2026-03-08 06:34:35] Sample #27
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: round= 245 fin= 151 lag=94 peers= 7 supply=2,060,850 [HIGH_LAG] ⚠️
+
