@@ -28,7 +28,7 @@ curl https://ultradag-node-1.fly.dev/balance/your_address | jq
 
 ### 3. Review the Codebase
 ```bash
-git clone https://github.com/[your-org]/ultradag.git
+git clone https://github.com/ultradag/ultradag.git
 cd ultradag
 cargo test  # Run test suite
 ```

@@ -836,10 +836,10 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 4. **Claim:** Prove testnet address ownership, receive mainnet tokens
 
 **Documentation:**
-- Full program details: `BUG_BOUNTY.md`
-- Security policy: `SECURITY.md`
-- Hunter's guide: `docs/BUG_BOUNTY_GUIDE.md`
-- Reward ledger: `BOUNTY_LEDGER.md`
+- Full program details: `security/bug-bounty/PROGRAM.md`
+- Security policy: `security/POLICY.md`
+- Hunter's guide: `security/bug-bounty/GUIDE.md`
+- Reward ledger: `security/bug-bounty/LEDGER.md`
 
 **Submission:** Use GitHub Security Advisories for private disclosure (90-day embargo).
 
