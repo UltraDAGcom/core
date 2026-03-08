@@ -123,6 +123,7 @@ pub struct KeygenResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BootstrapNode {
     /// Address string (host:port).
+    #[serde(alias = "addr")]
     pub address: String,
     /// Whether the node is currently connected.
     pub connected: bool,

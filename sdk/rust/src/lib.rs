@@ -32,5 +32,6 @@ pub mod error;
 pub mod types;
 
 pub use client::UltraDagClient;
+pub use crypto::Keypair;
 pub use error::{Result, UltraDagError};
 pub use types::*;
