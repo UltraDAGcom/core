@@ -262,7 +262,7 @@ let lastUpdate = null;
 
 async function fetchNodeStatus(node) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
+  const timer = setTimeout(() => controller.abort(), 10000);
   const t0 = performance.now();
   try {
     const response = await fetch(node.url + '/status', {
@@ -276,7 +276,7 @@ async function fetchNodeStatus(node) {
     const finRound = d.last_finalized_round;
     const lag = finRound != null ? round - finRound : null;
     return {
-      online: true, latency, round, finRound, lag,
+      online: true, stale: false, latency, round, finRound, lag,
       supply: d.total_supply || 0,
       validators: d.validator_count || 0,
       peers: d.peer_count || 0,
@@ -289,6 +289,11 @@ async function fetchNodeStatus(node) {
     };
   } catch (err) {
     clearTimeout(timer);
+    // Keep previous data as stale instead of flipping to offline
+    const prev = nodeData[node.name];
+    if (prev && prev.online) {
+      return { ...prev, stale: true, latency: null };
+    }
     return { online: false, error: err.message };
   }
 }
@@ -318,17 +323,20 @@ function renderNodes() {
     const d = nodeData[node.name];
     if (!d) return;
     const on = d.online;
+    const stale = d.stale;
     const card = document.createElement('div');
     card.className = 'node-card ' + (on ? 'online' : 'offline');
 
     const lagDisplay = d.lag != null ? d.lag : '—';
     const lagStyle = on ? ' style="color:' + lagColor(d.lag) + '"' : '';
+    const statusLabel = !on ? 'Offline' : stale ? 'Slow' : 'Online';
+    const statusClass = !on ? 'offline' : 'online';
 
     card.innerHTML =
       '<div class="node-header">' +
         '<div class="node-name">' + node.name + ' <span style="font-size:10px;color:var(--muted);font-weight:400">' + node.region + '</span></div>' +
-        '<div class="node-status ' + (on ? 'online' : 'offline') + '">' +
-          (on ? 'Online' : 'Offline') +
+        '<div class="node-status ' + statusClass + '">' +
+          statusLabel +
         '</div>' +
       '</div>' +
       '<div class="node-metrics">' +
@@ -354,7 +362,7 @@ function renderNodes() {
         '</div>' +
         '<div class="node-metric">' +
           '<div class="node-metric-label">Latency</div>' +
-          '<div class="node-metric-value">' + (on ? d.latency + 'ms' : '—') + '</div>' +
+          '<div class="node-metric-value">' + (on && d.latency != null ? d.latency + 'ms' : '—') + '</div>' +
         '</div>' +
       '</div>' +
       '<div class="node-url">' + node.url.replace('https://', '') + (on && d.mempool > 0 ? ' &middot; mempool: ' + d.mempool : '') + '</div>';
