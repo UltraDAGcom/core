@@ -59,6 +59,22 @@ pub async fn validator_loop(
             return;
         }
 
+        // Peer-count gate: if fewer than 2 peers connected, pause production.
+        // A lone node (or near-lone) cannot achieve BFT finality and will race
+        // ahead alone, creating a divergent chain that requires CLEAN_STATE to fix.
+        {
+            let peer_count = server.peers.connected_count().await;
+            if peer_count < 2 {
+                if timer_fired {
+                    consecutive_skips += 1;
+                    if consecutive_skips % 6 == 0 {
+                        warn!("Waiting for peers ({} connected, need ≥2) — skip #{}", peer_count, consecutive_skips);
+                    }
+                }
+                continue;
+            }
+        }
+
         // Determine the round we're producing for.
         // Only advance to current_round + 1 when we see quorum in current_round.
         // This prevents validators from racing ahead independently.
@@ -332,6 +348,18 @@ pub async fn validator_loop(
                         
                         info!("Produced checkpoint at round {}", last_finalized_round);
                     }
+                }
+            }
+        }
+
+        // Prune old rounds to bound memory (every 50 rounds to amortize cost)
+        if dag_round % 50 == 0 {
+            let last_fin = server.finality.read().await.last_finalized_round();
+            if last_fin > 0 {
+                let mut dag_w = server.dag.write().await;
+                let pruned = dag_w.prune_old_rounds(last_fin);
+                if pruned > 0 {
+                    info!("Pruned {} old vertices (floor={})", pruned, dag_w.pruning_floor());
                 }
             }
         }

@@ -81,7 +81,10 @@ impl FinalityTracker {
 
     /// Find all newly finalizable vertices in the DAG.
     /// Returns them in ancestor-first order (suitable for committing).
-    /// Uses forward propagation through children to avoid re-scanning the entire DAG.
+    ///
+    /// Only scans vertices in rounds near the finality frontier (from
+    /// `last_finalized_round` to `current_round`), NOT all vertices.
+    /// Then forward-propagates through children for cascading finality.
     pub fn find_newly_finalized(&mut self, dag: &BlockDag) -> Vec<[u8; 32]> {
         let threshold = self.finality_threshold();
         if threshold == usize::MAX {
@@ -90,19 +93,25 @@ impl FinalityTracker {
 
         let genesis: [u8; 32] = [0u8; 32];
 
-        // Seed: find all non-finalized vertices whose parents are all finalized
-        // and that have enough descendant validators.
-        // Iterate all vertices once instead of calling ancestors() per tip (O(V) vs O(V²))
+        // Only scan rounds from last_finalized_round to current_round (frontier).
+        // Vertices in older rounds are either already finalized or unreachable.
+        let scan_from = self.last_finalized_round;
+        let scan_to = dag.current_round();
+
         let mut ready: BTreeSet<[u8; 32]> = BTreeSet::new();
-        for (hash, vertex) in dag.all_vertices() {
-            if self.finalized.contains(hash) {
-                continue;
-            }
-            let parents_ok = vertex.parent_hashes.is_empty()
-                || vertex.parent_hashes.iter()
-                    .all(|p| *p == genesis || self.finalized.contains(p));
-            if parents_ok && dag.descendant_validator_count(hash) >= threshold {
-                ready.insert(*hash);
+        for round in scan_from..=scan_to {
+            for hash in dag.hashes_in_round(round) {
+                if self.finalized.contains(hash) {
+                    continue;
+                }
+                if let Some(vertex) = dag.get(hash) {
+                    let parents_ok = vertex.parent_hashes.is_empty()
+                        || vertex.parent_hashes.iter()
+                            .all(|p| *p == genesis || self.finalized.contains(p));
+                    if parents_ok && dag.descendant_validator_count(hash) >= threshold {
+                        ready.insert(*hash);
+                    }
+                }
             }
         }
 
@@ -140,7 +149,6 @@ impl FinalityTracker {
         }
 
         // Sort by (round, hash) for deterministic ancestor-first ordering.
-        // Round ordering guarantees ancestor-first since parents are always in earlier rounds.
         newly_finalized.sort_by(|a, b| {
             let ra = dag.get(a).map(|v| v.round).unwrap_or(0);
             let rb = dag.get(b).map(|v| v.round).unwrap_or(0);
@@ -155,6 +163,14 @@ impl FinalityTracker {
         }
 
         newly_finalized
+    }
+
+    /// Reset the tracker after a checkpoint fast-sync.
+    /// Sets `last_finalized_round` and clears the finalized set (suffix vertices
+    /// will be finalized normally going forward from the checkpoint round).
+    pub fn reset_to_checkpoint(&mut self, checkpoint_round: u64) {
+        self.last_finalized_round = checkpoint_round;
+        self.finalized.clear();
     }
 
     /// Get the highest round number that has been finalized.

@@ -301,9 +301,22 @@ async fn main() {
         sk
     };
 
+    // Determine seed peers early so we can pass them to NodeServer for heartbeat reconnection
+    let seeds: Vec<String> = if !args.seed.is_empty() {
+        args.seed.clone()
+    } else if !args.no_bootstrap {
+        ultradag_network::TESTNET_BOOTSTRAP_NODES
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    } else {
+        vec![]
+    };
+
     let mut server_inner = NodeServer::new(args.port);
     server_inner.set_data_dir(data_dir.clone());
     server_inner.set_validator_sk(validator_sk.clone());
+    server_inner.set_seed_addrs(seeds.clone());
     let server = Arc::new(server_inner);
 
     // Load persisted state
@@ -384,18 +397,6 @@ async fn main() {
         error!("RPC server task exited unexpectedly!");
     });
 
-    // Determine seed peers: explicit --seed, bootstrap nodes, or none
-    let seeds: Vec<String> = if !args.seed.is_empty() {
-        args.seed.clone()
-    } else if !args.no_bootstrap {
-        ultradag_network::TESTNET_BOOTSTRAP_NODES
-            .iter()
-            .map(|s| s.to_string())
-            .collect()
-    } else {
-        vec![]
-    };
-
     let use_bootstrap = args.seed.is_empty() && !args.no_bootstrap;
 
     if use_bootstrap && !seeds.is_empty() {
@@ -427,13 +428,53 @@ async fn main() {
         });
     }
 
-    // Attempt fast-sync from checkpoint if we're behind
+    // Attempt fast-sync from checkpoint if we're behind.
+    // Retries up to 3 times with 10s between attempts, stops once caught up.
     if !args.skip_fast_sync {
         let server_clone = server.clone();
         tokio::spawn(async move {
             // Wait for peer connections to establish
             tokio::time::sleep(Duration::from_secs(5)).await;
-            server_clone.request_fast_sync().await;
+
+            for attempt in 1..=3 {
+                let our_round = server_clone.dag.read().await.current_round();
+                let peer_count = server_clone.peers.connected_count().await;
+
+                if peer_count == 0 {
+                    info!("Fast-sync attempt {}/3: no peers connected yet, retrying in 10s", attempt);
+                    tokio::time::sleep(Duration::from_secs(10)).await;
+                    continue;
+                }
+
+                // Check finality state — if we have no finalized rounds, we might need sync
+                let our_finalized = {
+                    let fin = server_clone.finality.read().await;
+                    fin.last_finalized_round()
+                };
+
+                // If we're at a reasonable state already, skip fast-sync
+                if our_finalized > 0 && our_round > 10 {
+                    info!("Fast-sync: already at round {} (finalized {}), no sync needed", our_round, our_finalized);
+                    break;
+                }
+
+                info!(
+                    "Fast-sync attempt {}/3: our round={}, finalized={}, peers={} — requesting checkpoint",
+                    attempt, our_round, our_finalized, peer_count
+                );
+                server_clone.request_fast_sync().await;
+
+                // Wait for response to be processed
+                tokio::time::sleep(Duration::from_secs(10)).await;
+
+                // Check if sync succeeded
+                let new_round = server_clone.dag.read().await.current_round();
+                let new_finalized = server_clone.finality.read().await.last_finalized_round();
+                if new_finalized > our_finalized || new_round > our_round + 10 {
+                    info!("Fast-sync succeeded: now at round {} (finalized {})", new_round, new_finalized);
+                    break;
+                }
+            }
         });
     } else {
         info!("Fast-sync disabled (--skip-fast-sync)");

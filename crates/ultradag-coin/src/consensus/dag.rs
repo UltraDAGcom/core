@@ -249,6 +249,11 @@ impl BlockDag {
     }
 
     /// Get all vertices in a given round.
+    /// Get vertex hashes in a given round (lightweight — no vertex cloning).
+    pub fn hashes_in_round(&self, round: u64) -> &[[u8; 32]] {
+        self.rounds.get(&round).map(|v| v.as_slice()).unwrap_or(&[])
+    }
+
     pub fn vertices_in_round(&self, round: u64) -> Vec<&DagVertex> {
         self.rounds
             .get(&round)
@@ -529,6 +534,11 @@ impl BlockDag {
     /// Get the current pruning floor (earliest round still in memory).
     pub fn pruning_floor(&self) -> u64 {
         self.pruning_floor
+    }
+
+    /// Set the pruning floor directly (used after checkpoint fast-sync).
+    pub fn set_pruning_floor(&mut self, floor: u64) {
+        self.pruning_floor = floor;
     }
 
     /// Save DAG state to disk

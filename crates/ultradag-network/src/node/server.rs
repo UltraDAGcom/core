@@ -54,6 +54,8 @@ pub struct NodeServer {
     pub validator_sk: Option<SecretKey>,
     /// Peers banned for sending too many rejected vertices. Maps IP → unban time.
     pub banned_peers: Arc<Mutex<HashMap<String, Instant>>>,
+    /// Seed/bootstrap addresses for reconnection after peer loss.
+    pub seed_addrs: Arc<Vec<String>>,
 }
 
 impl NodeServer {
@@ -77,6 +79,7 @@ impl NodeServer {
             data_dir: PathBuf::from("."),
             validator_sk: None,
             banned_peers: Arc::new(Mutex::new(HashMap::new())),
+            seed_addrs: Arc::new(Vec::new()),
         }
     }
 
@@ -88,6 +91,11 @@ impl NodeServer {
     /// Set the validator keypair for checkpoint co-signing.
     pub fn set_validator_sk(&mut self, sk: SecretKey) {
         self.validator_sk = Some(sk);
+    }
+
+    /// Set seed/bootstrap addresses for automatic reconnection.
+    pub fn set_seed_addrs(&mut self, addrs: Vec<String>) {
+        self.seed_addrs = Arc::new(addrs);
     }
 
     /// Attempt fast-sync from a connected peer using checkpoint protocol.
@@ -240,14 +248,14 @@ impl NodeServer {
     /// whose kernel send buffers still accept writes (zombie writers).
     pub fn start_heartbeat(&self) {
         let peers = self.peers.clone();
+        let seed_addrs = self.seed_addrs.clone();
+        let listen_port = self.port;
+        let dag = self.dag.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30));
             loop {
                 interval.tick().await;
                 let addrs = peers.connected_addrs().await;
-                if addrs.is_empty() {
-                    continue;
-                }
                 let mut dead = Vec::new();
                 for addr in &addrs {
                     let result = tokio::time::timeout(
@@ -267,7 +275,22 @@ impl NodeServer {
                     peers.remove_connected_listen_addr(addr).await;
                 }
                 if !dead.is_empty() {
-                    info!("Heartbeat: removed {} dead peers, {} remaining", dead.len(), peers.connected_count().await);
+                    let remaining = peers.connected_count().await;
+                    info!("Heartbeat: removed {} dead peers, {} remaining", dead.len(), remaining);
+                }
+
+                // Reconnect to seeds if peer count is low
+                let peer_count = peers.connected_count().await;
+                if peer_count < 3 && !seed_addrs.is_empty() {
+                    info!("Heartbeat: low peer count ({}), reconnecting to seeds...", peer_count);
+                    for addr in seed_addrs.iter() {
+                        tokio::spawn(try_connect_peer(
+                            addr.clone(),
+                            listen_port,
+                            dag.clone(),
+                            peers.clone(),
+                        ));
+                    }
                 }
             }
         });
@@ -1236,46 +1259,78 @@ async fn handle_peer(
             }
 
             Message::CheckpointSync { checkpoint, suffix_vertices, state_at_checkpoint } => {
-                // Validate the checkpoint
-                let active = {
-                    let state_r = state.read().await;
-                    state_r.active_validators().to_vec()
-                };
+                // Fix 1: Use the checkpoint's own state snapshot for validator trust,
+                // not the local state engine (which may be empty on fresh nodes).
+                let checkpoint_state = ultradag_coin::StateEngine::from_snapshot(state_at_checkpoint.clone());
+                let active = checkpoint_state.active_validators().to_vec();
                 let quorum = if active.is_empty() {
-                    2
+                    // Pre-staking: accept if checkpoint has at least 2 valid signers
+                    let valid_count = checkpoint.valid_signers().len();
+                    if valid_count < 2 {
+                        warn!("Received CheckpointSync with only {} valid signers (need ≥2)", valid_count);
+                        continue;
+                    }
+                    valid_count // accept all valid signers as quorum
                 } else {
                     (active.len() * 2 + 2) / 3
                 };
-                
-                if !checkpoint.is_accepted(&active, quorum) {
-                    warn!("Received CheckpointSync with insufficient signatures");
+
+                if !active.is_empty() && !checkpoint.is_accepted(&active, quorum) {
+                    warn!("Received CheckpointSync with insufficient signatures ({} valid, need {})",
+                        checkpoint.valid_signers().len(), quorum);
                     continue;
                 }
-                
+
                 // Verify state root
                 let computed_root = ultradag_coin::consensus::compute_state_root(&state_at_checkpoint);
                 if computed_root != checkpoint.state_root {
                     warn!("CheckpointSync state_root mismatch — rejecting");
                     continue;
                 }
-                
+
                 // Apply state snapshot
                 {
                     let mut state_w = state.write().await;
                     state_w.load_snapshot(state_at_checkpoint);
                 }
-                
-                // Insert suffix vertices
+
+                // Fix 3: Insert suffix vertices with signature verification
                 let mut inserted = 0;
+                let mut skipped = 0;
                 {
                     let mut dag_w = dag.write().await;
+                    // Set pruning floor to checkpoint round
+                    dag_w.set_pruning_floor(checkpoint.round);
                     for vertex in suffix_vertices {
+                        if !vertex.verify_signature() {
+                            warn!("CheckpointSync: skipping suffix vertex with invalid signature (round {})", vertex.round);
+                            skipped += 1;
+                            continue;
+                        }
                         if dag_w.try_insert(vertex).is_ok() {
                             inserted += 1;
                         }
                     }
                 }
-                
+
+                // Fix 2: Reset FinalityTracker to reflect synced state
+                {
+                    let mut fin = finality.write().await;
+                    fin.reset_to_checkpoint(checkpoint.round);
+                    // Register validators from checkpoint state
+                    for addr in &active {
+                        fin.register_validator(*addr);
+                    }
+                    // Also register validators from suffix vertices
+                    let dag_r = dag.read().await;
+                    for addr in dag_r.all_validators() {
+                        fin.register_validator(addr);
+                    }
+                }
+
+                if skipped > 0 {
+                    warn!("CheckpointSync: skipped {} vertices with invalid signatures", skipped);
+                }
                 info!(
                     "Fast-synced from checkpoint at round {}, inserted {} suffix vertices",
                     checkpoint.round,

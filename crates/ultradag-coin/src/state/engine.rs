@@ -745,6 +745,21 @@ impl StateEngine {
         }
     }
 
+    /// Create a StateEngine from a snapshot (for checkpoint validation without mutating self).
+    pub fn from_snapshot(snapshot: crate::state::persistence::StateSnapshot) -> Self {
+        Self {
+            accounts: snapshot.accounts.into_iter().collect(),
+            stake_accounts: snapshot.stake_accounts.into_iter().collect(),
+            active_validator_set: snapshot.active_validator_set,
+            current_epoch: snapshot.current_epoch,
+            total_supply: snapshot.total_supply,
+            last_finalized_round: snapshot.last_finalized_round,
+            proposals: snapshot.proposals.into_iter().collect(),
+            votes: snapshot.votes.into_iter().collect(),
+            next_proposal_id: snapshot.next_proposal_id,
+        }
+    }
+
     /// Load state from a snapshot (for fast-sync from checkpoint).
     pub fn load_snapshot(&mut self, snapshot: crate::state::persistence::StateSnapshot) {
         self.accounts = snapshot.accounts.into_iter().collect();

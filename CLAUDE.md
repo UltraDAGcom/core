@@ -393,10 +393,17 @@ pub struct NodeServer {
 6. Rebroadcast to all peers
 
 **Checkpoint Handling:**
-1. **CheckpointProposal**: Verify round finalized, validate state_root, store as pending
-2. **CheckpointSignatureMsg**: Accumulate signatures, check quorum, log acceptance
+1. **CheckpointProposal**: Verify round finalized, validate state_root, store as pending, co-sign
+2. **CheckpointSignatureMsg**: Accumulate signatures, check quorum, save accepted to disk
 3. **GetCheckpoint**: Send latest checkpoint + suffix vertices + state snapshot
-4. **CheckpointSync**: Verify signatures/state_root, apply snapshot, insert suffix vertices
+4. **CheckpointSync** (receiver / fast-sync):
+   - Uses checkpoint's own `state_at_checkpoint` for validator trust (not local state — fixes fresh node bootstrap)
+   - Verifies state_root matches checkpoint
+   - Applies state snapshot via `load_snapshot()`
+   - Inserts suffix vertices with Ed25519 signature verification
+   - Resets FinalityTracker: sets `last_finalized_round`, registers validators from snapshot + DAG
+   - Sets DAG `pruning_floor` to checkpoint round
+5. **Fast-sync trigger** (startup): retries up to 3 times with 10s between, checks if caught up before retrying
 
 **Transaction Propagation:**
 - `NewTx` broadcasts transactions to mempool across all peers
@@ -942,6 +949,24 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 7. **Self-connection filtering (March 9, 2026)** — Nodes could connect to themselves via `.internal` DNS, loopback, or peer gossip
    - **Fix:** Added `is_self_address()` check in `connect_to()`, `listen()`, and `try_connect_peer()`. Checks loopback variants, `FLY_APP_NAME.internal`, system hostname, and post-connect resolved IP comparison
    - **Result:** Self-connections rejected with "Skipping self-connection to {addr}" log
+8. **Finality stall under load (March 9, 2026)** — `find_newly_finalized()` scanned ALL vertices in the DAG (O(V)), causing finality to fall behind as DAG grew
+   - **Fix:** Changed to scan only frontier rounds (`last_finalized_round..=current_round`) instead of `dag.all_vertices()`
+   - **Result:** Finality check cost is now O(frontier_vertices) regardless of total DAG size
+9. **Node racing ahead alone (March 9, 2026)** — Stall recovery mode advanced rounds unconditionally even with 0 peers, creating divergent chains
+   - **Fix:** Added peer-count gate in validator loop: if `connected_peers < 2`, pause vertex production entirely
+   - **Result:** Lone nodes wait for peers instead of building unreachable chains
+10. **Dead peer reconnection (March 9, 2026)** — Heartbeat removed dead peers but never reconnected to bootstrap/seed nodes
+    - **Fix:** Added seed-based reconnection in heartbeat after removing dead peers when `peer_count < 3`. Seeds stored on `NodeServer.seed_addrs`
+    - **Result:** Nodes automatically reconnect after peer loss
+11. **DAG never pruned at runtime (March 9, 2026)** — `prune_old_rounds()` existed but was never called from the validator loop, causing unbounded memory growth
+    - **Fix:** Added pruning call every 50 rounds in validator loop after finality advances
+    - **Result:** Memory bounded to ~PRUNING_HORIZON (1000) rounds of history
+12. **Checkpoint sync broken on fresh nodes (March 9, 2026)** — `CheckpointSync` handler validated checkpoint signatures against local active validators, which are empty on a fresh/genesis node, causing all checkpoints to be rejected
+    - **Fix:** Extract validator set from `state_at_checkpoint` (the checkpoint's own state) for trust anchor. Added `StateEngine::from_snapshot()`, `FinalityTracker::reset_to_checkpoint()`, `BlockDag::set_pruning_floor()`. Suffix vertices now verified with Ed25519 before insertion.
+    - **Result:** Fresh nodes can fast-sync from checkpoint with proper trust chain
+13. **Fast-sync fire-once with no retry (March 9, 2026)** — `request_fast_sync()` fired once after 5s on startup with no retry and no check if it worked
+    - **Fix:** Retry up to 3 times with 10s between attempts, check if round/finality advanced after each attempt, skip if already caught up
+    - **Result:** Robust fast-sync startup that handles slow peer connections
 
 ## Performance Roadmap
 
