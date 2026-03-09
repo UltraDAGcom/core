@@ -2142,7 +2142,7 @@ checksum = "562d481066bde0658276a35467c4af00bdc6ee726305698a55b86e61d7ad82bb"
 
 [[package]]
 name = "ultradag-coin"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "blake3",
  "chrono",
@@ -2157,7 +2157,7 @@ dependencies = [
 
 [[package]]
 name = "ultradag-network"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "blake3",
  "hostname",
@@ -2171,7 +2171,7 @@ dependencies = [
 
 [[package]]
 name = "ultradag-node"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "clap",
  "dashmap",

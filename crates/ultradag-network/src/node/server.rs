@@ -67,6 +67,8 @@ pub struct NodeServer {
     pub banned_peers: Arc<Mutex<HashMap<String, Instant>>>,
     /// Seed/bootstrap addresses for reconnection after peer loss.
     pub seed_addrs: Arc<Vec<String>>,
+    /// Metrics for checkpoint production and synchronization.
+    pub checkpoint_metrics: Arc<crate::CheckpointMetrics>,
 }
 
 impl NodeServer {
@@ -91,6 +93,7 @@ impl NodeServer {
             validator_sk: None,
             banned_peers: Arc::new(Mutex::new(HashMap::new())),
             seed_addrs: Arc::new(Vec::new()),
+            checkpoint_metrics: Arc::new(crate::CheckpointMetrics::new()),
         }
     }
 

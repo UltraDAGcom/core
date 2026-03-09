@@ -1122,13 +1122,32 @@ async fn handle_request(
             let Some(addr) = Address::from_hex(addr_hex) else {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address hex"));
             };
+            
             let state = read_lock_or_503!(server.state);
             let vote = state.get_vote(id, &addr);
+            
             json_response(StatusCode::OK, &serde_json::json!({
-                "proposal_id": id,
-                "voter": addr.to_hex(),
                 "vote": vote,
             }))
+        }
+
+        // ====== Metrics endpoints ======
+
+        (&Method::GET, ["metrics"]) => {
+            // Prometheus format
+            let metrics = server.checkpoint_metrics.export_prometheus();
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Access-Control-Allow-Origin", "*")
+                .body(Full::new(Bytes::from(metrics)))
+                .unwrap()
+        }
+
+        (&Method::GET, ["metrics", "json"]) => {
+            // JSON format for dashboards
+            let metrics = server.checkpoint_metrics.export_json();
+            json_response(StatusCode::OK, &metrics)
         }
 
         _ => error_response(StatusCode::NOT_FOUND, "not found"),
