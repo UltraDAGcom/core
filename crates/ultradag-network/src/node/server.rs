@@ -253,6 +253,8 @@ impl NodeServer {
         let dag = self.dag.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30));
+            // Consume first tick (fires immediately) — let seed connections establish first
+            interval.tick().await;
             loop {
                 interval.tick().await;
                 let addrs = peers.connected_addrs().await;
@@ -354,6 +356,7 @@ impl NodeServer {
                 warn!("Peer {} disconnected: {}", addr_str, e);
             }
             peers.remove_peer(&addr_str).await;
+            peers.remove_connected_listen_addr(&addr_str).await;
         });
 
         Ok(())
@@ -548,6 +551,12 @@ async fn try_connect_peer(
                 }
             }
 
+            // Re-check: another task may have connected in the meantime
+            if peers.is_listen_addr_connected(&addr).await {
+                drop(stream);
+                return;
+            }
+
             info!("Peer discovery: connected to {}", addr);
             peers.add_known(addr.clone()).await;
             peers.add_connected_listen_addr(addr.clone()).await;
@@ -576,6 +585,7 @@ async fn try_connect_peer(
                     }
                 }
                 peers_clone.remove_peer(&addr_clone).await;
+                peers_clone.remove_connected_listen_addr(&addr_clone).await;
             });
         }
         Err(e) => {
