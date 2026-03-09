@@ -242,6 +242,121 @@ async fn handle_request(
             json_response(StatusCode::OK, &serde_json::json!({"status": "ok"}))
         }
 
+        // Detailed health diagnostics with comprehensive system status
+        (&Method::GET, ["health", "detailed"]) => {
+            // Use try_read to avoid blocking - return partial diagnostics if locks are contended
+            let dag_status = match server.dag.try_read() {
+                Ok(dag) => serde_json::json!({
+                    "available": true,
+                    "current_round": dag.current_round(),
+                    "vertex_count": dag.len(),
+                    "tips_count": dag.tips().len(),
+                    "pruning_floor": dag.pruning_floor(),
+                }),
+                Err(_) => serde_json::json!({
+                    "available": false,
+                    "reason": "DAG lock contended"
+                })
+            };
+
+            let finality_status = match server.finality.try_read() {
+                Ok(fin) => {
+                    let last_fin = fin.last_finalized_round();
+                    let dag_round = server.dag.try_read().map(|d| d.current_round()).unwrap_or(0);
+                    let finality_lag = dag_round.saturating_sub(last_fin);
+                    serde_json::json!({
+                        "available": true,
+                        "last_finalized_round": last_fin,
+                        "finality_lag": finality_lag,
+                        "validator_count": fin.validator_count(),
+                    })
+                }
+                Err(_) => serde_json::json!({
+                    "available": false,
+                    "reason": "Finality lock contended"
+                })
+            };
+
+            let state_status = match server.state.try_read() {
+                Ok(state) => serde_json::json!({
+                    "available": true,
+                    "total_supply": state.total_supply(),
+                    "account_count": state.account_count(),
+                    "total_staked": state.total_staked(),
+                    "active_validators": state.active_validators().len(),
+                    "next_proposal_id": state.next_proposal_id(),
+                }),
+                Err(_) => serde_json::json!({
+                    "available": false,
+                    "reason": "State lock contended"
+                })
+            };
+
+            let mempool_status = match server.mempool.try_read() {
+                Ok(mp) => serde_json::json!({
+                    "available": true,
+                    "transaction_count": mp.len(),
+                }),
+                Err(_) => serde_json::json!({
+                    "available": false,
+                    "reason": "Mempool lock contended"
+                })
+            };
+
+            let network_status = serde_json::json!({
+                "peer_count": server.peers.connected_count().await,
+                "sync_complete": server.sync_complete.load(std::sync::atomic::Ordering::Relaxed),
+            });
+
+            let checkpoint_status = {
+                let metrics = server.checkpoint_metrics.export_json();
+                serde_json::json!({
+                    "last_checkpoint_round": metrics["health"]["last_checkpoint_round"],
+                    "checkpoint_age_seconds": metrics["health"]["last_checkpoint_age_seconds"],
+                    "pending_checkpoints": metrics["health"]["pending_checkpoints"],
+                    "disk_count": metrics["pruning"]["checkpoint_disk_count"],
+                })
+            };
+
+            // Determine overall health status
+            let all_available = dag_status["available"].as_bool().unwrap_or(false)
+                && finality_status["available"].as_bool().unwrap_or(false)
+                && state_status["available"].as_bool().unwrap_or(false)
+                && mempool_status["available"].as_bool().unwrap_or(false);
+
+            let finality_lag = finality_status["finality_lag"].as_u64().unwrap_or(u64::MAX);
+            let peer_count = network_status["peer_count"].as_u64().unwrap_or(0);
+            
+            let (overall_status, warnings) = if !all_available {
+                ("degraded", vec!["Some components have contended locks"])
+            } else if finality_lag > 100 {
+                ("unhealthy", vec!["High finality lag (>100 rounds)"])
+            } else if peer_count == 0 {
+                ("warning", vec!["No connected peers"])
+            } else if finality_lag > 10 {
+                ("warning", vec!["Elevated finality lag (>10 rounds)"])
+            } else {
+                ("healthy", vec![])
+            };
+
+            json_response(StatusCode::OK, &serde_json::json!({
+                "status": overall_status,
+                "warnings": warnings,
+                "timestamp": std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+                "components": {
+                    "dag": dag_status,
+                    "finality": finality_status,
+                    "state": state_status,
+                    "mempool": mempool_status,
+                    "network": network_status,
+                    "checkpoints": checkpoint_status,
+                }
+            }))
+        }
+
         (&Method::GET, ["status"]) => {
             // Short timeout (500ms) — fast enough for dashboard polling,
             // long enough to catch gaps between validator write locks.
