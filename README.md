@@ -53,6 +53,23 @@ Transaction ordering is deterministic: finalized vertices are sorted by (round, 
 
 ## Running a Node
 
+### Docker (Recommended)
+
+**Easiest way to run on Linux, macOS, or Windows:**
+
+```bash
+# Single node
+docker run -p 9333:9333 -p 10333:10333 \
+  ghcr.io/ultradagcom/core:latest --port 9333 --validate
+
+# 4-node local network
+cd deployments/docker && docker-compose up -d
+```
+
+**[Full Docker Guide →](./docs/DOCKER.md)**
+
+### From Source
+
 ```bash
 # Run a validator node (RPC on port 10333)
 cargo run --release -p ultradag-node -- --port 9333 --validate

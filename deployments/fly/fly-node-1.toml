@@ -1,4 +1,4 @@
-app = "ultradag-node-4"
+app = "ultradag-node-1"
 primary_region = "ams"
 
 [build]
@@ -9,9 +9,9 @@ primary_region = "ams"
   RPC_PORT = "10333"
   DATA_DIR = "/data"
   VALIDATORS = "4"
-  SEED = "ultradag-node-1.internal:9333 ultradag-node-2.internal:9333 ultradag-node-3.internal:9333"
+  SEED = "ultradag-node-2.internal:9333 ultradag-node-3.internal:9333 ultradag-node-4.internal:9333"
   NO_BOOTSTRAP = "true"
-  # CLEAN_STATE = "true"
+  CLEAN_STATE = "true"
 
 [mounts]
   source = "ultradag_data"

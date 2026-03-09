@@ -354,3 +354,1225 @@
   Node 4: round=2735 fin=2640 lag=95 peers= 4 supply=2,559,700 [HIGH_LAG] ⚠️
   Round 2832: 1 vertices ⚠️
 
+[2026-03-08 23:57:44] Sample #138
+  Node 1: round=2833 fin=2512 lag=321 peers= 3 supply=2,540,600 [HIGH_LAG] ⚠️
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: round=2750 fin=2436 lag=314 peers= 3 supply=2,538,800 [HIGH_LAG] ⚠️
+  Node 4: round=2798 fin=2640 lag=158 peers= 4 supply=2,559,700 [HIGH_LAG] ⚠️
+  Round 2832: 1 vertices ⚠️
+
+[2026-03-09 00:03:01] Sample #139
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Round 49: 2 vertices ⚠️
+
+[2026-03-09 00:08:03] Sample #140
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Round 109: 1 vertices ⚠️
+
+[2026-03-09 00:13:06] Sample #141
+  Node 1: round=  29 fin=  27 lag= 2 peers= 9 supply=2,055,400 ✅
+  Node 2: round=  29 fin=  27 lag= 2 peers= 9 supply=2,055,400 ✅
+  Node 3: round=  29 fin=  27 lag= 2 peers= 9 supply=2,055,400 ✅
+  Node 4: round=  28 fin=  27 lag= 1 peers= 9 supply=2,055,400 ✅
+  Round 28: 4 vertices ✅
+
+[2026-03-09 00:18:08] Sample #142
+  Node 1: round=  61 fin=  28 lag=33 peers= 8 supply=2,055,600 [HIGH_LAG] ⚠️
+  Node 2: round=  61 fin=  28 lag=33 peers= 9 supply=2,055,600 [HIGH_LAG] ⚠️
+  Node 3: round=  61 fin=  28 lag=33 peers= 9 supply=2,055,600 [HIGH_LAG] ⚠️
+  Node 4: round=  62 fin=  28 lag=34 peers= 8 supply=2,055,600 [HIGH_LAG] ⚠️
+  Round 60: 1 vertices ⚠️
+
+[2026-03-09 00:23:10] Sample #143
+  Node 1: round=  61 fin=  28 lag=33 peers= 8 supply=2,055,600 [HIGH_LAG] ⚠️
+  Node 2: round=  61 fin=  28 lag=33 peers= 9 supply=2,055,600 [HIGH_LAG] ⚠️
+  Node 3: round=  61 fin=  28 lag=33 peers= 9 supply=2,055,600 [HIGH_LAG] ⚠️
+  Node 4: round=  62 fin=  28 lag=34 peers= 8 supply=2,055,600 [HIGH_LAG] ⚠️
+  Round 60: 1 vertices ⚠️
+
+[2026-03-09 00:28:13] Sample #144
+  Node 1: round=  61 fin=  28 lag=33 peers= 8 supply=2,055,600 [HIGH_LAG] ⚠️
+  Node 2: round=  61 fin=  28 lag=33 peers= 9 supply=2,055,600 [HIGH_LAG] ⚠️
+  Node 3: round=  61 fin=  28 lag=33 peers= 9 supply=2,055,600 [HIGH_LAG] ⚠️
+  Node 4: round=  62 fin=  28 lag=34 peers= 8 supply=2,055,600 [HIGH_LAG] ⚠️
+  Round 60: 1 vertices ⚠️
+
+[2026-03-09 00:33:15] Sample #145
+  Node 1: Parse error - 'dag_round'
+  Node 2: round=  25 fin=  20 lag= 5 peers= 9 supply=2,052,350 ✅
+  Node 3: round=  25 fin=  20 lag= 5 peers= 9 supply=2,052,350 ✅
+  Node 4: Parse error - 'dag_round'
+
+[2026-03-09 00:38:27] Sample #146
+  Node 1: Parse error - 'dag_round'
+  Node 2: round=  83 fin=  21 lag=62 peers= 9 supply=2,052,400 [HIGH_LAG] ⚠️
+  Node 3: round=  87 fin=  21 lag=66 peers= 9 supply=2,052,400 [HIGH_LAG] ⚠️
+  Node 4: Parse error - 'dag_round'
+
+[2026-03-09 00:43:44] Sample #147
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: round= 126 fin=  21 lag=105 peers= 7 supply=2,052,400 [HIGH_LAG] ⚠️
+  Node 3: round= 131 fin=  21 lag=110 peers= 9 supply=2,052,400 [HIGH_LAG] ⚠️
+  Node 4: CRASHED or UNREACHABLE ❌
+
+[2026-03-09 00:49:26] Sample #148
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: round= 162 fin=  91 lag=71 peers= 9 supply=2,056,550 [HIGH_LAG] ⚠️
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: round= 164 fin=  92 lag=72 peers= 5 supply=2,056,900 [HIGH_LAG] ⚠️
+
+[2026-03-09 00:54:57] Sample #149
+  Node 1: round= 132 fin=  73 lag=59 peers= 8 supply=2,055,000 [HIGH_LAG] ⚠️
+  Node 2: round=   0 fin=  91 lag=-91 peers= 8 supply=2,056,550 ✅
+  Node 3: round=   0 fin=  73 lag=-73 peers= 8 supply=2,055,000 ✅
+  Node 4: round= 223 fin=  92 lag=131 peers=11 supply=2,056,950 [HIGH_LAG] ⚠️
+  Round 131: 1 vertices ⚠️
+
+[2026-03-09 01:00:00] Sample #150
+  Node 1: round=  25 fin=  12 lag=13 peers= 9 supply=2,050,750 [HIGH_LAG] ⚠️
+  Node 2: round=  25 fin=  12 lag=13 peers= 8 supply=2,050,750 [HIGH_LAG] ⚠️
+  Node 3: round=  24 fin=  10 lag=14 peers=11 supply=2,050,500 [HIGH_LAG] ⚠️
+  Node 4: round=  25 fin=  12 lag=13 peers= 9 supply=2,050,750 [HIGH_LAG] ⚠️
+  Round 25: 3 vertices ✅
+
+[2026-03-09 01:05:03] Sample #151
+  Node 1: round=  61 fin=  23 lag=38 peers= 9 supply=2,051,300 [HIGH_LAG] ⚠️
+  Node 2: round=  66 fin=  23 lag=43 peers= 8 supply=2,051,300 [HIGH_LAG] ⚠️
+  Node 3: round=  54 fin=  10 lag=44 peers=11 supply=2,050,500 [HIGH_LAG] ⚠️
+  Node 4: round=  56 fin=  23 lag=33 peers= 9 supply=2,051,300 [HIGH_LAG] ⚠️
+  Round 60: 1 vertices ⚠️
+
+[2026-03-09 01:10:12] Sample #152
+  Node 1: round=  93 fin=   1 lag=92 peers= 9 supply=2,055,450 [HIGH_LAG] ⚠️
+  Node 2: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 3: round=  94 fin=  44 lag=50 peers=11 supply=2,053,500 [HIGH_LAG] ⚠️
+  Node 4: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Round 92: 1 vertices ⚠️
+
+[2026-03-09 01:15:16] Sample #153
+  Node 1: round=  26 fin=  18 lag= 8 peers= 9 supply=2,052,050 ✅
+  Node 2: round=   0 fin=  44 lag=-44 peers= 9 supply=2,054,500 ✅
+  Node 3: round=  27 fin=  18 lag= 9 peers= 8 supply=2,052,050 ✅
+  Node 4: round=  27 fin=  26 lag= 1 peers= 8 supply=2,052,950 ✅
+  Round 26: 2 vertices ⚠️
+
+[2026-03-09 01:20:19] Sample #154
+  Node 1: round= 159 fin=  75 lag=84 peers= 9 supply=2,056,750 [HIGH_LAG] ⚠️
+  Node 2: round=   0 fin=  44 lag=-44 peers= 9 supply=2,054,500 ✅
+  Node 3: round= 166 fin=  75 lag=91 peers= 8 supply=2,056,750 [HIGH_LAG] ⚠️
+  Node 4: CRASHED or UNREACHABLE ❌
+  Round 158: 1 vertices ⚠️
+
+[2026-03-09 01:25:31] Sample #155
+  Node 1: round=  26 fin=  24 lag= 2 peers= 9 supply=2,052,900 ✅
+  Node 2: round=  26 fin=  24 lag= 2 peers= 9 supply=2,052,900 ✅
+  Node 3: round=  25 fin=  24 lag= 1 peers= 9 supply=2,052,800 ✅
+  Node 4: round=  27 fin=  25 lag= 2 peers= 9 supply=2,053,050 ✅
+  Round 25: 3 vertices ✅
+
+[2026-03-09 01:30:34] Sample #156
+  Node 1: round=  26 fin=  24 lag= 2 peers= 9 supply=2,052,900 ✅
+  Node 2: round=  26 fin=  24 lag= 2 peers= 9 supply=2,052,900 ✅
+  Node 3: round=  25 fin=  24 lag= 1 peers= 9 supply=2,052,800 ✅
+  Node 4: round=  27 fin=  25 lag= 2 peers= 9 supply=2,053,050 ✅
+  Round 25: 3 vertices ✅
+
+[2026-03-09 01:35:36] Sample #157
+  Node 1: round=  26 fin=  24 lag= 2 peers= 9 supply=2,052,900 ✅
+  Node 2: round=  26 fin=  24 lag= 2 peers= 9 supply=2,052,900 ✅
+  Node 3: round=  25 fin=  24 lag= 1 peers= 9 supply=2,052,800 ✅
+  Node 4: round=  27 fin=  25 lag= 2 peers= 9 supply=2,053,050 ✅
+  Round 25: 3 vertices ✅
+
+[2026-03-09 01:40:38] Sample #158
+  Node 1: round=  26 fin=  24 lag= 2 peers= 9 supply=2,052,900 ✅
+  Node 2: round=  26 fin=  24 lag= 2 peers= 9 supply=2,052,900 ✅
+  Node 3: round=  25 fin=  24 lag= 1 peers= 9 supply=2,052,800 ✅
+  Node 4: round=  27 fin=  25 lag= 2 peers= 9 supply=2,053,050 ✅
+  Round 25: 3 vertices ✅
+
+[2026-03-09 01:45:41] Sample #159
+  Node 1: round=  26 fin=  24 lag= 2 peers= 9 supply=2,052,900 ✅
+  Node 2: round=  26 fin=  24 lag= 2 peers= 9 supply=2,052,900 ✅
+  Node 3: round=  25 fin=  24 lag= 1 peers= 9 supply=2,052,800 ✅
+  Node 4: round=  27 fin=  25 lag= 2 peers= 9 supply=2,053,050 ✅
+  Round 25: 3 vertices ✅
+
+[2026-03-09 01:50:44] Sample #160
+  Node 1: round=  26 fin=  22 lag= 4 peers= 8 supply=2,052,650 ✅
+  Node 2: round=  78 fin=  25 lag=53 peers= 7 supply=2,057,350 [HIGH_LAG] ⚠️
+  Node 3: round=  26 fin=  22 lag= 4 peers= 7 supply=2,052,650 ✅
+  Node 4: round=  28 fin=  25 lag= 3 peers= 2 supply=2,053,100 [LOW_PEERS] ⚠️
+  Round 26: 2 vertices ⚠️
+
+[2026-03-09 01:55:47] Sample #161
+  Node 1: round=  50 fin=  30 lag=20 peers= 4 supply=2,053,950 [HIGH_LAG] ⚠️
+  Node 2: round=   0 fin=  26 lag=-26 peers= 8 supply=2,057,450 ✅
+  Node 3: round=  50 fin=  30 lag=20 peers= 3 supply=2,053,950 [HIGH_LAG] ⚠️
+  Node 4: round=  52 fin=  37 lag=15 peers= 3 supply=2,055,100 [HIGH_LAG] ⚠️
+  Round 49: 1 vertices ⚠️
+
+[2026-03-09 02:00:49] Sample #162
+  Node 1: round=  58 fin=  57 lag= 1 peers= 8 supply=2,056,750 ✅
+  Node 2: round=  59 fin=  57 lag= 2 peers= 7 supply=2,056,750 ✅
+  Node 3: round=  59 fin=  57 lag= 2 peers= 9 supply=2,056,750 ✅
+  Node 4: round=  59 fin=  58 lag= 1 peers= 4 supply=2,056,900 ✅
+  Round 58: 2 vertices ⚠️
+
+[2026-03-09 02:05:52] Sample #163
+  Node 1: round= 177 fin= 174 lag= 3 peers= 7 supply=2,071,450 ✅
+  Node 2: round= 177 fin= 174 lag= 3 peers= 6 supply=2,071,450 ✅
+  Node 3: round= 177 fin= 174 lag= 3 peers= 8 supply=2,071,450 ✅
+  Node 4: round= 177 fin= 174 lag= 3 peers= 7 supply=2,071,450 ✅
+  Round 176: 2 vertices ⚠️
+
+[2026-03-09 02:10:55] Sample #164
+  Node 1: round=  28 fin=  23 lag= 5 peers= 9 supply=2,052,050 ✅
+  Node 2: round=  30 fin=  27 lag= 3 peers= 8 supply=2,052,500 ✅
+  Node 3: round=  28 fin=  23 lag= 5 peers= 8 supply=2,052,050 ✅
+  Node 4: round=   0 fin=  15 lag=-15 peers= 7 supply=2,051,400 ✅
+  Round 27: 1 vertices ⚠️
+
+[2026-03-09 02:15:57] Sample #165
+  Node 1: round=  48 fin=  23 lag=25 peers= 9 supply=2,052,050 [HIGH_LAG] ⚠️
+  Node 2: round=  50 fin=  37 lag=13 peers= 8 supply=2,053,000 [HIGH_LAG] ⚠️
+  Node 3: round=  48 fin=  23 lag=25 peers= 8 supply=2,052,050 [HIGH_LAG] ⚠️
+  Node 4: round=   0 fin=  15 lag=-15 peers= 6 supply=2,051,400 ✅
+  Round 47: 1 vertices ⚠️
+
+[2026-03-09 02:20:59] Sample #166
+  Node 1: round=  14 fin=  12 lag= 2 peers= 5 supply=2,051,350 ✅
+  Node 2: round=  14 fin=  12 lag= 2 peers= 7 supply=2,051,350 ✅
+  Node 3: round=  14 fin=  12 lag= 2 peers= 6 supply=2,051,350 ✅
+  Node 4: round=   0 fin=  15 lag=-15 peers= 5 supply=2,051,400 ✅
+  Round 14: 2 vertices ⚠️
+
+[2026-03-09 02:26:02] Sample #167
+  Node 1: round=  37 fin=  15 lag=22 peers= 5 supply=2,051,750 [HIGH_LAG] ⚠️
+  Node 2: round=  36 fin=  15 lag=21 peers= 7 supply=2,051,750 [HIGH_LAG] ⚠️
+  Node 3: round=  42 fin=  36 lag= 6 peers= 7 supply=2,053,850 ✅
+  Node 4: round=  42 fin=  36 lag= 6 peers= 5 supply=2,053,850 ✅
+  Round 36: 1 vertices ⚠️
+
+[2026-03-09 02:31:04] Sample #168
+  Node 1: round=  95 fin=  92 lag= 3 peers= 8 supply=2,063,850 ✅
+  Node 2: round=  71 fin=  66 lag= 5 peers= 6 supply=2,060,350 ✅
+  Node 3: round=  95 fin=  92 lag= 3 peers= 7 supply=2,063,850 ✅
+  Node 4: round=  95 fin=  92 lag= 3 peers= 5 supply=2,063,850 ✅
+  Round 94: 2 vertices ⚠️
+
+[2026-03-09 02:36:07] Sample #169
+  Node 1: round= 215 fin= 212 lag= 3 peers= 8 supply=2,080,000 ✅
+  Node 2: round=  92 fin=  66 lag=26 peers= 5 supply=2,060,350 [HIGH_LAG] ⚠️
+  Node 3: round= 219 fin= 216 lag= 3 peers= 7 supply=2,080,550 ✅
+  Node 4: round= 219 fin= 216 lag= 3 peers= 5 supply=2,080,550 ✅
+  Round 218: 2 vertices ⚠️
+
+[2026-03-09 02:41:17] Sample #170
+  Node 1: round=  86 fin=  84 lag= 2 peers= 8 supply=2,064,750 ✅
+  Node 2: round=  86 fin=  84 lag= 2 peers= 8 supply=2,064,750 ✅
+  Node 3: round=  86 fin=  84 lag= 2 peers= 8 supply=2,064,750 ✅
+  Node 4: round=  87 fin=  85 lag= 2 peers= 8 supply=2,064,900 ✅
+  Round 86: 4 vertices ✅
+
+[2026-03-09 02:46:20] Sample #171
+  Node 1: round= 165 fin= 154 lag=11 peers= 8 supply=2,076,900 [HIGH_LAG] ⚠️
+  Node 2: round= 163 fin= 152 lag=11 peers= 9 supply=2,076,600 [HIGH_LAG] ⚠️
+  Node 3: round= 164 fin= 152 lag=12 peers= 9 supply=2,076,650 [HIGH_LAG] ⚠️
+  Node 4: round= 163 fin= 152 lag=11 peers= 9 supply=2,076,600 [HIGH_LAG] ⚠️
+  Round 165: 1 vertices ⚠️
+
+[2026-03-09 02:51:23] Sample #172
+  Node 1: round= 186 fin= 154 lag=32 peers= 8 supply=2,076,900 [HIGH_LAG] ⚠️
+  Node 2: round= 183 fin= 152 lag=31 peers= 8 supply=2,076,600 [HIGH_LAG] ⚠️
+  Node 3: round= 184 fin= 152 lag=32 peers= 8 supply=2,076,650 [HIGH_LAG] ⚠️
+  Node 4: round= 183 fin= 152 lag=31 peers= 8 supply=2,076,600 [HIGH_LAG] ⚠️
+  Round 185: 1 vertices ⚠️
+
+[2026-03-09 02:56:25] Sample #173
+  Node 1: round= 206 fin= 154 lag=52 peers= 8 supply=2,076,900 [HIGH_LAG] ⚠️
+  Node 2: round= 203 fin= 152 lag=51 peers= 9 supply=2,076,600 [HIGH_LAG] ⚠️
+  Node 3: round= 204 fin= 152 lag=52 peers= 9 supply=2,076,650 [HIGH_LAG] ⚠️
+  Node 4: round= 204 fin= 152 lag=52 peers= 9 supply=2,076,600 [HIGH_LAG] ⚠️
+  Round 205: 1 vertices ⚠️
+
+[2026-03-09 03:01:27] Sample #174
+  Node 1: round=  48 fin=  46 lag= 2 peers= 8 supply=2,056,200 ✅
+  Node 2: round=  48 fin=  47 lag= 1 peers= 8 supply=2,056,300 ✅
+  Node 3: round=  48 fin=  46 lag= 2 peers= 8 supply=2,056,200 ✅
+  Node 4: round=  48 fin=  46 lag= 2 peers= 8 supply=2,056,200 ✅
+  Round 48: 2 vertices ⚠️
+
+[2026-03-09 03:06:29] Sample #175
+  Node 1: round=  90 fin=  72 lag=18 peers= 9 supply=2,059,450 [HIGH_LAG] ⚠️
+  Node 2: round=  95 fin=  82 lag=13 peers= 9 supply=2,060,800 [HIGH_LAG] ⚠️
+  Node 3: round=  93 fin=  79 lag=14 peers= 9 supply=2,059,900 [HIGH_LAG] ⚠️
+  Node 4: round=  93 fin=  79 lag=14 peers= 9 supply=2,059,900 [HIGH_LAG] ⚠️
+  Round 89: 1 vertices ⚠️
+
+[2026-03-09 03:11:30] Sample #176
+  Node 1: round=  24 fin=  23 lag= 1 peers= 8 supply=2,054,600 ✅
+  Node 2: round=  24 fin=  23 lag= 1 peers= 8 supply=2,054,600 ✅
+  Node 3: round=  26 fin=  24 lag= 2 peers= 8 supply=2,054,800 ✅
+  Node 4: round=  26 fin=  24 lag= 2 peers= 8 supply=2,054,800 ✅
+  Round 25: 4 vertices ✅
+
+[2026-03-09 03:16:40] Sample #177
+  Node 1: round=  51 fin=  31 lag=20 peers= 9 supply=2,056,200 [HIGH_LAG] ⚠️
+  Node 2: round=  53 fin=  36 lag=17 peers= 9 supply=2,056,800 [HIGH_LAG] ⚠️
+  Node 3: round=  51 fin=  31 lag=20 peers= 9 supply=2,056,200 [HIGH_LAG] ⚠️
+  Node 4: round=  53 fin=  36 lag=17 peers= 9 supply=2,056,800 [HIGH_LAG] ⚠️
+  Round 51: 2 vertices ⚠️
+
+[2026-03-09 03:21:42] Sample #178
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=  21 fin=  10 lag=11 peers= 9 supply=2,052,000 [HIGH_LAG] ⚠️
+  Node 3: round=  23 fin=  20 lag= 3 peers= 9 supply=2,052,600 ✅
+  Node 4: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Round 20: 1 vertices ⚠️
+
+[2026-03-09 03:26:44] Sample #179
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=  41 fin=  10 lag=31 peers= 8 supply=2,052,000 [HIGH_LAG] ⚠️
+  Node 3: round=  43 fin=  20 lag=23 peers= 8 supply=2,052,600 [HIGH_LAG] ⚠️
+  Node 4: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Round 41: 1 vertices ⚠️
+
+[2026-03-09 03:32:16] Sample #180
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=  19 fin=   2 lag=17 peers= 8 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=  19 fin=   2 lag=17 peers= 6 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 19: 2 vertices ⚠️
+
+[2026-03-09 03:37:18] Sample #181
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=  43 fin=   2 lag=41 peers= 8 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=  44 fin=   2 lag=42 peers= 6 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 43: 1 vertices ⚠️
+
+[2026-03-09 03:42:22] Sample #182
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=  64 fin=   2 lag=62 peers= 8 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=  64 fin=   2 lag=62 peers= 6 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 63: 1 vertices ⚠️
+
+[2026-03-09 03:47:26] Sample #183
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=  84 fin=   2 lag=82 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=  84 fin=   2 lag=82 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 83: 1 vertices ⚠️
+
+[2026-03-09 03:52:28] Sample #184
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 104 fin=   2 lag=102 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 104 fin=   2 lag=102 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 103: 1 vertices ⚠️
+
+[2026-03-09 03:57:31] Sample #185
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 124 fin=   2 lag=122 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 124 fin=   2 lag=122 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 123: 1 vertices ⚠️
+
+[2026-03-09 04:02:32] Sample #186
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 144 fin=   2 lag=142 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 144 fin=   2 lag=142 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 143: 1 vertices ⚠️
+
+[2026-03-09 04:07:35] Sample #187
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 165 fin=   2 lag=163 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 165 fin=   2 lag=163 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 164: 1 vertices ⚠️
+
+[2026-03-09 04:12:37] Sample #188
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 185 fin=   2 lag=183 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 185 fin=   2 lag=183 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 184: 1 vertices ⚠️
+
+[2026-03-09 04:17:39] Sample #189
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 205 fin=   2 lag=203 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 205 fin=   2 lag=203 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 204: 1 vertices ⚠️
+
+[2026-03-09 04:22:41] Sample #190
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 225 fin=   2 lag=223 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 225 fin=   2 lag=223 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 224: 1 vertices ⚠️
+
+[2026-03-09 04:27:43] Sample #191
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 245 fin=   2 lag=243 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 245 fin=   2 lag=243 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 244: 1 vertices ⚠️
+
+[2026-03-09 04:32:44] Sample #192
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 265 fin=   2 lag=263 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 265 fin=   2 lag=263 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 264: 1 vertices ⚠️
+
+[2026-03-09 04:37:47] Sample #193
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 285 fin=   2 lag=283 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 285 fin=   2 lag=283 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 284: 1 vertices ⚠️
+
+[2026-03-09 04:42:48] Sample #194
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 305 fin=   2 lag=303 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 305 fin=   2 lag=303 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 304: 1 vertices ⚠️
+
+[2026-03-09 04:47:51] Sample #195
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 326 fin=   2 lag=324 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 326 fin=   2 lag=324 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 325: 1 vertices ⚠️
+
+[2026-03-09 04:52:52] Sample #196
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 346 fin=   2 lag=344 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 346 fin=   2 lag=344 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 345: 1 vertices ⚠️
+
+[2026-03-09 04:57:55] Sample #197
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 366 fin=   2 lag=364 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 366 fin=   2 lag=364 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 365: 1 vertices ⚠️
+
+[2026-03-09 05:02:56] Sample #198
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 386 fin=   2 lag=384 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 386 fin=   2 lag=384 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 385: 1 vertices ⚠️
+
+[2026-03-09 05:07:58] Sample #199
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 406 fin=   2 lag=404 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 406 fin=   2 lag=404 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 405: 1 vertices ⚠️
+
+[2026-03-09 05:13:00] Sample #200
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 426 fin=   2 lag=424 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 426 fin=   2 lag=424 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 425: 1 vertices ⚠️
+
+[2026-03-09 05:18:02] Sample #201
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 446 fin=   2 lag=444 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 446 fin=   2 lag=444 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 445: 1 vertices ⚠️
+
+[2026-03-09 05:23:04] Sample #202
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 467 fin=   2 lag=465 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 466 fin=   2 lag=464 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 466: 1 vertices ⚠️
+
+[2026-03-09 05:28:06] Sample #203
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 487 fin=   2 lag=485 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 487 fin=   2 lag=485 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 486: 1 vertices ⚠️
+
+[2026-03-09 05:33:08] Sample #204
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 507 fin=   2 lag=505 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 507 fin=   2 lag=505 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 506: 1 vertices ⚠️
+
+[2026-03-09 05:38:10] Sample #205
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 527 fin=   2 lag=525 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 527 fin=   2 lag=525 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 526: 1 vertices ⚠️
+
+[2026-03-09 05:43:12] Sample #206
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 547 fin=   2 lag=545 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 547 fin=   2 lag=545 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 546: 1 vertices ⚠️
+
+[2026-03-09 05:48:14] Sample #207
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 567 fin=   2 lag=565 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 567 fin=   2 lag=565 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 566: 1 vertices ⚠️
+
+[2026-03-09 05:53:16] Sample #208
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 587 fin=   2 lag=585 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 587 fin=   2 lag=585 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 586: 1 vertices ⚠️
+
+[2026-03-09 05:58:18] Sample #209
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 607 fin=   2 lag=605 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 607 fin=   2 lag=605 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 606: 1 vertices ⚠️
+
+[2026-03-09 06:03:20] Sample #210
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 628 fin=   2 lag=626 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 628 fin=   2 lag=626 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 627: 1 vertices ⚠️
+
+[2026-03-09 06:08:22] Sample #211
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 648 fin=   2 lag=646 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 648 fin=   2 lag=646 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 647: 1 vertices ⚠️
+
+[2026-03-09 06:13:24] Sample #212
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 668 fin=   2 lag=666 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 668 fin=   2 lag=666 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 667: 1 vertices ⚠️
+
+[2026-03-09 06:18:26] Sample #213
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 688 fin=   2 lag=686 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 688 fin=   2 lag=686 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 687: 1 vertices ⚠️
+
+[2026-03-09 06:23:28] Sample #214
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 708 fin=   2 lag=706 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 708 fin=   2 lag=706 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 707: 1 vertices ⚠️
+
+[2026-03-09 06:28:30] Sample #215
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 728 fin=   2 lag=726 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 728 fin=   2 lag=726 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 727: 1 vertices ⚠️
+
+[2026-03-09 06:33:32] Sample #216
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 748 fin=   2 lag=746 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 748 fin=   2 lag=746 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 747: 1 vertices ⚠️
+
+[2026-03-09 06:38:34] Sample #217
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 769 fin=   2 lag=767 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 768 fin=   2 lag=766 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 768: 1 vertices ⚠️
+
+[2026-03-09 06:43:36] Sample #218
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 789 fin=   2 lag=787 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 789 fin=   2 lag=787 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 788: 1 vertices ⚠️
+
+[2026-03-09 06:48:39] Sample #219
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 809 fin=   2 lag=807 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 809 fin=   2 lag=807 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 808: 1 vertices ⚠️
+
+[2026-03-09 06:53:40] Sample #220
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 829 fin=   2 lag=827 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 829 fin=   2 lag=827 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 828: 1 vertices ⚠️
+
+[2026-03-09 06:58:43] Sample #221
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 849 fin=   2 lag=847 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 849 fin=   2 lag=847 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 848: 1 vertices ⚠️
+
+[2026-03-09 07:03:44] Sample #222
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 869 fin=   2 lag=867 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 869 fin=   2 lag=867 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 868: 1 vertices ⚠️
+
+[2026-03-09 07:08:47] Sample #223
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 889 fin=   2 lag=887 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 889 fin=   2 lag=887 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 888: 1 vertices ⚠️
+
+[2026-03-09 07:13:48] Sample #224
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 909 fin=   2 lag=907 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 909 fin=   2 lag=907 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 908: 1 vertices ⚠️
+
+[2026-03-09 07:18:50] Sample #225
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 930 fin=   2 lag=928 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 930 fin=   2 lag=928 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 929: 1 vertices ⚠️
+
+[2026-03-09 07:23:52] Sample #226
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 950 fin=   2 lag=948 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 950 fin=   2 lag=948 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 949: 1 vertices ⚠️
+
+[2026-03-09 07:28:55] Sample #227
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 970 fin=   2 lag=968 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 970 fin=   2 lag=968 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 969: 1 vertices ⚠️
+
+[2026-03-09 07:33:56] Sample #228
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 990 fin=   2 lag=988 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 990 fin=   2 lag=988 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 989: 1 vertices ⚠️
+
+[2026-03-09 07:38:59] Sample #229
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1010 fin=   2 lag=1008 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1010 fin=   2 lag=1008 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1009: 1 vertices ⚠️
+
+[2026-03-09 07:44:00] Sample #230
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1030 fin=   2 lag=1028 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1030 fin=   2 lag=1028 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1029: 1 vertices ⚠️
+
+[2026-03-09 07:49:03] Sample #231
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1050 fin=   2 lag=1048 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1050 fin=   2 lag=1048 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1049: 1 vertices ⚠️
+
+[2026-03-09 07:54:04] Sample #232
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1071 fin=   2 lag=1069 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1071 fin=   2 lag=1069 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1070: 1 vertices ⚠️
+
+[2026-03-09 07:59:07] Sample #233
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1091 fin=   2 lag=1089 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1091 fin=   2 lag=1089 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1090: 1 vertices ⚠️
+
+[2026-03-09 08:04:09] Sample #234
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1111 fin=   2 lag=1109 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1111 fin=   2 lag=1109 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1110: 1 vertices ⚠️
+
+[2026-03-09 08:09:12] Sample #235
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1131 fin=   2 lag=1129 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1131 fin=   2 lag=1129 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1130: 1 vertices ⚠️
+
+[2026-03-09 08:14:13] Sample #236
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1151 fin=   2 lag=1149 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1151 fin=   2 lag=1149 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1150: 1 vertices ⚠️
+
+[2026-03-09 08:19:16] Sample #237
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1171 fin=   2 lag=1169 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1171 fin=   2 lag=1169 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1170: 1 vertices ⚠️
+
+[2026-03-09 08:24:17] Sample #238
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1191 fin=   2 lag=1189 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1191 fin=   2 lag=1189 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1190: 1 vertices ⚠️
+
+[2026-03-09 08:29:20] Sample #239
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1212 fin=   2 lag=1210 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1211 fin=   2 lag=1209 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1211: 1 vertices ⚠️
+
+[2026-03-09 08:34:21] Sample #240
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1232 fin=   2 lag=1230 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1232 fin=   2 lag=1230 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1231: 1 vertices ⚠️
+
+[2026-03-09 08:39:24] Sample #241
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1252 fin=   2 lag=1250 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1252 fin=   2 lag=1250 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1251: 1 vertices ⚠️
+
+[2026-03-09 08:44:25] Sample #242
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1272 fin=   2 lag=1270 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1272 fin=   2 lag=1270 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1271: 1 vertices ⚠️
+
+[2026-03-09 08:49:28] Sample #243
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1292 fin=   2 lag=1290 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1292 fin=   2 lag=1290 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1291: 1 vertices ⚠️
+
+[2026-03-09 08:54:30] Sample #244
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1312 fin=   2 lag=1310 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1312 fin=   2 lag=1310 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1311: 1 vertices ⚠️
+
+[2026-03-09 08:59:32] Sample #245
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1332 fin=   2 lag=1330 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1332 fin=   2 lag=1330 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1331: 1 vertices ⚠️
+
+[2026-03-09 09:04:34] Sample #246
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1353 fin=   2 lag=1351 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1352 fin=   2 lag=1350 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1352: 1 vertices ⚠️
+
+[2026-03-09 09:09:37] Sample #247
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1373 fin=   2 lag=1371 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1373 fin=   2 lag=1371 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1372: 1 vertices ⚠️
+
+[2026-03-09 09:14:38] Sample #248
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1393 fin=   2 lag=1391 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1393 fin=   2 lag=1391 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1392: 1 vertices ⚠️
+
+[2026-03-09 09:19:41] Sample #249
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1413 fin=   2 lag=1411 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1413 fin=   2 lag=1411 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1412: 1 vertices ⚠️
+
+[2026-03-09 09:24:42] Sample #250
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1433 fin=   2 lag=1431 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1433 fin=   2 lag=1431 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1432: 1 vertices ⚠️
+
+[2026-03-09 09:29:45] Sample #251
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1453 fin=   2 lag=1451 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1453 fin=   2 lag=1451 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1452: 1 vertices ⚠️
+
+[2026-03-09 09:34:46] Sample #252
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1473 fin=   2 lag=1471 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1473 fin=   2 lag=1471 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1472: 1 vertices ⚠️
+
+[2026-03-09 09:39:49] Sample #253
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1493 fin=   2 lag=1491 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1493 fin=   2 lag=1491 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1492: 1 vertices ⚠️
+
+[2026-03-09 09:44:50] Sample #254
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1514 fin=   2 lag=1512 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1514 fin=   2 lag=1512 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1513: 1 vertices ⚠️
+
+[2026-03-09 09:49:53] Sample #255
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1534 fin=   2 lag=1532 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1534 fin=   2 lag=1532 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1533: 1 vertices ⚠️
+
+[2026-03-09 09:54:55] Sample #256
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1554 fin=   2 lag=1552 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1554 fin=   2 lag=1552 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1553: 1 vertices ⚠️
+
+[2026-03-09 09:59:57] Sample #257
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1574 fin=   2 lag=1572 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1574 fin=   2 lag=1572 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1573: 1 vertices ⚠️
+
+[2026-03-09 11:31:24] Sample #258
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1940 fin=   2 lag=1938 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1940 fin=   2 lag=1938 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1939: 1 vertices ⚠️
+
+[2026-03-09 11:36:27] Sample #259
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1960 fin=   2 lag=1958 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1960 fin=   2 lag=1958 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1959: 1 vertices ⚠️
+
+[2026-03-09 11:41:30] Sample #260
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=1980 fin=   2 lag=1978 peers= 7 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1980 fin=   2 lag=1978 peers= 3 supply=2,050,150 [HIGH_LAG] ⚠️
+  Round 1979: 1 vertices ⚠️
+
+[2026-03-09 11:46:33] Sample #261
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round=2000 fin=   2 lag=1998 peers= 5 supply=2,050,150 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=1999 fin=   2 lag=1997 peers= 0 supply=2,050,150 [HIGH_LAG,LOW_PEERS] ⚠️
+  Round 1999: 1 vertices ⚠️
+
+[2026-03-09 11:51:36] Sample #262
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Round 14: 1 vertices ⚠️
+
+[2026-03-09 11:56:39] Sample #263
+  Node 1: round=  45 fin=  29 lag=16 peers= 3 supply=2,052,200 [HIGH_LAG] ⚠️
+  Node 2: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 3: round=  46 fin=  29 lag=17 peers= 6 supply=2,052,200 [HIGH_LAG] ⚠️
+  Node 4: round=  46 fin=  29 lag=17 peers= 5 supply=2,052,200 [HIGH_LAG] ⚠️
+  Round 45: 3 vertices ✅
+
+[2026-03-09 12:01:41] Sample #264
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 3: round=  95 fin=  73 lag=22 peers= 4 supply=2,060,750 [HIGH_LAG] ⚠️
+  Node 4: round=  95 fin=  73 lag=22 peers= 4 supply=2,060,750 [HIGH_LAG] ⚠️
+
+[2026-03-09 12:13:07] Sample #265
+  Node 1: round=   0 fin=  33 lag=-33 peers= 3 supply=2,054,750 ✅
+  Node 2: round=   0 fin=  35 lag=-35 peers= 5 supply=2,055,050 ✅
+  Node 3: round=  85 fin=  35 lag=50 peers= 5 supply=2,055,050 [HIGH_LAG] ⚠️
+  Node 4: round=   0 fin=  35 lag=-35 peers= 3 supply=2,055,050 ✅
+  Round -1: 1 vertices ⚠️
+
+[2026-03-09 12:18:09] Sample #266
+  Node 1: round=   0 fin=  33 lag=-33 peers= 3 supply=2,054,750 ✅
+  Node 2: round=   0 fin=  35 lag=-35 peers= 5 supply=2,055,050 ✅
+  Node 3: round= 105 fin=  35 lag=70 peers= 5 supply=2,055,050 [HIGH_LAG] ⚠️
+  Node 4: round=   0 fin=  35 lag=-35 peers= 3 supply=2,055,050 ✅
+  Round -1: 1 vertices ⚠️
+
+[2026-03-09 13:58:55] Sample #267
+  Node 1: round=   0 fin=  33 lag=-33 peers= 3 supply=2,054,750 ✅
+  Node 2: round=   0 fin=  35 lag=-35 peers= 6 supply=2,055,050 ✅
+  Node 3: round= 508 fin=  35 lag=473 peers= 4 supply=2,055,050 [HIGH_LAG] ⚠️
+  Node 4: round=   0 fin=  35 lag=-35 peers= 1 supply=2,055,050 [LOW_PEERS] ⚠️
+  Round -1: 1 vertices ⚠️
+
+[2026-03-09 14:03:58] Sample #268
+  Node 1: round=   0 fin=  33 lag=-33 peers= 3 supply=2,054,750 ✅
+  Node 2: round=   0 fin=  35 lag=-35 peers= 6 supply=2,055,050 ✅
+  Node 3: round= 528 fin=  35 lag=493 peers= 4 supply=2,055,050 [HIGH_LAG] ⚠️
+  Node 4: round=   0 fin=  35 lag=-35 peers= 1 supply=2,055,050 [LOW_PEERS] ⚠️
+  Round -1: 1 vertices ⚠️
+
+[2026-03-09 14:09:00] Sample #269
+  Node 1: round=   0 fin=  33 lag=-33 peers= 3 supply=2,054,750 ✅
+  Node 2: round=   0 fin=  35 lag=-35 peers= 6 supply=2,055,050 ✅
+  Node 3: round= 548 fin=  35 lag=513 peers= 2 supply=2,055,050 [HIGH_LAG,LOW_PEERS] ⚠️
+  Node 4: round=   0 fin=  35 lag=-35 peers= 2 supply=2,055,050 [LOW_PEERS] ⚠️
+  Round -1: 1 vertices ⚠️
+
+[2026-03-09 14:14:03] Sample #270
+  Node 1: round=   0 fin=  33 lag=-33 peers= 3 supply=2,054,750 ✅
+  Node 2: round=   0 fin=  35 lag=-35 peers= 6 supply=2,055,050 ✅
+  Node 3: round= 568 fin=  35 lag=533 peers= 3 supply=2,055,050 [HIGH_LAG] ⚠️
+  Node 4: round=   0 fin=  35 lag=-35 peers= 2 supply=2,055,050 [LOW_PEERS] ⚠️
+  Round -1: 1 vertices ⚠️
+
+[2026-03-09 14:19:05] Sample #271
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Round 14: 4 vertices ✅
+
+[2026-03-09 14:24:07] Sample #272
+  Node 1: round=  75 fin=  68 lag= 7 peers= 5 supply=2,063,250 ✅
+  Node 2: round=  76 fin=  68 lag= 8 peers= 4 supply=2,063,250 ✅
+  Node 3: round=  76 fin=  68 lag= 8 peers= 5 supply=2,063,250 ✅
+  Node 4: CRASHED or UNREACHABLE ❌
+  Round 77: 3 vertices ✅
+
+[2026-03-09 14:29:20] Sample #273
+  Node 1: round= 124 fin= 122 lag= 2 peers= 3 supply=2,072,900 ✅
+  Node 2: round= 124 fin= 122 lag= 2 peers= 4 supply=2,072,900 ✅
+  Node 3: round= 124 fin= 122 lag= 2 peers= 5 supply=2,072,900 ✅
+  Node 4: round= 124 fin= 122 lag= 2 peers= 4 supply=2,072,900 ✅
+  Round 123: 4 vertices ✅
+
+[2026-03-09 14:34:22] Sample #274
+  Node 1: round= 182 fin= 178 lag= 4 peers= 3 supply=2,083,150 ✅
+  Node 2: round= 182 fin= 179 lag= 3 peers= 4 supply=2,083,200 ✅
+  Node 3: round= 167 fin= 150 lag=17 peers= 4 supply=2,081,000 [HIGH_LAG] ⚠️
+  Node 4: round= 181 fin= 175 lag= 6 peers= 3 supply=2,082,800 ✅
+  Round 182: 2 vertices ⚠️
+
+[2026-03-09 14:39:43] Sample #275
+  Node 1: round= 235 fin= 219 lag=16 peers= 3 supply=2,091,600 [HIGH_LAG] ⚠️
+  Node 2: round= 235 fin= 219 lag=16 peers= 4 supply=2,091,600 [HIGH_LAG] ⚠️
+  Node 3: round= 224 fin= 219 lag= 5 peers= 4 supply=2,091,450 ✅
+  Node 4: round= 235 fin= 219 lag=16 peers= 3 supply=2,091,600 [HIGH_LAG] ⚠️
+  Round 234: 3 vertices ✅
+
+[2026-03-09 14:44:46] Sample #276
+  Node 1: Parse error - 'dag_round'
+  Node 2: round= 261 fin= 236 lag=25 peers= 5 supply=2,094,350 [HIGH_LAG] ⚠️
+  Node 3: Parse error - 'dag_round'
+  Node 4: round= 261 fin= 236 lag=25 peers= 5 supply=2,094,350 [HIGH_LAG] ⚠️
+
+[2026-03-09 14:49:49] Sample #277
+  Node 1: Parse error - 'dag_round'
+  Node 2: round= 297 fin= 236 lag=61 peers= 3 supply=2,094,350 [HIGH_LAG] ⚠️
+  Node 3: round= 297 fin= 236 lag=61 peers= 3 supply=2,094,350 [HIGH_LAG] ⚠️
+  Node 4: round= 297 fin= 236 lag=61 peers= 3 supply=2,094,350 [HIGH_LAG] ⚠️
+
+[2026-03-09 14:54:51] Sample #278
+  Node 1: round=  55 fin=  47 lag= 8 peers= 3 supply=2,059,400 ✅
+  Node 2: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 3: round= 358 fin= 354 lag= 4 peers= 4 supply=2,110,150 ✅
+  Node 4: CRASHED or UNREACHABLE ❌
+  Round 56: 1 vertices ⚠️
+
+[2026-03-09 15:00:30] Sample #279
+  Node 1: round=  57 fin=  47 lag=10 peers= 3 supply=2,059,400 ✅
+  Node 2: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 3: round=  41 fin=  24 lag=17 peers= 3 supply=2,054,800 [HIGH_LAG] ⚠️
+  Node 4: round=  41 fin=  24 lag=17 peers= 3 supply=2,054,800 [HIGH_LAG] ⚠️
+  Round 56: 1 vertices ⚠️
+
+[2026-03-09 15:05:47] Sample #280
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: Parse error - 'dag_round'
+  Round 32: 2 vertices ⚠️
+
+[2026-03-09 15:10:50] Sample #281
+  Node 1: round=  59 fin=  32 lag=27 peers= 3 supply=2,055,450 [HIGH_LAG] ⚠️
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: round=  63 fin=  26 lag=37 peers= 3 supply=2,055,050 [HIGH_LAG] ⚠️
+  Node 4: round=  61 fin=  25 lag=36 peers= 3 supply=2,055,000 [HIGH_LAG] ⚠️
+  Round 60: 2 vertices ⚠️
+
+[2026-03-09 15:16:19] Sample #282
+  Node 1: round=  85 fin=  32 lag=53 peers= 3 supply=2,055,450 [HIGH_LAG] ⚠️
+  Node 2: round=  85 fin=  32 lag=53 peers= 3 supply=2,055,450 [HIGH_LAG] ⚠️
+  Node 3: round=  84 fin=  26 lag=58 peers= 3 supply=2,055,050 [HIGH_LAG] ⚠️
+  Node 4: round=  83 fin=  25 lag=58 peers= 3 supply=2,055,000 [HIGH_LAG] ⚠️
+  Round 86: 2 vertices ⚠️
+
+[2026-03-09 15:21:38] Sample #283
+  Node 1: round= 108 fin=  32 lag=76 peers= 5 supply=2,055,450 [HIGH_LAG] ⚠️
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: round= 108 fin=  26 lag=82 peers= 6 supply=2,055,050 [HIGH_LAG] ⚠️
+  Node 4: round=  93 fin=  25 lag=68 peers= 1 supply=2,055,000 [HIGH_LAG,LOW_PEERS] ⚠️
+  Round 108: 1 vertices ⚠️
+
+[2026-03-09 15:26:52] Sample #284
+  Node 1: round= 133 fin=  32 lag=101 peers= 5 supply=2,055,450 [HIGH_LAG] ⚠️
+  Node 2: round= 133 fin=  32 lag=101 peers= 2 supply=2,055,450 [HIGH_LAG,LOW_PEERS] ⚠️
+  Node 3: round= 117 fin=  26 lag=91 peers= 4 supply=2,055,050 [HIGH_LAG] ⚠️
+  Node 4: round=  93 fin=  25 lag=68 peers= 1 supply=2,055,000 [HIGH_LAG,LOW_PEERS] ⚠️
+  Round 132: 2 vertices ⚠️
+
+[2026-03-09 15:31:56] Sample #285
+  Node 1: round= 157 fin=  32 lag=125 peers= 4 supply=2,055,450 [HIGH_LAG] ⚠️
+  Node 2: round= 157 fin=  32 lag=125 peers= 2 supply=2,055,450 [HIGH_LAG,LOW_PEERS] ⚠️
+  Node 3: round= 117 fin=  26 lag=91 peers= 4 supply=2,055,050 [HIGH_LAG] ⚠️
+  Node 4: round=  93 fin=  25 lag=68 peers= 1 supply=2,055,000 [HIGH_LAG,LOW_PEERS] ⚠️
+  Round 157: 2 vertices ⚠️
+
+[2026-03-09 15:37:03] Sample #286
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: round= 180 fin=  32 lag=148 peers= 3 supply=2,055,450 [HIGH_LAG] ⚠️
+  Node 3: round= 117 fin=  26 lag=91 peers= 4 supply=2,055,050 [HIGH_LAG] ⚠️
+  Node 4: round=  93 fin=  25 lag=68 peers= 1 supply=2,055,000 [HIGH_LAG,LOW_PEERS] ⚠️
+
+[2026-03-09 18:34:05] Sample #287
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: round= 888 fin=  32 lag=856 peers= 3 supply=2,055,450 [HIGH_LAG] ⚠️
+  Node 3: round= 117 fin=  26 lag=91 peers= 4 supply=2,055,050 [HIGH_LAG] ⚠️
+  Node 4: round=  93 fin=  25 lag=68 peers= 1 supply=2,055,000 [HIGH_LAG,LOW_PEERS] ⚠️
+
+[2026-03-09 18:42:14] Sample #288
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: round= 921 fin=  32 lag=889 peers= 3 supply=2,055,450 [HIGH_LAG] ⚠️
+  Node 3: round= 117 fin=  26 lag=91 peers= 4 supply=2,055,050 [HIGH_LAG] ⚠️
+  Node 4: round=  93 fin=  25 lag=68 peers= 1 supply=2,055,000 [HIGH_LAG,LOW_PEERS] ⚠️
+
+[2026-03-09 19:09:45] Sample #289
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: round=  56 fin=  48 lag= 8 peers= 4 supply=2,059,200 ✅
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=  57 fin=  49 lag= 8 peers= 4 supply=2,059,250 ✅
+  Round 51: 2 vertices ⚠️
+
+[2026-03-09 19:15:33] Sample #290
+  Node 1: round=  82 fin=  44 lag=38 peers= 5 supply=2,058,950 [HIGH_LAG] ⚠️
+  Node 2: round=  87 fin=  81 lag= 6 peers= 5 supply=2,062,100 ✅
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=  87 fin=  81 lag= 6 peers= 5 supply=2,062,100 ✅
+  Round 81: 1 vertices ⚠️
+
+[2026-03-09 19:20:42] Sample #291
+  Node 1: round= 102 fin=  44 lag=58 peers= 3 supply=2,058,950 [HIGH_LAG] ⚠️
+  Node 2: round=  98 fin=  83 lag=15 peers= 3 supply=2,062,700 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 109 fin=  91 lag=18 peers= 4 supply=2,062,950 [HIGH_LAG] ⚠️
+  Round 102: 1 vertices ⚠️
+
+[2026-03-09 19:25:46] Sample #292
+  Node 1: round= 123 fin=  44 lag=79 peers= 3 supply=2,058,950 [HIGH_LAG] ⚠️
+  Node 2: round=  98 fin=  83 lag=15 peers= 3 supply=2,062,700 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 129 fin=  91 lag=38 peers= 4 supply=2,062,950 [HIGH_LAG] ⚠️
+  Round 122: 1 vertices ⚠️
+
+[2026-03-09 19:30:50] Sample #293
+  Node 1: round= 144 fin=  44 lag=100 peers= 3 supply=2,058,950 [HIGH_LAG] ⚠️
+  Node 2: round=  98 fin=  83 lag=15 peers= 3 supply=2,062,700 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 150 fin=  91 lag=59 peers= 4 supply=2,062,950 [HIGH_LAG] ⚠️
+  Round 143: 1 vertices ⚠️
+
+[2026-03-09 19:36:04] Sample #294
+  Node 1: round= 164 fin=  44 lag=120 peers= 3 supply=2,058,950 [HIGH_LAG] ⚠️
+  Node 2: round=  98 fin=  83 lag=15 peers= 3 supply=2,062,700 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 170 fin=  91 lag=79 peers= 4 supply=2,062,950 [HIGH_LAG] ⚠️
+  Round 163: 1 vertices ⚠️
+
+[2026-03-09 19:41:08] Sample #295
+  Node 1: round= 184 fin=  44 lag=140 peers= 3 supply=2,058,950 [HIGH_LAG] ⚠️
+  Node 2: round=  98 fin=  83 lag=15 peers= 3 supply=2,062,700 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round= 190 fin=  91 lag=99 peers= 4 supply=2,062,950 [HIGH_LAG] ⚠️
+  Round 183: 1 vertices ⚠️
+
+[2026-03-09 19:46:12] Sample #296
+  Node 1: round=  53 fin=  24 lag=29 peers= 3 supply=2,054,800 [HIGH_LAG] ⚠️
+  Node 2: round=  53 fin=  24 lag=29 peers= 4 supply=2,054,800 [HIGH_LAG] ⚠️
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: round=  53 fin=  24 lag=29 peers= 3 supply=2,054,800 [HIGH_LAG] ⚠️
+  Round 52: 3 vertices ✅
+
+[2026-03-09 19:51:14] Sample #297
+  Node 1: round= 113 fin=  96 lag=17 peers= 4 supply=2,065,800 [HIGH_LAG] ⚠️
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: round= 115 fin=  97 lag=18 peers= 3 supply=2,065,850 [HIGH_LAG] ⚠️
+  Node 4: round= 115 fin=  97 lag=18 peers= 4 supply=2,065,850 [HIGH_LAG] ⚠️
+  Round 114: 3 vertices ✅
+
+[2026-03-09 19:56:27] Sample #298
+  Node 1: round= 168 fin= 150 lag=18 peers= 3 supply=2,069,900 [HIGH_LAG] ⚠️
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: round= 170 fin= 150 lag=20 peers= 3 supply=2,069,900 [HIGH_LAG] ⚠️
+  Node 4: round= 170 fin= 150 lag=20 peers= 3 supply=2,069,900 [HIGH_LAG] ⚠️
+  Round 169: 3 vertices ✅
+
+[2026-03-09 20:01:38] Sample #299
+  Node 1: CRASHED or UNREACHABLE ❌
+  Node 2: round= 205 fin= 203 lag= 2 peers= 3 supply=2,073,650 ✅
+  Node 3: round= 221 fin= 204 lag=17 peers= 3 supply=2,070,400 [HIGH_LAG] ⚠️
+  Node 4: round= 221 fin= 204 lag=17 peers= 3 supply=2,071,700 [HIGH_LAG] ⚠️
+  Round 217: 3 vertices ✅
+
+[2026-03-09 20:07:03] Sample #300
+  Node 1: round= 275 fin= 255 lag=20 peers= 3 supply=2,072,100 [HIGH_LAG] ⚠️
+  Node 2: round= 207 fin= 204 lag= 3 peers= 3 supply=2,073,750 ✅
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: round= 276 fin= 255 lag=21 peers= 4 supply=2,073,350 [HIGH_LAG] ⚠️
+  Round 275: 2 vertices ⚠️
+
+[2026-03-09 20:12:16] Sample #301
+  Node 1: round= 296 fin= 255 lag=41 peers= 4 supply=2,072,100 [HIGH_LAG] ⚠️
+  Node 2: round= 207 fin= 204 lag= 3 peers= 3 supply=2,073,750 ✅
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: round= 297 fin= 255 lag=42 peers= 3 supply=2,073,350 [HIGH_LAG] ⚠️
+  Round 296: 2 vertices ⚠️
+
+[2026-03-09 20:17:29] Sample #302
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: round= 207 fin= 204 lag= 3 peers= 3 supply=2,073,750 ✅
+  Node 3: CRASHED or UNREACHABLE ❌
+  Node 4: round= 318 fin= 255 lag=63 peers= 3 supply=2,073,350 [HIGH_LAG] ⚠️
+  Round 29: 1 vertices ⚠️
+
+[2026-03-09 20:22:45] Sample #303
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Round -1: 1 vertices ⚠️
+
+[2026-03-09 20:27:48] Sample #304
+  Node 1: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 2: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 3: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Node 4: Parse error - unsupported operand type(s) for -: 'int' and 'NoneType'
+  Round 57: 4 vertices ✅
+
+[2026-03-09 20:32:51] Sample #305
+  Node 1: round=  12 fin=  11 lag= 1 peers= 3 supply=2,052,100 ✅
+  Node 2: round=  12 fin=  11 lag= 1 peers= 3 supply=2,052,100 ✅
+  Node 3: round=  12 fin=  11 lag= 1 peers= 3 supply=2,052,100 ✅
+  Node 4: round=  13 fin=  11 lag= 2 peers= 3 supply=2,052,100 ✅
+  Round 12: 4 vertices ✅
+
+[2026-03-09 20:37:54] Sample #306
+  Node 1: round=  73 fin=  72 lag= 1 peers= 3 supply=2,064,300 ✅
+  Node 2: round=  73 fin=  72 lag= 1 peers= 3 supply=2,064,300 ✅
+  Node 3: round=  73 fin=  72 lag= 1 peers= 3 supply=2,064,300 ✅
+  Node 4: round=  73 fin=  72 lag= 1 peers= 3 supply=2,064,300 ✅
+  Round 72: 4 vertices ✅
+
+[2026-03-09 20:42:56] Sample #307
+  Node 1: round= 133 fin= 107 lag=26 peers= 4 supply=2,071,200 [HIGH_LAG] ⚠️
+  Node 2: round= 133 fin= 107 lag=26 peers= 5 supply=2,071,200 [HIGH_LAG] ⚠️
+  Node 3: round= 133 fin= 107 lag=26 peers= 4 supply=2,071,200 [HIGH_LAG] ⚠️
+  Node 4: round=  56 fin=  50 lag= 6 peers= 3 supply=2,059,900 ✅
+  Round 133: 3 vertices ✅
+
+[2026-03-09 20:47:59] Sample #308
+  Node 1: round= 194 fin= 107 lag=87 peers= 4 supply=2,071,200 [HIGH_LAG] ⚠️
+  Node 2: round= 194 fin= 107 lag=87 peers= 5 supply=2,071,200 [HIGH_LAG] ⚠️
+  Node 3: round= 194 fin= 107 lag=87 peers= 4 supply=2,071,200 [HIGH_LAG] ⚠️
+  Node 4: round=  76 fin=  51 lag=25 peers= 3 supply=2,060,100 [HIGH_LAG] ⚠️
+  Round 193: 3 vertices ✅
+
+[2026-03-09 20:53:01] Sample #309
+  Node 1: round= 249 fin= 107 lag=142 peers= 6 supply=2,071,200 [HIGH_LAG] ⚠️
+  Node 2: round= 249 fin= 107 lag=142 peers= 6 supply=2,071,200 [HIGH_LAG] ⚠️
+  Node 3: round= 250 fin= 107 lag=143 peers= 5 supply=2,071,200 [HIGH_LAG] ⚠️
+  Node 4: round=  88 fin=  51 lag=37 peers= 5 supply=2,060,100 [HIGH_LAG] ⚠️
+  Round 250: 3 vertices ✅
+
+[2026-03-09 20:58:10] Sample #310
+  Node 1: round= 288 fin= 107 lag=181 peers= 6 supply=2,071,200 [HIGH_LAG] ⚠️
+  Node 2: CRASHED or UNREACHABLE ❌
+  Node 3: round= 289 fin= 107 lag=182 peers= 5 supply=2,071,200 [HIGH_LAG] ⚠️
+  Node 4: CRASHED or UNREACHABLE ❌
+  Round 289: 2 vertices ⚠️
+
+[2026-03-09 21:03:44] Sample #311
+  Node 1: round= 310 fin= 107 lag=203 peers= 3 supply=2,071,200 [HIGH_LAG] ⚠️
+  Node 2: round= 310 fin= 107 lag=203 peers= 4 supply=2,071,200 [HIGH_LAG] ⚠️
+  Node 3: round= 311 fin= 107 lag=204 peers= 3 supply=2,071,200 [HIGH_LAG] ⚠️
+  Node 4: round= 131 fin=  51 lag=80 peers= 5 supply=2,060,100 [HIGH_LAG] ⚠️
+  Round 310: 3 vertices ✅
+
+[2026-03-09 21:09:00] Sample #312
+  Node 1: round=  56 fin=  51 lag= 5 peers= 2 supply=2,060,100 [LOW_PEERS] ⚠️
+  Node 2: round= 333 fin= 107 lag=226 peers= 2 supply=2,071,200 [HIGH_LAG,LOW_PEERS] ⚠️
+  Node 3: round= 335 fin= 107 lag=228 peers= 2 supply=2,071,200 [HIGH_LAG,LOW_PEERS] ⚠️
+  Node 4: round= 151 fin=  51 lag=100 peers= 3 supply=2,060,100 [HIGH_LAG] ⚠️
+  Round 55: 1 vertices ⚠️
+
+[2026-03-09 21:14:03] Sample #313
+  Node 1: round= 161 fin=  51 lag=110 peers= 6 supply=2,060,100 [HIGH_LAG] ⚠️
+  Node 2: round= 352 fin= 107 lag=245 peers= 6 supply=2,071,200 [HIGH_LAG] ⚠️
+  Node 3: round= 354 fin= 107 lag=247 peers= 5 supply=2,071,200 [HIGH_LAG] ⚠️
+  Node 4: round= 171 fin=  51 lag=120 peers= 5 supply=2,060,100 [HIGH_LAG] ⚠️
+  Round 160: 1 vertices ⚠️
+

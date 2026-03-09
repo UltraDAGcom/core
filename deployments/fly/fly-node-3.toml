@@ -11,7 +11,7 @@ primary_region = "ams"
   VALIDATORS = "4"
   SEED = "ultradag-node-1.internal:9333 ultradag-node-2.internal:9333 ultradag-node-4.internal:9333"
   NO_BOOTSTRAP = "true"
-  # CLEAN_STATE = "true"
+  CLEAN_STATE = "true"
 
 [mounts]
   source = "ultradag_data"

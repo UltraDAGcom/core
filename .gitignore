@@ -7,10 +7,13 @@
 *.json.bak
 /testnet_results
 /benchmark_results
-wallet*.json
+/logs
 nohup.out
-testnet_monitor.log
-testnet-validators.txt
+*.log
+deploy_*/
+
+# Fly.io auto-generated files (actual configs in deployments/fly/)
+fly-node-*.toml
 
 # SDK build artifacts
 sdk/python/.venv/

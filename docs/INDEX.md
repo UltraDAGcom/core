@@ -2,7 +2,7 @@
 
 ## Core Documentation (Root)
 - **[README.md](../README.md)** - Project overview and quick start
-- **[CLAUDE.md](../CLAUDE.md)** - Complete technical specification
+- **[CLAUDE.md](development/CLAUDE.md)** - Complete technical specification and development changelog
 
 ## Technical Documentation (`/docs/technical/`)
 - **[CONSENSUS_SPEC.md](technical/CONSENSUS_SPEC.md)** - Formal consensus specification
@@ -37,9 +37,13 @@
 ```
 /Users/johan/Projects/15_UltraDAG/
 ├── README.md                    # Entry point
-├── CLAUDE.md                    # Technical spec
+├── CONTRIBUTING.md              # Contribution guidelines
+├── config/                      # Configuration files
+├── deployments/                 # Deployment configs (Docker, Fly.io)
 ├── docs/
 │   ├── INDEX.md                 # This file
+│   ├── development/             # Development docs and changelog
+│   │   └── CLAUDE.md            # Technical spec and changelog
 │   ├── technical/               # Technical specifications
 │   │   ├── CONSENSUS_SPEC.md
 │   │   ├── WHITEPAPER.md
