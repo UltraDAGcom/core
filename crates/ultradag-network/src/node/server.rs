@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, Mutex, Notify, RwLock};
+use tokio::time::Instant;
 use tracing::{info, warn};
 
 use std::path::PathBuf;
@@ -50,6 +52,8 @@ pub struct NodeServer {
     pub data_dir: PathBuf,
     /// Validator secret key for co-signing checkpoints (None for observer nodes).
     pub validator_sk: Option<SecretKey>,
+    /// Peers banned for sending too many rejected vertices. Maps IP → unban time.
+    pub banned_peers: Arc<Mutex<HashMap<String, Instant>>>,
 }
 
 impl NodeServer {
@@ -72,6 +76,7 @@ impl NodeServer {
             sync_complete: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             data_dir: PathBuf::from("."),
             validator_sk: None,
+            banned_peers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -98,6 +103,46 @@ impl NodeServer {
     /// Must be high enough for all validators (inbound + outbound) plus some observers.
     const MAX_PEERS: usize = 16;
 
+    /// Check if an address refers to the local node (self-connection).
+    /// Compares against known local addresses: loopback, 0.0.0.0, and the
+    /// Fly.io `.internal` hostname derived from FLY_APP_NAME.
+    pub fn is_self_address(&self, addr: &str) -> bool {
+        let port_str = self.port.to_string();
+
+        // Check loopback and wildcard variants
+        let loopback_addrs = [
+            format!("127.0.0.1:{}", self.port),
+            format!("0.0.0.0:{}", self.port),
+            format!("[::1]:{}", self.port),
+            format!("[::]:{}", self.port),
+            format!("localhost:{}", self.port),
+        ];
+        for self_addr in &loopback_addrs {
+            if addr == self_addr {
+                return true;
+            }
+        }
+
+        // Check Fly.io .internal hostname (e.g. ultradag-node-1.internal:9333)
+        if let Ok(app_name) = std::env::var("FLY_APP_NAME") {
+            let internal_addr = format!("{}.internal:{}", app_name, self.port);
+            if addr == internal_addr {
+                return true;
+            }
+        }
+
+        // Check system hostname
+        if let Ok(hostname) = hostname::get() {
+            if let Some(hostname_str) = hostname.to_str() {
+                if addr == format!("{}:{}", hostname_str, self.port) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
     /// Start listening for incoming connections.
     pub async fn listen(&self) -> std::io::Result<()> {
         let listener = TcpListener::bind(format!("[::]:{}", self.port)).await?;
@@ -107,6 +152,13 @@ impl NodeServer {
             let (stream, addr) = listener.accept().await?;
             let addr_str = addr.to_string();
 
+            // Reject self-connections (e.g. node connecting to its own listen port)
+            if addr.ip().is_loopback() && addr.port() == self.port {
+                info!("Skipping self-connection to {}", addr_str);
+                drop(stream);
+                continue;
+            }
+
             // Reject connections beyond the peer limit
             let current_peers = self.peers.connected_count().await;
             if current_peers >= Self::MAX_PEERS {
@@ -115,15 +167,41 @@ impl NodeServer {
                 continue;
             }
 
-            // Deduplicate: reject if we already have a connection from the same IP.
-            // Different address formats (.internal, .fly.dev, IPv6, public IP) resolve
-            // to the same node and create wasteful duplicate connections.
+            // Deduplicate: reject if we already have a LIVE connection from the same IP.
+            // Probe the existing writer with a Ping to verify it's alive first.
             let remote_ip = addr.ip().to_string();
             let existing_addrs = self.peers.connected_addrs().await;
-            let already_connected = existing_addrs.iter().any(|a| a.contains(&remote_ip));
-            if already_connected {
-                drop(stream);
-                continue;
+            let matching_addr = existing_addrs.iter().find(|a| a.contains(&remote_ip)).cloned();
+            if let Some(existing) = matching_addr {
+                // Probe the existing writer — if it's dead, remove it and accept this connection
+                let probe_result = tokio::time::timeout(
+                    Duration::from_secs(2),
+                    self.peers.send_to(&existing, &Message::Ping(0)),
+                ).await;
+                match probe_result {
+                    Ok(Ok(())) => {
+                        // Existing connection is alive — reject the new one
+                        info!("Rejecting duplicate connection from {} — already connected via {}", addr_str, existing);
+                        drop(stream);
+                        continue;
+                    }
+                    _ => {
+                        // Existing connection is dead — remove it and accept the new one
+                        info!("Replacing dead connection {} with new connection from {}", existing, addr_str);
+                        self.peers.remove_peer(&existing).await;
+                    }
+                }
+            }
+
+            // Check if this IP is banned
+            {
+                let banned = self.banned_peers.lock().await;
+                if let Some(&until) = banned.get(&remote_ip) {
+                    if Instant::now() < until {
+                        drop(stream);
+                        continue;
+                    }
+                }
             }
 
             info!("Incoming connection from {}", addr_str);
@@ -143,11 +221,12 @@ impl NodeServer {
             let pending_checkpoints = self.pending_checkpoints.clone();
             let data_dir = self.data_dir.clone();
             let validator_sk = self.validator_sk.clone();
+            let banned_peers = self.banned_peers.clone();
 
             let listen_port = self.port;
             tokio::spawn(async move {
                 // handle_peer may rename peer_addr via Hello; remove both keys on disconnect
-                if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref()).await {
+                if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers).await {
                     warn!("Peer {} disconnected: {}", addr_str, e);
                 }
                 // Remove by original ephemeral addr and any possible listen addr
@@ -156,10 +235,64 @@ impl NodeServer {
         }
     }
 
+    /// Spawn a background heartbeat task that pings all writers every 30 seconds
+    /// and removes any that fail or timeout. This detects dead TCP connections
+    /// whose kernel send buffers still accept writes (zombie writers).
+    pub fn start_heartbeat(&self) {
+        let peers = self.peers.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(30));
+            loop {
+                interval.tick().await;
+                let addrs = peers.connected_addrs().await;
+                if addrs.is_empty() {
+                    continue;
+                }
+                let mut dead = Vec::new();
+                for addr in &addrs {
+                    let result = tokio::time::timeout(
+                        Duration::from_secs(3),
+                        peers.send_to(addr, &Message::Ping(0)),
+                    ).await;
+                    match result {
+                        Ok(Ok(())) => {}
+                        _ => {
+                            warn!("Heartbeat: peer {} is dead, removing", addr);
+                            dead.push(addr.clone());
+                        }
+                    }
+                }
+                for addr in &dead {
+                    peers.remove_peer(addr).await;
+                    peers.remove_connected_listen_addr(addr).await;
+                }
+                if !dead.is_empty() {
+                    info!("Heartbeat: removed {} dead peers, {} remaining", dead.len(), peers.connected_count().await);
+                }
+            }
+        });
+    }
+
     /// Connect to a seed peer.
     pub async fn connect_to(&self, addr: &str) -> std::io::Result<()> {
+        if self.is_self_address(addr) {
+            info!("Skipping self-connection to {}", addr);
+            return Ok(());
+        }
+
         let stream = tokio::net::TcpStream::connect(addr).await?;
         let addr_str = addr.to_string();
+
+        // Check if the resolved remote IP is our own (catches DNS-based self-connections)
+        if let Ok(remote) = stream.peer_addr() {
+            if let Ok(local) = stream.local_addr() {
+                if remote.ip() == local.ip() && remote.port() == self.port {
+                    info!("Skipping self-connection to {}", addr);
+                    return Ok(());
+                }
+            }
+        }
+
         info!("Connected to {}", addr_str);
 
         self.peers.add_known(addr_str.clone()).await;
@@ -190,10 +323,11 @@ impl NodeServer {
         let pending_checkpoints = self.pending_checkpoints.clone();
         let data_dir = self.data_dir.clone();
         let validator_sk = self.validator_sk.clone();
+        let banned_peers = self.banned_peers.clone();
         let listen_port = self.port;
 
         tokio::spawn(async move {
-            if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref()).await {
+            if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers).await {
                 warn!("Peer {} disconnected: {}", addr_str, e);
             }
             peers.remove_peer(&addr_str).await;
@@ -304,10 +438,36 @@ async fn try_connect_peer(
     dag: Arc<RwLock<BlockDag>>,
     peers: PeerRegistry,
 ) {
-    // Don't connect to ourselves
-    let self_addr = format!("127.0.0.1:{}", listen_port);
-    if addr == self_addr || addr == format!("0.0.0.0:{}", listen_port) {
-        return;
+    // Don't connect to ourselves — check loopback, wildcard, .internal hostname
+    let loopback_addrs = [
+        format!("127.0.0.1:{}", listen_port),
+        format!("0.0.0.0:{}", listen_port),
+        format!("[::1]:{}", listen_port),
+        format!("[::]:{}", listen_port),
+        format!("localhost:{}", listen_port),
+    ];
+    for self_addr in &loopback_addrs {
+        if addr == *self_addr {
+            info!("Skipping self-connection to {}", addr);
+            return;
+        }
+    }
+    // Check Fly.io .internal hostname
+    if let Ok(app_name) = std::env::var("FLY_APP_NAME") {
+        let internal_addr = format!("{}.internal:{}", app_name, listen_port);
+        if addr == internal_addr {
+            info!("Skipping self-connection to {}", addr);
+            return;
+        }
+    }
+    // Check system hostname
+    if let Ok(hostname) = hostname::get() {
+        if let Some(hostname_str) = hostname.to_str() {
+            if addr == format!("{}:{}", hostname_str, listen_port) {
+                info!("Skipping self-connection to {}", addr);
+                return;
+            }
+        }
     }
 
     // Check if already at max peers
@@ -325,10 +485,15 @@ async fn try_connect_peer(
         return;
     }
 
-    // Resolve DNS to IP and check if we're already connected to this IP
-    // (prevents duplicate connections via .internal / .fly.dev / IPv6 / public IP)
+    // Resolve DNS to IP and check for self-connection or duplicate
     if let Ok(mut resolved) = tokio::net::lookup_host(&addr).await {
         if let Some(socket_addr) = resolved.next() {
+            // Self-connection check: if DNS resolves to loopback with our port
+            if socket_addr.ip().is_loopback() && socket_addr.port() == listen_port {
+                info!("Skipping self-connection to {}", addr);
+                return;
+            }
+            // Duplicate connection check
             let resolved_ip = socket_addr.ip().to_string();
             let existing = peers.connected_addrs().await;
             for existing_addr in &existing {
@@ -341,8 +506,15 @@ async fn try_connect_peer(
 
     match tokio::net::TcpStream::connect(&addr).await {
         Ok(stream) => {
-            // After connecting, check the remote IP for dedup
+            // After connecting, check if we connected to ourselves or a duplicate
             if let Ok(remote) = stream.peer_addr() {
+                // Self-connection: remote IP matches local IP and remote port is our listen port
+                if let Ok(local) = stream.local_addr() {
+                    if remote.ip() == local.ip() && remote.port() == listen_port {
+                        info!("Skipping self-connection to {}", addr);
+                        return;
+                    }
+                }
                 let remote_ip = remote.ip().to_string();
                 let existing = peers.connected_addrs().await;
                 for existing_addr in &existing {
@@ -389,6 +561,11 @@ async fn try_connect_peer(
     }
 }
 
+/// Maximum allowlist rejections before disconnecting and banning a peer.
+const MAX_ALLOWLIST_REJECTIONS: u32 = 10;
+/// Duration to ban a peer after exceeding the rejection threshold.
+const BAN_DURATION: Duration = Duration::from_secs(60);
+
 async fn handle_peer(
     mut reader: PeerReader,
     state: &Arc<RwLock<StateEngine>>,
@@ -404,8 +581,10 @@ async fn handle_peer(
     pending_checkpoints: &Arc<RwLock<HashMap<u64, ultradag_coin::Checkpoint>>>,
     data_dir: &std::path::Path,
     validator_sk: Option<&SecretKey>,
+    banned_peers: &Arc<Mutex<HashMap<String, Instant>>>,
 ) -> std::io::Result<()> {
     let peer_addr = reader.addr.clone();
+    let mut allowlist_rejections: u32 = 0;
 
     loop {
         let msg = reader.recv().await?;
@@ -514,7 +693,22 @@ async fn handle_peer(
                 {
                     let fin_r = finality.read().await;
                     if !fin_r.validator_set().is_allowed(&validator) {
-                        warn!("Rejected vertex from non-allowlisted validator {}.. round={}", &validator.to_hex()[..8], round);
+                        allowlist_rejections += 1;
+                        if allowlist_rejections >= MAX_ALLOWLIST_REJECTIONS {
+                            warn!("Disconnecting peer {} after {} allowlist rejections — banned for {}s",
+                                peer_addr, allowlist_rejections, BAN_DURATION.as_secs());
+                            // Extract IP for ban (handle both IPv4 "ip:port" and IPv6 "[ip]:port")
+                            let ip = if peer_addr.starts_with('[') {
+                                peer_addr.find(']').map(|i| peer_addr[1..i].to_string())
+                            } else {
+                                peer_addr.rsplit_once(':').map(|(ip, _)| ip.to_string())
+                            }.unwrap_or_else(|| peer_addr.clone());
+                            banned_peers.lock().await.insert(ip, Instant::now() + BAN_DURATION);
+                            return Ok(());
+                        }
+                        if allowlist_rejections == 1 {
+                            warn!("Rejected vertex from non-allowlisted validator {}.. round={}", &validator.to_hex()[..8], round);
+                        }
                         continue;
                     }
                 }
@@ -545,6 +739,10 @@ async fn handle_peer(
                         continue;
                     }
                     Err(DagInsertError::MissingParents(missing)) => {
+                        warn!(
+                            "Orphaned vertex {} round={} from {} — missing {} parents, buffering",
+                            hex_short(&vertex_hash), round, peer_addr, missing.len(),
+                        );
                         // Buffer as orphan and request missing parents from peer
                         {
                             let mut orph = orphans.lock().await;
@@ -651,15 +849,16 @@ async fn handle_peer(
                 let mut new_validators = Vec::new();
                 let mut failed_vertices = Vec::new();
                 let mut all_missing_parents: Vec<[u8; 32]> = Vec::new();
+                // Filter out non-allowlisted vertices BEFORE acquiring dag write lock
+                let filtered: Vec<DagVertex> = {
+                    let fin_r = finality.read().await;
+                    vertices.into_iter().filter(|v| {
+                        v.verify_signature() && fin_r.validator_set().is_allowed(&v.validator)
+                    }).collect()
+                };
                 {
                     let mut dag_w = dag.write().await;
-                    for vertex in vertices {
-                        // Verify signature before accepting (same as DagProposal)
-                        if !vertex.verify_signature() {
-                            warn!("Rejected sync vertex with invalid signature from {}", peer_addr);
-                            continue;
-                        }
-
+                    for vertex in filtered {
                         let validator = vertex.validator;
                         let hash = vertex.hash();
                         match dag_w.try_insert(vertex.clone()) {
@@ -824,10 +1023,15 @@ async fn handle_peer(
                 let mut all_missing: Vec<[u8; 32]> = Vec::new();
                 let mut inserted_any = false;
 
-                for vertex in vertices.into_iter().take(50) {
-                    if !vertex.verify_signature() {
-                        continue;
-                    }
+                // Filter out non-allowlisted vertices before processing
+                let filtered: Vec<DagVertex> = {
+                    let fin_r = finality.read().await;
+                    vertices.into_iter().take(50).filter(|v| {
+                        v.verify_signature() && fin_r.validator_set().is_allowed(&v.validator)
+                    }).collect()
+                };
+
+                for vertex in filtered {
                     let validator = vertex.validator;
                     let hash = vertex.hash();
                     let insert_result = {

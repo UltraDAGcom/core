@@ -28,7 +28,7 @@ h1{font-size:48px;color:var(--white);margin-bottom:12px;font-weight:700}
 .live-dot{width:8px;height:8px;background:var(--green);border-radius:50%;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;margin-bottom:48px}
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-bottom:48px}
 .stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:24px;transition:border-color .3s}
 .stat-card:hover{border-color:var(--accent2)}
 .stat-label{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
@@ -46,7 +46,7 @@ h1{font-size:48px;color:var(--white);margin-bottom:12px;font-weight:700}
 .node-status{font-family:'DM Mono',monospace;font-size:11px;padding:4px 10px;border-radius:3px;text-transform:uppercase;letter-spacing:.1em}
 .node-status.online{background:rgba(74,222,128,.15);color:var(--green);border:1px solid rgba(74,222,128,.3)}
 .node-status.offline{background:rgba(248,113,113,.15);color:var(--red);border:1px solid rgba(248,113,113,.3)}
-.node-metrics{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.node-metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 .node-metric{display:flex;flex-direction:column}
 .node-metric-label{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
 .node-metric-value{font-size:18px;font-weight:600;color:var(--bright)}
@@ -100,6 +100,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
   h1{font-size:36px}
   .subtitle{font-size:12px}
   .stats-grid{grid-template-columns:repeat(2,1fr);gap:16px}
+  .node-metrics{grid-template-columns:1fr 1fr 1fr}
   .stat-card{padding:20px}
   .stat-value{font-size:28px}
   .stat-sub{font-size:11px}
@@ -116,7 +117,8 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
   h1{font-size:28px}
   .subtitle{font-size:11px}
   .live-indicator{font-size:11px;padding:6px 12px}
-  .stats-grid{grid-template-columns:1fr;gap:12px}
+  .stats-grid{grid-template-columns:1fr 1fr;gap:12px}
+  .node-metrics{grid-template-columns:1fr 1fr}
   .stat-card{padding:16px}
   .stat-label{font-size:10px}
   .stat-value{font-size:24px}
@@ -189,12 +191,12 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
     <div class="stat-card">
       <div class="stat-label">Current Round</div>
       <div class="stat-value" id="current-round">—</div>
-      <div class="stat-sub">Consensus round number</div>
+      <div class="stat-sub" id="current-round-sub">Consensus round number</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Finality Lag</div>
-      <div class="stat-value" id="finality-lag">—</div>
-      <div class="stat-sub">Rounds behind tip</div>
+      <div class="stat-label">Finalized Round</div>
+      <div class="stat-value" id="finalized-round">—</div>
+      <div class="stat-sub" id="finality-lag-sub">—</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Total Supply</div>
@@ -202,7 +204,17 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
       <div class="stat-sub" id="total-supply-udag">— UDAG</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Active Validators</div>
+      <div class="stat-label">Network Health</div>
+      <div class="stat-value" id="network-health">—</div>
+      <div class="stat-sub" id="network-health-sub">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">DAG Vertices</div>
+      <div class="stat-value" id="dag-vertices">—</div>
+      <div class="stat-sub" id="dag-vertices-sub">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Validators</div>
       <div class="stat-value" id="validator-count">—</div>
       <div class="stat-sub">Participating in consensus</div>
     </div>
@@ -212,25 +224,6 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
     <h2 class="section-title">Validator Nodes</h2>
     <div class="nodes-grid" id="nodes-grid">
       <!-- Nodes 1-4 populated by JavaScript -->
-    </div>
-    <div class="nodes-grid" style="margin-top:20px">
-      <div class="node-card online">
-        <div class="node-header">
-          <div class="node-name">Node 5 (VPS)</div>
-          <div class="node-status online">HTTP Only</div>
-        </div>
-        <div class="node-metrics">
-          <div class="node-metric">
-            <div class="node-metric-label">IP</div>
-            <div class="node-metric-value" style="font-size:14px">84.247.10.2</div>
-          </div>
-          <div class="node-metric">
-            <div class="node-metric-label">Port</div>
-            <div class="node-metric-value">9333 / 10333</div>
-          </div>
-        </div>
-        <div class="node-url">No HTTPS — use <code style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:var(--bg3);padding:2px 6px;border-radius:2px">curl http://84.247.10.2:10333/status</code></div>
-      </div>
     </div>
   </div>
 
@@ -258,156 +251,189 @@ mobileMenu.querySelectorAll('a').forEach(link=>{link.addEventListener('click',()
 
 <script>
 const NODES = [
-  { name: 'Node 1', url: 'https://ultradag-node-1.fly.dev' },
-  { name: 'Node 2', url: 'https://ultradag-node-2.fly.dev' },
-  { name: 'Node 3', url: 'https://ultradag-node-3.fly.dev' },
-  { name: 'Node 4', url: 'https://ultradag-node-4.fly.dev' },
-  // Node 5 (VPS at 84.247.10.2:10333) is HTTP-only, cannot be fetched from HTTPS page (mixed content)
-  // Access directly: curl http://84.247.10.2:10333/status
+  { name: 'Node 1', region: 'Amsterdam', url: 'https://ultradag-node-1.fly.dev' },
+  { name: 'Node 2', region: 'Amsterdam', url: 'https://ultradag-node-2.fly.dev' },
+  { name: 'Node 3', region: 'Amsterdam', url: 'https://ultradag-node-3.fly.dev' },
+  { name: 'Node 4', region: 'Amsterdam', url: 'https://ultradag-node-4.fly.dev' },
 ];
 
 let nodeData = {};
-let errorCount = 0;
+let lastUpdate = null;
 
 async function fetchNodeStatus(node) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  const t0 = performance.now();
   try {
-    const response = await fetch(`${node.url}/status`, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(5000)
+    const response = await fetch(node.url + '/status', {
+      signal: controller.signal,
     });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    
-    const data = await response.json();
+    clearTimeout(timer);
+    const latency = Math.round(performance.now() - t0);
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const d = await response.json();
+    const round = d.dag_round || 0;
+    const finRound = d.last_finalized_round;
+    const lag = finRound != null ? round - finRound : null;
     return {
-      online: true,
-      round: data.dag_round || 0,
-      finalized: data.last_finalized_round || 0,
-      lag: (data.dag_round || 0) - (data.last_finalized_round || 0),
-      supply: data.total_supply || 0,
-      validators: data.validator_count || 0,
-      peers: data.peer_count || 0
+      online: true, latency, round, finRound, lag,
+      supply: d.total_supply || 0,
+      validators: d.validator_count || 0,
+      peers: d.peer_count || 0,
+      vertices: d.dag_vertices || 0,
+      finalized: d.finalized_count || 0,
+      mempool: d.mempool_size || 0,
+      tips: d.dag_tips || 0,
+      accounts: d.account_count || 0,
+      staked: d.total_staked || 0,
     };
-  } catch (error) {
-    console.error(`Failed to fetch ${node.name}:`, error);
-    return {
-      online: false,
-      round: 0,
-      lag: 0,
-      supply: 0,
-      validators: 0,
-      peers: 0,
-      error: error.message
-    };
+  } catch (err) {
+    clearTimeout(timer);
+    return { online: false, error: err.message };
   }
 }
 
 async function updateAllNodes() {
-  const promises = NODES.map(async (node) => {
+  const results = await Promise.all(NODES.map(async (node) => {
     const status = await fetchNodeStatus(node);
     nodeData[node.name] = { ...node, ...status };
-  });
-  
-  await Promise.all(promises);
+  }));
+  lastUpdate = new Date();
   renderNodes();
   updateGlobalStats();
+}
+
+function lagColor(lag) {
+  if (lag == null) return 'var(--muted)';
+  if (lag <= 3) return 'var(--green)';
+  if (lag <= 10) return 'var(--yellow)';
+  return 'var(--red)';
 }
 
 function renderNodes() {
   const grid = document.getElementById('nodes-grid');
   grid.innerHTML = '';
-  
+
   NODES.forEach(node => {
-    const data = nodeData[node.name];
-    if (!data) return;
-    
+    const d = nodeData[node.name];
+    if (!d) return;
+    const on = d.online;
     const card = document.createElement('div');
-    card.className = `node-card ${data.online ? 'online' : 'offline'}`;
-    
-    card.innerHTML = `
-      <div class="node-header">
-        <div class="node-name">${node.name}</div>
-        <div class="node-status ${data.online ? 'online' : 'offline'}">
-          ${data.online ? 'Online' : 'Offline'}
-        </div>
-      </div>
-      <div class="node-metrics">
-        <div class="node-metric">
-          <div class="node-metric-label">Round</div>
-          <div class="node-metric-value">${data.online ? data.round.toLocaleString() : '—'}</div>
-        </div>
-        <div class="node-metric">
-          <div class="node-metric-label">Lag</div>
-          <div class="node-metric-value">${data.online ? data.lag : '—'}</div>
-        </div>
-        <div class="node-metric">
-          <div class="node-metric-label">Validators</div>
-          <div class="node-metric-value">${data.online ? data.validators : '—'}</div>
-        </div>
-        <div class="node-metric">
-          <div class="node-metric-label">Peers</div>
-          <div class="node-metric-value">${data.online ? data.peers : '—'}</div>
-        </div>
-      </div>
-      <div class="node-url">${node.url.replace('https://', '')}</div>
-    `;
-    
+    card.className = 'node-card ' + (on ? 'online' : 'offline');
+
+    const lagDisplay = d.lag != null ? d.lag : '—';
+    const lagStyle = on ? ' style="color:' + lagColor(d.lag) + '"' : '';
+
+    card.innerHTML =
+      '<div class="node-header">' +
+        '<div class="node-name">' + node.name + ' <span style="font-size:10px;color:var(--muted);font-weight:400">' + node.region + '</span></div>' +
+        '<div class="node-status ' + (on ? 'online' : 'offline') + '">' +
+          (on ? 'Online' : 'Offline') +
+        '</div>' +
+      '</div>' +
+      '<div class="node-metrics">' +
+        '<div class="node-metric">' +
+          '<div class="node-metric-label">Round</div>' +
+          '<div class="node-metric-value">' + (on ? d.round.toLocaleString() : '—') + '</div>' +
+        '</div>' +
+        '<div class="node-metric">' +
+          '<div class="node-metric-label">Finality Lag</div>' +
+          '<div class="node-metric-value"' + lagStyle + '>' + (on ? lagDisplay : '—') + '</div>' +
+        '</div>' +
+        '<div class="node-metric">' +
+          '<div class="node-metric-label">Vertices</div>' +
+          '<div class="node-metric-value">' + (on ? d.vertices.toLocaleString() : '—') + '</div>' +
+        '</div>' +
+        '<div class="node-metric">' +
+          '<div class="node-metric-label">Peers</div>' +
+          '<div class="node-metric-value">' + (on ? d.peers : '—') + '</div>' +
+        '</div>' +
+        '<div class="node-metric">' +
+          '<div class="node-metric-label">Finalized</div>' +
+          '<div class="node-metric-value">' + (on ? d.finalized.toLocaleString() : '—') + '</div>' +
+        '</div>' +
+        '<div class="node-metric">' +
+          '<div class="node-metric-label">Latency</div>' +
+          '<div class="node-metric-value">' + (on ? d.latency + 'ms' : '—') + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="node-url">' + node.url.replace('https://', '') + (on && d.mempool > 0 ? ' &middot; mempool: ' + d.mempool : '') + '</div>';
+
     grid.appendChild(card);
   });
 }
 
 function updateGlobalStats() {
-  const onlineNodes = Object.values(nodeData).filter(n => n.online);
-  
-  if (onlineNodes.length === 0) {
-    showError('All nodes are currently offline. Retrying...');
-    errorCount++;
-    if (errorCount > 3) {
-      document.getElementById('current-round').textContent = '—';
-      document.getElementById('finality-lag').textContent = '—';
-      document.getElementById('total-supply').textContent = '—';
-      document.getElementById('total-supply-udag').textContent = '— UDAG';
-      document.getElementById('validator-count').textContent = '—';
-    }
+  const online = Object.values(nodeData).filter(n => n.online);
+  const total = NODES.length;
+
+  // Network health
+  const healthEl = document.getElementById('network-health');
+  const healthSub = document.getElementById('network-health-sub');
+  healthEl.textContent = online.length + '/' + total;
+  if (online.length === total) {
+    healthEl.style.color = 'var(--green)';
+    healthSub.textContent = 'All nodes operational';
+  } else if (online.length > 0) {
+    healthEl.style.color = 'var(--yellow)';
+    healthSub.textContent = (total - online.length) + ' node(s) unreachable';
+  } else {
+    healthEl.style.color = 'var(--red)';
+    healthSub.textContent = 'Network offline';
+    showError('All nodes are currently unreachable. Retrying...');
     return;
   }
-  
-  errorCount = 0;
   hideError();
-  
-  // Use the node with highest round (most up-to-date)
-  const bestNode = onlineNodes.reduce((best, node) => 
-    node.round > best.round ? node : best
-  );
-  
-  document.getElementById('current-round').textContent = bestNode.round.toLocaleString();
-  document.getElementById('finality-lag').textContent = bestNode.lag;
-  
-  const supplySats = bestNode.supply;
-  const supplyUdag = (supplySats / 100_000_000).toFixed(2);
-  document.getElementById('total-supply').textContent = supplySats.toLocaleString();
-  document.getElementById('total-supply-udag').textContent = `${parseFloat(supplyUdag).toLocaleString()} UDAG`;
-  
-  document.getElementById('validator-count').textContent = bestNode.validators;
+
+  // Use the most up-to-date node
+  const best = online.reduce((a, b) => a.round > b.round ? a : b);
+
+  document.getElementById('current-round').textContent = best.round.toLocaleString();
+  const roundsPerDay = 86400 / 5; // 5s rounds
+  const uptimeDays = (best.round / roundsPerDay).toFixed(1);
+  document.getElementById('current-round-sub').textContent = '~' + uptimeDays + ' days of uptime';
+
+  const finRound = best.finRound;
+  document.getElementById('finalized-round').textContent = finRound != null ? finRound.toLocaleString() : '—';
+  if (best.lag != null) {
+    const lagSub = document.getElementById('finality-lag-sub');
+    lagSub.textContent = 'Lag: ' + best.lag + ' rounds (~' + (best.lag * 5) + 's)';
+    lagSub.style.color = lagColor(best.lag);
+  } else {
+    document.getElementById('finality-lag-sub').textContent = 'Not yet finalizing';
+  }
+
+  const supplySats = best.supply;
+  const supplyUdag = supplySats / 100_000_000;
+  document.getElementById('total-supply').textContent = supplyUdag.toLocaleString(undefined, {maximumFractionDigits: 2}) + ' UDAG';
+  const pct = ((supplyUdag / 21_000_000) * 100).toFixed(3);
+  document.getElementById('total-supply-udag').textContent = pct + '% of 21M max supply minted';
+
+  document.getElementById('dag-vertices').textContent = best.vertices.toLocaleString();
+  const vpr = best.round > 0 ? (best.vertices / best.round).toFixed(1) : '—';
+  document.getElementById('dag-vertices-sub').textContent = vpr + ' vertices/round avg';
+
+  document.getElementById('validator-count').textContent = best.validators;
 }
 
-function showError(message) {
-  const container = document.getElementById('error-container');
-  container.innerHTML = `<div class="error-message">${message}</div>`;
+function showError(msg) {
+  document.getElementById('error-container').innerHTML = '<div class="error-message">' + msg + '</div>';
 }
-
 function hideError() {
   document.getElementById('error-container').innerHTML = '';
 }
 
-// Initial load
-updateAllNodes();
+// Update the live indicator with last refresh time
+function updateTimestamp() {
+  if (!lastUpdate) return;
+  const ago = Math.round((Date.now() - lastUpdate.getTime()) / 1000);
+  const el = document.querySelector('.live-indicator span:last-child');
+  if (el) el.textContent = 'Updated ' + ago + 's ago';
+}
 
-// Auto-refresh every 5 seconds
+updateAllNodes();
 setInterval(updateAllNodes, 5000);
+setInterval(updateTimestamp, 1000);
 </script>
 
 </body>

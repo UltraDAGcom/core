@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::warn;
+use tracing::{debug, info, warn};
 
 use crate::peer::connection::PeerWriter;
 use crate::protocol::Message;
@@ -72,21 +72,48 @@ impl PeerRegistry {
     }
 
     /// Broadcast a message to all connected peers except `exclude`.
+    /// Sends concurrently to all peers to avoid head-of-line blocking
+    /// from slow connections (sequential sends caused 3-18s delays).
     /// Automatically removes peers that fail to send (broken connections).
     pub async fn broadcast(&self, msg: &Message, exclude: &str) {
-        let mut dead_peers = Vec::new();
-        {
+        let sends: Vec<(String, PeerWriter)> = {
             let writers = self.writers.read().await;
-            for (addr, writer) in writers.iter() {
-                if addr == exclude {
-                    continue;
+            writers.iter()
+                .filter(|(addr, _)| *addr != exclude)
+                .map(|(addr, writer)| (addr.clone(), writer.clone()))
+                .collect()
+        };
+
+        debug!("Broadcasting to {} peers", sends.len());
+
+        let mut handles = Vec::with_capacity(sends.len());
+        for (addr, writer) in sends {
+            let msg_clone = msg.clone();
+            handles.push(tokio::spawn(async move {
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    writer.send(&msg_clone),
+                ).await {
+                    Ok(Ok(())) => None,
+                    Ok(Err(e)) => {
+                        warn!("Failed to send to {}: {} — removing dead peer", addr, e);
+                        Some(addr)
+                    }
+                    Err(_) => {
+                        warn!("Timeout sending to {} — removing dead peer", addr);
+                        Some(addr)
+                    }
                 }
-                if let Err(e) = writer.send(msg).await {
-                    warn!("Failed to send to {}: {} — removing dead peer", addr, e);
-                    dead_peers.push(addr.clone());
-                }
+            }));
+        }
+
+        let mut dead_peers = Vec::new();
+        for handle in handles {
+            if let Ok(Some(addr)) = handle.await {
+                dead_peers.push(addr);
             }
         }
+
         // Remove dead peers outside the read lock
         if !dead_peers.is_empty() {
             let mut writers = self.writers.write().await;

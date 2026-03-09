@@ -13,3 +13,4 @@ serde_json = "1"
 tokio = { workspace = true }
 tracing = { workspace = true }
 rand = { workspace = true }
+hostname = "0.4"

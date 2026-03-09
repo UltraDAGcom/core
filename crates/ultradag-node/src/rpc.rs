@@ -13,7 +13,7 @@ use tokio::net::TcpListener;
 use tracing::{error, info, warn};
 
 /// Timeout for RPC lock acquisition — prevents blocking when P2P sync holds write locks.
-const RPC_LOCK_TIMEOUT: Duration = Duration::from_secs(3);
+const RPC_LOCK_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Acquire a read lock with timeout. Returns 503 if the lock can't be acquired.
 macro_rules! read_lock_or_503 {
@@ -237,25 +237,30 @@ async fn handle_request(
         }
 
         (&Method::GET, ["status"]) => {
-            // Acquire each lock briefly with timeout to avoid blocking when
-            // P2P sync handlers hold write locks.
-            let (last_finalized_round, total_supply, account_count, total_staked, active_stakers_len) = {
-                let state = read_lock_or_503!(server.state);
-                (state.last_finalized_round(), state.total_supply(), state.account_count(), state.total_staked(), state.active_stakers().len())
-            };
-            let mempool_size = {
-                let mp = read_lock_or_503!(server.mempool);
-                mp.len()
-            };
+            let state = read_lock_or_503!(server.state);
+            let last_finalized_round = state.last_finalized_round();
+            let total_supply = state.total_supply();
+            let account_count = state.account_count();
+            let total_staked = state.total_staked();
+            let active_stakers_len = state.active_stakers().len();
+            drop(state);
+
+            let mempool = read_lock_or_503!(server.mempool);
+            let mempool_size = mempool.len();
+            drop(mempool);
+
             let peers = server.peers.connected_count().await;
-            let (dag_vertices, dag_round, dag_tips_len) = {
-                let dag = read_lock_or_503!(server.dag);
-                (dag.len(), dag.current_round(), dag.tips().len())
-            };
-            let (finalized_count, validator_count) = {
-                let fin = read_lock_or_503!(server.finality);
-                (fin.finalized_count(), fin.validator_count())
-            };
+
+            let dag = read_lock_or_503!(server.dag);
+            let dag_vertices = dag.len();
+            let dag_round = dag.current_round();
+            let dag_tips_len = dag.tips().len();
+            drop(dag);
+
+            let fin = read_lock_or_503!(server.finality);
+            let finalized_count = fin.finalized_count();
+            let validator_count = fin.validator_count();
+            drop(fin);
             let connected_addrs = server.peers.connected_listen_addrs().await;
             let bootstrap_connected = ultradag_network::TESTNET_BOOTSTRAP_NODES
                 .iter()

@@ -939,6 +939,9 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 6. **Fly-to-Fly P2P connectivity (March 9, 2026)** — Dedicated IPv4 TCP proxy killed persistent TCP connections ("early eof")
    - **Fix:** Changed seed addresses to `.internal` DNS (Fly's private WireGuard network)
    - **Result:** Stable P2P connections, 3-4 peers per node
+7. **Self-connection filtering (March 9, 2026)** — Nodes could connect to themselves via `.internal` DNS, loopback, or peer gossip
+   - **Fix:** Added `is_self_address()` check in `connect_to()`, `listen()`, and `try_connect_peer()`. Checks loopback variants, `FLY_APP_NAME.internal`, system hostname, and post-connect resolved IP comparison
+   - **Result:** Self-connections rejected with "Skipping self-connection to {addr}" log
 
 ## Performance Roadmap
 

@@ -520,6 +520,9 @@ async fn main() {
         std::process::exit(0);
     });
 
+    // Heartbeat: detect and remove dead TCP connections every 30 seconds
+    server.start_heartbeat();
+
     if let Err(e) = server.listen().await {
         error!("Server error: {}", e);
         cancel.store(true, Ordering::Relaxed);

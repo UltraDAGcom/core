@@ -8,20 +8,6 @@ use tracing::{info, warn};
 use ultradag_coin::{DagVertex, SecretKey, Signature, create_block, sync_epoch_validators};
 use ultradag_network::{Message, NodeServer};
 
-/// Check if the previous round has quorum (2f+1 distinct validators).
-/// Returns (has_quorum, prev_count, threshold).
-async fn has_prev_round_quorum(server: &NodeServer, dag_round: u64) -> (bool, usize, usize) {
-    let prev_round = dag_round.saturating_sub(1);
-    let dag = server.dag.read().await;
-    let count = dag.distinct_validators_in_round(prev_round).len();
-    let fin = server.finality.read().await;
-    let thresh = fin.finality_threshold();
-    if thresh == usize::MAX {
-        (false, count, thresh)
-    } else {
-        (count >= thresh, count, thresh)
-    }
-}
 
 pub async fn validator_loop(
     server: Arc<NodeServer>,
@@ -41,9 +27,12 @@ pub async fn validator_loop(
     let mut in_recovery = false;
     const MAX_SKIPS_BEFORE_RECOVERY: u32 = 3;
     // Minimum time between vertex productions to prevent runaway optimistic loops.
-    // During sync bursts, hundreds of round_notify fire, but we should never produce
-    // faster than this cooldown to avoid CPU saturation and health check failures.
-    let min_production_interval = Duration::from_millis(round_duration.as_millis() as u64 / 2).max(Duration::from_secs(1));
+    // Must equal round_duration: if set lower, fast validators race ahead of peers
+    // and lose quorum, causing cascading network splits after ~80 rounds.
+    // Optimistic responsiveness still helps: instead of waiting for the next timer
+    // tick (up to round_duration away), validators produce immediately when quorum
+    // is seen — but never faster than once per round.
+    let min_production_interval = round_duration;
     let mut last_production = tokio::time::Instant::now() - round_duration;
 
     loop {
@@ -71,65 +60,63 @@ pub async fn validator_loop(
         }
 
         // Determine the round we're producing for.
-        // CRITICAL: All validators must produce for the same round to avoid drift.
-        // Produce for current_round if we haven't produced there yet, otherwise current_round + 1.
+        // Only advance to current_round + 1 when we see quorum in current_round.
+        // This prevents validators from racing ahead independently.
         let dag_round = {
             let dag = server.dag.read().await;
             let current = dag.current_round();
 
-            // Check if we already produced a vertex in current_round
-            if dag.has_vertex_from_validator_in_round(&validator, current) {
-                // We already produced in current round, advance to next
+            if !dag.has_vertex_from_validator_in_round(&validator, current) {
+                // Haven't produced in current round — produce there
+                current.max(1)
+            } else if in_recovery {
+                // In stall recovery — advance unconditionally
                 current + 1
             } else {
-                // We haven't produced in current round yet, produce there
-                current.max(1) // Never produce for round 0 (genesis)
+                // Already produced. Check if quorum validators produced in current
+                // round OR the previous round. The prev-round fallback breaks deadlocks
+                // where current-round vertices are still propagating but the network
+                // was healthy one round ago.
+                let validators_in_current = dag.distinct_validators_in_round(current).len();
+                let prev = current.saturating_sub(1);
+                let validators_in_prev = dag.distinct_validators_in_round(prev).len();
+                let configured = server.finality.read().await.validator_set().configured_validators().unwrap_or(4);
+                let quorum = (2 * configured + 2) / 3;
+                if validators_in_current >= quorum || (prev > 0 && validators_in_prev >= quorum) {
+                    current + 1
+                } else {
+                    // Not enough validators in either round yet.
+                    if timer_fired {
+                        consecutive_skips += 1;
+                        if consecutive_skips >= MAX_SKIPS_BEFORE_RECOVERY {
+                            warn!("Entering stall recovery after {} skips at round {}", consecutive_skips, current);
+                            in_recovery = true;
+                            current + 1
+                        } else {
+                            continue; // Wait for more validators
+                        }
+                    } else {
+                        continue; // Notification — just re-check
+                    }
+                }
             }
         };
 
-        let prev_round = dag_round.saturating_sub(1);
-
-        // 2f+1 reference rule: check we have enough vertices from the previous round.
-        // For round 1 (prev_round=0 with no DAG history), skip the check.
-        // Stall recovery: after MAX_SKIPS consecutive timer skips, produce unconditionally.
-        // Once in recovery mode, stay there until quorum is naturally achieved.
-        if dag_round > 1 && !in_recovery && consecutive_skips < MAX_SKIPS_BEFORE_RECOVERY {
-            let (has_quorum, prev_round_count, threshold) = has_prev_round_quorum(&server, dag_round).await;
-
-            if !has_quorum {
-                if !timer_fired {
-                    // Notification was premature — quorum not yet met. Just wait more.
-                    // Don't count as a skip; only timer ticks count as genuine skips.
-                    continue;
-                }
-                consecutive_skips += 1;
-                warn!(
-                    "Skipping round {} — only {}/{} validators seen in round {} (need quorum) [skip {}/{}]",
-                    dag_round, prev_round_count, threshold, prev_round,
-                    consecutive_skips, MAX_SKIPS_BEFORE_RECOVERY,
-                );
-                continue;
-            }
-        } else if consecutive_skips >= MAX_SKIPS_BEFORE_RECOVERY || in_recovery {
-            // Enter or stay in recovery mode — produce unconditionally every round.
-            // IMPORTANT: only produce on timer ticks in recovery mode. Notifications
-            // would cause rapid production (runaway loop with optimistic responsiveness).
-            if !in_recovery {
-                warn!("Entering stall recovery mode after {} skips — producing unconditionally until quorum resumes", consecutive_skips);
-                in_recovery = true;
-            }
+        // Check if quorum has resumed so we can exit recovery
+        if in_recovery {
             if !timer_fired {
-                continue; // In recovery, wait for timer — don't produce on notifications
+                continue; // In recovery, only produce on timer ticks
             }
-            // Check if quorum has resumed so we can exit recovery
-            let (has_quorum, _, _) = has_prev_round_quorum(&server, dag_round).await;
-            if has_quorum {
+            let dag = server.dag.read().await;
+            let prev = dag_round.saturating_sub(1);
+            let validators_in_prev = dag.distinct_validators_in_round(prev).len();
+            let configured = server.finality.read().await.validator_set().configured_validators().unwrap_or(4);
+            let quorum = (2 * configured + 2) / 3;
+            if validators_in_prev >= quorum {
                 info!("Quorum restored — exiting stall recovery mode");
                 in_recovery = false;
             }
         }
-
-        consecutive_skips = 0;
 
         // Active set check: when staking is active, only active validators produce
         {
@@ -150,22 +137,29 @@ pub async fn validator_loop(
             }
         }
 
-        // Get parent references: use ALL vertices from the previous round (not just tips).
-        // This creates dense round-to-round edges in the DAG, ensuring descendant sets
-        // grow quickly for fast finality. Using tips() alone typically yields only 1 parent
-        // (our own last vertex), creating parallel linear chains with poor finality.
+        // Get parent references: use DAG tips (vertices with no children) filtered
+        // to exclude same-round vertices. Tips are the most recently propagated vertices,
+        // making them the safest parents — peers are most likely to have them.
+        // IMPORTANT: exclude tips from the SAME round we're producing for. Including
+        // same-round tips causes a daisy-chain effect where each validator references
+        // the previous one, collapsing tips to 1. By only referencing prior rounds,
+        // all validators in a round are independent tips (tips=3-4).
+        // NOTE: Using vertices_in_round(prev_round) instead of tips() caused cascading
+        // orphan failures — peers that hadn't yet received all prev-round vertices would
+        // orphan the new vertex, creating a positive feedback loop of divergent chains.
         let dag_tips = {
             let dag = server.dag.read().await;
-            let prev_round = dag_round.saturating_sub(1);
-            let prev_round_parents: Vec<[u8; 32]> = dag
-                .vertices_in_round(prev_round)
+            let parents: Vec<[u8; 32]> = dag.tips()
                 .iter()
-                .map(|v| v.hash())
+                .filter(|tip| {
+                    dag.get(tip).map_or(false, |v| v.round < dag_round)
+                })
+                .copied()
                 .collect();
-            if prev_round_parents.is_empty() {
-                dag.tips() // Fallback for round 1 or empty DAG
+            if parents.is_empty() {
+                vec![[0u8; 32]] // Genesis
             } else {
-                prev_round_parents
+                parents
             }
         };
 
@@ -343,6 +337,8 @@ pub async fn validator_loop(
         }
 
         last_production = tokio::time::Instant::now();
+        consecutive_skips = 0;
+        in_recovery = false;
 
         info!(
             "Produced vertex hash={} round={} height={}",
