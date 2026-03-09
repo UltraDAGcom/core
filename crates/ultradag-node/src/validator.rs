@@ -153,24 +153,19 @@ pub async fn validator_loop(
             }
         }
 
-        // Get parent references: use DAG tips (vertices with no children) filtered
-        // to exclude same-round vertices. Tips are the most recently propagated vertices,
-        // making them the safest parents — peers are most likely to have them.
-        // IMPORTANT: exclude tips from the SAME round we're producing for. Including
-        // same-round tips causes a daisy-chain effect where each validator references
-        // the previous one, collapsing tips to 1. By only referencing prior rounds,
-        // all validators in a round are independent tips (tips=3-4).
-        // NOTE: Using vertices_in_round(prev_round) instead of tips() caused cascading
-        // orphan failures — peers that hadn't yet received all prev-round vertices would
-        // orphan the new vertex, creating a positive feedback loop of divergent chains.
+        // Get parent references: use ALL vertices from the previous round.
+        // This creates dense cross-links between validators, enabling fast finality
+        // (descendant validator sets grow quickly when vertices reference all peers).
+        // Using tips() instead would collapse to 1 parent per validator since each
+        // validator's chain tip is its own last vertex.
+        // Peers may not have all prev-round vertices yet — orphan resolution via
+        // GetParents handles this automatically.
         let dag_tips = {
             let dag = server.dag.read().await;
-            let parents: Vec<[u8; 32]> = dag.tips()
+            let prev_round = dag_round.saturating_sub(1);
+            let parents: Vec<[u8; 32]> = dag.vertices_in_round(prev_round)
                 .iter()
-                .filter(|tip| {
-                    dag.get(tip).map_or(false, |v| v.round < dag_round)
-                })
-                .copied()
+                .map(|v| v.hash())
                 .collect();
             if parents.is_empty() {
                 vec![[0u8; 32]] // Genesis
