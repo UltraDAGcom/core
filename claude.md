@@ -32,6 +32,23 @@
 - Clarified RPC port default formula: P2P port + 1000 (e.g., 9333 → 10333)
 - Clarified emission schedule: 50 UDAG per vertex (not per round total)
 
+**Governance & Testing (March 10, 2026):**
+- Implemented comprehensive governance integration tests (6 test cases covering full proposal lifecycle)
+- Added deterministic vertex ordering in `apply_finalized_vertices()` to prevent state divergence
+- Created technical documentation for checkpoint sync protocol
+- Fixed Cargo edition from 2026 to 2021 for compatibility
+
+**Checkpoint Metrics & Monitoring (March 10, 2026):**
+- Implemented complete metrics system for checkpoint operations
+- Added Prometheus-compatible `/metrics` endpoint for monitoring systems
+- Added JSON `/metrics/json` endpoint for custom dashboards
+- Instrumented validator checkpoint production (timing, size, errors)
+- Instrumented P2P checkpoint co-signing and validation
+- Instrumented fast-sync operations (duration, bandwidth, success/failure)
+- Instrumented checkpoint persistence (save/load success rates)
+- All metrics thread-safe using Arc<AtomicU64> for zero-contention updates
+- Tracks: production count, duration, size, co-signing participation, quorum achievement, fast-sync performance, validation failures, pending checkpoints, storage operations
+
 ---
 
 ## What Makes UltraDAG Different
