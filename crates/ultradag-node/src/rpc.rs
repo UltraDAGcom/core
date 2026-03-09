@@ -121,7 +121,7 @@ struct BalanceResponse {
     address: String,
     balance: u64,
     nonce: u64,
-    balance_tdag: f64,
+    balance_udag: f64,
 }
 
 #[derive(Serialize)]
@@ -438,7 +438,7 @@ async fn handle_request(
                     address: addr.to_hex(),
                     balance,
                     nonce,
-                    balance_tdag: balance as f64 / 100_000_000.0,
+                    balance_udag: balance as f64 / 100_000_000.0,
                 },
             )
         }
@@ -1049,9 +1049,16 @@ async fn handle_request(
                 };
 
                 let balance = state.balance(&sender);
-                if balance < fee {
+                let pending_cost: u64 = mp.best(MAX_MEMPOOL_SCAN)
+                    .iter()
+                    .filter(|t| t.from() == sender)
+                    .map(|t| t.total_cost())
+                    .sum();
+                let total_needed = pending_cost.saturating_add(fee);
+                if balance < total_needed {
                     return Ok(error_response(StatusCode::BAD_REQUEST,
-                        &format!("insufficient balance for fee: need {}, have {}", fee, balance)));
+                        &format!("insufficient balance for fee: need {} (fee={}, pending={}), have {}",
+                            total_needed, fee, pending_cost, balance)));
                 }
 
                 let proposal_id = state.next_proposal_id();
@@ -1126,9 +1133,16 @@ async fn handle_request(
                 };
 
                 let balance = state.balance(&sender);
-                if balance < fee {
+                let pending_cost: u64 = mp.best(MAX_MEMPOOL_SCAN)
+                    .iter()
+                    .filter(|t| t.from() == sender)
+                    .map(|t| t.total_cost())
+                    .sum();
+                let total_needed = pending_cost.saturating_add(fee);
+                if balance < total_needed {
                     return Ok(error_response(StatusCode::BAD_REQUEST,
-                        &format!("insufficient balance for fee: need {}, have {}", fee, balance)));
+                        &format!("insufficient balance for fee: need {} (fee={}, pending={}), have {}",
+                            total_needed, fee, pending_cost, balance)));
                 }
 
                 let mut vote_tx = VoteTx {

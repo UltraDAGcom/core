@@ -124,6 +124,9 @@ impl StateEngine {
         // Apply to a snapshot first to ensure atomicity
         let mut snapshot = self.clone();
 
+        // Process any unstake completions for this round
+        snapshot.process_unstake_completions(vertex.round);
+
         let total_fees: u64 = vertex.block.transactions.iter().map(|tx| {
             match tx {
                 crate::tx::Transaction::Transfer(t) => t.fee,
