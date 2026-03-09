@@ -282,19 +282,25 @@ impl StateEngine {
     /// When staking is active, uses stake-proportional rewards.
     /// Otherwise each vertex gets the full block reward (pre-staking mode).
     pub fn apply_finalized_vertices(&mut self, vertices: &[DagVertex]) -> Result<(), CoinError> {
+        // Sort deterministically by (round, hash) so all nodes apply in the same order
+        let mut sorted: Vec<&DagVertex> = vertices.iter().collect();
+        sorted.sort_by(|a, b| {
+            a.round.cmp(&b.round).then_with(|| a.hash().cmp(&b.hash()))
+        });
+
         if self.total_staked() > 0 {
             // Stake-proportional mode: validator count per round for equal-split fallback
             let mut round_counts: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();
-            for v in vertices {
+            for v in &sorted {
                 *round_counts.entry(v.round).or_insert(0) += 1;
             }
-            for vertex in vertices {
+            for vertex in &sorted {
                 let count = round_counts.get(&vertex.round).copied().unwrap_or(1);
                 self.apply_vertex_with_validators(vertex, count)?;
             }
         } else {
             // Pre-staking mode: each vertex gets full block_reward (backward compatible)
-            for vertex in vertices {
+            for vertex in &sorted {
                 self.apply_vertex_with_validators(vertex, 1)?;
             }
         }

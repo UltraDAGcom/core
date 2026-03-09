@@ -1,0 +1,426 @@
+use ultradag_coin::{
+    SecretKey, StateEngine, Signature, StakeTx,
+};
+use ultradag_coin::governance::{CreateProposalTx, ProposalType, VoteTx};
+use ultradag_coin::constants::{
+    GOVERNANCE_APPROVAL_DENOMINATOR, GOVERNANCE_APPROVAL_NUMERATOR,
+    GOVERNANCE_QUORUM_DENOMINATOR, GOVERNANCE_QUORUM_NUMERATOR,
+    GOVERNANCE_VOTING_PERIOD_ROUNDS, MIN_STAKE_TO_PROPOSE,
+};
+
+fn make_proposal_tx(
+    sk: &SecretKey,
+    proposal_id: u64,
+    title: &str,
+    description: &str,
+    proposal_type: ProposalType,
+    fee: u64,
+    nonce: u64,
+) -> CreateProposalTx {
+    let mut tx = CreateProposalTx {
+        from: sk.address(),
+        proposal_id,
+        title: title.to_string(),
+        description: description.to_string(),
+        proposal_type,
+        fee,
+        nonce,
+        pub_key: sk.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    tx.signature = sk.sign(&tx.signable_bytes());
+    tx
+}
+
+fn make_vote_tx(
+    sk: &SecretKey,
+    proposal_id: u64,
+    approve: bool,
+    fee: u64,
+    nonce: u64,
+) -> VoteTx {
+    let mut tx = VoteTx {
+        from: sk.address(),
+        proposal_id,
+        vote: approve,
+        fee,
+        nonce,
+        pub_key: sk.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    tx.signature = sk.sign(&tx.signable_bytes());
+    tx
+}
+
+#[test]
+fn test_full_proposal_lifecycle() {
+    let mut state = StateEngine::new_with_genesis();
+    
+    // Create proposer with sufficient stake
+    let proposer = SecretKey::generate();
+    let proposer_addr = proposer.address();
+    
+    // Fund and stake proposer
+    state.faucet_credit(&proposer_addr, MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
+    let mut stake_tx = StakeTx {
+        from: proposer_addr,
+        amount: MIN_STAKE_TO_PROPOSE,
+        nonce: 0,
+        pub_key: proposer.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
+    state.apply_stake_tx(&stake_tx).unwrap();
+    
+    // Create proposal
+    let proposal_tx = make_proposal_tx(
+        &proposer,
+        0,
+        "Increase Block Size",
+        "Proposal to increase max transactions per block from 10,000 to 20,000",
+        ProposalType::ParameterChange {
+            param: "max_txs_per_block".to_string(),
+            new_value: "20000".to_string(),
+        },
+        10_000,
+        1,
+    );
+    
+    // Apply proposal at round 100
+    state.apply_create_proposal(&proposal_tx, 100).unwrap();
+    
+    // Verify proposal was created
+    let proposal = state.proposal(0).expect("Proposal should exist");
+    assert_eq!(proposal.title, "Increase Block Size");
+    assert_eq!(proposal.proposer, proposer_addr);
+    assert_eq!(proposal.voting_starts, 100);
+    assert_eq!(proposal.votes_for, 0);
+    assert_eq!(proposal.votes_against, 0);
+    assert!(matches!(proposal.status, ultradag_coin::governance::ProposalStatus::Active));
+    
+    // Create voters
+    let voter1 = SecretKey::generate();
+    let voter2 = SecretKey::generate();
+    let voter3 = SecretKey::generate();
+    
+    // Fund and stake voters (need stake to vote)
+    for (sk, nonce) in [(&voter1, 0), (&voter2, 0), (&voter3, 0)] {
+        let addr = sk.address();
+        state.faucet_credit(&addr, 60_000 * 100_000_000 + 1_000_000).unwrap();
+        let mut stake_tx = StakeTx {
+            from: addr,
+            amount: 50_000 * 100_000_000,
+            nonce,
+            pub_key: sk.verifying_key().to_bytes(),
+            signature: Signature([0u8; 64]),
+        };
+        stake_tx.signature = sk.sign(&stake_tx.signable_bytes());
+        state.apply_stake_tx(&stake_tx).unwrap();
+    }
+    
+    // Vote YES from voter1 and voter2
+    let vote1 = make_vote_tx(&voter1, 0, true, 10_000, 1);
+    let vote2 = make_vote_tx(&voter2, 0, true, 10_000, 1);
+    
+    state.apply_vote(&vote1, 150).unwrap();
+    state.apply_vote(&vote2, 200).unwrap();
+    
+    // Vote NO from voter3
+    let vote3 = make_vote_tx(&voter3, 0, false, 10_000, 1);
+    state.apply_vote(&vote3, 250).unwrap();
+    
+    // Check vote tallies
+    let proposal = state.proposal(0).unwrap();
+    assert_eq!(proposal.votes_for, 2 * 50_000 * 100_000_000);
+    assert_eq!(proposal.votes_against, 50_000 * 100_000_000);
+    
+    // Verify individual votes
+    assert_eq!(state.get_vote(0, &voter1.address()), Some(true));
+    assert_eq!(state.get_vote(0, &voter2.address()), Some(true));
+    assert_eq!(state.get_vote(0, &voter3.address()), Some(false));
+}
+
+#[test]
+fn test_proposal_quorum_and_approval() {
+    let mut state = StateEngine::new_with_genesis();
+    
+    // Create proposer
+    let proposer = SecretKey::generate();
+    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
+    let mut stake_tx = StakeTx {
+        from: proposer.address(),
+        amount: MIN_STAKE_TO_PROPOSE,
+        nonce: 0,
+        pub_key: proposer.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
+    state.apply_stake_tx(&stake_tx).unwrap();
+    
+    // Create proposal
+    let proposal_tx = make_proposal_tx(
+        &proposer,
+        0,
+        "Test Proposal",
+        "Testing quorum and approval",
+        ProposalType::TextProposal,
+        10_000,
+        1,
+    );
+    state.apply_create_proposal(&proposal_tx, 100).unwrap();
+    
+    // Create voters with different stake amounts
+    let total_stake = state.total_staked();
+    
+    // Calculate minimum votes needed for quorum (10% of total stake)
+    let quorum_threshold = (total_stake * GOVERNANCE_QUORUM_NUMERATOR) / GOVERNANCE_QUORUM_DENOMINATOR;
+    
+    // Create voter with at least quorum amount (and at least MIN_STAKE_SATS)
+    let voter = SecretKey::generate();
+    let stake_amount = quorum_threshold.max(ultradag_coin::tx::MIN_STAKE_SATS);
+    state.faucet_credit(&voter.address(), stake_amount + 100_000_000).unwrap();
+    let mut stake_tx = StakeTx {
+        from: voter.address(),
+        amount: stake_amount,
+        nonce: 0,
+        pub_key: voter.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stake_tx.signature = voter.sign(&stake_tx.signable_bytes());
+    state.apply_stake_tx(&stake_tx).unwrap();
+    
+    // Vote YES
+    let vote = make_vote_tx(&voter, 0, true, 10_000, 1);
+    state.apply_vote(&vote, 150).unwrap();
+    
+    // Check if proposal meets quorum and approval
+    let proposal = state.proposal(0).unwrap();
+    let total_votes = proposal.votes_for + proposal.votes_against;
+    let new_total_stake = state.total_staked();
+    
+    // Quorum check: total votes >= 10% of total stake
+    let meets_quorum = total_votes >= (new_total_stake * GOVERNANCE_QUORUM_NUMERATOR) / GOVERNANCE_QUORUM_DENOMINATOR;
+    
+    // Approval check: votes_for >= 66% of (votes_for + votes_against)
+    let meets_approval = if total_votes > 0 {
+        (proposal.votes_for * GOVERNANCE_APPROVAL_DENOMINATOR) >= (total_votes * GOVERNANCE_APPROVAL_NUMERATOR)
+    } else {
+        false
+    };
+    
+    assert!(meets_quorum, "Proposal should meet quorum threshold");
+    assert!(meets_approval, "Proposal should meet approval threshold");
+}
+
+#[test]
+fn test_proposal_rejection() {
+    let mut state = StateEngine::new_with_genesis();
+    
+    // Create proposer
+    let proposer = SecretKey::generate();
+    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
+    let mut stake_tx = StakeTx {
+        from: proposer.address(),
+        amount: MIN_STAKE_TO_PROPOSE,
+        nonce: 0,
+        pub_key: proposer.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
+    state.apply_stake_tx(&stake_tx).unwrap();
+    
+    // Create proposal
+    let proposal_tx = make_proposal_tx(
+        &proposer,
+        0,
+        "Bad Proposal",
+        "This should be rejected",
+        ProposalType::TextProposal,
+        10_000,
+        1,
+    );
+    state.apply_create_proposal(&proposal_tx, 100).unwrap();
+    
+    // Create voters
+    let voter1 = SecretKey::generate();
+    let voter2 = SecretKey::generate();
+    
+    // Fund and stake voters
+    for sk in [&voter1, &voter2] {
+        let addr = sk.address();
+        state.faucet_credit(&addr, 60_000 * 100_000_000 + 1_000_000).unwrap();
+        let mut stake_tx = StakeTx {
+            from: addr,
+            amount: 50_000 * 100_000_000,
+            nonce: 0,
+            pub_key: sk.verifying_key().to_bytes(),
+            signature: Signature([0u8; 64]),
+        };
+    stake_tx.signature = sk.sign(&stake_tx.signable_bytes());
+        state.apply_stake_tx(&stake_tx).unwrap();
+    }
+    
+    // Both vote NO
+    let vote1 = make_vote_tx(&voter1, 0, false, 10_000, 1);
+    let vote2 = make_vote_tx(&voter2, 0, false, 10_000, 1);
+
+    state.apply_vote(&vote1, 150).unwrap();
+    state.apply_vote(&vote2, 200).unwrap();
+    
+    // Check that proposal fails approval (0% approval)
+    let proposal = state.proposal(0).unwrap();
+    let total_votes = proposal.votes_for + proposal.votes_against;
+    let approval_rate = if total_votes > 0 {
+        (proposal.votes_for * 100) / total_votes
+    } else {
+        0
+    };
+    
+    assert_eq!(approval_rate, 0, "Proposal should have 0% approval");
+    assert!(proposal.votes_against > 0, "Should have NO votes");
+    assert_eq!(proposal.votes_for, 0, "Should have no YES votes");
+}
+
+#[test]
+fn test_voting_period_expiration() {
+    let mut state = StateEngine::new_with_genesis();
+    
+    // Create proposer
+    let proposer = SecretKey::generate();
+    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
+    let mut stake_tx = StakeTx {
+        from: proposer.address(),
+        amount: MIN_STAKE_TO_PROPOSE,
+        nonce: 0,
+        pub_key: proposer.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
+    state.apply_stake_tx(&stake_tx).unwrap();
+    
+    // Create proposal at round 100
+    let proposal_tx = make_proposal_tx(
+        &proposer,
+        0,
+        "Time-Limited Proposal",
+        "Testing voting period",
+        ProposalType::TextProposal,
+        10_000,
+        1,
+    );
+    state.apply_create_proposal(&proposal_tx, 100).unwrap();
+    
+    // Create voter
+    let voter = SecretKey::generate();
+    state.faucet_credit(&voter.address(), 60_000 * 100_000_000).unwrap();
+    let mut stake_tx = StakeTx {
+        from: voter.address(),
+        amount: 50_000 * 100_000_000,
+        nonce: 0,
+        pub_key: voter.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stake_tx.signature = voter.sign(&stake_tx.signable_bytes());
+    state.apply_stake_tx(&stake_tx).unwrap();
+    
+    // Try to vote within voting period (should succeed)
+    let vote_early = make_vote_tx(&voter, 0, true, 10_000, 1);
+    let early_round = 100 + GOVERNANCE_VOTING_PERIOD_ROUNDS - 1;
+    assert!(state.apply_vote(&vote_early, early_round).is_ok(), "Vote within period should succeed");
+    
+    // Try to vote after voting period (should fail)
+    let voter2 = SecretKey::generate();
+    state.faucet_credit(&voter2.address(), 60_000 * 100_000_000).unwrap();
+    let mut stake_tx2 = StakeTx {
+        from: voter2.address(),
+        amount: 50_000 * 100_000_000,
+        nonce: 0,
+        pub_key: voter2.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stake_tx2.signature = voter2.sign(&stake_tx2.signable_bytes());
+    state.apply_stake_tx(&stake_tx2).unwrap();
+    
+    let vote_late = make_vote_tx(&voter, 0, true, 10_000, 1);
+    let late_round = 100 + GOVERNANCE_VOTING_PERIOD_ROUNDS + 1;
+    assert!(state.apply_vote(&vote_late, late_round).is_err(), "Vote after period should fail");
+}
+
+#[test]
+fn test_double_voting_prevention() {
+    let mut state = StateEngine::new_with_genesis();
+    
+    // Create proposer
+    let proposer = SecretKey::generate();
+    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
+    let mut stake_tx = StakeTx {
+        from: proposer.address(),
+        amount: MIN_STAKE_TO_PROPOSE,
+        nonce: 0,
+        pub_key: proposer.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
+    state.apply_stake_tx(&stake_tx).unwrap();
+    
+    // Create proposal
+    let proposal_tx = make_proposal_tx(
+        &proposer,
+        0,
+        "Test Proposal",
+        "Testing double voting",
+        ProposalType::TextProposal,
+        10_000,
+        1,
+    );
+    state.apply_create_proposal(&proposal_tx, 100).unwrap();
+    
+    // Create voter
+    let voter = SecretKey::generate();
+    state.faucet_credit(&voter.address(), 60_000 * 100_000_000).unwrap();
+    let mut stake_tx = StakeTx {
+        from: voter.address(),
+        amount: 50_000 * 100_000_000,
+        nonce: 0,
+        pub_key: voter.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stake_tx.signature = voter.sign(&stake_tx.signable_bytes());
+    state.apply_stake_tx(&stake_tx).unwrap();
+    
+    // First vote (should succeed)
+    let vote1 = make_vote_tx(&voter, 0, true, 10_000, 1);
+    assert!(state.apply_vote(&vote1, 150).is_ok(), "First vote should succeed");
+    
+    // Second vote (should fail - already voted)
+    let vote2 = make_vote_tx(&voter, 0, false, 10_000, 2);
+    assert!(state.apply_vote(&vote2, 200).is_err(), "Second vote should fail");
+    
+    // Verify only first vote counted
+    let proposal = state.proposal(0).unwrap();
+    assert_eq!(proposal.votes_for, 50_000 * 100_000_000);
+    assert_eq!(proposal.votes_against, 0);
+}
+
+#[test]
+fn test_insufficient_stake_to_propose() {
+    let mut state = StateEngine::new_with_genesis();
+    
+    // Create proposer with insufficient stake
+    let proposer = SecretKey::generate();
+    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE - 1).unwrap();
+    
+    // Try to create proposal (should fail)
+    let proposal_tx = make_proposal_tx(
+        &proposer,
+        0,
+        "Invalid Proposal",
+        "Should fail due to insufficient stake",
+        ProposalType::TextProposal,
+        10_000,
+        0,
+    );
+    
+    let result = state.apply_create_proposal(&proposal_tx, 100);
+    assert!(result.is_err(), "Proposal creation should fail with insufficient stake");
+}
