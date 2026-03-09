@@ -57,7 +57,7 @@ impl DagVertex {
 
     /// Verify the Ed25519 signature on this vertex.
     pub fn verify_signature(&self) -> bool {
-        use ed25519_dalek::{Verifier, VerifyingKey};
+        use ed25519_dalek::VerifyingKey;
         let Ok(vk) = VerifyingKey::from_bytes(&self.pub_key) else {
             return false;
         };
@@ -67,7 +67,7 @@ impl DagVertex {
             return false;
         }
         let sig = ed25519_dalek::Signature::from_bytes(&self.signature.0);
-        vk.verify(&self.signable_bytes(), &sig).is_ok()
+        vk.verify_strict(&self.signable_bytes(), &sig).is_ok()
     }
 
     /// The hash of this vertex covers all semantic fields:

@@ -25,6 +25,8 @@ pub async fn validator_loop(
 
     let mut consecutive_skips = 0u32;
     let mut in_recovery = false;
+    let last_fin = server.finality.read().await.last_finalized_round();
+    let mut last_checkpoint_round: u64 = (last_fin / ultradag_coin::CHECKPOINT_INTERVAL) * ultradag_coin::CHECKPOINT_INTERVAL;
     const MAX_SKIPS_BEFORE_RECOVERY: u32 = 3;
     // Minimum time between vertex productions to prevent runaway optimistic loops.
     // Must equal round_duration: if set lower, fast validators race ahead of peers
@@ -343,43 +345,52 @@ pub async fn validator_loop(
                             mp.remove(&tx.hash());
                         }
                     }
-                    
-                    // Checkpoint generation: produce checkpoint at CHECKPOINT_INTERVAL
-                    if last_finalized_round > 0 && last_finalized_round % ultradag_coin::CHECKPOINT_INTERVAL == 0 {
-                        let state_snapshot = state_w.snapshot();
-                        let state_root = ultradag_coin::consensus::compute_state_root(&state_snapshot);
-                        let dag_r = server.dag.read().await;
-                        let dag_tip = dag_r.tips().first().copied().unwrap_or([0u8; 32]);
-                        drop(dag_r);
-                        
-                        let mut checkpoint = ultradag_coin::Checkpoint {
-                            round: last_finalized_round,
-                            state_root,
-                            dag_tip,
-                            total_supply: state_w.total_supply(),
-                            signatures: vec![],
-                        };
-                        
-                        // Sign with our validator key
-                        let sig = ultradag_coin::consensus::CheckpointSignature {
-                            validator,
-                            pub_key: sk.verifying_key().to_bytes(),
-                            signature: sk.sign(&checkpoint.signable_bytes()),
-                        };
-                        checkpoint.signatures.push(sig);
-                        
-                        // Persist locally
-                        if let Err(e) = ultradag_coin::persistence::save_checkpoint(&data_dir, &checkpoint) {
-                            warn!("Failed to save checkpoint: {}", e);
-                        }
-                        
-                        // Broadcast to peers for co-signing
-                        server.peers.broadcast(&Message::CheckpointProposal(checkpoint), "").await;
-                        
-                        info!("Produced checkpoint at round {}", last_finalized_round);
-                    }
                 }
             }
+        }
+
+        // Checkpoint generation: runs independently of finality block above.
+        // P2P handler may finalize vertices before validator loop, making all_finalized empty.
+        // We check last_finalized_round directly from the finality tracker.
+        let current_finalized = server.finality.read().await.last_finalized_round();
+        if current_finalized > last_checkpoint_round
+            && current_finalized % ultradag_coin::CHECKPOINT_INTERVAL == 0
+        {
+            let state_r = server.state.read().await;
+            let state_snapshot = state_r.snapshot();
+            let state_root = ultradag_coin::consensus::compute_state_root(&state_snapshot);
+            let total_supply = state_r.total_supply();
+            drop(state_r);
+
+            let dag_r = server.dag.read().await;
+            let dag_tip = dag_r.tips().first().copied().unwrap_or([0u8; 32]);
+            drop(dag_r);
+
+            let mut checkpoint = ultradag_coin::Checkpoint {
+                round: current_finalized,
+                state_root,
+                dag_tip,
+                total_supply,
+                signatures: vec![],
+            };
+
+            let sig = ultradag_coin::consensus::CheckpointSignature {
+                validator,
+                pub_key: sk.verifying_key().to_bytes(),
+                signature: sk.sign(&checkpoint.signable_bytes()),
+            };
+            checkpoint.signatures.push(sig);
+
+            // Store in pending_checkpoints so co-signatures can accumulate
+            server.pending_checkpoints.write().await.insert(current_finalized, checkpoint.clone());
+
+            if let Err(e) = ultradag_coin::persistence::save_checkpoint(&data_dir, &checkpoint) {
+                warn!("Failed to save checkpoint: {}", e);
+            }
+
+            server.peers.broadcast(&Message::CheckpointProposal(checkpoint), "").await;
+            last_checkpoint_round = current_finalized;
+            info!("Produced checkpoint at round {}", current_finalized);
         }
 
         // Prune old rounds to bound memory (every 50 rounds to amortize cost)

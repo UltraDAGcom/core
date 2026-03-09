@@ -19,6 +19,7 @@ impl CreateProposalTx {
     pub fn signable_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(256);
         buf.extend_from_slice(crate::constants::NETWORK_ID);
+        buf.extend_from_slice(b"proposal");
         buf.extend_from_slice(&self.from.0);
         buf.extend_from_slice(&self.proposal_id.to_le_bytes());
         buf.extend_from_slice(self.title.as_bytes());
@@ -46,6 +47,16 @@ impl CreateProposalTx {
         hasher.update(&self.proposal_id.to_le_bytes());
         hasher.update(self.title.as_bytes());
         hasher.update(self.description.as_bytes());
+        match &self.proposal_type {
+            ProposalType::TextProposal => {
+                hasher.update(&[0]);
+            }
+            ProposalType::ParameterChange { param, new_value } => {
+                hasher.update(&[1]);
+                hasher.update(param.as_bytes());
+                hasher.update(new_value.as_bytes());
+            }
+        }
         hasher.update(&self.fee.to_le_bytes());
         hasher.update(&self.nonce.to_le_bytes());
         *hasher.finalize().as_bytes()
@@ -80,6 +91,7 @@ impl VoteTx {
     pub fn signable_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(100);
         buf.extend_from_slice(crate::constants::NETWORK_ID);
+        buf.extend_from_slice(b"vote");
         buf.extend_from_slice(&self.from.0);
         buf.extend_from_slice(&self.proposal_id.to_le_bytes());
         buf.push(if self.vote { 1 } else { 0 });

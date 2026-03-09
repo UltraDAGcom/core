@@ -14,6 +14,17 @@ use ultradag_coin::consensus::dag::DagInsertError;
 use crate::peer::{split_connection, PeerReader, PeerRegistry};
 use crate::protocol::Message;
 
+/// Expected protocol version for Hello handshake.
+const PROTOCOL_VERSION: u32 = 1;
+
+/// Maximum number of connections allowed from a single IP address.
+#[allow(dead_code)]
+const MAX_CONNECTIONS_PER_IP: usize = 3;
+
+/// Maximum number of suffix vertices to include in a GetCheckpoint response.
+#[allow(dead_code)]
+const MAX_CHECKPOINT_SUFFIX_VERTICES: usize = 500;
+
 /// Maximum orphan buffer size in bytes (50MB).
 const MAX_ORPHAN_BYTES: usize = 50 * 1024 * 1024;
 
@@ -107,16 +118,14 @@ impl NodeServer {
         self.peers.broadcast(&Message::GetCheckpoint { min_round: our_round }, "").await;
     }
 
-    /// Maximum number of concurrent peer connections to prevent resource exhaustion.
+    /// Maximum number of inbound peer connections to prevent resource exhaustion.
     /// Must be high enough for all validators (inbound + outbound) plus some observers.
-    const MAX_PEERS: usize = 16;
+    const MAX_INBOUND_PEERS: usize = 16;
 
     /// Check if an address refers to the local node (self-connection).
     /// Compares against known local addresses: loopback, 0.0.0.0, and the
     /// Fly.io `.internal` hostname derived from FLY_APP_NAME.
     pub fn is_self_address(&self, addr: &str) -> bool {
-        let port_str = self.port.to_string();
-
         // Check loopback and wildcard variants
         let loopback_addrs = [
             format!("127.0.0.1:{}", self.port),
@@ -169,8 +178,8 @@ impl NodeServer {
 
             // Reject connections beyond the peer limit
             let current_peers = self.peers.connected_count().await;
-            if current_peers >= Self::MAX_PEERS {
-                warn!("Rejecting connection from {} — peer limit ({}) reached", addr_str, Self::MAX_PEERS);
+            if current_peers >= Self::MAX_INBOUND_PEERS {
+                warn!("Rejecting connection from {} — peer limit ({}) reached", addr_str, Self::MAX_INBOUND_PEERS);
                 drop(stream);
                 continue;
             }
@@ -453,7 +462,7 @@ async fn resolve_orphans(
 }
 
 /// Maximum number of outbound peer connections.
-const MAX_PEERS: usize = 8;
+const MAX_OUTBOUND_PEERS: usize = 8;
 
 /// Connect to a peer address if not already connected.
 /// Establishes a TCP connection, sends Hello, and keeps a drain loop
@@ -497,7 +506,7 @@ async fn try_connect_peer(
     }
 
     // Check if already at max peers
-    if peers.connected_count().await >= MAX_PEERS {
+    if peers.connected_count().await >= MAX_OUTBOUND_PEERS {
         return;
     }
 
@@ -672,7 +681,12 @@ async fn handle_peer(
                 let _ = peers.send_to(&peer_addr, &Message::GetPeers).await;
             }
 
-            Message::HelloAck { height, .. } => {
+            Message::HelloAck { version, height } => {
+                if version != PROTOCOL_VERSION {
+                    warn!("Peer {} sent HelloAck with unsupported protocol version {} (expected {}), disconnecting",
+                        peer_addr, version, PROTOCOL_VERSION);
+                    return Ok(());
+                }
                 let our_round = dag.read().await.current_round();
                 if height > our_round {
                     peers
@@ -849,6 +863,7 @@ async fn handle_peer(
                                     }
                                 }
                             }
+                            drop(state_w);
                         }
                     }
 
@@ -998,7 +1013,7 @@ async fn handle_peer(
                     peers.add_known(addr.clone()).await;
                 }
                 // Connect to learned peers for mesh topology
-                if peers.connected_count().await < MAX_PEERS {
+                if peers.connected_count().await < MAX_OUTBOUND_PEERS {
                     for addr in addrs {
                         tokio::spawn(try_connect_peer(
                             addr,
@@ -1280,7 +1295,7 @@ async fn handle_peer(
                         warn!("Received CheckpointSync with only {} valid signers (need ≥2)", valid_count);
                         continue;
                     }
-                    valid_count // accept all valid signers as quorum
+                    2 // Pre-staking: minimum BFT quorum
                 } else {
                     (active.len() * 2 + 2) / 3
                 };

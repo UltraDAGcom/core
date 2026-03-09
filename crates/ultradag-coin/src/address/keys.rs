@@ -1,4 +1,4 @@
-use ed25519_dalek::{Signer, Verifier};
+use ed25519_dalek::Signer;
 use serde::{Deserialize, Serialize};
 
 /// A 32-byte address derived from the Ed25519 public key: blake3(pubkey).
@@ -110,7 +110,7 @@ impl Signature {
     /// Verify this signature against an Ed25519 verifying key and data.
     pub fn verify(&self, verifying_key: &ed25519_dalek::VerifyingKey, data: &[u8]) -> bool {
         let sig = ed25519_dalek::Signature::from_bytes(&self.0);
-        verifying_key.verify(data, &sig).is_ok()
+        verifying_key.verify_strict(data, &sig).is_ok()
     }
 }
 

@@ -885,6 +885,13 @@ async fn handle_request(
         // ====== Governance POST endpoints ======
 
         (&Method::POST, ["proposal"]) => {
+            // Check endpoint-specific rate limit
+            if !rate_limiter.check_rate_limit(client_ip, limits::PROPOSAL) {
+                return Ok(error_response(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "rate limit exceeded: too many proposal requests",
+                ));
+            }
             let body = req.collect().await?.to_bytes();
             if body.len() > MAX_REQUEST_SIZE {
                 return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large"));
@@ -970,6 +977,13 @@ async fn handle_request(
         }
 
         (&Method::POST, ["vote"]) => {
+            // Check endpoint-specific rate limit
+            if !rate_limiter.check_rate_limit(client_ip, limits::VOTE) {
+                return Ok(error_response(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "rate limit exceeded: too many vote requests",
+                ));
+            }
             let body = req.collect().await?.to_bytes();
             if body.len() > MAX_REQUEST_SIZE {
                 return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large"));

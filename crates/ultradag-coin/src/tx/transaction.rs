@@ -155,8 +155,9 @@ impl TransferTx {
     /// The data that gets signed (everything except the signature).
     /// Includes network identifier to prevent cross-network replay attacks.
     pub fn signable_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(100);
+        let mut buf = Vec::with_capacity(108);
         buf.extend_from_slice(crate::constants::NETWORK_ID);
+        buf.extend_from_slice(b"transfer");
         buf.extend_from_slice(&self.from.0);
         buf.extend_from_slice(&self.to.0);
         buf.extend_from_slice(&self.amount.to_le_bytes());
@@ -256,8 +257,8 @@ mod tests {
         let tx = make_signed_tx(&sk, 50, 5, 3);
         if let Transaction::Transfer(ref transfer) = tx {
             assert_eq!(transfer.signable_bytes(), transfer.signable_bytes());
-            // Should be NETWORK_ID (19) + from (32) + to (32) + amount (8) + fee (8) + nonce (8) = 107 bytes
-            assert_eq!(transfer.signable_bytes().len(), 107);
+            // Should be NETWORK_ID (19) + "transfer" (8) + from (32) + to (32) + amount (8) + fee (8) + nonce (8) = 115 bytes
+            assert_eq!(transfer.signable_bytes().len(), 115);
         } else {
             panic!("Expected Transfer variant");
         }

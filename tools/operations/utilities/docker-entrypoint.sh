@@ -40,4 +40,16 @@ if [ "${NO_BOOTSTRAP:-}" = "true" ] || [ "${NO_BOOTSTRAP:-}" = "1" ]; then
   ARGS="$ARGS --no-bootstrap"
 fi
 
+if [ -n "${PRUNING_DEPTH:-}" ]; then
+  ARGS="$ARGS --pruning-depth $PRUNING_DEPTH"
+fi
+
+if [ "${ARCHIVE:-}" = "true" ] || [ "${ARCHIVE:-}" = "1" ]; then
+  ARGS="$ARGS --archive"
+fi
+
+if [ "${SKIP_FAST_SYNC:-}" = "true" ] || [ "${SKIP_FAST_SYNC:-}" = "1" ]; then
+  ARGS="$ARGS --skip-fast-sync"
+fi
+
 exec ultradag-node $ARGS
