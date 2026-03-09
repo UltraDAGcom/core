@@ -3,14 +3,18 @@
 #
 # Usage:
 #   ./scripts/deploy-testnet.sh              # Build + deploy new code to all 4 nodes
-#   ./scripts/deploy-testnet.sh --clean      # Same but wipes state (CLEAN_STATE)
-#   ./scripts/deploy-testnet.sh --restart    # Just restart (no rebuild), useful after code is already deployed
+#   ./scripts/deploy-testnet.sh --clean      # Same but wipes state on all nodes
+#   ./scripts/deploy-testnet.sh --restart    # Just restart (no rebuild)
 #
-# The key insight: fly deploy is sequential per-node and takes minutes.
-# For simultaneous starts, we first deploy the image (which restarts nodes),
-# then if --clean, we set CLEAN_STATE and restart all machines at once.
+# TOML files live in deployments/fly/fly-node-{1,2,3,4}.toml.
+# --clean temporarily sets CLEAN_STATE=true in the TOML env, deploys,
+# then reverts it. This is more reliable than fly secrets --stage.
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+TOML_DIR="$PROJECT_ROOT/deployments/fly"
 
 NODES=(ultradag-node-1 ultradag-node-2 ultradag-node-3 ultradag-node-4)
 CLEAN=false
@@ -24,28 +28,26 @@ for arg in "$@"; do
     esac
 done
 
+# --clean: uncomment CLEAN_STATE in all TOML files
 if $CLEAN; then
-    echo "==> Setting CLEAN_STATE=true on all nodes..."
-    for node in "${NODES[@]}"; do
-        fly secrets set CLEAN_STATE=true -a "$node" --stage &
+    echo "==> Enabling CLEAN_STATE in TOML files..."
+    for i in 1 2 3 4; do
+        sed -i '' 's/^  # CLEAN_STATE = "true"/  CLEAN_STATE = "true"/' "$TOML_DIR/fly-node-$i.toml"
     done
-    wait
-    echo "    Staged. Will take effect on next restart."
 fi
 
 if ! $RESTART_ONLY; then
     echo "==> Building and deploying new code to all nodes..."
-    # Deploy sequentially (shared remote builder can't parallelize well)
     for i in 1 2 3 4; do
         echo "  Deploying node $i..."
-        fly deploy -a "ultradag-node-$i" -c "fly-node-$i.toml" --remote-only 2>&1 | grep -E "succeeded|Visit|Error" || true
+        fly deploy -a "ultradag-node-$i" -c "$TOML_DIR/fly-node-$i.toml" --remote-only 2>&1 | grep -E "succeeded|Visit|Error" || true
     done
     echo "    All nodes deployed."
 fi
 
+# --clean or --restart: restart all machines simultaneously
 if $RESTART_ONLY || $CLEAN; then
     echo "==> Restarting all machines simultaneously..."
-    # Get machine IDs
     for node in "${NODES[@]}"; do
         MACHINE_ID=$(fly machines list -a "$node" --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
         echo "  Restarting $node ($MACHINE_ID)..."
@@ -55,13 +57,12 @@ if $RESTART_ONLY || $CLEAN; then
     echo "    All machines restarted."
 fi
 
+# --clean: revert CLEAN_STATE in TOML files so normal deploys don't wipe state
 if $CLEAN; then
-    echo "==> Removing CLEAN_STATE secret (staged for next deploy)..."
-    for node in "${NODES[@]}"; do
-        fly secrets unset CLEAN_STATE -a "$node" --stage 2>/dev/null &
+    echo "==> Reverting CLEAN_STATE in TOML files..."
+    for i in 1 2 3 4; do
+        sed -i '' 's/^  CLEAN_STATE = "true"/  # CLEAN_STATE = "true"/' "$TOML_DIR/fly-node-$i.toml"
     done
-    wait
-    echo "    Done."
 fi
 
 echo ""
