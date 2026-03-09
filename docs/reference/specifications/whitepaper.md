@@ -486,11 +486,281 @@ GetDagVertices { from_round: our_round + 1, max_count: 100 }
 
 The receiving node responds with all vertices in the requested round range. The requesting node verifies signatures, checks equivocation, and inserts valid vertices into its DAG. Vertices with missing parents are buffered as orphans (up to 1,000 entries / 50 MB) and retried when new vertices arrive.
 
+### 11.5 Checkpoint System
+
+UltraDAG implements a BFT checkpoint protocol for fast-sync and state recovery. Checkpoints enable new nodes to bootstrap from a recent finalized state without replaying the entire DAG history.
+
+**Checkpoint Structure:**
+```
+Checkpoint = {
+    round:       u64,              // Finalized round number
+    state_root:  [u8; 32],         // Blake3 hash of state snapshot
+    signatures:  Vec<Signature>,   // BFT quorum signatures
+}
+```
+
+**Checkpoint Production (Every 100 Finalized Rounds):**
+
+1. **Validator creates checkpoint** when `finalized_round % 100 == 0`
+2. **Computes state root** = `Blake3(StateSnapshot)` where StateSnapshot includes all account balances, nonces, total supply, and governance state
+3. **Signs checkpoint** with validator's Ed25519 key
+4. **Broadcasts** `CheckpointProposal` to all peers
+
+**Checkpoint Co-signing Protocol:**
+
+1. **Receiving validator** verifies:
+   - Round matches their own finalized round
+   - State root matches their computed state root
+   - Proposer signature is valid
+2. **Co-signs** if verification passes
+3. **Broadcasts** `CheckpointSignatureMsg` with their signature
+4. **Quorum achievement**: When `|valid_signatures| >= ceil(2n/3)`, checkpoint is accepted
+5. **Persistence**: Accepted checkpoints are saved to disk as `checkpoint_{round:010}.json`
+
+**Fast-Sync Protocol:**
+
+When a new node joins or falls behind:
+
+1. **Requests checkpoint** via `GetCheckpoint { min_round }`
+2. **Receives** `CheckpointSync { checkpoint, suffix_vertices, state_at_checkpoint }`
+3. **Verifies**:
+   - Checkpoint has BFT quorum signatures
+   - State root matches `Blake3(state_at_checkpoint)`
+   - All suffix vertices have valid signatures
+4. **Applies**:
+   - Loads state snapshot directly
+   - Sets DAG pruning floor to checkpoint round
+   - Inserts suffix vertices (rounds after checkpoint)
+   - Resets finality tracker to checkpoint round
+5. **Sync complete**: Node is now at current round in 30-120 seconds
+
+**Checkpoint Pruning:**
+
+To limit disk usage, old checkpoints are automatically pruned:
+- **Retention policy**: Keep 10 most recent checkpoints
+- **Minimum safety**: Always keep at least 2 checkpoints
+- **Automatic pruning**: After each checkpoint production
+- **Disk usage**: Constant ~20MB (10 checkpoints × ~2MB each)
+
+Without pruning, checkpoints would accumulate unbounded (2MB every 100 rounds = 20GB after 1M rounds). With pruning, disk usage remains constant regardless of chain age.
+
+**Checkpoint Metrics:**
+
+All checkpoint operations are instrumented with metrics:
+- Production count, duration, size
+- Co-signing participation
+- Quorum achievement rate
+- Fast-sync attempts, successes, failures
+- Persistence success/failure rates
+- Pruning activity and disk count
+
 ---
 
-## 12. Implementation
+## 12. Governance Protocol
 
-### 12.1 Architecture
+UltraDAG implements on-chain governance for protocol parameter changes and validator set management.
+
+### 12.1 Proposal Types
+
+**Text Proposals:**
+```
+TextProposal = {
+    title:       String,
+    description: String,
+}
+```
+Used for signaling, community decisions, non-binding votes.
+
+**Parameter Change Proposals:**
+```
+ParameterProposal = {
+    title:       String,
+    description: String,
+    parameter:   String,    // e.g., "MIN_FEE_SATS"
+    new_value:   String,    // Serialized value
+}
+```
+Used for protocol parameter updates (fees, limits, thresholds).
+
+**Validator Set Proposals:**
+```
+ValidatorSetProposal = {
+    title:       String,
+    description: String,
+    add:         Vec<Address>,     // Validators to add
+    remove:      Vec<Address>,     // Validators to remove
+}
+```
+Used for validator set reconfiguration (future work - requires epoch-based transitions).
+
+### 12.2 Proposal Lifecycle
+
+**1. Creation:**
+- Any address with sufficient stake can create a proposal
+- Proposal is assigned a unique sequential ID
+- Voting period begins immediately (default: 2,016 rounds ≈ 2.8 hours at 5s rounds)
+
+**2. Voting:**
+- Only active validators can vote
+- Vote weight = validator's stake amount
+- Vote options: Yes, No
+- Votes are immutable once cast
+
+**3. Execution:**
+- Proposal passes if: `yes_votes > total_stake / 2` (simple majority)
+- Execution occurs automatically when voting period ends
+- Parameter changes take effect in the next finalized vertex
+- Failed proposals are marked as rejected
+
+**4. State Tracking:**
+```
+ProposalStatus = Pending | Active | Passed | Rejected | Executed
+```
+
+### 12.3 Governance Transactions
+
+**Create Proposal:**
+```
+CreateProposalTx = {
+    proposer:      Address,
+    proposal_type: ProposalType,
+    nonce:         u64,
+    pub_key:       [u8; 32],
+    signature:     [u8; 64],
+}
+```
+
+**Cast Vote:**
+```
+VoteTx = {
+    voter:       Address,
+    proposal_id: u64,
+    vote:        bool,      // true = yes, false = no
+    nonce:       u64,
+    pub_key:     [u8; 32],
+    signature:   [u8; 64],
+}
+```
+
+### 12.4 Deterministic Execution
+
+All governance operations are deterministic:
+- Proposals are processed in the order they appear in finalized vertices
+- Votes are counted using the stake amounts at proposal creation time
+- Execution happens at a deterministic round (voting_starts + voting_period)
+- Hash computation includes proposal_type to prevent hash collisions
+
+---
+
+## 13. Observability & Monitoring
+
+### 13.1 Health Check Endpoints
+
+**Simple Health Check** (`GET /health`):
+```json
+{"status": "ok"}
+```
+Lock-free, always responds immediately. Used for load balancer health probes.
+
+**Detailed Diagnostics** (`GET /health/detailed`):
+```json
+{
+  "status": "healthy|warning|unhealthy|degraded",
+  "warnings": ["list of issues"],
+  "timestamp": 1709943000,
+  "components": {
+    "dag": {
+      "available": true,
+      "current_round": 4523,
+      "vertex_count": 4523,
+      "tips_count": 1,
+      "pruning_floor": 3523
+    },
+    "finality": {
+      "available": true,
+      "last_finalized_round": 4521,
+      "finality_lag": 2,
+      "validator_count": 4
+    },
+    "state": {...},
+    "mempool": {...},
+    "network": {...},
+    "checkpoints": {...}
+  }
+}
+```
+
+**Health Status Levels:**
+- **healthy**: All components available, finality lag ≤10, peers >0
+- **warning**: Finality lag >10 or no peers
+- **unhealthy**: Finality lag >100
+- **degraded**: Component locks contended (high load)
+
+**Non-blocking Design:**
+Uses `try_read()` instead of blocking reads, returns partial diagnostics if locks are unavailable. Suitable for frequent polling (every 5-10 seconds).
+
+### 13.2 Metrics System
+
+**Prometheus Metrics** (`GET /metrics`):
+```
+# Checkpoint Production
+checkpoint_produced_total 42
+checkpoint_production_duration_ms 145
+checkpoint_size_bytes 2048576
+
+# Checkpoint Co-signing
+checkpoints_cosigned_total 156
+checkpoint_quorum_reached_total 38
+checkpoint_validation_failures 3
+
+# Fast-Sync
+fast_sync_attempts_total 5
+fast_sync_success_total 5
+fast_sync_duration_ms 4523
+fast_sync_bytes_downloaded_total 31457280
+
+# Checkpoint Storage
+checkpoint_persist_success 42
+checkpoint_persist_failures 0
+checkpoint_load_success 5
+
+# Health Indicators
+checkpoint_last_round 4200
+checkpoint_age_seconds 12
+checkpoint_pending_count 2
+
+# Checkpoint Pruning
+checkpoints_pruned_total 32
+checkpoint_disk_count 10
+```
+
+**JSON Metrics** (`GET /metrics/json`):
+Structured JSON format for custom dashboards and alerting systems.
+
+**Metrics Architecture:**
+- Thread-safe atomic counters (`Arc<AtomicU64>`)
+- Zero-contention updates (no locks)
+- Prometheus-compatible format
+- Real-time health indicators
+
+### 13.3 Alerting Thresholds
+
+**Critical Alerts:**
+- Node down (1min)
+- High finality lag >100 (5min)
+- No peers (2min)
+
+**Warning Alerts:**
+- Elevated finality lag >10 (5min)
+- Checkpoint stale >600s (5min)
+- High memory usage >500MB (10min)
+- Disk space low <20% (5min)
+
+---
+
+## 14. Implementation
+
+### 14.1 Architecture
 
 ```
 +-----------------------------+
@@ -513,7 +783,7 @@ The receiving node responds with all vertices in the requested round range. The 
 +-----------------------------+
 ```
 
-### 12.2 Concurrency Model
+### 14.2 Concurrency Model
 
 The node is built on Tokio for asynchronous I/O:
 
@@ -524,7 +794,7 @@ The node is built on Tokio for asynchronous I/O:
 
 All shared state (DAG, finality tracker, state engine, mempool) is protected by `tokio::sync::RwLock` with short lock scopes. Write locks are never held across I/O operations.
 
-### 12.3 Persistence
+### 14.3 Persistence
 
 All node state is periodically saved to disk:
 
@@ -535,7 +805,7 @@ All node state is periodically saved to disk:
 
 Writes use atomic file operations (write to `.tmp`, then rename) to prevent corruption on crash. State is saved every 10 rounds and on graceful shutdown (SIGTERM).
 
-### 12.4 Configured Validator Count
+### 14.4 Configured Validator Count
 
 For testnet deployment, the `--validators N` flag fixes the quorum threshold at `ceil(2N/3)` regardless of how many validators are dynamically registered. This prevents a class of bugs where phantom validator registrations (from stale persistence, sync artifacts, or network partitions) inflate the quorum beyond what active validators can satisfy.
 
@@ -543,9 +813,9 @@ Dynamic registration still occurs — validators are auto-registered when their 
 
 ---
 
-## 13. Security Analysis
+## 15. Security Analysis
 
-### 13.1 Verified Properties
+### 15.1 Verified Properties
 
 The following properties have been verified through comprehensive testing (238 tests, all using real Ed25519 cryptography — no mocks):
 
@@ -567,7 +837,7 @@ The following properties have been verified through comprehensive testing (238 t
 | Address derivation (Blake3) | 14 | Verified |
 | Persistence correctness | 5 | Verified |
 
-### 13.2 Attack Resistance
+### 15.2 Attack Resistance
 
 | Attack | Defense |
 |--------|---------|
@@ -584,7 +854,7 @@ The following properties have been verified through comprehensive testing (238 t
 | **Orphan buffer exhaustion** | Adversary sends vertices with non-existent parents to fill the orphan buffer. Mitigated by a hard cap: 1,000 entries AND 50 MB byte limit (`server.rs:13,416`). Vertices exceeding either limit are silently dropped. The buffer is per-node, not per-peer, so a single adversarial peer can fill it — per-peer rate limiting (see Section 16) would further mitigate this. |
 | **Sync poisoning** | Adversary responds to `GetDagVertices` with invalid or malicious vertices. Mitigated: every vertex in a `DagVertices` response is verified (Ed25519 signature check, equivocation check, parent existence check, round bound check) before insertion. Invalid vertices are silently dropped. The same acceptance rules apply to synced vertices as to live proposals. |
 
-### 13.3 Known Limitations
+### 15.3 Known Limitations
 
 1. **No formal safety proof.** The safety argument is based on quorum intersection but has not been mechanically verified.
 
@@ -602,7 +872,7 @@ The following properties have been verified through comprehensive testing (238 t
 
 ---
 
-## 14. Testnet Results
+## 16. Testnet Results
 
 A 4-node local testnet was run for 200+ rounds with the following results:
 
@@ -627,9 +897,9 @@ Detailed checkpoint data:
 
 ---
 
-## 15. Minimalism vs. Throughput
+## 17. Minimalism vs. Throughput
 
-### 15.1 What Minimalism Costs
+### 17.1 What Minimalism Costs
 
 UltraDAG's design philosophy (Section 2) produces a dramatically simpler protocol, but simplicity has concrete throughput costs. This section makes those costs explicit.
 
@@ -653,7 +923,7 @@ In practice, network propagation delay and block size limits reduce effective TP
 
 **No optimistic responsiveness.** UltraDAG always waits for the round timer, even when all validators are online, honest, and have already received each other's vertices. Protocols with optimistic responsiveness (HotStuff, Shoal++) can advance at network speed — completing a round in one network RTT (~100ms on a LAN) rather than waiting for the full timer duration (1-5 seconds). This means UltraDAG's finality latency has a hard floor at `3 * round_duration`, while responsive protocols can achieve `3 * network_RTT`.
 
-### 15.2 Why These Tradeoffs Are Acceptable
+### 17.2 Why These Tradeoffs Are Acceptable
 
 UltraDAG targets a specific use case: **IoT micropayment networks** where devices with constrained resources need to participate in or verify consensus.
 
@@ -667,7 +937,7 @@ UltraDAG targets a specific use case: **IoT micropayment networks** where device
 
 ---
 
-## 16. Comparison with Related Work
+## 18. Comparison with Related Work
 
 | Property | PBFT | Tendermint | HotStuff | DAG-Rider | Narwhal/Tusk | Bullshark | Shoal++ | **UltraDAG** |
 |----------|------|-----------|----------|-----------|-------------|-----------|---------|-------------|
@@ -687,7 +957,7 @@ The "three-sentence description" row captures a qualitative property: can the co
 
 ---
 
-## 17. Future Work
+## 19. Future Work
 
 1. **Epoch-based validator set reconfiguration.** Safe transitions between validator sets with explicit finality for the old set before the new set activates. This replaces the current `--validators N` static configuration.
 2. **Per-peer rate limiting.** Defense against message flooding from individual peers, complementing the global message size and orphan buffer limits.
@@ -700,7 +970,7 @@ The "three-sentence description" row captures a qualitative property: can the co
 
 ---
 
-## 18. Conclusion
+## 20. Conclusion
 
 UltraDAG demonstrates that a complete, working cryptocurrency can be built on a leaderless DAG-BFT consensus protocol with minimal complexity. The entire consensus core — 781 lines of Rust across five files — implements DAG construction, BFT finality via descendant coverage, deterministic ordering, validator management, and Ed25519-signed vertices. The protocol can be stated in three sentences and fully audited in a day.
 
