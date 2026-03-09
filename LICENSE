@@ -1,0 +1,7 @@
+Business Source License 1.1
+Licensor: Johan Struijk
+Licensed Work: UltraDAG v1.0
+The Licensed Work is (c) 2026 Johan Struijk
+Change Date: March 10, 2030
+Change License: MIT License
+Additional Use Grant: You may use the Licensed Work to operate validator nodes on the UltraDAG network (mainnet or testnet), develop wallets, explorers, and other applications that interact with the UltraDAG network via its public RPC interface, and integrate WUDAG or other UltraDAG-based tokens into decentralized applications. You may not use the Licensed Work to deploy, launch, or operate a competing blockchain network or distributed ledger system.
