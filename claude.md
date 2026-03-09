@@ -58,6 +58,16 @@
 - 1000x reduction in long-term checkpoint disk usage
 - Safe deletion with error handling and logging
 
+**Health Check & Diagnostics (March 10, 2026):**
+- Added comprehensive `/health/detailed` endpoint for production monitoring
+- Component-level diagnostics: DAG, finality, state, mempool, network, checkpoints
+- Non-blocking design using try_read() for fast response under load
+- Health status levels: healthy, warning, unhealthy, degraded
+- Finality lag monitoring and alerting thresholds
+- Lock contention detection and reporting
+- Suitable for Kubernetes probes, Prometheus alerts, and dashboards
+- Complements existing `/health` (simple) and `/status` (cached) endpoints
+
 ---
 
 ## What Makes UltraDAG Different
