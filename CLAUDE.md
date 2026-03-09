@@ -309,7 +309,7 @@ When a vertex fails insertion due to missing parents, the node:
 
 ### Key Constants (`constants.rs`)
 - `PRUNING_HORIZON` = 1000 rounds — Number of finalized rounds to keep in memory before pruning
-- `CHECKPOINT_INTERVAL` = 1000 rounds — How often to produce checkpoints for fast-sync
+- `CHECKPOINT_INTERVAL` = 100 rounds — How often to produce checkpoints for fast-sync (~8 min at 5s rounds)
 - `MAX_ACTIVE_VALIDATORS` = 21 — Maximum number of active validators
 - `EPOCH_LENGTH_ROUNDS` = 210,000 — Rounds between validator set recalculations
 - `MIN_STAKE_SATS` = 10,000 UDAG — Minimum stake to become a validator
@@ -1011,7 +1011,7 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 
 **Completed implementation:**
 1. ✅ **Checkpoint data structures** - Checkpoint signing, verification, quorum acceptance
-2. ✅ **Checkpoint storage** - Save/load checkpoints with `CHECKPOINT_INTERVAL` (1000 rounds)
+2. ✅ **Checkpoint storage** - Save/load checkpoints with `CHECKPOINT_INTERVAL` (100 rounds)
 3. ✅ **Network messages** - CheckpointProposal, CheckpointSignatureMsg, GetCheckpoint, CheckpointSync
 4. ✅ **Equivocation evidence retention** - Permanent evidence_store survives pruning
 5. ✅ **Tunable pruning depth** - `--pruning-depth N` CLI flag (default: 1000)

@@ -71,7 +71,7 @@ pub const OBSERVER_REWARD_PERCENT: u64 = 20;
 
 /// How often to produce a checkpoint (in finalized rounds).
 /// Checkpoints enable fast-sync for new nodes.
-pub const CHECKPOINT_INTERVAL: u64 = 1_000;
+pub const CHECKPOINT_INTERVAL: u64 = 100;
 
 /// Compute the epoch number for a given round.
 pub fn epoch_of(round: u64) -> u64 {
