@@ -259,6 +259,41 @@ pub async fn validator_loop(
                 all_finalized.extend(newly_finalized);
             }
 
+            // Diagnostic: log why finality might be stuck (every 20 rounds)
+            if all_finalized.is_empty() && dag_round % 20 == 0 {
+                let genesis: [u8; 32] = [0u8; 32];
+                let threshold = fin.finality_threshold();
+                let last_fin = fin.last_finalized_round();
+                let scan_round = last_fin; // first round to scan
+                let hashes = dag_r.hashes_in_round(scan_round);
+                let total = hashes.len();
+                let mut unfinalized = 0;
+                let mut sample_info = String::new();
+                for hash in hashes {
+                    if fin.is_finalized(hash) { continue; }
+                    unfinalized += 1;
+                    if unfinalized <= 2 {
+                        if let Some(v) = dag_r.get(hash) {
+                            let parents_ok = v.parent_hashes.is_empty()
+                                || v.parent_hashes.iter()
+                                    .all(|p| *p == genesis || fin.is_finalized(p));
+                            let desc_count = dag_r.descendant_validator_count(hash);
+                            let missing_parents: Vec<String> = v.parent_hashes.iter()
+                                .filter(|p| **p != genesis && !fin.is_finalized(p))
+                                .map(|p| hex_short(p))
+                                .collect();
+                            sample_info.push_str(&format!(
+                                " [v={} desc={}/{} parents_ok={} missing={}]",
+                                hex_short(&hash), desc_count, threshold, parents_ok,
+                                if missing_parents.is_empty() { "none".to_string() } else { missing_parents.join(",") }
+                            ));
+                        }
+                    }
+                }
+                warn!("Finality stuck: last_fin={} scan_round={} total={} unfinalized={} threshold={}{}",
+                    last_fin, scan_round, total, unfinalized, threshold, sample_info);
+            }
+
             if !all_finalized.is_empty() {
                 info!("DAG-BFT finalized {} vertices", all_finalized.len());
 

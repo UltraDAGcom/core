@@ -59,6 +59,11 @@ impl FinalityTracker {
         self.finalized.contains(hash)
     }
 
+    /// Mark a vertex as finalized (used during reconciliation on startup).
+    pub fn mark_as_finalized(&mut self, hash: [u8; 32]) {
+        self.finalized.insert(hash);
+    }
+
     /// Evaluate finality for a vertex. Returns true if newly finalized.
     /// Uses O(1) precomputed descendant validator counts.
     pub fn check_finality(&mut self, hash: &[u8; 32], dag: &BlockDag) -> bool {

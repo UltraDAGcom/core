@@ -378,6 +378,30 @@ async fn main() {
         }
     }
 
+    // Reconcile FinalityTracker with StateEngine after restart.
+    // The FinalityTracker and StateEngine persist last_finalized_round independently.
+    // If the FinalityTracker advanced ahead (finalized vertices not applied to state),
+    // reset it to the state engine's level so finality can re-discover and apply them.
+    {
+        let state_r = server.state.read().await;
+        let state_fin = state_r.last_finalized_round().unwrap_or(0);
+        drop(state_r);
+        let mut fin = server.finality.write().await;
+        let tracker_fin = fin.last_finalized_round();
+        if tracker_fin > state_fin && state_fin > 0 {
+            warn!("FinalityTracker ahead of StateEngine ({} vs {}), resetting to state level", tracker_fin, state_fin);
+            fin.reset_to_checkpoint(state_fin);
+            // Re-populate finalized set: vertices at or below state_fin that are in the DAG
+            // should be considered finalized (they were applied to state).
+            let dag = server.dag.read().await;
+            for round in 0..=state_fin {
+                for hash in dag.hashes_in_round(round) {
+                    fin.mark_as_finalized(*hash);
+                }
+            }
+        }
+    }
+
     // Set configured validator count (only if --validator-key wasn't used, since that sets it already).
     if args.validator_key.is_none() {
         if let Some(n) = args.validators {
