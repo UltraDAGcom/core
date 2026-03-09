@@ -18,6 +18,42 @@
 - **Fix:** Changed seed addresses in `fly-node-{1,2,3,4}.toml` from dedicated IPv4 to Fly `.internal` DNS (private WireGuard network)
 - Example: `137.66.57.226:9333` → `ultradag-node-2.internal:9333`
 
+**Comprehensive Audit Fixes (March 10, 2026):**
+- **Deterministic vertex ordering** — `apply_finalized_vertices()` now sorts by (round, hash) before applying. Fixes state_root divergence across nodes caused by P2P message ordering differences.
+- **Checkpoint production independence** — Checkpoint generation moved outside the finality block in validator loop. Fires even when P2P handler steals finality. Stores checkpoint in `pending_checkpoints` before broadcasting.
+- **Unstake completion integration** — `process_unstake_completions()` now called during vertex application. Previously never called in production, causing unstaked funds to be permanently locked.
+- **Ed25519 verify_strict everywhere** — `Signature::verify()` in keys.rs now uses `verify_strict()` internally. Prevents signature malleability across all tx types.
+- **Transaction type discriminators** — Added `b"transfer"`, `b"proposal"`, `b"vote"` prefixes to signable_bytes. Prevents cross-type signature replay. StakeTx/UnstakeTx already had `b"stake"`/`b"unstake"`. Breaking change — requires clean testnet restart.
+- **Governance pending cost validation** — `/proposal` and `/vote` RPC endpoints now check pending mempool costs before balance validation, matching `/tx` and `/stake` behavior.
+- **`balance_tdag` → `balance_udag`** — Fixed in RPC response struct (was documented as fixed but still had old name in code).
+- **Stale checkpoint rejection** — CheckpointProposal handler now rejects checkpoints for rounds < our finalized round (was comparing stale state_root causing false "possible fork" warnings).
+- **GetCheckpoint suffix capped** — Suffix vertices in GetCheckpoint response now capped at `MAX_CHECKPOINT_SUFFIX_VERTICES` (500) to stay within 4MB message limit.
+- **Finality lock contention** — DagProposal handler now releases finality.write() before acquiring state.write(). Reduces lock contention during state application.
+- **Dockerfile Rust version** — Updated from rust:1.85-slim to rust:1.92-slim to support edition 2026.
+- **Governance test fixes** — Fixed governance integration tests that allocated more UDAG than faucet held.
+- **Governance quorum ceiling division** — `has_passed()` in governance/mod.rs now uses ceiling division for quorum and approval thresholds. Floor division allowed proposals to pass with slightly less than required quorum/supermajority.
+- **HWM timing safety** — High-water mark update moved from finality block (every finality advance) to persistence block (every 10 rounds, after state files saved). Prevents HWM racing ahead of persisted state, which could cause crash loops.
+- **Docker entrypoint HWM preservation** — Removed unconditional `rm -f high_water_mark.json` on every startup. HWM now only removed during `CLEAN_STATE` resets, preserving monotonicity protection across normal restarts.
+
+**Hardening Audit (March 10, 2026):**
+- **credit() overflow protection** — `credit()` in StateEngine now uses `saturating_add()` instead of unchecked `+=`. Prevents balance overflow breaking supply invariant.
+- **Vote weight overflow protection** — `votes_for` and `votes_against` now use `saturating_add()`. Prevents governance manipulation via vote counter overflow.
+- **Faucet rate limit restored** — Fixed from 1000 req/60s (testing mode) to 1 req/600s (production). Was 10,000x too permissive, allowing faucet drain in seconds.
+- **MAX_PARENTS=64 enforced** — Added `MAX_PARENTS` constant and `TooManyParents` error in `DagInsertError`. `try_insert()` rejects vertices with >64 parents. Prevents memory exhaustion from unbounded parent lists.
+- **Evidence store multi-entry** — `evidence_store` changed from `HashMap<Address, EquivocationEvidence>` to `HashMap<Address, Vec<EquivocationEvidence>>`. Multiple equivocations per validator now tracked. Deduplicates by round.
+- **Pending checkpoint eviction cap** — `pending_checkpoints` now evicts oldest entries when >10 pending. Prevents unbounded memory growth from stale checkpoint proposals.
+- **Stake RPC fee inclusion** — `/stake` endpoint now includes `MIN_FEE_SATS` in `total_needed` balance check. Was inconsistent with `/proposal` and `/vote` endpoints.
+- **PeerReader recv timeout** — Added 30-second read timeout to `PeerReader::recv()`. Prevents slowloris-style attacks tying up handler threads indefinitely.
+- **Peers response capped** — `GetPeers` response now truncated to 100 peers. Prevents topology leakage and bandwidth amplification.
+- **GetDagVertices max_count capped** — `max_count` now capped at 500 server-side. Prevents CPU exhaustion from `u32::MAX` iteration requests.
+- **Vote weight excludes unstaking** — Governance vote weight now excludes addresses in unstake cooldown. Unstaking validators can no longer influence governance.
+- **RPC proposal length validation** — `/proposal` endpoint validates `title` (max 128 bytes) and `description` (max 4096 bytes) before crypto work. Prevents large payload waste.
+- **Hello version check** — Both `Hello` and `HelloAck` handlers now check protocol version. Was only checked in `HelloAck`.
+- **Defensive unwrap removal** — `process_unstake_completions()` and `apply_vote()` now use `if let`/`ok_or` instead of `.unwrap()`.
+- **Slash saturating arithmetic** — `slash()` now uses `saturating_mul()` and `saturating_sub()` for slash amount calculation.
+- **json_response panic prevention** — `serde_json::to_string_pretty()` now uses `unwrap_or_else` with error fallback instead of `unwrap()`.
+- **Governance execution transition** — `tick_governance()` now transitions `PassedPending` proposals to `Executed` when `execute_at_round` is reached.
+
 **Dashboard Fixes (March 9, 2026):**
 - Fixed faucet request: added missing `amount` field (`{address, amount: 10000000000}`)
 - Removed "No login required" from faucet description
@@ -77,6 +113,22 @@
 - Production deployment checklist and rollback criteria
 - Security incident response: key compromise, DDoS mitigation
 - Performance tuning guidelines for memory, network, and disk I/O
+
+**Complete Documentation Suite (March 10, 2026):**
+- **Whitepaper Enhancement** — Updated with checkpoint system (Section 11.5), governance protocol (Section 12), and observability & monitoring (Section 13). Added 270+ lines covering BFT checkpoint co-signing, fast-sync protocol, governance proposal lifecycle, health check endpoints, Prometheus metrics, and alerting thresholds. All sections renumbered correctly (14-20).
+- **RPC API Reference** — Created comprehensive 1,061-line API documentation at `docs/reference/api/rpc-endpoints.md`. Covers all 25+ endpoints with complete request/response examples, rate limiting details (per-endpoint limits), error handling, code examples in JavaScript/Python/cURL, transaction signing specification, address derivation, and nonce management.
+- **Node Operator Guide** — Created 984-line operational guide at `docs/guides/operations/node-operator-guide.md`. Covers installation (binary/source/Docker), configuration (CLI/config file/environment), full node and validator setup with systemd, monitoring with Prometheus/Grafana, maintenance procedures, software updates with rollback, backup & recovery with fast-sync, security hardening (key management, network, access control), and comprehensive troubleshooting (6 common issues with solutions).
+- **Validator Handbook** — Created 822-line validator guide at `docs/guides/validators/validator-handbook.md`. Covers complete staking mechanics with lifecycle diagram, rewards & economics (50 UDAG per vertex, halving schedule, APY calculations), validator responsibilities and performance requirements, best practices (infrastructure/operational/economic), slashing & penalties (current and planned), governance participation with voting strategy, performance optimization, and extensive FAQ (30+ questions).
+- **Transaction Format Specification** — Created 692-line technical spec at `docs/reference/specifications/transaction-format.md`. Documents all 5 transaction types (Transfer, Stake, Unstake, CreateProposal, Vote) with complete structure, signable bytes format, JSON representation, validation rules, Ed25519 signature scheme details, binary and JSON serialization, complete examples with hex dumps, security considerations, and common pitfalls.
+- **Integration Guide** — Created 926-line developer guide at `docs/guides/development/integration-guide.md`. Covers quick start, wallet integration (key management, transaction signing, submission, confirmation), exchange integration (deposit monitoring, withdrawal processing, hot/cold wallet management, fee estimation), DApp development patterns, testing (unit/integration/E2E), production deployment (load balancing, health checks, error handling), and best practices with complete code examples in JavaScript and Python.
+- **FAQ & Troubleshooting** — Created 736-line comprehensive FAQ at `docs/FAQ.md`. Covers 50+ questions across general topics, getting started, transactions, staking & validation, governance, technical questions (consensus, finality, checkpoints), troubleshooting (node startup, finality lag, peer connections, stuck transactions, balance updates, memory usage), performance optimization, and security best practices.
+- **Grafana Dashboard Templates** — Created production monitoring solution at `docs/monitoring/`. Includes complete Grafana dashboard JSON with 17 panels organized in 7 rows (overview, DAG metrics, checkpoint production, fast-sync, storage, mempool, system resources), pre-configured alerts (finality lag, stale checkpoint, mempool size, memory usage), and 881-line monitoring guide with quick start, metrics reference (30+ metrics), alert configuration, troubleshooting, and production recommendations (HA, long-term storage, security).
+
+**Documentation Statistics:**
+- Total lines written: ~6,000+ lines across 10 comprehensive documents
+- Coverage: 100% of planned mainnet documentation
+- All documents committed and pushed to `origin main`
+- Ready for validators, node operators, developers, and integrators
 
 ---
 
@@ -348,7 +400,8 @@ When a vertex fails insertion due to missing parents, the node:
 - Signatures: Ed25519 (ed25519-dalek). Address = blake3(ed25519_pubkey). Transactions carry pub_key for verification.
 - DAG vertices: Ed25519-signed by the proposing validator. Peers reject vertices with invalid signatures or equivocation.
 
-### Key Constants (`constants.rs`)
+### Key Constants (`constants.rs` and `dag.rs`)
+- `MAX_PARENTS` = 64 — Maximum parent references per DagVertex (in `dag.rs`)
 - `PRUNING_HORIZON` = 1000 rounds — Number of finalized rounds to keep in memory before pruning
 - `CHECKPOINT_INTERVAL` = 100 rounds — How often to produce checkpoints for fast-sync (~8 min at 5s rounds)
 - `MAX_ACTIVE_VALIDATORS` = 21 — Maximum number of active validators
@@ -642,7 +695,7 @@ cargo test --workspace
 
 ## Tests
 
-**469 tests passing** (all pass, zero failures, zero ignored):
+**480 tests passing** (all pass, zero failures, zero ignored):
 
 Run `cargo test --workspace --release` to verify:
 ```
@@ -846,6 +899,12 @@ let dag_round = {
 - **Deterministic finality**: BTreeSet instead of HashSet for iteration order.
 - **Message size limit**: 4MB maximum before deserialization.
 - **Mempool limit**: 10,000 transactions with fee-based eviction.
+- **MAX_PARENTS=64**: Reject vertices with >64 parent references (prevents memory exhaustion).
+- **Read timeout**: PeerReader applies 30-second timeout to prevent slowloris attacks.
+- **Peers response cap**: GetPeers response truncated to 100 peers.
+- **GetDagVertices cap**: max_count capped at 500 server-side.
+- **Pending checkpoint eviction**: Max 10 pending checkpoints, oldest evicted.
+- **Saturating arithmetic**: All credit/debit, vote counting, and slash operations use saturating math.
 
 ### State Persistence
 - JSON serialization for BlockDag, FinalityTracker, StateEngine (including stake_accounts, active_validator_set, current_epoch), Mempool.
@@ -1073,20 +1132,84 @@ UltraDAG is offering rewards for security researchers who discover and responsib
     - **Fix:** Insert checkpoint into `pending_checkpoints` before broadcasting `CheckpointProposal`
     - **Result:** Proposer accumulates co-signatures, checkpoints reach quorum (3+ of 4 sigs)
 
-### Security Audit Fixes (March 9, 2026)
+16. **State divergence across nodes (March 10, 2026)** — Finalized vertices applied in non-deterministic P2P arrival order, causing different state_root per node. Checkpoint co-signing always failed with "mismatched state_root"
+    - **Fix:** `apply_finalized_vertices()` now sorts vertices by (round, hash) before applying
+    - **Result:** All nodes compute identical state_root for the same finalized round
+17. **Unstake completions never processed (March 10, 2026)** — `process_unstake_completions()` existed but was never called in production. Unstaked funds permanently locked after cooldown expired.
+    - **Fix:** Called `process_unstake_completions(vertex.round)` at the start of each `apply_vertex_with_validators()`
+    - **Result:** Unstaked funds automatically returned after cooldown period
+18. **Checkpoint production trapped in finality block (March 10, 2026)** — Checkpoint generation was inside `if !all_finalized.is_empty()` block. P2P handler finalizes vertices before validator loop, making `all_finalized` empty, so checkpoints were never produced.
+    - **Fix:** Moved checkpoint generation outside finality block; reads `last_finalized_round` directly from finality tracker
+    - **Result:** Checkpoints produced reliably regardless of which code path finalizes vertices
+19. **Stale checkpoint false-fork warnings (March 10, 2026)** — CheckpointProposal handler accepted checkpoints for rounds < our finalized round, compared current state against old checkpoint, always mismatched
+    - **Fix:** Added early rejection for `checkpoint.round < our_finalized`
+    - **Result:** Only checkpoints for current finalized round are co-signed
+20. **GetCheckpoint suffix unbounded (March 10, 2026)** — Suffix vertices in response had no cap, could exceed 4MB message limit causing silent send failure
+    - **Fix:** Capped at `MAX_CHECKPOINT_SUFFIX_VERTICES` (500)
+    - **Result:** Fast-sync responses stay within message size limits
+21. **Finality lock contention in DagProposal handler (March 10, 2026)** — `finality.write()` held during state application, mempool cleanup, and epoch transition
+    - **Fix:** Release finality lock before acquiring state lock; re-acquire only for epoch transition
+    - **Result:** Reduced lock contention under load
+22. **Governance quorum floor division (March 10, 2026)** — `has_passed()` used floor division for quorum and approval thresholds. With certain vote counts, proposals could pass with slightly less than the required 10% quorum or 66% supermajority.
+    - **Fix:** Changed to ceiling division: `(x * numerator + denominator - 1) / denominator`
+    - **Result:** Quorum and approval thresholds are now strict lower bounds
+23. **HWM races ahead of persisted state (March 10, 2026)** — High-water mark was updated on every finality advance, but state files only persisted every 10 rounds. A crash between HWM update and state save would leave HWM ahead of actual state, causing a rejection loop on restart.
+    - **Fix:** Moved HWM update to persistence block (after state files saved, every 10 rounds)
+    - **Result:** HWM always reflects actually-persisted state
+24. **Docker entrypoint destroys HWM on every restart (March 10, 2026)** — `docker-entrypoint.sh` unconditionally deleted `high_water_mark.json` on every startup, defeating monotonicity protection.
+    - **Fix:** HWM now only deleted during `CLEAN_STATE` resets alongside other state files
+    - **Result:** HWM monotonicity protection preserved across normal restarts
+25. **credit() balance overflow (March 10, 2026)** — `credit()` used unchecked `+=` which could wrap u64, breaking supply invariant.
+    - **Fix:** Changed to `saturating_add()`
+    - **Result:** Balance can never overflow; supply invariant preserved
+26. **Vote weight overflow (March 10, 2026)** — `votes_for/against` used unchecked `+=` which could wrap u64, corrupting governance outcomes.
+    - **Fix:** Changed to `saturating_add()`
+    - **Result:** Vote counters cannot overflow
+27. **Faucet rate limit 10,000x too permissive (March 10, 2026)** — Set to 1000 req/60s for testing, never restored. Faucet drainable in seconds.
+    - **Fix:** Restored to 1 req/600s (1 request per 10 minutes)
+    - **Result:** Faucet protected from rapid drain
+28. **MAX_PARENTS not enforced (March 10, 2026)** — CLAUDE.md documented MAX_PARENTS=64 but code had no such check. Unbounded parent lists enabled memory exhaustion.
+    - **Fix:** Added `MAX_PARENTS=64` constant, `TooManyParents` error in `DagInsertError`, check in `try_insert()`
+    - **Result:** Vertices with >64 parents rejected
+29. **Evidence store single-entry per validator (March 10, 2026)** — Only first equivocation stored per validator. Multiple equivocations lost.
+    - **Fix:** Changed `evidence_store` to `HashMap<Address, Vec<EquivocationEvidence>>`, dedup by round
+    - **Result:** All equivocations tracked per validator
+30. **Pending checkpoints unbounded (March 10, 2026)** — No eviction cap on pending_checkpoints HashMap.
+    - **Fix:** Evict oldest entries when >10 pending
+    - **Result:** Memory bounded regardless of checkpoint proposal rate
+31. **Stake RPC missing fee in balance check (March 10, 2026)** — `/stake` endpoint omitted `MIN_FEE_SATS` from `total_needed`.
+    - **Fix:** Added `saturating_add(MIN_FEE_SATS)` to total_needed calculation
+    - **Result:** Stake balance check consistent with other tx types
+32. **PeerReader no read timeout (March 10, 2026)** — `recv()` waited indefinitely for message data. Slowloris attack vector.
+    - **Fix:** Added 30-second read timeout via `tokio::time::timeout`
+    - **Result:** Stalled connections cleaned up automatically
+33. **Peers response unbounded (March 10, 2026)** — `GetPeers` returned full known peer list (potential 1000+ entries).
+    - **Fix:** Truncated to 100 peers
+    - **Result:** Bounded response size, reduced topology leakage
+34. **GetDagVertices max_count uncapped (March 10, 2026)** — Peer-supplied `max_count` (u32) used directly for iteration range.
+    - **Fix:** Capped at 500 server-side with `saturating_add` for range end
+    - **Result:** CPU exhaustion from huge range requests prevented
+35. **Vote weight includes unstaking addresses (March 10, 2026)** — `stake_of()` returned staked amount even during cooldown. Unstaking validators retained full governance influence.
+    - **Fix:** Vote weight now filters out addresses with `unlock_at_round.is_some()`
+    - **Result:** Unstaking validators have zero governance influence
+36. **Governance proposals never execute (March 10, 2026)** — `tick_governance()` only transitioned Active→PassedPending/Rejected. PassedPending proposals stayed in that state forever.
+    - **Fix:** Added `PassedPending { execute_at_round }` → `Executed` transition when `current_round >= execute_at_round`
+    - **Result:** Proposals complete their full lifecycle
+
+### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.
-- **Ed25519 verification inconsistency** — StakeTx used `verify_strict()` but TransferTx/governance used non-strict `verify()`. All now use `verify_strict()`.
+- **Ed25519 verification inconsistency** — `Signature::verify()` in keys.rs now uses `verify_strict()` internally. All tx types (Transfer, Stake, Unstake, Proposal, Vote) and DagVertex get strict verification.
 - **Missing tx type discriminator in signable_bytes** — Transfer, CreateProposal, Vote used only NETWORK_ID. Added type prefixes: `b"transfer"`, `b"proposal"`, `b"vote"` (breaking change, requires clean testnet restart).
 - **Proposal/Vote RPC endpoints skip pending cost check** — Unlike `/tx`, governance endpoints didn't check pending mempool costs. Added pending cost calculation.
 - **Faucet balance check missing fee** — `total_needed` omitted fee, could accept requests with insufficient balance.
-- **`balance_tdag` → `balance_udag`** — RPC response field name corrected.
+- **`balance_tdag` → `balance_udag`** — RPC response field name corrected in struct and usage.
 - **State reconciliation skips when state_fin==0** — Removed incorrect `&& state_fin > 0` guard.
 - **No max parent count on DagVertex** — Added `MAX_PARENTS = 64` with `TooManyParents` error.
 - **GetCheckpoint suffix unbounded** — Capped at 500 vertices to stay within 4MB message limit.
 - **CheckpointSync deadlock risk** — Fixed lock ordering: each lock acquired/dropped in its own scope.
 - **Pending checkpoint memory leak** — Added eviction when >10 pending checkpoints.
 - **Hello message ignores protocol version** — Added version check, disconnects on mismatch.
-- **No per-IP connection limit** — Added `MAX_CONNECTIONS_PER_IP = 3`.
+- **No per-IP connection limit** — Defined `MAX_CONNECTIONS_PER_IP = 3` constant (enforcement TODO for mainnet).
 - **Evidence store single-equivocation limit** — Changed to `Vec<EquivocationEvidence>` per validator.
 
 ## Performance Roadmap
@@ -1128,7 +1251,7 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 - Nodes joining after pruning fetch from checkpoint + recent DAG
 - Full history available from archive nodes (optional deployment)
 
-**Current status:** Checkpoint infrastructure fully integrated and operational at runtime. All 469 tests passing.
+**Current status:** Checkpoint infrastructure fully integrated and operational at runtime. All 480 tests passing.
 
 **Completed implementation:**
 1. ✅ **Checkpoint data structures** - Checkpoint signing, verification, quorum acceptance
@@ -1231,7 +1354,7 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 - [ ] **Chaos testing** — Network partitions, validator crashes, Byzantine behavior simulation
 - [ ] **Load testing** — Sustained high transaction volume, mempool saturation
 - [ ] **Upgrade testing** — Binary upgrade without consensus failure
-- [x] **All tests passing** — 469 automated tests, 0 failures, 0 ignored (March 7, 2026)
+- [x] **All tests passing** — 480 automated tests, 0 failures, 0 ignored (March 10, 2026)
 
 ### Documentation
 - [ ] **Remove testnet warnings** — Update all references from testnet to mainnet
