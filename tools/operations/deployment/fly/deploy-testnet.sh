@@ -6,7 +6,7 @@
 #   ./tools/operations/deployment/fly/deploy-testnet.sh --clean      # Same but wipes state on all nodes
 #   ./tools/operations/deployment/fly/deploy-testnet.sh --restart    # Just restart (no rebuild)
 #
-# TOML files live in config/fly/fly-node-{1,2,3,4}.toml.
+# TOML files live in tools/operations/deployment/fly/fly-node-{1,2,3,4}.toml.
 # --clean temporarily sets CLEAN_STATE=true in the TOML env, deploys,
 # then reverts it. This is more reliable than fly secrets --stage.
 
@@ -14,7 +14,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-TOML_DIR="$PROJECT_ROOT/config/fly"
+TOML_DIR="$SCRIPT_DIR"
 
 NODES=(ultradag-node-1 ultradag-node-2 ultradag-node-3 ultradag-node-4)
 CLEAN=false
