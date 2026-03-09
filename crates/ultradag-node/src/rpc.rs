@@ -80,7 +80,7 @@ fn parse_secret_key(hex: &str) -> Result<SecretKey, &'static str> {
     Ok(SecretKey::from_bytes(bytes))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct StatusResponse {
     last_finalized_round: Option<u64>,
     peer_count: usize,
@@ -95,6 +95,12 @@ struct StatusResponse {
     total_staked: u64,
     active_stakers: usize,
     bootstrap_connected: bool,
+}
+
+/// Cached /status response — serves last good data when locks are contended.
+static STATUS_CACHE: std::sync::OnceLock<tokio::sync::Mutex<Option<StatusResponse>>> = std::sync::OnceLock::new();
+fn status_cache() -> &'static tokio::sync::Mutex<Option<StatusResponse>> {
+    STATUS_CACHE.get_or_init(|| tokio::sync::Mutex::new(None))
 }
 
 #[derive(Serialize)]
@@ -237,52 +243,59 @@ async fn handle_request(
         }
 
         (&Method::GET, ["status"]) => {
-            let state = read_lock_or_503!(server.state);
-            let last_finalized_round = state.last_finalized_round();
-            let total_supply = state.total_supply();
-            let account_count = state.account_count();
-            let total_staked = state.total_staked();
-            let active_stakers_len = state.active_stakers().len();
-            drop(state);
+            // Use try_read() for non-blocking best-effort reads.
+            // Falls back to cached response when locks are contended
+            // (validator loop holds write locks for ~100ms every 5s).
+            let state_data = server.state.try_read().ok().map(|s|
+                (s.last_finalized_round(), s.total_supply(), s.account_count(), s.total_staked(), s.active_stakers().len())
+            );
+            let mempool_size = server.mempool.try_read().ok().map(|m| m.len());
+            let dag_data = server.dag.try_read().ok().map(|d|
+                (d.len(), d.current_round(), d.tips().len())
+            );
+            let fin_data = server.finality.try_read().ok().map(|f|
+                (f.finalized_count(), f.validator_count())
+            );
 
-            let mempool = read_lock_or_503!(server.mempool);
-            let mempool_size = mempool.len();
-            drop(mempool);
+            // If any lock failed, serve cached response
+            if state_data.is_none() || dag_data.is_none() || fin_data.is_none() {
+                let cache = status_cache().lock().await;
+                if let Some(cached) = cache.as_ref() {
+                    return Ok(json_response(StatusCode::OK, cached));
+                }
+                // No cache yet — return 503
+                return Ok(error_response(StatusCode::SERVICE_UNAVAILABLE, "node busy, try again"));
+            }
 
+            let (last_finalized_round, total_supply, account_count, total_staked, active_stakers_len) = state_data.unwrap();
+            let (dag_vertices, dag_round, dag_tips_len) = dag_data.unwrap();
+            let (finalized_count, validator_count) = fin_data.unwrap();
             let peers = server.peers.connected_count().await;
-
-            let dag = read_lock_or_503!(server.dag);
-            let dag_vertices = dag.len();
-            let dag_round = dag.current_round();
-            let dag_tips_len = dag.tips().len();
-            drop(dag);
-
-            let fin = read_lock_or_503!(server.finality);
-            let finalized_count = fin.finalized_count();
-            let validator_count = fin.validator_count();
-            drop(fin);
             let connected_addrs = server.peers.connected_listen_addrs().await;
             let bootstrap_connected = ultradag_network::TESTNET_BOOTSTRAP_NODES
                 .iter()
                 .any(|bn| connected_addrs.iter().any(|ca| ca == *bn));
-            json_response(
-                StatusCode::OK,
-                &StatusResponse {
-                    last_finalized_round,
-                    peer_count: peers,
-                    mempool_size,
-                    total_supply,
-                    account_count,
-                    dag_vertices,
-                    dag_round,
-                    dag_tips: dag_tips_len,
-                    finalized_count,
-                    validator_count,
-                    total_staked,
-                    active_stakers: active_stakers_len,
-                    bootstrap_connected,
-                },
-            )
+
+            let status = StatusResponse {
+                last_finalized_round,
+                peer_count: peers,
+                mempool_size: mempool_size.unwrap_or(0),
+                total_supply,
+                account_count,
+                dag_vertices,
+                dag_round,
+                dag_tips: dag_tips_len,
+                finalized_count,
+                validator_count,
+                total_staked,
+                active_stakers: active_stakers_len,
+                bootstrap_connected,
+            };
+
+            // Update cache
+            *status_cache().lock().await = Some(status.clone());
+
+            json_response(StatusCode::OK, &status)
         }
 
         (&Method::GET, ["balance", addr_hex]) => {
