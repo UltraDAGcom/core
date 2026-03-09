@@ -2,9 +2,9 @@
 # Deploy and restart all 4 testnet nodes simultaneously.
 #
 # Usage:
-#   ./scripts/deploy-testnet.sh              # Build + deploy new code to all 4 nodes
-#   ./scripts/deploy-testnet.sh --clean      # Same but wipes state on all nodes
-#   ./scripts/deploy-testnet.sh --restart    # Just restart (no rebuild)
+#   ./tools/operations/deployment/fly/deploy-testnet.sh              # Build + deploy new code to all 4 nodes
+#   ./tools/operations/deployment/fly/deploy-testnet.sh --clean      # Same but wipes state on all nodes
+#   ./tools/operations/deployment/fly/deploy-testnet.sh --restart    # Just restart (no rebuild)
 #
 # TOML files live in deployments/fly/fly-node-{1,2,3,4}.toml.
 # --clean temporarily sets CLEAN_STATE=true in the TOML env, deploys,
@@ -13,7 +13,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 TOML_DIR="$PROJECT_ROOT/deployments/fly"
 
 NODES=(ultradag-node-1 ultradag-node-2 ultradag-node-3 ultradag-node-4)

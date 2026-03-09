@@ -20,7 +20,7 @@ Access RPC at `http://localhost:10333/status`
 ```bash
 # Clone repository
 git clone https://github.com/UltraDAGcom/core.git
-cd core/deployments/docker
+cd core
 
 # Start 4-node network
 docker-compose up -d

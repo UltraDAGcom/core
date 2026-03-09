@@ -1,7 +1,7 @@
 # UltraDAG
 
-[![Bug Bounty](https://img.shields.io/badge/Bug%20Bounty-500k%20UDAG-success)](./security/bug-bounty/PROGRAM.md)
-[![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./security/POLICY.md)
+[![Bug Bounty](https://img.shields.io/badge/Bug%20Bounty-500k%20UDAG-success)](./docs/security/bug-bounty/PROGRAM.md)
+[![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./docs/security/POLICY.md)
 [![Testnet](https://img.shields.io/badge/Testnet-Live-green)](https://ultradag-node-1.fly.dev/status)
 [![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-informational)](./LICENSE)
 
@@ -18,7 +18,7 @@ A DAG-BFT cryptocurrency for permissioned networks and IoT applications. Built i
 - 🟡 **Medium:** 1,000 - 5,000 UDAG
 - 🟢 **Low:** 100 - 1,000 UDAG
 
-**[View Full Program →](./security/bug-bounty/PROGRAM.md)** | **[Quick Start Guide →](./security/bug-bounty/GUIDE.md)**
+**[View Full Program →](./docs/security/bug-bounty/PROGRAM.md)** | **[Quick Start Guide →](./docs/security/bug-bounty/GUIDE.md)**
 
 All rewards tracked publicly and convertible to mainnet tokens at launch.
 
@@ -63,10 +63,10 @@ docker run -p 9333:9333 -p 10333:10333 \
   ghcr.io/ultradagcom/core:latest --port 9333 --validate
 
 # 4-node local network
-cd deployments/docker && docker-compose up -d
+docker-compose up -d
 ```
 
-**[Full Docker Guide →](./docs/DOCKER.md)**
+**[Full Docker Guide →](./docs/getting-started/docker-guide.md)**
 
 ### From Source
 
