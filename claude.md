@@ -49,6 +49,15 @@
 - All metrics thread-safe using Arc<AtomicU64> for zero-contention updates
 - Tracks: production count, duration, size, co-signing participation, quorum achievement, fast-sync performance, validation failures, pending checkpoints, storage operations
 
+**Checkpoint Pruning (March 10, 2026):**
+- Implemented automatic checkpoint pruning to limit disk usage
+- Keeps most recent 10 checkpoints (configurable, minimum 2 for safety)
+- Automatic pruning after each checkpoint production
+- Prevents unbounded disk growth (constant ~20MB vs unbounded GB growth)
+- Added pruning metrics: checkpoints_pruned_total, checkpoint_disk_count
+- 1000x reduction in long-term checkpoint disk usage
+- Safe deletion with error handling and logging
+
 ---
 
 ## What Makes UltraDAG Different
