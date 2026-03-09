@@ -68,6 +68,16 @@
 - Suitable for Kubernetes probes, Prometheus alerts, and dashboards
 - Complements existing `/health` (simple) and `/status` (cached) endpoints
 
+**Operations Runbook (March 10, 2026):**
+- Created comprehensive deployment runbook at `docs/operations/RUNBOOK.md`
+- Emergency procedures: network partition, high finality lag, node crashes, resource issues
+- Troubleshooting guides: transaction processing, checkpoint sync, peer connections, state divergence
+- Recovery procedures: fast-sync, state restoration, binary rollback
+- Prometheus alert rules with thresholds and escalation paths
+- Production deployment checklist and rollback criteria
+- Security incident response: key compromise, DDoS mitigation
+- Performance tuning guidelines for memory, network, and disk I/O
+
 ---
 
 ## What Makes UltraDAG Different
