@@ -356,6 +356,8 @@ pub async fn validator_loop(
         if current_finalized > last_checkpoint_round
             && current_finalized % ultradag_coin::CHECKPOINT_INTERVAL == 0
         {
+            let checkpoint_start = tokio::time::Instant::now();
+            
             let state_r = server.state.read().await;
             let state_snapshot = state_r.snapshot();
             let state_root = ultradag_coin::consensus::compute_state_root(&state_snapshot);
@@ -384,13 +386,24 @@ pub async fn validator_loop(
             // Store in pending_checkpoints so co-signatures can accumulate
             server.pending_checkpoints.write().await.insert(current_finalized, checkpoint.clone());
 
-            if let Err(e) = ultradag_coin::persistence::save_checkpoint(&data_dir, &checkpoint) {
-                warn!("Failed to save checkpoint: {}", e);
+            // Persist checkpoint to disk
+            match ultradag_coin::persistence::save_checkpoint(&data_dir, &checkpoint) {
+                Ok(_) => server.checkpoint_metrics.record_checkpoint_persist_success(),
+                Err(e) => {
+                    warn!("Failed to save checkpoint: {}", e);
+                    server.checkpoint_metrics.record_checkpoint_persist_failure();
+                }
             }
 
-            server.peers.broadcast(&Message::CheckpointProposal(checkpoint), "").await;
+            server.peers.broadcast(&Message::CheckpointProposal(checkpoint.clone()), "").await;
             last_checkpoint_round = current_finalized;
-            info!("Produced checkpoint at round {}", current_finalized);
+            
+            // Record metrics
+            let duration_ms = checkpoint_start.elapsed().as_millis() as u64;
+            let size_bytes = serde_json::to_vec(&checkpoint).map(|v| v.len()).unwrap_or(0) as u64;
+            server.checkpoint_metrics.record_checkpoint_produced(duration_ms, size_bytes, current_finalized);
+            
+            info!("Produced checkpoint at round {} ({}ms, {} bytes)", current_finalized, duration_ms, size_bytes);
         }
 
         // Prune old rounds to bound memory (every 50 rounds to amortize cost)

@@ -244,9 +244,10 @@ impl NodeServer {
             let banned_peers = self.banned_peers.clone();
 
             let listen_port = self.port;
+            let checkpoint_metrics = self.checkpoint_metrics.clone();
             tokio::spawn(async move {
                 // handle_peer may rename peer_addr via Hello; remove both keys on disconnect
-                if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers).await {
+                if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers, &checkpoint_metrics).await {
                     warn!("Peer {} disconnected: {}", addr_str, e);
                 }
                 // Remove by original ephemeral addr and any possible listen addr
@@ -362,9 +363,10 @@ impl NodeServer {
         let validator_sk = self.validator_sk.clone();
         let banned_peers = self.banned_peers.clone();
         let listen_port = self.port;
+        let checkpoint_metrics = self.checkpoint_metrics.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers).await {
+            if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers, &checkpoint_metrics).await {
                 warn!("Peer {} disconnected: {}", addr_str, e);
             }
             peers.remove_peer(&addr_str).await;
@@ -627,6 +629,7 @@ async fn handle_peer(
     data_dir: &std::path::Path,
     validator_sk: Option<&SecretKey>,
     banned_peers: &Arc<Mutex<HashMap<String, Instant>>>,
+    checkpoint_metrics: &Arc<crate::CheckpointMetrics>,
 ) -> std::io::Result<()> {
     let peer_addr = reader.addr.clone();
     let mut allowlist_rejections: u32 = 0;
@@ -1149,6 +1152,7 @@ async fn handle_peer(
                         "Checkpoint at round {} has mismatched state_root — possible fork",
                         checkpoint.round
                     );
+                    checkpoint_metrics.record_checkpoint_validation_failure();
                     continue;
                 }
 
@@ -1156,6 +1160,7 @@ async fn handle_peer(
                 let valid_signers = checkpoint.valid_signers();
                 if valid_signers.is_empty() {
                     warn!("Checkpoint proposal has no valid signatures");
+                    checkpoint_metrics.record_checkpoint_validation_failure();
                     continue;
                 }
 
@@ -1170,11 +1175,17 @@ async fn handle_peer(
                             signature: sig,
                         }, &peer_addr).await;
                     }
+                    
+                    // Record co-signing metrics
+                    checkpoint_metrics.record_checkpoint_cosigned(checkpoint.signatures.len() as u64);
                 }
 
                 // 5. Store as pending (waiting for quorum)
                 let round = checkpoint.round;
-                pending_checkpoints.write().await.insert(round, checkpoint);
+                let mut pending = pending_checkpoints.write().await;
+                pending.insert(round, checkpoint);
+                checkpoint_metrics.update_pending_checkpoints_count(pending.len() as u64);
+                drop(pending);
 
                 info!("Received and co-signed checkpoint proposal for round {}", round);
             }
@@ -1221,9 +1232,16 @@ async fn handle_peer(
                     let accepted = checkpoint.clone();
                     drop(pending);
 
-                    if let Err(e) = ultradag_coin::persistence::save_checkpoint(data_dir, &accepted) {
-                        warn!("Failed to save accepted checkpoint: {}", e);
+                    match ultradag_coin::persistence::save_checkpoint(data_dir, &accepted) {
+                        Ok(_) => checkpoint_metrics.record_checkpoint_persist_success(),
+                        Err(e) => {
+                            warn!("Failed to save accepted checkpoint: {}", e);
+                            checkpoint_metrics.record_checkpoint_persist_failure();
+                        }
                     }
+                    
+                    // Record quorum achievement
+                    checkpoint_metrics.record_checkpoint_quorum_reached();
 
                     info!(
                         "Checkpoint accepted at round {} with {} signatures",
@@ -1237,21 +1255,30 @@ async fn handle_peer(
                     for r in rounds.iter().filter(|&&r| r < accepted.round) {
                         pending.remove(r);
                     }
+                    checkpoint_metrics.update_pending_checkpoints_count(pending.len() as u64);
                 }
             }
 
             Message::GetCheckpoint { min_round } => {
                 // Rate-limit checkpoint sync — it's expensive (locks DAG + state).
                 // Use try_read to avoid blocking if locks are contended.
-                let checkpoint = ultradag_coin::persistence::load_latest_checkpoint(data_dir)
-                    .filter(|cp| cp.round >= min_round)
-                    .or_else(|| {
-                        let pending = pending_checkpoints.try_read().ok()?;
-                        pending.values()
-                            .filter(|cp| cp.round >= min_round)
-                            .max_by_key(|cp| cp.round)
-                            .cloned()
-                    });
+                let checkpoint = match ultradag_coin::persistence::load_latest_checkpoint(data_dir) {
+                    Some(cp) if cp.round >= min_round => {
+                        checkpoint_metrics.record_checkpoint_load_success();
+                        Some(cp)
+                    }
+                    Some(_) => None, // Checkpoint too old
+                    None => {
+                        // Try pending checkpoints
+                        match pending_checkpoints.try_read() {
+                            Ok(pending) => pending.values()
+                                .filter(|cp| cp.round >= min_round)
+                                .max_by_key(|cp| cp.round)
+                                .cloned(),
+                            Err(_) => None,
+                        }
+                    }
+                };
 
                 if let Some(checkpoint) = checkpoint {
                     // Use try_read to avoid blocking — if locks are held, skip this request.
@@ -1287,6 +1314,9 @@ async fn handle_peer(
             }
 
             Message::CheckpointSync { checkpoint, suffix_vertices, state_at_checkpoint } => {
+                checkpoint_metrics.record_fast_sync_attempt();
+                let sync_start = std::time::Instant::now();
+                
                 // Fix 1: Use the checkpoint's own state snapshot for validator trust,
                 // not the local state engine (which may be empty on fresh nodes).
                 let checkpoint_state = ultradag_coin::StateEngine::from_snapshot(state_at_checkpoint.clone());
@@ -1296,6 +1326,7 @@ async fn handle_peer(
                     let valid_count = checkpoint.valid_signers().len();
                     if valid_count < 2 {
                         warn!("Received CheckpointSync with only {} valid signers (need ≥2)", valid_count);
+                        checkpoint_metrics.record_fast_sync_failure();
                         continue;
                     }
                     2 // Pre-staking: minimum BFT quorum
@@ -1306,6 +1337,7 @@ async fn handle_peer(
                 if !active.is_empty() && !checkpoint.is_accepted(&active, quorum) {
                     warn!("Received CheckpointSync with insufficient signatures ({} valid, need {})",
                         checkpoint.valid_signers().len(), quorum);
+                    checkpoint_metrics.record_fast_sync_failure();
                     continue;
                 }
 
@@ -1313,8 +1345,14 @@ async fn handle_peer(
                 let computed_root = ultradag_coin::consensus::compute_state_root(&state_at_checkpoint);
                 if computed_root != checkpoint.state_root {
                     warn!("CheckpointSync state_root mismatch — rejecting");
+                    checkpoint_metrics.record_fast_sync_failure();
                     continue;
                 }
+
+                // Calculate bytes before moving state_at_checkpoint
+                let bytes_downloaded = serde_json::to_vec(&state_at_checkpoint)
+                    .map(|v| v.len())
+                    .unwrap_or(0) as u64;
 
                 // Apply state snapshot
                 {
@@ -1359,10 +1397,18 @@ async fn handle_peer(
                 if skipped > 0 {
                     warn!("CheckpointSync: skipped {} vertices with invalid signatures", skipped);
                 }
+                
+                // Record successful fast-sync metrics
+                let sync_duration_ms = sync_start.elapsed().as_millis() as u64;
+                checkpoint_metrics.record_fast_sync_success(sync_duration_ms, bytes_downloaded);
+                checkpoint_metrics.record_checkpoint_load_success();
+                
                 info!(
-                    "Fast-synced from checkpoint at round {}, inserted {} suffix vertices",
+                    "Fast-synced from checkpoint at round {}, inserted {} suffix vertices ({}ms, {} bytes)",
                     checkpoint.round,
-                    inserted
+                    inserted,
+                    sync_duration_ms,
+                    bytes_downloaded
                 );
             }
         }
