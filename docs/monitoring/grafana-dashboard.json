@@ -1,0 +1,502 @@
+{
+  "dashboard": {
+    "title": "UltraDAG Node Monitoring",
+    "tags": ["ultradag", "blockchain", "consensus"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Node Health Status",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "up{job=\"ultradag\"}",
+            "legendFormat": "Node Status"
+          }
+        ],
+        "options": {
+          "colorMode": "background",
+          "graphMode": "none",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {"type": "value", "value": "1", "text": "UP"},
+              {"type": "value", "value": "0", "text": "DOWN"}
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 1, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Finality Lag",
+        "type": "stat",
+        "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "ultradag_finality_lag",
+            "legendFormat": "Rounds Behind"
+          }
+        ],
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 10, "color": "yellow"},
+                {"value": 100, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Peer Connections",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "ultradag_peer_count",
+            "legendFormat": "Connected Peers"
+          }
+        ],
+        "options": {
+          "colorMode": "background",
+          "graphMode": "area",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 1, "color": "yellow"},
+                {"value": 3, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Current Round",
+        "type": "stat",
+        "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "ultradag_current_round",
+            "legendFormat": "Round"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Finality Lag Over Time",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "ultradag_finality_lag",
+            "legendFormat": "Finality Lag"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Rounds"},
+          {"format": "short"}
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2,
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [10], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "High Finality Lag",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 6,
+        "title": "DAG Vertex Count",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "ultradag_vertex_count",
+            "legendFormat": "Total Vertices"
+          },
+          {
+            "expr": "ultradag_finalized_vertex_count",
+            "legendFormat": "Finalized Vertices"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Vertices"},
+          {"format": "short"}
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2
+      },
+      {
+        "id": 7,
+        "title": "Checkpoint Production",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(checkpoint_produced_total[5m])",
+            "legendFormat": "Production Rate"
+          },
+          {
+            "expr": "checkpoint_production_duration_ms",
+            "legendFormat": "Duration (ms)"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Rate / Duration"},
+          {"format": "short"}
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2
+      },
+      {
+        "id": 8,
+        "title": "Checkpoint Co-signing",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(checkpoints_cosigned_total[5m])",
+            "legendFormat": "Co-sign Rate"
+          },
+          {
+            "expr": "rate(checkpoint_quorum_reached_total[5m])",
+            "legendFormat": "Quorum Rate"
+          },
+          {
+            "expr": "checkpoint_validation_failures",
+            "legendFormat": "Validation Failures"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Rate"},
+          {"format": "short"}
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2
+      },
+      {
+        "id": 9,
+        "title": "Fast-Sync Operations",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 20, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "fast_sync_attempts_total",
+            "legendFormat": "Attempts"
+          },
+          {
+            "expr": "fast_sync_success_total",
+            "legendFormat": "Successes"
+          },
+          {
+            "expr": "fast_sync_failures_total",
+            "legendFormat": "Failures"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Count"},
+          {"format": "short"}
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2,
+        "bars": true
+      },
+      {
+        "id": 10,
+        "title": "Fast-Sync Performance",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 20, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "fast_sync_duration_ms",
+            "legendFormat": "Duration (ms)"
+          },
+          {
+            "expr": "rate(fast_sync_bytes_downloaded_total[5m])",
+            "legendFormat": "Download Rate (bytes/s)"
+          }
+        ],
+        "yaxes": [
+          {"format": "ms", "label": "Duration"},
+          {"format": "Bps", "label": "Bytes/sec"}
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2
+      },
+      {
+        "id": 11,
+        "title": "Checkpoint Storage",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 28, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "checkpoint_persist_success",
+            "legendFormat": "Persist Success"
+          },
+          {
+            "expr": "checkpoint_persist_failures",
+            "legendFormat": "Persist Failures"
+          },
+          {
+            "expr": "checkpoint_load_success",
+            "legendFormat": "Load Success"
+          },
+          {
+            "expr": "checkpoint_load_failures",
+            "legendFormat": "Load Failures"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Count"},
+          {"format": "short"}
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2
+      },
+      {
+        "id": 12,
+        "title": "Checkpoint Health",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 28, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "checkpoint_last_round",
+            "legendFormat": "Last Checkpoint Round"
+          },
+          {
+            "expr": "checkpoint_age_seconds",
+            "legendFormat": "Age (seconds)"
+          },
+          {
+            "expr": "checkpoint_pending_count",
+            "legendFormat": "Pending Count"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Value"},
+          {"format": "short"}
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2,
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [600], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["B", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "Stale Checkpoint",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 13,
+        "title": "Checkpoint Pruning",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 36, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(checkpoints_pruned_total[5m])",
+            "legendFormat": "Pruning Rate"
+          },
+          {
+            "expr": "checkpoint_disk_count",
+            "legendFormat": "Disk Count"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Count"},
+          {"format": "short"}
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2
+      },
+      {
+        "id": 14,
+        "title": "Mempool Size",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 36, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "ultradag_mempool_transaction_count",
+            "legendFormat": "Pending Transactions"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Transactions"},
+          {"format": "short"}
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2,
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [5000], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "High Mempool Size",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 15,
+        "title": "System Resources - CPU",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 44, "w": 8, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(process_cpu_seconds_total{job=\"ultradag\"}[5m]) * 100",
+            "legendFormat": "CPU Usage %"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "CPU %", "max": 100},
+          {"format": "short"}
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2
+      },
+      {
+        "id": 16,
+        "title": "System Resources - Memory",
+        "type": "graph",
+        "gridPos": {"x": 8, "y": 44, "w": 8, "h": 8},
+        "targets": [
+          {
+            "expr": "process_resident_memory_bytes{job=\"ultradag\"} / 1024 / 1024",
+            "legendFormat": "Memory Usage (MB)"
+          }
+        ],
+        "yaxes": [
+          {"format": "decmbytes", "label": "Memory"},
+          {"format": "short"}
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2,
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [500], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "10m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "High Memory Usage",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 17,
+        "title": "System Resources - Network",
+        "type": "graph",
+        "gridPos": {"x": 16, "y": 44, "w": 8, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(node_network_receive_bytes_total[5m])",
+            "legendFormat": "RX Bytes/s"
+          },
+          {
+            "expr": "rate(node_network_transmit_bytes_total[5m])",
+            "legendFormat": "TX Bytes/s"
+          }
+        ],
+        "yaxes": [
+          {"format": "Bps", "label": "Network"},
+          {"format": "short"}
+        ],
+        "lines": true,
+        "fill": 1,
+        "linewidth": 2
+      }
+    ]
+  }
+}
