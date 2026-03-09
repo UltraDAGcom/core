@@ -92,6 +92,43 @@ pub fn list_checkpoints(dir: &Path) -> Vec<u64> {
     rounds
 }
 
+/// Prune old checkpoints, keeping only the most recent ones.
+/// 
+/// Strategy:
+/// - Keep the latest `keep_count` checkpoints
+/// - Always keep at least 2 checkpoints for safety (even if keep_count=1)
+/// - Delete older checkpoints to limit disk usage
+/// 
+/// Returns the number of checkpoints deleted.
+pub fn prune_old_checkpoints(dir: &Path, keep_count: usize) -> std::io::Result<usize> {
+    let keep_count = keep_count.max(2); // Always keep at least 2 for safety
+    let mut rounds = list_checkpoints(dir);
+    
+    if rounds.len() <= keep_count {
+        return Ok(0); // Nothing to prune
+    }
+    
+    // Sort in descending order (newest first)
+    rounds.sort_unstable_by(|a, b| b.cmp(a));
+    
+    // Keep the newest `keep_count` checkpoints, delete the rest
+    let to_delete = &rounds[keep_count..];
+    let mut deleted = 0;
+    
+    for round in to_delete {
+        let path = dir.join(format!("checkpoint_{:010}.json", round));
+        if path.exists() {
+            if let Err(e) = std::fs::remove_file(&path) {
+                tracing::warn!("Failed to delete checkpoint at round {}: {}", round, e);
+            } else {
+                deleted += 1;
+            }
+        }
+    }
+    
+    Ok(deleted)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

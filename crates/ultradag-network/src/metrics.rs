@@ -36,6 +36,10 @@ pub struct CheckpointMetrics {
     last_checkpoint_round: Arc<AtomicU64>,
     last_checkpoint_timestamp: Arc<AtomicU64>,
     pending_checkpoints_count: Arc<AtomicU64>,
+    
+    // Checkpoint Pruning
+    checkpoints_pruned_total: Arc<AtomicU64>,
+    checkpoint_disk_count: Arc<AtomicU64>,
 }
 
 impl CheckpointMetrics {
@@ -134,6 +138,16 @@ impl CheckpointMetrics {
         now.saturating_sub(last_ts)
     }
     
+    // Checkpoint Pruning Metrics
+    
+    pub fn record_checkpoints_pruned(&self, count: u64) {
+        self.checkpoints_pruned_total.fetch_add(count, Ordering::Relaxed);
+    }
+    
+    pub fn update_checkpoint_disk_count(&self, count: u64) {
+        self.checkpoint_disk_count.store(count, Ordering::Relaxed);
+    }
+    
     // Prometheus-style metrics export
     
     pub fn export_prometheus(&self) -> String {
@@ -217,6 +231,14 @@ checkpoint_age_seconds {}
 # HELP checkpoint_pending_count Number of pending checkpoints awaiting quorum
 # TYPE checkpoint_pending_count gauge
 checkpoint_pending_count {}
+
+# HELP checkpoints_pruned_total Total number of checkpoints pruned from disk
+# TYPE checkpoints_pruned_total counter
+checkpoints_pruned_total {}
+
+# HELP checkpoint_disk_count Current number of checkpoints stored on disk
+# TYPE checkpoint_disk_count gauge
+checkpoint_disk_count {}
 "#,
             self.checkpoints_produced_total.load(Ordering::Relaxed),
             self.checkpoint_production_duration_ms.load(Ordering::Relaxed),
@@ -238,6 +260,8 @@ checkpoint_pending_count {}
             self.last_checkpoint_round.load(Ordering::Relaxed),
             self.last_checkpoint_age_seconds(),
             self.pending_checkpoints_count.load(Ordering::Relaxed),
+            self.checkpoints_pruned_total.load(Ordering::Relaxed),
+            self.checkpoint_disk_count.load(Ordering::Relaxed),
         )
     }
     
@@ -274,6 +298,10 @@ checkpoint_pending_count {}
                 "last_checkpoint_round": self.last_checkpoint_round.load(Ordering::Relaxed),
                 "last_checkpoint_age_seconds": self.last_checkpoint_age_seconds(),
                 "pending_checkpoints": self.pending_checkpoints_count.load(Ordering::Relaxed),
+            },
+            "pruning": {
+                "checkpoints_pruned_total": self.checkpoints_pruned_total.load(Ordering::Relaxed),
+                "checkpoint_disk_count": self.checkpoint_disk_count.load(Ordering::Relaxed),
             }
         })
     }

@@ -404,6 +404,22 @@ pub async fn validator_loop(
             server.checkpoint_metrics.record_checkpoint_produced(duration_ms, size_bytes, current_finalized);
             
             info!("Produced checkpoint at round {} ({}ms, {} bytes)", current_finalized, duration_ms, size_bytes);
+            
+            // Prune old checkpoints to limit disk usage (keep last 10 checkpoints)
+            match ultradag_coin::persistence::prune_old_checkpoints(&data_dir, 10) {
+                Ok(deleted) => {
+                    if deleted > 0 {
+                        server.checkpoint_metrics.record_checkpoints_pruned(deleted as u64);
+                        info!("Pruned {} old checkpoints from disk", deleted);
+                    }
+                    // Update disk count metric
+                    let disk_count = ultradag_coin::persistence::list_checkpoints(&data_dir).len() as u64;
+                    server.checkpoint_metrics.update_checkpoint_disk_count(disk_count);
+                }
+                Err(e) => {
+                    warn!("Failed to prune old checkpoints: {}", e);
+                }
+            }
         }
 
         // Prune old rounds to bound memory (every 50 rounds to amortize cost)
