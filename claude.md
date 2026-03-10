@@ -73,6 +73,12 @@
 - **CheckpointSync mempool cleanup** — After `load_snapshot()` in CheckpointSync handler, mempool is now cleared. Old transactions referencing stale nonces/balances could cause invalid block production after fast-sync.
 - **Mempool::clear()** — Added `clear()` method to Mempool for bulk removal of all transactions.
 
+**Deep Review Audit (March 10, 2026):**
+- **Supply cap coinbase validation reorder** — Moved capping BEFORE validation in engine.rs; validator.rs now also caps reward before block creation. Critical fix: near max supply, valid vertices were rejected.
+- **Mempool Stake/Unstake fee exemption** — Stake/Unstake (fee=0 by design) were rejected by MIN_FEE_SATS check. Added explicit exemption.
+- **CLI zero-value validation** — `--validators 0`, `--round-ms 0`, `--pruning-depth 0` now rejected with clear errors instead of causing runtime failures.
+- **Finality scan_from off-by-one** — `find_newly_finalized()` re-scanned already-finalized round. Fixed to start from `last_finalized_round + 1`.
+
 **Production Perfection Audit (March 10, 2026):**
 - **Comprehensive production audit** — Complete systematic review of entire codebase for mainnet readiness. Created `PRODUCTION_AUDIT.md` with detailed analysis of all critical components.
 - **RPC unwrap() elimination** — Fixed all unwrap() calls in RPC response building (rpc.rs lines 62, 227, 1285). Replaced with proper error handling and graceful fallbacks. All response building now has error recovery.
@@ -1264,6 +1270,18 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 43. **total_staked() sum overflow (March 10, 2026)** — `Iterator::sum()` on stake amounts could silently wrap at u64::MAX, producing incorrect reward calculations.
     - **Fix:** Changed to `fold(0u64, |acc, s| acc.saturating_add(s.staked))`
     - **Result:** Total staked computation bounded to u64::MAX
+44. **Supply cap coinbase validation order (March 10, 2026)** — `apply_vertex()` validated coinbase against uncapped `block_reward(height)`, then capped afterward. Near max supply, validators produce capped coinbase but engine rejects it as "invalid coinbase" because validation happens before capping.
+    - **Fix:** Moved supply cap enforcement BEFORE coinbase validation in engine.rs. Validator loop also caps reward before block creation. Both paths now agree on the capped amount.
+    - **Result:** Vertices near supply cap accepted correctly; coinbase always matches capped reward
+45. **Stake/Unstake rejected by mempool MIN_FEE check (March 10, 2026)** — Mempool `insert()` rejected all transactions with `fee < MIN_FEE_SATS`. Stake/Unstake have `fee=0` by design, so they were silently dropped from the mempool, never propagated or included in vertices.
+    - **Fix:** Added fee exemption for `Transaction::Stake(_) | Transaction::Unstake(_)` before the MIN_FEE check
+    - **Result:** Stake/Unstake transactions accepted in mempool despite zero fee
+46. **CLI accepts invalid --validators 0, --round-ms 0, --pruning-depth 0 (March 10, 2026)** — `--validators 0` breaks quorum (division by zero in ceil(2*0/3)), `--round-ms 0` causes tight spin loop, `--pruning-depth 0` prunes everything immediately.
+    - **Fix:** Added explicit validation rejecting zero values for these flags on startup
+    - **Result:** Clear error messages on startup instead of runtime failures
+47. **Finality scan_from off-by-one (March 10, 2026)** — `find_newly_finalized()` used `self.last_finalized_round` as `scan_from`, re-scanning the already-finalized round on every call. Wasted CPU on vertices known to be finalized.
+    - **Fix:** Changed to `self.last_finalized_round + 1` (skip already-finalized round), with special case for round 0
+    - **Result:** Finality scan starts from the correct frontier round
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.

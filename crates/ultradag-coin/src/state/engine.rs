@@ -906,6 +906,42 @@ mod tests {
         vertex
     }
 
+    /// Like make_vertex_for but with a custom coinbase reward amount.
+    fn make_vertex_with_reward(
+        proposer: &Address,
+        round: u64,
+        height: u64,
+        reward: u64,
+        sk: &SecretKey,
+    ) -> DagVertex {
+        let coinbase = CoinbaseTx {
+            to: *proposer,
+            amount: reward,
+            height,
+        };
+        let block = Block {
+            header: BlockHeader {
+                version: 1,
+                height,
+                timestamp: 1_000_000,
+                prev_hash: [0u8; 32],
+                merkle_root: [0u8; 32],
+            },
+            coinbase,
+            transactions: vec![],
+        };
+        let mut vertex = DagVertex::new(
+            block,
+            vec![],
+            round,
+            *proposer,
+            sk.verifying_key().to_bytes(),
+            Signature([0u8; 64]),
+        );
+        vertex.signature = sk.sign(&vertex.signable_bytes());
+        vertex
+    }
+
     #[test]
     fn initial_balance_is_zero() {
         let state = StateEngine::new();
@@ -1016,7 +1052,8 @@ mod tests {
         state.credit(&proposer, existing_supply); // Maintain invariant
 
         // Apply a vertex — reward should be capped to remaining supply (100 sats)
-        let vertex = make_vertex_for(&proposer, 0, 0, vec![], &sk);
+        // Coinbase must match the capped amount (not the uncapped block_reward)
+        let vertex = make_vertex_with_reward(&proposer, 0, 0, 100, &sk);
         state.apply_vertex(&vertex).unwrap();
 
         assert_eq!(state.total_supply(), max);
@@ -1035,7 +1072,8 @@ mod tests {
         state.total_supply = max;
         state.credit(&proposer, max); // Maintain invariant
 
-        let vertex = make_vertex_for(&proposer, 0, 0, vec![], &sk);
+        // Coinbase must be 0 (no remaining supply to emit)
+        let vertex = make_vertex_with_reward(&proposer, 0, 0, 0, &sk);
         state.apply_vertex(&vertex).unwrap();
 
         // Supply should not exceed max
