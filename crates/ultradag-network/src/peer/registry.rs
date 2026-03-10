@@ -31,7 +31,11 @@ impl PeerRegistry {
     }
 
     pub async fn add_known(&self, addr: String) {
-        self.known.write().await.insert(addr);
+        let mut known = self.known.write().await;
+        // Cap at 1000 known peers to prevent memory exhaustion via malicious Peers messages
+        if known.len() < 1000 {
+            known.insert(addr);
+        }
     }
 
     pub async fn add_writer(&self, addr: String, writer: PeerWriter) {

@@ -476,10 +476,11 @@ fn test_19_epoch_boundary_updates_validator_set() {
     }
 
     // Produce a vertex at the next epoch boundary
+    // Engine uses vertex.round as height for block_reward, so use epoch2_round
     let epoch2_round = EPOCH_LENGTH_ROUNDS;
     let own_stake2 = state.stake_of(&sks[1].address());
     let total_stake2 = state.total_staked();
-    let reward2 = ((block_reward(1) as u128) * own_stake2 as u128 / total_stake2 as u128) as u64;
+    let reward2 = ((block_reward(epoch2_round) as u128) * own_stake2 as u128 / total_stake2 as u128) as u64;
     let v2 = make_vertex(&sks[1], epoch2_round, 1, vec![], reward2);
     state.apply_vertex(&v2).unwrap();
 

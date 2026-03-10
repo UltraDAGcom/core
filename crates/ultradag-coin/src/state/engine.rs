@@ -139,9 +139,14 @@ impl StateEngine {
                 crate::tx::Transaction::Stake(_) | crate::tx::Transaction::Unstake(_) => 0,
             }
         }).sum();
-        // Compute expected height from state (don't trust proposer-supplied height).
-        // This prevents a malicious validator from setting height=0 to claim max reward.
-        let expected_height = snapshot.last_finalized_round.map(|r| r + 1).unwrap_or(0);
+        // Use vertex.round as height for block_reward computation.
+        // This eliminates the TOCTOU between production time and application time:
+        // the validator computes reward from its local state, but state can advance
+        // between production and finalization. Using vertex.round is safe because:
+        // 1. Round is immutable once signed (can't be faked)
+        // 2. DAG rejects rounds outside [pruning_floor, current_round + 10]
+        // 3. Both producer and engine compute the same value deterministically
+        let expected_height = vertex.round;
         let total_round_reward = crate::constants::block_reward(expected_height);
         let proposer = &vertex.block.coinbase.to;
         let total_stake = snapshot.total_staked();

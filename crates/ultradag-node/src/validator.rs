@@ -184,15 +184,9 @@ pub async fn validator_loop(
         // Snapshot mempool
         let mempool_snap = server.mempool.read().await.clone();
 
-        // Calculate height based on finalized rounds — must match engine.rs expected_height.
-        // Engine: snapshot.last_finalized_round.map(|r| r + 1).unwrap_or(0)
-        let height = {
-            let state = server.state.read().await;
-            match state.last_finalized_round() {
-                Some(r) => r + 1,
-                None => 0,
-            }
-        };
+        // Use dag_round as height for block_reward — matches engine.rs which uses vertex.round.
+        // This eliminates TOCTOU: both producer and engine use the same immutable round number.
+        let height = dag_round;
 
         info!(
             "Producing vertex round={} height={} mempool={} parents={}",

@@ -90,27 +90,24 @@ fn coinbase_fees_after_supply_exhaustion() {
     let fund_amount = 10_000_000;
     state.faucet_credit(&sender_sk.address(), fund_amount).unwrap();
 
-    // Height after 64 halvings — block_reward = 0
-    let post_exhaustion_height = 64 * HALVING_INTERVAL + 1;
-    assert_eq!(block_reward(post_exhaustion_height), 0);
-
-    // Set last_finalized_round so engine computes expected_height = post_exhaustion_height
-    state.last_finalized_round = Some(post_exhaustion_height - 1);
+    // Round after 64 halvings — block_reward = 0
+    let post_exhaustion_round = 64 * HALVING_INTERVAL + 1;
+    assert_eq!(block_reward(post_exhaustion_round), 0);
 
     let fee = 100_000;
     let tx = make_signed_tx(&sender_sk, receiver, 1_000_000, fee, 0);
 
-    // Create vertex at post-exhaustion height with a tx that has fees
+    // Create vertex at post-exhaustion round with a tx that has fees
     let proposer = proposer_sk.address();
     let coinbase = ultradag_coin::CoinbaseTx {
         to: proposer,
         amount: 0 + fee, // block_reward=0, but fees should still work
-        height: post_exhaustion_height,
+        height: post_exhaustion_round,
     };
     let block = ultradag_coin::Block {
         header: ultradag_coin::BlockHeader {
             version: 1,
-            height: post_exhaustion_height,
+            height: post_exhaustion_round,
             timestamp: 1_000_000,
             prev_hash: [0u8; 32],
             merkle_root: [0u8; 32],
@@ -118,10 +115,11 @@ fn coinbase_fees_after_supply_exhaustion() {
         coinbase,
         transactions: vec![tx],
     };
+    // Use post_exhaustion_round as vertex round — engine uses vertex.round for height
     let mut vertex = DagVertex::new(
         block,
         vec![[0u8; 32]],
-        0,
+        post_exhaustion_round,
         proposer,
         proposer_sk.verifying_key().to_bytes(),
         Signature([0u8; 64]),
@@ -142,23 +140,21 @@ fn empty_block_after_supply_exhaustion() {
     let mut state = StateEngine::new();
     let sk = SecretKey::generate();
 
-    let post_exhaustion_height = 64 * HALVING_INTERVAL + 1;
-    assert_eq!(block_reward(post_exhaustion_height), 0);
-
-    // Set last_finalized_round so engine computes expected_height = post_exhaustion_height
-    state.last_finalized_round = Some(post_exhaustion_height - 1);
+    let post_exhaustion_round = 64 * HALVING_INTERVAL + 1;
+    assert_eq!(block_reward(post_exhaustion_round), 0);
 
     // Vertex with 0 transactions, 0 block reward → coinbase = 0
+    // Engine uses vertex.round for height, so round must match post-exhaustion
     let proposer = sk.address();
     let coinbase = ultradag_coin::CoinbaseTx {
         to: proposer,
         amount: 0,
-        height: post_exhaustion_height,
+        height: post_exhaustion_round,
     };
     let block = ultradag_coin::Block {
         header: ultradag_coin::BlockHeader {
             version: 1,
-            height: post_exhaustion_height,
+            height: post_exhaustion_round,
             timestamp: 1_000_000,
             prev_hash: [0u8; 32],
             merkle_root: [0u8; 32],
@@ -169,7 +165,7 @@ fn empty_block_after_supply_exhaustion() {
     let mut vertex = DagVertex::new(
         block,
         vec![[0u8; 32]],
-        0,
+        post_exhaustion_round,
         proposer,
         sk.verifying_key().to_bytes(),
         Signature([0u8; 64]),

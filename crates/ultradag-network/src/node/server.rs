@@ -993,6 +993,7 @@ async fn handle_peer(
                 };
                 {
                     let mut dag_w = dag.write().await;
+                    let mut equivocation_msgs: Vec<Message> = Vec::new();
                     for vertex in filtered {
                         let validator = vertex.validator;
                         let hash = vertex.hash();
@@ -1015,20 +1016,23 @@ async fn handle_peer(
                                     "Equivocation in sync vertex from validator {} round {} (peer {})",
                                     validator, vertex.round, peer_addr,
                                 );
-                                // Broadcast equivocation evidence
+                                // Collect equivocation evidence for broadcast after loop
+                                // (don't break — remaining vertices may be legitimate)
                                 if let Some([h1, h2]) = dag_w.get_equivocation_evidence(&validator, vertex.round) {
                                     if let (Some(v1), Some(v2)) = (dag_w.get_including_equivocations(&h1).cloned(), dag_w.get_including_equivocations(&h2).cloned()) {
-                                        let evidence_msg = Message::EquivocationEvidence {
+                                        equivocation_msgs.push(Message::EquivocationEvidence {
                                             vertex1: v1,
                                             vertex2: v2,
-                                        };
-                                        drop(dag_w);
-                                        peers.broadcast(&evidence_msg, "").await;
-                                        break;
+                                        });
                                     }
                                 }
                             }
                         }
+                    }
+                    // Broadcast equivocation evidence after loop (outside dag write scope below)
+                    drop(dag_w);
+                    for msg in equivocation_msgs {
+                        peers.broadcast(&msg, "").await;
                     }
                 }
                 // Buffer failed inserts as orphans (outside dag lock)
