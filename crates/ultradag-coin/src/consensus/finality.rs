@@ -118,9 +118,13 @@ impl FinalityTracker {
                     continue;
                 }
                 if let Some(vertex) = dag.get(hash) {
+                    // Parent is considered "ok" if:
+                    // - It's the genesis hash, OR
+                    // - It's in the finalized set, OR
+                    // - It's been pruned from the DAG (pruned == deeply finalized)
                     let parents_ok = vertex.parent_hashes.is_empty()
                         || vertex.parent_hashes.iter()
-                            .all(|p| *p == genesis || self.finalized.contains(p));
+                            .all(|p| *p == genesis || self.finalized.contains(p) || dag.get(p).is_none());
                     if parents_ok && dag.descendant_validator_count(hash) >= threshold {
                         ready.insert(*hash);
                     }
@@ -152,7 +156,7 @@ impl FinalityTracker {
                     }
                     if let Some(vertex) = dag.get(&child) {
                         let parents_ok = vertex.parent_hashes.iter()
-                            .all(|p| *p == genesis || self.finalized.contains(p));
+                            .all(|p| *p == genesis || self.finalized.contains(p) || dag.get(p).is_none());
                         if parents_ok {
                             ready.insert(child);
                         }

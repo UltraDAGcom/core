@@ -522,7 +522,9 @@ pub async fn validator_loop(
 
         last_production = tokio::time::Instant::now();
         consecutive_skips = 0;
-        in_recovery = false;
+        // Don't reset in_recovery here — only exit recovery when quorum
+        // actually resumes (line 138-141). Resetting here causes a tight
+        // loop: produce → reset → 3 skips → recovery → produce → reset...
 
         info!(
             "Produced vertex hash={} round={} height={}",
