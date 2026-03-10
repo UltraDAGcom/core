@@ -13,6 +13,14 @@
  * detection. Does NOT model: staking, pruning, checkpoints, state engine,
  * transactions, or network transport.
  *
+ * Equivocation model: Byzantine validators CAN produce multiple vertices in
+ * the same round (equivocating). However, honest validators' DAGs only contain
+ * ONE vertex per (validator, round) — the first seen. This is enforced by
+ * try_insert() in dag.rs (line 236-264). In this spec, honest vertices
+ * reference at most one id per validator from the previous round, modeling
+ * the equivocation detection. Byzantine equivocating vertices exist in the
+ * global vertex set but honest validators' parent sets only see one per equivocator.
+ *
  * Safety: No two finalized vertices from the same validator in the same round.
  * Liveness: Every vertex produced by an honest validator is eventually finalized
  *           (under fair scheduling).
@@ -39,9 +47,8 @@ N == Cardinality(VALIDATORS)
 \*   (2 * effective_count + 2) / 3
 QuorumThreshold == (2 * N + 2) \div 3
 
-\* Upper bound on vertex IDs. Honest validators produce at most N * MAX_ROUNDS.
-\* Byzantine validators can equivocate, but we bound total vertices to keep
-\* the state space finite for TLC.
+\* Upper bound on vertex IDs to keep state space finite for TLC.
+\* Honest: N * MAX_ROUNDS. Byzantine equivocation: up to N * MAX_ROUNDS more.
 MaxId == N * MAX_ROUNDS * 3
 
 \* =========================================================================
@@ -61,9 +68,6 @@ vars == <<round, vertices, finalized, byzantine, active, nextId>>
 
 \* =========================================================================
 \* Type invariant — structural well-formedness
-\* Checks constraints on individual vertex fields without defining an
-\* enumerable VertexType set (which would be infinite or combinatorially
-\* explosive due to the parents subset field).
 \* =========================================================================
 
 TypeOK ==
@@ -91,14 +95,40 @@ VerticesInRound(r) == {vtx \in vertices : vtx.round = r}
 \* Set of distinct validators that produced at least one vertex in round r
 ValidatorsInRound(r) == {vtx.validator : vtx \in VerticesInRound(r)}
 
-\* Set of ids of vertices in round r (used as parent references)
+\* Set of ids of vertices in round r
 IdsInRound(r) == {vtx.id : vtx \in VerticesInRound(r)}
+
+\* Ids of vertices from validator val in round r
+IdsOfValidatorInRound(val, r) == {vtx.id : vtx \in VerticesOf(val, r)}
+
+(*
+ * ValidParentSets(r): Set of all valid parent selections for round r.
+ *
+ * Models equivocation detection (dag.rs try_insert):
+ * Each honest node's DAG contains at most ONE vertex per (validator, round).
+ * When constructing parents from round r-1, an honest validator picks exactly
+ * one vertex id per distinct validator that produced in round r-1.
+ *
+ * Non-deterministic choice across equivocating vertices models the fact that
+ * different honest nodes may have received different versions from a Byzantine
+ * equivocator (each node accepts whichever arrived first).
+ *)
+ValidParentSets(r) ==
+    IF r = 1 THEN {{}}
+    ELSE LET prevVals == ValidatorsInRound(r - 1)
+         IN  IF prevVals = {} THEN {{}}
+             ELSE {ps \in SUBSET IdsInRound(r - 1) :
+                    \* Exactly one id per validator that produced in round r-1
+                    /\ \A val \in prevVals :
+                        Cardinality({pid \in ps : pid \in IdsOfValidatorInRound(val, r - 1)}) = 1
+                    \* No extra ids
+                    /\ Cardinality(ps) = Cardinality(prevVals)
+                  }
 
 \* Direct children: vertices that reference vtx.id as a parent
 DirectChildren(vtx) == {v \in vertices : vtx.id \in v.parents}
 
 \* All descendants of vtx (transitive closure through children).
-\* Since MAX_ROUNDS is small, we compute this via fixed-point iteration.
 RECURSIVE DescendantsAcc(_, _)
 DescendantsAcc(frontier, acc) ==
     LET newChildren == UNION {DirectChildren(v) : v \in frontier} \ acc
@@ -107,7 +137,7 @@ DescendantsAcc(frontier, acc) ==
 
 Descendants(vtx) == DescendantsAcc({vtx}, {})
 
-\* Distinct validators among a set of descendants
+\* Distinct validators among descendants of vtx
 DescendantValidators(vtx) ==
     {d.validator : d \in Descendants(vtx)}
 
@@ -120,7 +150,7 @@ IsHonest(v) == v \notin byzantine
 \* Parent quorum check: does round r-1 have vertices from >= QuorumThreshold
 \* distinct validators? This is the "2f+1 gate" from validator.rs.
 PrevRoundHasQuorum(r) ==
-    IF r = 1 THEN TRUE \* Round 1 has no prior round requirement
+    IF r = 1 THEN TRUE
     ELSE Cardinality(ValidatorsInRound(r - 1)) >= QuorumThreshold
 
 \* =========================================================================
@@ -149,11 +179,11 @@ Init ==
  *   - r is the next round to produce (round + 1, or current round if not yet produced)
  *   - v has NOT already produced a vertex in round r (equivocation prevention)
  *   - Round r-1 has >= QuorumThreshold distinct validators (2f+1 gate)
- *   - r <= MAX_ROUNDS (bounded model)
- *   - nextId <= MaxId (bounded model)
+ *   - r <= MAX_ROUNDS, nextId <= MaxId (bounded model)
  *
- * The vertex references all vertex ids from round r-1 as parents
- * (matching the "vertices_in_round(prev_round)" parent selection from validator.rs).
+ * Parent selection: picks exactly one vertex id per distinct validator from
+ * round r-1 (models dag.rs equivocation detection — each honest DAG has at
+ * most one vertex per validator per round).
  *)
 ProduceVertex(v, r) ==
     /\ IsHonest(v)
@@ -161,18 +191,16 @@ ProduceVertex(v, r) ==
     /\ r >= 1
     /\ r <= MAX_ROUNDS
     /\ nextId <= MaxId
-    \* Validator produces for current frontier: round must be <= round + 1
     /\ r <= round + 1
     \* Equivocation prevention: honest validator produces at most one vertex per round
     /\ VerticesOf(v, r) = {}
     \* 2f+1 gate: previous round must have quorum
     /\ PrevRoundHasQuorum(r)
-    \* Create vertex referencing all vertices from round r-1
-    /\ LET parentIds == IF r = 1 THEN {} ELSE IdsInRound(r - 1)
-           newVertex == [validator |-> v, round |-> r, parents |-> parentIds, id |-> nextId]
-       IN  /\ vertices' = vertices \union {newVertex}
-           /\ nextId' = nextId + 1
-    \* Advance global round if this vertex is in a new round
+    \* Create vertex with valid parent selection (one per validator from round r-1)
+    /\ \E parentIds \in ValidParentSets(r) :
+        LET newVertex == [validator |-> v, round |-> r, parents |-> parentIds, id |-> nextId]
+        IN  /\ vertices' = vertices \union {newVertex}
+            /\ nextId' = nextId + 1
     /\ round' = IF r > round THEN r ELSE round
     /\ UNCHANGED <<finalized, byzantine, active>>
 
@@ -184,7 +212,7 @@ ProduceVertex(v, r) ==
  *   - descendant_validator_count(hash) >= quorum_threshold
  *
  * Additionally enforces the parent finality guarantee from find_newly_finalized():
- *   - All parents must be finalized first (or be the genesis sentinel)
+ *   - All parents must be finalized first (or vertex has no parents — round 1)
  *)
 FinalizeVertex(vtx) ==
     /\ vtx \in vertices
@@ -199,8 +227,7 @@ FinalizeVertex(vtx) ==
 
 (*
  * FinalizeForValidatorRound(v, r): Finalize some vertex from validator v in round r.
- * This is a projection of FinalizeVertex onto the finite (VALIDATORS x rounds) domain,
- * allowing TLC to express fairness constraints without enumerating an infinite type.
+ * Projection onto finite (VALIDATORS x rounds) domain for TLC fairness/liveness.
  *)
 FinalizeForValidatorRound(v, r) ==
     \E vtx \in vertices :
@@ -215,12 +242,18 @@ FinalizeForValidatorRound(v, r) ==
 
 (*
  * ByzantineAction(v, r): A Byzantine validator can:
- *   (a) Produce an equivocating vertex (same round, different content/id)
- *   (b) Stay silent (do nothing) — modeled by not taking this action
+ *   (a) Produce an equivocating vertex (same round as an existing vertex — different id)
+ *   (b) Produce a normal vertex in a new round
+ *   (c) Stay silent (do nothing) — modeled by not taking this action
  *
- * Byzantine vertices have unique ids (different content), creating equivocation.
- * The DAG in dag.rs try_insert() detects this and marks the validator as Byzantine,
- * but the equivocating vertex may still be referenced by other vertices before detection.
+ * Unlike honest validators, Byzantine validators:
+ *   - Have NO equivocation prevention check (can produce multiple vertices per round)
+ *   - Can choose arbitrary parent subsets (strategic parent selection)
+ *   - Are NOT constrained by the 2f+1 gate
+ *
+ * In the actual protocol, equivocating vertices are detected by try_insert()
+ * and rejected from honest nodes' DAGs. But they exist in the "global" view
+ * and the safety property must hold despite their existence.
  *)
 ByzantineAction(v, r) ==
     /\ v \in byzantine
@@ -228,18 +261,17 @@ ByzantineAction(v, r) ==
     /\ r <= MAX_ROUNDS
     /\ r <= round + 1
     /\ nextId <= MaxId
-    \* Byzantine validator produces a vertex (possibly equivocating — no uniqueness check)
-    /\ LET parentIds == IF r = 1 THEN {} ELSE IdsInRound(r - 1)
-           newVertex == [validator |-> v, round |-> r, parents |-> parentIds, id |-> nextId]
-       IN  /\ vertices' = vertices \union {newVertex}
-           /\ nextId' = nextId + 1
+    \* Byzantine can choose ANY subset of round r-1 ids as parents (strategic)
+    /\ \E parentIds \in SUBSET (IF r = 1 THEN {} ELSE IdsInRound(r - 1)) :
+        LET newVertex == [validator |-> v, round |-> r, parents |-> parentIds, id |-> nextId]
+        IN  /\ vertices' = vertices \union {newVertex}
+            /\ nextId' = nextId + 1
     /\ round' = IF r > round THEN r ELSE round
     /\ UNCHANGED <<finalized, byzantine, active>>
 
 (*
  * AdvanceRound: The system can advance to the next round.
  * Models the round timer from validator.rs (tokio::interval).
- * Only advances if current round has at least one vertex.
  *)
 AdvanceRound ==
     /\ round < MAX_ROUNDS
@@ -260,11 +292,10 @@ Next ==
 \* =========================================================================
 \* Fairness (for liveness)
 \*
-\* We quantify over the finite domains VALIDATORS x 1..MAX_ROUNDS rather than
-\* the infinite VertexType. WF on ProduceVertex ensures honest validators
-\* produce when enabled. SF on FinalizeForValidatorRound ensures that if a
-\* vertex from (v,r) becomes repeatedly eligible for finalization, it is
-\* eventually finalized. WF on AdvanceRound ensures rounds progress.
+\* Quantified over finite VALIDATORS x 1..MAX_ROUNDS domain.
+\* WF on ProduceVertex: honest validators produce when enabled.
+\* SF on FinalizeForValidatorRound: eligible vertices eventually finalized.
+\* WF on AdvanceRound: rounds progress.
 \* =========================================================================
 
 Fairness ==
@@ -289,11 +320,11 @@ Spec == Init /\ [][Next]_vars /\ Fairness
  * Two finalized vertices from the same validator in the same round
  * must be identical (same id). This is the core BFT safety guarantee.
  *
- * In the Rust code, equivocation is prevented for honest validators at
- * production time (has_vertex_from_validator_in_round check in validator.rs)
- * and detected for Byzantine validators at insertion time (try_insert in dag.rs).
- * Finality requires 2/3+ descendants, so with f <= floor((N-1)/3) Byzantine
- * validators, conflicting vertices cannot both reach finality.
+ * With f <= floor((N-1)/3) Byzantine validators and honest validators
+ * selecting at most one vertex per (validator, round) as parent:
+ * - At most one of any equivocating pair can accumulate >= ceil(2N/3) descendants
+ * - Because honest validators (>= N-f >= ceil(2N/3)) each reference only ONE
+ *   version, and finality requires ceil(2N/3) validator descendants
  *)
 Conflicting(v1, v2) ==
     /\ v1.validator = v2.validator
@@ -322,8 +353,7 @@ FinalizedParentsConsistency ==
 \* =========================================================================
 \* Liveness Properties (temporal)
 \*
-\* Quantified over the finite VALIDATORS x 1..MAX_ROUNDS domain so TLC
-\* can evaluate it (avoids enumerating the infinite VertexType set).
+\* Quantified over finite VALIDATORS x 1..MAX_ROUNDS domain.
 \* =========================================================================
 
 (*
@@ -335,7 +365,7 @@ Liveness == \A v \in VALIDATORS : \A r \in 1..MAX_ROUNDS :
     ~> (\E vtx \in finalized : vtx.validator = v /\ vtx.round = r)
 
 \* =========================================================================
-\* Auxiliary invariants (help TLC prove properties faster)
+\* Auxiliary invariants
 \* =========================================================================
 
 \* Round monotonicity: finalized vertices have round <= current round

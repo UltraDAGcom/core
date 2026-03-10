@@ -85,7 +85,9 @@ impl NodeServer {
             state: Arc::new(RwLock::new(StateEngine::new_with_genesis())),
             mempool: Arc::new(RwLock::new(Mempool::new())),
             dag: Arc::new(RwLock::new(BlockDag::new())),
-            finality: Arc::new(RwLock::new(FinalityTracker::new(3))),
+            // min_validators=1 for testnet - allows finality with any number of active validators
+            // For mainnet, should be 4 (MIN_ACTIVE_VALIDATORS) to enforce BFT safety
+            finality: Arc::new(RwLock::new(FinalityTracker::new(1))),
             peers: PeerRegistry::new(),
             vertex_tx,
             tx_tx,
