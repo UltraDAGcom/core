@@ -8,7 +8,7 @@ pub mod validator_set;
 pub mod vertex;
 
 pub use checkpoint::{Checkpoint, CheckpointSignature, compute_state_root};
-pub use dag::{BlockDag, DagInsertError, EquivocationEvidence};
+pub use dag::{BlockDag, DagInsertError, EquivocationEvidence, K_PARENTS, MAX_PARENTS};
 pub use epoch::sync_epoch_validators;
 pub use finality::FinalityTracker;
 pub use ordering::order_vertices;

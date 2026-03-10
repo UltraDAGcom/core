@@ -155,11 +155,11 @@ pub async fn validator_loop(
             }
         }
 
-        // Get parent references: use ALL vertices from the previous round.
-        // This creates dense cross-links between validators, enabling fast finality
-        // (descendant validator sets grow quickly when vertices reference all peers).
-        // Using tips() instead would collapse to 1 parent per validator since each
-        // validator's chain tip is its own last vertex.
+        // Get parent references: use K_PARENTS partial selection from previous round.
+        // This enables unlimited validator scaling by keeping parent count bounded at K
+        // regardless of the number of validators N. Follows Narwhal's approach.
+        // The DAG stays well-connected through deterministic cross-references, and finality
+        // math still works because descendants propagate through the partial parent graph.
         // Peers may not have all prev-round vertices yet — orphan resolution via
         // GetParents handles this automatically.
         let dag_tips = {
@@ -169,11 +169,27 @@ pub async fn validator_loop(
                 .iter()
                 .map(|v| v.hash())
                 .collect();
-            // Cap at MAX_PARENTS to stay consistent with try_insert() validation.
-            // With >64 validators in a round, we take the first 64 parents.
-            if parents.len() > ultradag_coin::consensus::dag::MAX_PARENTS {
-                parents.truncate(ultradag_coin::consensus::dag::MAX_PARENTS);
+            
+            // Use partial parent selection if we have more than K_PARENTS vertices
+            if parents.len() > ultradag_coin::consensus::dag::K_PARENTS {
+                // Deterministic selection based on validator address
+                // This ensures reproducibility and prevents gaming
+                let mut scored: Vec<([u8; 32], u64)> = parents
+                    .iter()
+                    .map(|parent| {
+                        let mut score = 0u64;
+                        for i in 0..8 {
+                            score ^= (validator.0[i] as u64) << (i * 8);
+                            score ^= (parent[i] as u64) << (i * 8);
+                        }
+                        (*parent, score)
+                    })
+                    .collect();
+                scored.sort_by_key(|(_, s)| *s);
+                scored.truncate(ultradag_coin::consensus::dag::K_PARENTS);
+                parents = scored.into_iter().map(|(p, _)| p).collect();
             }
+            
             if parents.is_empty() {
                 vec![[0u8; 32]] // Genesis
             } else {

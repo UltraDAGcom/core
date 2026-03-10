@@ -19,6 +19,12 @@ pub enum DagInsertError {
 /// Maximum number of parent references allowed per DagVertex.
 pub const MAX_PARENTS: usize = 64;
 
+/// Target number of parents per vertex for partial parent selection.
+/// Each validator references K random tips instead of all tips, enabling
+/// unlimited validator scaling (removes N=64 ceiling). Follows Narwhal approach.
+/// K=32 provides strong DAG connectivity while keeping parent count manageable.
+pub const K_PARENTS: usize = 32;
+
 /// Number of rounds to keep in memory before pruning older finalized vertices.
 /// Keeps last 1000 rounds = ~7 days at 10-second rounds.
 pub const PRUNING_HORIZON: u64 = 1000;
@@ -287,6 +293,42 @@ impl BlockDag {
     /// Get all current tip hashes.
     pub fn tips(&self) -> Vec<[u8; 32]> {
         self.tips.iter().copied().collect()
+    }
+
+    /// Select K parents from available tips using deterministic sampling.
+    /// If tips.len() <= K, returns all tips. Otherwise, selects K tips deterministically
+    /// based on the proposer's address (for reproducibility in tests/verification).
+    /// 
+    /// This enables unlimited validator scaling by keeping parent count bounded at K
+    /// regardless of the number of validators N. Follows Narwhal's approach.
+    pub fn select_parents(&self, proposer: &Address, k: usize) -> Vec<[u8; 32]> {
+        let tips = self.tips();
+        
+        // If we have K or fewer tips, use all of them
+        if tips.len() <= k {
+            return tips;
+        }
+        
+        // Deterministic sampling: use proposer address as seed for reproducibility
+        // XOR proposer address with each tip hash to create a score, then take top K
+        let mut scored_tips: Vec<([u8; 32], u64)> = tips
+            .iter()
+            .map(|tip| {
+                // Simple deterministic score: XOR first 8 bytes of proposer with tip
+                let mut score = 0u64;
+                for i in 0..8 {
+                    score ^= (proposer.0[i] as u64) << (i * 8);
+                    score ^= (tip[i] as u64) << (i * 8);
+                }
+                (*tip, score)
+            })
+            .collect();
+        
+        // Sort by score (deterministic) and take top K
+        scored_tips.sort_by_key(|(_, score)| *score);
+        scored_tips.truncate(k);
+        
+        scored_tips.into_iter().map(|(tip, _)| tip).collect()
     }
 
     /// Get all vertices in a given round.
