@@ -779,6 +779,15 @@ async fn handle_request(
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address hex"));
             };
 
+            // Cap faucet amount at 100 UDAG per request
+            const MAX_FAUCET_SATS: u64 = 100 * 100_000_000; // 100 UDAG
+            if faucet_req.amount > MAX_FAUCET_SATS {
+                return Ok(error_response(
+                    StatusCode::BAD_REQUEST,
+                    &format!("faucet amount exceeds maximum of 100 UDAG ({} sats)", MAX_FAUCET_SATS),
+                ));
+            }
+
             // Use the deterministic faucet keypair (same on every node)
             let faucet_sk = ultradag_coin::faucet_keypair();
             let faucet_addr = faucet_sk.address();

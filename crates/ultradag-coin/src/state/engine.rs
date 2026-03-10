@@ -38,7 +38,7 @@ pub struct StateEngine {
     stake_accounts: HashMap<Address, StakeAccount>,
     total_supply: u64,
     /// Track the last finalized round we've applied
-    last_finalized_round: Option<u64>,
+    pub last_finalized_round: Option<u64>,
     /// Epoch-frozen active validator set (top MAX_ACTIVE_VALIDATORS by stake).
     /// Recalculated only at epoch boundaries.
     active_validator_set: Vec<Address>,
@@ -135,7 +135,10 @@ impl StateEngine {
                 crate::tx::Transaction::Stake(_) | crate::tx::Transaction::Unstake(_) => 0,
             }
         }).sum();
-        let total_round_reward = crate::constants::block_reward(vertex.block.coinbase.height);
+        // Compute expected height from state (don't trust proposer-supplied height).
+        // This prevents a malicious validator from setting height=0 to claim max reward.
+        let expected_height = snapshot.last_finalized_round.map(|r| r + 1).unwrap_or(0);
+        let total_round_reward = crate::constants::block_reward(expected_height);
         let proposer = &vertex.block.coinbase.to;
         let total_stake = snapshot.total_staked();
         let own_stake = snapshot.stake_of(proposer);
@@ -221,6 +224,13 @@ impl StateEngine {
                     // Fee already included in coinbase
                 }
                 crate::tx::Transaction::Stake(stake_tx) => {
+                    // Validate minimum stake
+                    if stake_tx.amount < crate::tx::stake::MIN_STAKE_SATS {
+                        return Err(CoinError::BelowMinStake {
+                            minimum: crate::tx::stake::MIN_STAKE_SATS,
+                            got: stake_tx.amount,
+                        });
+                    }
                     // Debit liquid balance
                     snapshot.debit(&stake_tx.from, stake_tx.amount);
                     // Credit stake account
@@ -235,6 +245,9 @@ impl StateEngine {
                     let stake = snapshot.stake_accounts.entry(unstake_tx.from).or_default();
                     if stake.staked == 0 {
                         return Err(CoinError::NoStakeToUnstake);
+                    }
+                    if stake.unlock_at_round.is_some() {
+                        return Err(CoinError::AlreadyUnstaking);
                     }
                     stake.unlock_at_round = Some(vertex.round + crate::tx::UNSTAKE_COOLDOWN_ROUNDS);
                     // Increment nonce

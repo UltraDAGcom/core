@@ -98,10 +98,10 @@ impl FinalityTracker {
 
         let genesis: [u8; 32] = [0u8; 32];
 
-        // Only scan rounds from after last_finalized_round to current_round (frontier).
-        // Vertices at or below last_finalized_round are already finalized.
-        // Use saturating_add to avoid overflow at round 0.
-        let scan_from = if self.last_finalized_round == 0 { 0 } else { self.last_finalized_round + 1 };
+        // Scan from last_finalized_round (inclusive) since that round may contain
+        // unfinalized vertices (e.g., vertex B in round 5 when only A was finalized).
+        // The `finalized.contains` check at line 110 skips already-finalized vertices.
+        let scan_from = self.last_finalized_round;
         let scan_to = dag.current_round();
 
         let mut ready: BTreeSet<[u8; 32]> = BTreeSet::new();

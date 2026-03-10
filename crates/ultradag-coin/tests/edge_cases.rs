@@ -94,6 +94,9 @@ fn coinbase_fees_after_supply_exhaustion() {
     let post_exhaustion_height = 64 * HALVING_INTERVAL + 1;
     assert_eq!(block_reward(post_exhaustion_height), 0);
 
+    // Set last_finalized_round so engine computes expected_height = post_exhaustion_height
+    state.last_finalized_round = Some(post_exhaustion_height - 1);
+
     let fee = 100_000;
     let tx = make_signed_tx(&sender_sk, receiver, 1_000_000, fee, 0);
 
@@ -141,6 +144,9 @@ fn empty_block_after_supply_exhaustion() {
 
     let post_exhaustion_height = 64 * HALVING_INTERVAL + 1;
     assert_eq!(block_reward(post_exhaustion_height), 0);
+
+    // Set last_finalized_round so engine computes expected_height = post_exhaustion_height
+    state.last_finalized_round = Some(post_exhaustion_height - 1);
 
     // Vertex with 0 transactions, 0 block reward → coinbase = 0
     let proposer = sk.address();

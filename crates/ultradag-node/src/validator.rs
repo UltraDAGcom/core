@@ -204,9 +204,16 @@ pub async fn validator_loop(
             let own_stake = state.stake_of(&validator);
             let base_reward = if total_stake > 0 && own_stake > 0 {
                 // Proportional to stake
-                ((total_round_reward as u128)
+                let proportional = ((total_round_reward as u128)
                     .saturating_mul(own_stake as u128)
-                    / total_stake as u128) as u64
+                    / total_stake as u128) as u64;
+                // Observer penalty: staked but not in the active validator set
+                let active_set = state.active_validators();
+                if !active_set.is_empty() && !active_set.contains(&validator) {
+                    proportional * ultradag_coin::constants::OBSERVER_REWARD_PERCENT / 100
+                } else {
+                    proportional
+                }
             } else {
                 // Pre-staking fallback: each vertex gets full block_reward.
                 // Matches StateEngine::apply_finalized_vertices pre-staking mode (count=1).
@@ -343,12 +350,18 @@ pub async fn validator_loop(
         // Checkpoint generation: runs independently of finality block above.
         // P2P handler may finalize vertices before validator loop, making all_finalized empty.
         // We check last_finalized_round directly from the finality tracker.
+        // Iterate all crossed multiples of CHECKPOINT_INTERVAL between last_checkpoint_round
+        // and current_finalized, so we don't miss boundaries when finality jumps (e.g., 198→201).
         let current_finalized = server.finality.read().await.last_finalized_round();
-        if current_finalized > last_checkpoint_round
-            && current_finalized % ultradag_coin::CHECKPOINT_INTERVAL == 0
-        {
+        let interval = ultradag_coin::CHECKPOINT_INTERVAL;
+        let first_crossed = ((last_checkpoint_round / interval) + 1) * interval;
+        let mut cp_round = first_crossed;
+        while cp_round <= current_finalized {
+            let checkpoint_round = cp_round;
+            cp_round += interval;
+
             let checkpoint_start = tokio::time::Instant::now();
-            
+
             let state_r = server.state.read().await;
             let state_snapshot = state_r.snapshot();
             let state_root = ultradag_coin::consensus::compute_state_root(&state_snapshot);
@@ -360,7 +373,7 @@ pub async fn validator_loop(
             drop(dag_r);
 
             let mut checkpoint = ultradag_coin::Checkpoint {
-                round: current_finalized,
+                round: checkpoint_round,
                 state_root,
                 dag_tip,
                 total_supply,
@@ -375,7 +388,7 @@ pub async fn validator_loop(
             checkpoint.signatures.push(sig);
 
             // Store in pending_checkpoints so co-signatures can accumulate
-            server.pending_checkpoints.write().await.insert(current_finalized, checkpoint.clone());
+            server.pending_checkpoints.write().await.insert(checkpoint_round, checkpoint.clone());
 
             // Persist checkpoint to disk
             match ultradag_coin::persistence::save_checkpoint(&data_dir, &checkpoint) {
@@ -387,15 +400,15 @@ pub async fn validator_loop(
             }
 
             server.peers.broadcast(&Message::CheckpointProposal(checkpoint.clone()), "").await;
-            last_checkpoint_round = current_finalized;
-            
+            last_checkpoint_round = checkpoint_round;
+
             // Record metrics
             let duration_ms = checkpoint_start.elapsed().as_millis() as u64;
             let size_bytes = serde_json::to_vec(&checkpoint).map(|v| v.len()).unwrap_or(0) as u64;
-            server.checkpoint_metrics.record_checkpoint_produced(duration_ms, size_bytes, current_finalized);
-            
-            info!("Produced checkpoint at round {} ({}ms, {} bytes)", current_finalized, duration_ms, size_bytes);
-            
+            server.checkpoint_metrics.record_checkpoint_produced(duration_ms, size_bytes, checkpoint_round);
+
+            info!("Produced checkpoint at round {} ({}ms, {} bytes)", checkpoint_round, duration_ms, size_bytes);
+
             // Prune old checkpoints to limit disk usage (keep last 10 checkpoints)
             match ultradag_coin::persistence::prune_old_checkpoints(&data_dir, 10) {
                 Ok(deleted) => {

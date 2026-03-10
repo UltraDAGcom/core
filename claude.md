@@ -73,11 +73,22 @@
 - **CheckpointSync mempool cleanup** — After `load_snapshot()` in CheckpointSync handler, mempool is now cleared. Old transactions referencing stale nonces/balances could cause invalid block production after fast-sync.
 - **Mempool::clear()** — Added `clear()` method to Mempool for bulk removal of all transactions.
 
+**Comprehensive Security Review (March 10, 2026):**
+- **CRITICAL: Coinbase height not validated** — Engine trusted proposer-supplied `coinbase.height` for reward calculation. Malicious validator could set height=0 every vertex for max 50 UDAG reward. Fixed: engine computes expected height from `last_finalized_round`.
+- **Observer reward penalty missing** — Validator loop didn't apply 20% observer penalty, causing coinbase mismatch with engine validation. Fixed: validator.rs now matches engine's observer penalty logic.
+- **Checkpoint interval boundary skip** — Bug #14 claimed fixed but code still used simple modulo check. Finality jumps (e.g., 198→201) permanently skip checkpoint at round 200. Fixed: iterate all crossed multiples of CHECKPOINT_INTERVAL.
+- **try_connect_peer one-way connections** — Reconnected peers (heartbeat/peer discovery) discarded all inbound messages in a drain loop. Fixed: pass reader to `handle_peer` for bidirectional message processing.
+- **DagVertices deadlock** — Handler held finality write lock while acquiring state write lock. DagProposal handler acquires them in reverse order on epoch transitions. Fixed: drop finality+dag before acquiring state (matching DagProposal pattern).
+- **Equivocation evidence not signature-verified** — `process_equivocation_evidence()` didn't verify Ed25519 signatures. Any peer could frame honest validators as Byzantine. Fixed: added `verify_signature()` check on both evidence vertices.
+- **Inline StakeTx missing MIN_STAKE_SATS** — `apply_vertex_with_validators()` accepted StakeTx with any amount. Fixed: added `MIN_STAKE_SATS` validation matching standalone `apply_stake_tx()`.
+- **Inline UnstakeTx missing "already unstaking"** — Multiple unstake txs could reset cooldown period. Fixed: added `unlock_at_round.is_some()` guard matching standalone `apply_unstake_tx()`.
+- **Faucet no max amount** — No cap on `/faucet` amount, allowing single-request drain of 1M UDAG reserve. Fixed: capped at 100 UDAG per request.
+- **Finality scan_from correctness** — `scan_from = last_finalized_round + 1` could skip unfinalized vertices at `last_finalized_round`. Reverted to inclusive scan; `finalized.contains` check makes it efficient.
+
 **Deep Review Audit (March 10, 2026):**
 - **Supply cap coinbase validation reorder** — Moved capping BEFORE validation in engine.rs; validator.rs now also caps reward before block creation. Critical fix: near max supply, valid vertices were rejected.
 - **Mempool Stake/Unstake fee exemption** — Stake/Unstake (fee=0 by design) were rejected by MIN_FEE_SATS check. Added explicit exemption.
 - **CLI zero-value validation** — `--validators 0`, `--round-ms 0`, `--pruning-depth 0` now rejected with clear errors instead of causing runtime failures.
-- **Finality scan_from off-by-one** — `find_newly_finalized()` re-scanned already-finalized round. Fixed to start from `last_finalized_round + 1`.
 
 **Production Perfection Audit (March 10, 2026):**
 - **Comprehensive production audit** — Complete systematic review of entire codebase for mainnet readiness. Created `PRODUCTION_AUDIT.md` with detailed analysis of all critical components.
@@ -1279,9 +1290,36 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 46. **CLI accepts invalid --validators 0, --round-ms 0, --pruning-depth 0 (March 10, 2026)** — `--validators 0` breaks quorum (division by zero in ceil(2*0/3)), `--round-ms 0` causes tight spin loop, `--pruning-depth 0` prunes everything immediately.
     - **Fix:** Added explicit validation rejecting zero values for these flags on startup
     - **Result:** Clear error messages on startup instead of runtime failures
-47. **Finality scan_from off-by-one (March 10, 2026)** — `find_newly_finalized()` used `self.last_finalized_round` as `scan_from`, re-scanning the already-finalized round on every call. Wasted CPU on vertices known to be finalized.
-    - **Fix:** Changed to `self.last_finalized_round + 1` (skip already-finalized round), with special case for round 0
-    - **Result:** Finality scan starts from the correct frontier round
+47. **Finality scan_from can skip unfinalized vertices (March 10, 2026)** — `scan_from = last_finalized_round + 1` skips unfinalized vertices at `last_finalized_round` (e.g., vertex B in round 5 when only A was finalized).
+    - **Fix:** Reverted to inclusive scan from `last_finalized_round`. Already-finalized vertices skipped by `finalized.contains` check.
+    - **Result:** No vertices missed during finality scan
+48. **CRITICAL: Coinbase height not validated (March 10, 2026)** — Engine trusted proposer-supplied `coinbase.height` for `block_reward()` calculation. A malicious validator could set height=0 in every vertex to always claim maximum 50 UDAG reward regardless of actual chain progress.
+    - **Fix:** Engine computes `expected_height` from `last_finalized_round` instead of trusting vertex. Tests updated to set `last_finalized_round` for supply exhaustion scenarios.
+    - **Result:** Reward calculation independent of proposer-supplied data
+49. **Observer reward penalty missing in validator.rs (March 10, 2026)** — Validator loop computed full proportional reward for observers (staked but not in top 21). Engine applied 20% penalty. Coinbase mismatch would reject observer vertices.
+    - **Fix:** Added observer penalty check in validator.rs matching engine.rs logic: `if !active_set.is_empty() && !active_set.contains(&validator)` → 20% of proportional reward.
+    - **Result:** Observer vertices produce correct coinbase amount
+50. **Checkpoint interval boundary permanently skipped (March 10, 2026)** — Bug #14 (CLAUDE.md) claimed this was fixed, but code still used simple `current_finalized % CHECKPOINT_INTERVAL == 0` modulo check. Finality jump from round 198→201 permanently skips checkpoint at round 200.
+    - **Fix:** Iterate all crossed multiples of CHECKPOINT_INTERVAL from `last_checkpoint_round` to `current_finalized` using `while cp_round <= current_finalized`.
+    - **Result:** Checkpoints reliably produced at every interval boundary regardless of finality jump size
+51. **try_connect_peer discards all inbound messages (March 10, 2026)** — Reconnected peers (heartbeat seed reconnect, peer discovery) used a drain loop that silently discarded all received messages. Connections were effectively one-way — vertices, sync responses, and DAG data from the remote peer were lost.
+    - **Fix:** Replaced drain loop with `handle_peer()` call for full bidirectional message processing. Added all required parameters to `try_connect_peer`. Used `Box::pin` to break async type cycle.
+    - **Result:** Reconnected peers exchange data bidirectionally
+52. **DagVertices handler deadlock with DagProposal (March 10, 2026)** — DagVertices held finality write lock while acquiring state write lock (line 984→1004). DagProposal holds state write then re-acquires finality write on epoch transitions (line 863→870). Concurrent execution deadlocks.
+    - **Fix:** DagVertices now drops finality+dag locks in a scoped block before acquiring state write lock, matching DagProposal's lock ordering pattern.
+    - **Result:** Consistent lock ordering prevents deadlock
+53. **Equivocation evidence accepts forged signatures (March 10, 2026)** — `process_equivocation_evidence()` verified same-validator, same-round, different-hash but never verified Ed25519 signatures. Any peer could frame an honest validator as Byzantine by crafting two vertices with the victim's address and arbitrary signatures.
+    - **Fix:** Added `vertex1.verify_signature() && vertex2.verify_signature()` check before processing evidence.
+    - **Result:** Only cryptographically valid evidence accepted
+54. **Inline StakeTx bypasses MIN_STAKE_SATS (March 10, 2026)** — `apply_vertex_with_validators()` inline StakeTx handler accepted any stake amount. A validator could include a 1-sat StakeTx in their vertex, creating a sub-minimum stake account.
+    - **Fix:** Added `stake_tx.amount < MIN_STAKE_SATS` check with `BelowMinStake` error, matching standalone `apply_stake_tx()`.
+    - **Result:** Minimum stake enforced in both inline and standalone paths
+55. **Inline UnstakeTx allows cooldown reset (March 10, 2026)** — Inline UnstakeTx handler missing `unlock_at_round.is_some()` check. A malicious validator could include unstake txs extending another address's cooldown indefinitely.
+    - **Fix:** Added `AlreadyUnstaking` guard matching standalone `apply_unstake_tx()`.
+    - **Result:** Cooldown period cannot be reset once started
+56. **Faucet unlimited drain (March 10, 2026)** — `/faucet` endpoint accepted any amount in request body with no cap. Single request could drain entire 1,000,000 UDAG faucet reserve.
+    - **Fix:** Added `MAX_FAUCET_SATS = 100 UDAG` cap with clear error message.
+    - **Result:** Maximum 100 UDAG per faucet request
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.

@@ -470,6 +470,10 @@ impl BlockDag {
         if vertex1.hash() == vertex2.hash() {
             return false; // Same vertex (not equivocation)
         }
+        // Verify Ed25519 signatures to prevent framing honest validators
+        if !vertex1.verify_signature() || !vertex2.verify_signature() {
+            return false; // Forged evidence
+        }
 
         // Valid equivocation - store evidence and mark Byzantine
         let validator = vertex1.validator;

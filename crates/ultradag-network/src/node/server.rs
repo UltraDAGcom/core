@@ -263,6 +263,18 @@ impl NodeServer {
         let seed_addrs = self.seed_addrs.clone();
         let listen_port = self.port;
         let dag = self.dag.clone();
+        let state = self.state.clone();
+        let mempool = self.mempool.clone();
+        let finality = self.finality.clone();
+        let vertex_tx = self.vertex_tx.clone();
+        let tx_tx = self.tx_tx.clone();
+        let orphans = self.orphans.clone();
+        let round_notify = self.round_notify.clone();
+        let pending_checkpoints = self.pending_checkpoints.clone();
+        let data_dir = self.data_dir.clone();
+        let validator_sk = self.validator_sk.clone();
+        let banned_peers = self.banned_peers.clone();
+        let checkpoint_metrics = self.checkpoint_metrics.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30));
             // Consume first tick (fires immediately) — let seed connections establish first
@@ -303,6 +315,18 @@ impl NodeServer {
                             listen_port,
                             dag.clone(),
                             peers.clone(),
+                            state.clone(),
+                            mempool.clone(),
+                            finality.clone(),
+                            vertex_tx.clone(),
+                            tx_tx.clone(),
+                            orphans.clone(),
+                            round_notify.clone(),
+                            pending_checkpoints.clone(),
+                            data_dir.clone(),
+                            validator_sk.clone(),
+                            banned_peers.clone(),
+                            checkpoint_metrics.clone(),
                         ));
                     }
                 }
@@ -476,6 +500,18 @@ async fn try_connect_peer(
     listen_port: u16,
     dag: Arc<RwLock<BlockDag>>,
     peers: PeerRegistry,
+    state: Arc<RwLock<StateEngine>>,
+    mempool: Arc<RwLock<Mempool>>,
+    finality: Arc<RwLock<FinalityTracker>>,
+    vertex_tx: broadcast::Sender<DagVertex>,
+    tx_tx: broadcast::Sender<Transaction>,
+    orphans: Arc<Mutex<HashMap<[u8; 32], DagVertex>>>,
+    round_notify: Arc<Notify>,
+    pending_checkpoints: Arc<RwLock<HashMap<u64, ultradag_coin::Checkpoint>>>,
+    data_dir: std::path::PathBuf,
+    validator_sk: Option<SecretKey>,
+    banned_peers: Arc<Mutex<HashMap<String, Instant>>>,
+    checkpoint_metrics: Arc<crate::CheckpointMetrics>,
 ) {
     // Don't connect to ourselves — check loopback, wildcard, .internal hostname
     let loopback_addrs = [
@@ -574,7 +610,7 @@ async fn try_connect_peer(
             peers.add_known(addr.clone()).await;
             peers.add_connected_listen_addr(addr.clone()).await;
 
-            let (mut reader, writer) = split_connection(stream, addr.clone());
+            let (reader, writer) = split_connection(stream, addr.clone());
             peers.add_writer(addr.clone(), writer).await;
 
             // Send hello so the remote knows our listen port
@@ -587,15 +623,19 @@ async fn try_connect_peer(
                 })
                 .await;
 
-            // Drain reader to keep TCP connection alive until remote closes
+            // Process incoming messages (bidirectional connection).
+            // Box::pin breaks the async opaque type cycle between try_connect_peer and handle_peer.
             let peers_clone = peers.clone();
             let addr_clone = addr.clone();
             tokio::spawn(async move {
-                loop {
-                    match reader.recv().await {
-                        Ok(_) => {} // discard — vertices are received via the listener side
-                        Err(_) => break,
-                    }
+                let fut = Box::pin(handle_peer(
+                    reader, &state, &mempool, &dag, &finality, &peers_clone,
+                    &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify,
+                    &pending_checkpoints, &data_dir, validator_sk.as_ref(),
+                    &banned_peers, &checkpoint_metrics,
+                ));
+                if let Err(e) = fut.await {
+                    warn!("Peer {} disconnected: {}", addr_clone, e);
                 }
                 peers_clone.remove_peer(&addr_clone).await;
                 peers_clone.remove_connected_listen_addr(&addr_clone).await;
@@ -980,33 +1020,36 @@ async fn handle_peer(
                 }
                 if !new_validators.is_empty() {
                     // Don't notify here — DagVertices is bulk sync context.
-                    // Multi-pass finality
-                    let mut fin = finality.write().await;
-                    for v in &new_validators {
-                        fin.register_validator(*v);
-                    }
-                    let dag_r = dag.read().await;
-                    let mut all_finalized = Vec::new();
-                    loop {
-                        let newly_finalized = fin.find_newly_finalized(&dag_r);
-                        if newly_finalized.is_empty() {
-                            break;
+                    // Multi-pass finality — drop finality+dag before state to avoid deadlock
+                    let (all_finalized, finalized_vertices) = {
+                        let mut fin = finality.write().await;
+                        for v in &new_validators {
+                            fin.register_validator(*v);
                         }
-                        all_finalized.extend(newly_finalized);
-                    }
-                    if !all_finalized.is_empty() {
-                        info!("Sync finalized {} vertices", all_finalized.len());
+                        let dag_r = dag.read().await;
+                        let mut all_finalized = Vec::new();
+                        loop {
+                            let newly_finalized = fin.find_newly_finalized(&dag_r);
+                            if newly_finalized.is_empty() {
+                                break;
+                            }
+                            all_finalized.extend(newly_finalized);
+                        }
                         let finalized_vertices: Vec<DagVertex> = all_finalized
                             .iter()
                             .filter_map(|h| dag_r.get(h).cloned())
                             .collect();
-                        drop(dag_r);
+                        (all_finalized, finalized_vertices)
+                    }; // finality + dag locks dropped here
+                    if !all_finalized.is_empty() {
+                        info!("Sync finalized {} vertices", all_finalized.len());
                         let mut state_w = state.write().await;
                         let prev_round = state_w.last_finalized_round();
                         if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
                             warn!("Failed to apply sync-finalized vertices: {}", e);
                         } else {
                             if state_w.epoch_just_changed(prev_round) {
+                                let mut fin = finality.write().await;
                                 sync_epoch_validators(&mut fin, &state_w);
                                 info!("Epoch transition to epoch {} — active set: {} validators",
                                     state_w.current_epoch(), state_w.active_validators().len());
@@ -1019,7 +1062,6 @@ async fn handle_peer(
                             }
                         }
                     }
-                    drop(fin);
                     resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify).await;
                 }
             }
@@ -1035,16 +1077,10 @@ async fn handle_peer(
                     peers.add_known(addr.clone()).await;
                 }
                 // Connect to learned peers for mesh topology
-                if peers.connected_count().await < MAX_OUTBOUND_PEERS {
-                    for addr in addrs {
-                        tokio::spawn(try_connect_peer(
-                            addr,
-                            listen_port,
-                            dag.clone(),
-                            peers.clone(),
-                        ));
-                    }
-                }
+                // Peer connections are handled by the heartbeat task which
+                // reconnects to seeds when peer count is low. We just store
+                // the addresses here — connecting from within handle_peer
+                // would create an async type cycle.
             }
 
             Message::Ping(nonce) => {
