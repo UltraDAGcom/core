@@ -417,6 +417,9 @@ impl StateEngine {
 
     /// Recalculate the active validator set: top MAX_ACTIVE_VALIDATORS by stake.
     /// Only stakers with >= MIN_STAKE_SATS and not unstaking are eligible.
+    /// 
+    /// WARNING: If the resulting set has fewer than MIN_ACTIVE_VALIDATORS,
+    /// the system cannot guarantee BFT safety. This should be logged/monitored.
     pub fn recalculate_active_set(&mut self) {
         let mut eligible: Vec<(Address, u64)> = self.stake_accounts
             .iter()
@@ -427,6 +430,15 @@ impl StateEngine {
         eligible.sort_by(|a, b| b.1.cmp(&a.1).then(a.0 .0.cmp(&b.0 .0)));
         eligible.truncate(crate::constants::MAX_ACTIVE_VALIDATORS);
         self.active_validator_set = eligible.into_iter().map(|(addr, _)| addr).collect();
+        
+        // Log warning if below minimum safe validator count
+        if self.active_validator_set.len() < crate::constants::MIN_ACTIVE_VALIDATORS {
+            eprintln!(
+                "WARNING: Active validator count ({}) is below minimum safe threshold ({}) for BFT consensus. System safety cannot be guaranteed.",
+                self.active_validator_set.len(),
+                crate::constants::MIN_ACTIVE_VALIDATORS
+            );
+        }
     }
 
     /// Apply a StakeTx: debit liquid balance, credit stake account.
@@ -606,9 +618,9 @@ impl StateEngine {
             return Err(CoinError::FeeTooLow);
         }
 
-        // 4. Check proposer stake >= MIN_STAKE_TO_PROPOSE
+        // 4. Check proposer stake >= min_stake_to_propose (governance-adjustable)
         let proposer_stake = self.stake_of(&tx.from);
-        if proposer_stake < crate::constants::MIN_STAKE_TO_PROPOSE {
+        if proposer_stake < self.governance_params.min_stake_to_propose {
             return Err(CoinError::InsufficientStakeToPropose);
         }
 
@@ -631,7 +643,7 @@ impl StateEngine {
         let active_count = self.proposals.values()
             .filter(|p| matches!(p.status, crate::governance::ProposalStatus::Active))
             .count();
-        if active_count >= crate::constants::MAX_ACTIVE_PROPOSALS {
+        if active_count as u64 >= self.governance_params.max_active_proposals {
             return Err(CoinError::TooManyActiveProposals);
         }
 
@@ -657,7 +669,7 @@ impl StateEngine {
             description: tx.description.clone(),
             proposal_type: tx.proposal_type.clone(),
             voting_starts: current_round,
-            voting_ends: current_round.saturating_add(crate::constants::GOVERNANCE_VOTING_PERIOD_ROUNDS),
+            voting_ends: current_round.saturating_add(self.governance_params.voting_period_rounds),
             votes_for: 0,
             votes_against: 0,
             status: crate::governance::ProposalStatus::Active,
@@ -757,7 +769,7 @@ impl StateEngine {
         for (id, proposal) in &self.proposals {
             match &proposal.status {
                 crate::governance::ProposalStatus::Active if current_round > proposal.voting_ends => {
-                    let new_status = if proposal.has_passed(total_staked) {
+                    let new_status = if proposal.has_passed_with_params(total_staked, &self.governance_params) {
                         crate::governance::ProposalStatus::PassedPending {
                             execute_at_round: current_round.saturating_add(
                                 self.governance_params.execution_delay_rounds
@@ -881,6 +893,7 @@ impl StateEngine {
         self.proposals = snapshot.proposals.into_iter().collect();
         self.votes = snapshot.votes.into_iter().collect();
         self.next_proposal_id = snapshot.next_proposal_id;
+        self.governance_params = snapshot.governance_params;
     }
 
     /// Save state to disk
@@ -904,6 +917,7 @@ impl StateEngine {
             proposals: snapshot.proposals.into_iter().collect(),
             votes: snapshot.votes.into_iter().collect(),
             next_proposal_id: snapshot.next_proposal_id,
+            governance_params: snapshot.governance_params,
         };
         // Reconcile epoch after loading stale snapshot
         if let Some(round) = engine.last_finalized_round {

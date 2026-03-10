@@ -76,6 +76,16 @@ impl DagVertex {
         vk.verify_strict(&self.signable_bytes(), &sig).is_ok()
     }
 
+    /// Verify that the vertex timestamp is not too far in the future.
+    /// Rejects vertices with timestamps more than MAX_FUTURE_TIMESTAMP seconds
+    /// ahead of the current system time to prevent timestamp manipulation attacks.
+    pub fn verify_timestamp(&self, current_time: i64) -> bool {
+        let vertex_time = self.block.header.timestamp;
+        // Allow timestamps in the past (clock skew tolerance)
+        // Reject timestamps too far in the future
+        vertex_time <= current_time + crate::constants::MAX_FUTURE_TIMESTAMP
+    }
+
     /// The hash of this vertex covers all semantic fields:
     /// block hash + round + validator + parent hashes.
     pub fn hash(&self) -> [u8; 32] {
@@ -202,6 +212,53 @@ mod tests {
         // Vertex hash now covers parents too, so different parent order = different hash
         assert_ne!(v1.hash(), v2.hash(),
             "Different parent order produces different vertex hash");
+    }
+
+    #[test]
+    fn timestamp_validation_accepts_past_timestamps() {
+        let v = make_signed_vertex(0, vec![]);
+        let current_time = 2_000_000; // Well after vertex timestamp (1_000_000)
+        assert!(v.verify_timestamp(current_time), "Past timestamps should be accepted");
+    }
+
+    #[test]
+    fn timestamp_validation_accepts_near_future() {
+        let sk = SecretKey::generate();
+        let mut v = make_signed_vertex_with_parents(0, vec![], &sk);
+        let current_time = 1_000_000;
+        // Set timestamp 4 minutes in future (within MAX_FUTURE_TIMESTAMP = 300s)
+        v.block.header.timestamp = current_time + 240;
+        assert!(v.verify_timestamp(current_time), "Near-future timestamps within tolerance should be accepted");
+    }
+
+    #[test]
+    fn timestamp_validation_rejects_far_future() {
+        let sk = SecretKey::generate();
+        let mut v = make_signed_vertex_with_parents(0, vec![], &sk);
+        let current_time = 1_000_000;
+        // Set timestamp 10 minutes in future (exceeds MAX_FUTURE_TIMESTAMP = 300s)
+        v.block.header.timestamp = current_time + 600;
+        assert!(!v.verify_timestamp(current_time), "Far-future timestamps should be rejected");
+    }
+
+    #[test]
+    fn timestamp_validation_boundary_exact() {
+        let sk = SecretKey::generate();
+        let mut v = make_signed_vertex_with_parents(0, vec![], &sk);
+        let current_time = 1_000_000;
+        // Set timestamp exactly at MAX_FUTURE_TIMESTAMP boundary
+        v.block.header.timestamp = current_time + crate::constants::MAX_FUTURE_TIMESTAMP;
+        assert!(v.verify_timestamp(current_time), "Timestamp exactly at boundary should be accepted");
+    }
+
+    #[test]
+    fn timestamp_validation_boundary_plus_one() {
+        let sk = SecretKey::generate();
+        let mut v = make_signed_vertex_with_parents(0, vec![], &sk);
+        let current_time = 1_000_000;
+        // Set timestamp one second beyond MAX_FUTURE_TIMESTAMP boundary
+        v.block.header.timestamp = current_time + crate::constants::MAX_FUTURE_TIMESTAMP + 1;
+        assert!(!v.verify_timestamp(current_time), "Timestamp beyond boundary should be rejected");
     }
 }
 

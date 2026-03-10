@@ -162,6 +162,7 @@ fn test_07_state_root_is_deterministic() {
         proposals: vec![],
         votes: vec![],
         next_proposal_id: 0,
+        governance_params: Default::default(),
     };
 
     let snapshot2 = StateSnapshot {
@@ -174,6 +175,7 @@ fn test_07_state_root_is_deterministic() {
         proposals: vec![],
         votes: vec![],
         next_proposal_id: 0,
+        governance_params: Default::default(),
     };
 
     let root1 = compute_state_root(&snapshot1);

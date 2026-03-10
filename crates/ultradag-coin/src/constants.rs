@@ -16,6 +16,12 @@ pub const TARGET_BLOCK_TIME_SECS: u64 = 30;
 /// Genesis timestamp
 pub const GENESIS_TIMESTAMP: i64 = 1741132800; // 2025-03-05T00:00:00Z
 
+/// Maximum allowed timestamp drift into the future (in seconds).
+/// Vertices with timestamps more than this far ahead of local time are rejected.
+/// Set to 300 seconds (5 minutes) to tolerate clock skew while preventing
+/// far-future timestamp attacks that could manipulate round timing.
+pub const MAX_FUTURE_TIMESTAMP: i64 = 300;
+
 /// Maximum transactions per vertex
 pub const MAX_TXS_PER_BLOCK: usize = 10_000;
 
@@ -61,6 +67,11 @@ pub fn dev_address() -> crate::address::Address {
 /// Maximum number of active validators (top stakers by amount).
 /// Odd number for clean BFT quorum (ceil(2*21/3) = 14).
 pub const MAX_ACTIVE_VALIDATORS: usize = 21;
+
+/// Minimum number of active validators required for BFT consensus.
+/// BFT requires at least 4 validators to tolerate 1 Byzantine fault (3f+1 where f=1).
+/// With fewer than 4 validators, the system cannot guarantee safety.
+pub const MIN_ACTIVE_VALIDATORS: usize = 4;
 
 /// Epoch length in rounds. Validator set recalculated at epoch boundaries.
 /// Matches halving interval for clean alignment.

@@ -222,14 +222,13 @@ impl BlockDag {
             return Ok(false);
         }
 
-        // Reject vertices with timestamps too far in the future (>5 minutes)
+        // Reject vertices with timestamps too far in the future
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as i64;
-        let vertex_time = vertex.block.header.timestamp as i64;
-        if vertex_time > now + 300 {
-            return Ok(false); // Too far in future
+        if !vertex.verify_timestamp(now) {
+            return Ok(false); // Timestamp too far in future
         }
 
         // Equivocation: same validator, same round, different vertex

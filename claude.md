@@ -93,7 +93,7 @@ Comprehensive review of all recently added features to verify they are truly int
 - ✅ **HighWaterMark** — Checked at startup before state load, blocks startup on state rollback, cannot be bypassed
 - ✅ **Staking + Epochs** — Full flow: Transaction enum → P2P broadcast → DAG inclusion → finalized vertex processing → epoch transitions → active set recalculation → validator gate
 - ✅ **Pruning + Archive** — CLI args → NodeServer → validator loop (every 50 rounds) → `prune_old_rounds_with_depth()` → `prune_finalized()`. Archive mode (depth=0) skips pruning.
-- ⚠️ **Governance** — 90% integrated: proposals/votes flow through consensus correctly. **Gap:** proposal execution is a no-op — when ParameterChange passes, no parameters are actually changed. Must fix before mainnet.
+- ✅ **Governance** — Fully integrated: proposals/votes flow through consensus, `tick_governance()` transitions Active→PassedPending→Executed, ParameterChange proposals apply changes to runtime `GovernanceParams` via `apply_change()`, changed params affect subsequent governance operations (e.g., new voting periods), params persist across snapshots.
 
 **Hardening Audit (March 10, 2026):**
 - **credit() overflow protection** — `credit()` in StateEngine now uses `saturating_add()` instead of unchecked `+=`. Prevents balance overflow breaking supply invariant.
@@ -112,7 +112,7 @@ Comprehensive review of all recently added features to verify they are truly int
 - **Defensive unwrap removal** — `process_unstake_completions()` and `apply_vote()` now use `if let`/`ok_or` instead of `.unwrap()`.
 - **Slash saturating arithmetic** — `slash()` now uses `saturating_mul()` and `saturating_sub()` for slash amount calculation.
 - **json_response panic prevention** — `serde_json::to_string_pretty()` now uses `unwrap_or_else` with error fallback instead of `unwrap()`.
-- **Governance execution transition** — `tick_governance()` now transitions `PassedPending` proposals to `Executed` when `execute_at_round` is reached.
+- **Governance execution fully implemented** — `tick_governance()` transitions `PassedPending` proposals to `Executed` when `execute_at_round` is reached. ParameterChange proposals now apply changes to runtime `GovernanceParams` via `apply_change()` with validation bounds. `apply_create_proposal()` and `tick_governance()` use `self.governance_params` instead of hardcoded constants. `GovernanceParams` persisted in `StateSnapshot`. `/governance/config` RPC returns live params.
 - **Complete saturating arithmetic** — All remaining unchecked arithmetic in StateEngine fixed: `total_supply +=` (line 179), `capped_reward + total_fees` (line 182), `stake.staked +=` in `apply_vertex` and `apply_stake_tx`, nonce increments, `next_proposal_id`, `voting_ends`, `execute_at_round`, unstake cooldown. Zero unchecked arithmetic remains in financial/counter paths.
 - **MAX_PARENTS validator-side cap** — Validator loop now truncates parents to `MAX_PARENTS` before calling `insert()`. Previously `try_insert()` (peer path) enforced the limit but `insert()` (local path) did not. Prevents local validator from producing oversized vertices.
 - **CheckpointSync mempool cleanup** — After `load_snapshot()` in CheckpointSync handler, mempool is now cleared. Old transactions referencing stale nonces/balances could cause invalid block production after fast-sync.
@@ -159,7 +159,7 @@ Comprehensive review of all recently added features to verify they are truly int
 - Clarified emission schedule: 50 UDAG per vertex (not per round total)
 
 **Governance & Testing (March 10, 2026):**
-- Implemented comprehensive governance integration tests (6 test cases covering full proposal lifecycle)
+- Implemented comprehensive governance integration tests (26 test cases: 3 hash/sig, 13 integration including 7 execution tests, 10 unit)
 - Added deterministic vertex ordering in `apply_finalized_vertices()` to prevent state divergence
 - Created technical documentation for checkpoint sync protocol
 - Fixed Cargo edition from 2026 to 2021 for compatibility
@@ -354,6 +354,9 @@ site/
   testnet.html            # Live testnet status monitor (5 nodes, auto-refresh, per-node cards)
   consensus-viz.html      # Interactive DAG-BFT consensus simulator
   whitepaper.html         # Whitepaper page
+formal/
+  UltraDAGConsensus.tla   # TLA+ formal specification of DAG-BFT consensus
+  UltraDAGConsensus.cfg   # TLC model checker configuration (4 validators, 4 rounds, 1 Byzantine)
 ```
 
 ## Conventions
@@ -381,6 +384,7 @@ site/
 - `Transaction` — from, to, amount, fee, nonce (account nonce for replay protection), pub_key, signature
 - `StakeTx` — from, amount, nonce, pub_key, signature — locks UDAG as validator stake
 - `UnstakeTx` — from, nonce, pub_key, signature — begins unstake cooldown
+- `GovernanceParams` — runtime-adjustable governance parameters: min_fee_sats, min_stake_to_propose, quorum_numerator, approval_numerator, voting_period_rounds, execution_delay_rounds, max_active_proposals, observer_reward_percent. Modified via ParameterChange proposal execution. Persisted in StateSnapshot.
 
 ## DAG-BFT Consensus (Pure DAG-Driven Ledger)
 
@@ -873,6 +877,8 @@ test result: ok. 557 passed; 0 failed; 0 ignored
 - `vertex.rs` — 7 tests: vertex structure, signatures
 - `equivocation_gossip.rs` — 2 tests: equivocation evidence propagation
 - `governance.rs` — 3 tests: proposal hash, vote hash, different proposal types produce different hashes
+- `governance_integration.rs` — 13 tests: full proposal lifecycle, quorum/approval, voting period, double-vote prevention, parameter change execution, text proposal execution, invalid params, validation bounds, snapshot persistence, downstream effects, sequential proposals
+- `governance_tests.rs` — 10 tests: proposal creation, voting period, types, status transitions, vote counting, quorum calculation, state engine integration, ID uniqueness, has_passed logic
 
 ## Validator Round Synchronization Fix (March 7, 2026)
 
@@ -1330,9 +1336,9 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 35. **Vote weight includes unstaking addresses (March 10, 2026)** — `stake_of()` returned staked amount even during cooldown. Unstaking validators retained full governance influence.
     - **Fix:** Vote weight now filters out addresses with `unlock_at_round.is_some()`
     - **Result:** Unstaking validators have zero governance influence
-36. **Governance proposals never execute (March 10, 2026)** — `tick_governance()` only transitioned Active→PassedPending/Rejected. PassedPending proposals stayed in that state forever.
-    - **Fix:** Added `PassedPending { execute_at_round }` → `Executed` transition when `current_round >= execute_at_round`
-    - **Result:** Proposals complete their full lifecycle
+36. **Governance proposals never execute (March 10, 2026)** — `tick_governance()` only transitioned Active→PassedPending/Rejected. PassedPending proposals stayed in that state forever, and ParameterChange effects were never applied.
+    - **Fix:** Added `PassedPending { execute_at_round }` → `Executed` transition when `current_round >= execute_at_round`. On `Executed`, ParameterChange proposals call `governance_params.apply_change()` to modify runtime parameters. Added `GovernanceParams` struct with validation bounds, wired into `apply_create_proposal()`, `tick_governance()`, persistence, and RPC.
+    - **Result:** Full governance lifecycle: Active → PassedPending → Executed with actual parameter changes. 7 new integration tests verify execution, persistence, and downstream effects.
 37. **Remaining unchecked arithmetic in StateEngine (March 10, 2026)** — 7 additional unchecked `+=` operations found in engine.rs: `total_supply`, `capped_reward + total_fees`, `stake.staked` (2 locations), nonce increments, `next_proposal_id`, governance round calculations.
     - **Fix:** All changed to `saturating_add()` / `saturating_mul()`
     - **Result:** Zero unchecked arithmetic in any financial or counter path
@@ -1461,6 +1467,31 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 - **No per-IP connection limit** — Defined `MAX_CONNECTIONS_PER_IP = 3` constant (enforcement TODO for mainnet).
 - **Evidence store single-equivocation limit** — Changed to `Vec<EquivocationEvidence>` per validator.
 
+## Formal Verification (TLA+)
+
+**Location:** `formal/UltraDAGConsensus.tla` + `formal/UltraDAGConsensus.cfg`
+
+TLA+ specification of UltraDAG's DAG-BFT consensus, derived directly from the Rust implementation. Models vertex production, parent referencing, BFT finality, and Byzantine behavior.
+
+**State variables:** `round`, `vertices`, `finalized`, `byzantine`, `active`, `nextId`
+
+**Actions:**
+- `ProduceVertex(v, r)` — honest validator produces vertex with parents from round r-1, equivocation prevention, 2f+1 gate
+- `FinalizeVertex(vtx)` — vertex finalized when >= ceil(2N/3) distinct validators have descendants; parent finality guarantee enforced
+- `ByzantineAction(v, r)` — Byzantine validator can equivocate (multiple vertices per round) or stay silent
+- `AdvanceRound` — system advances to next round
+
+**Properties verified:**
+- **Safety** — No two finalized vertices from same validator in same round with different content
+- **HonestNoEquivocation** — Honest validators never produce two vertices in the same round
+- **FinalizedParentsConsistency** — All parents of finalized vertices are also finalized
+- **Liveness** — Every honest vertex is eventually finalized (under weak fairness)
+- **TypeOK**, **RoundMonotonicity**, **ByzantineBound** — structural invariants
+
+**Bounds:** VALIDATORS = {"v1","v2","v3","v4"}, MAX_ROUNDS = 4, MAX_BYZANTINE = 1. QuorumThreshold = ceil(8/3) = 3.
+
+**Run:** `java -jar tla2tools.jar -config UltraDAGConsensus.cfg UltraDAGConsensus.tla`
+
 ## Performance Roadmap
 
 ### ✅ Finality Algorithm Optimization (P2 — COMPLETED)
@@ -1571,11 +1602,11 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 - [ ] **Verify max supply** — After faucet removal, confirm total circulating supply at genesis = 1,050,000 UDAG (dev allocation only), and max supply = 21,000,000 UDAG exactly
 - [ ] **Security audit** — External audit of consensus, state, and cryptographic implementations
 - [ ] **Penetration testing** — Network-level attacks, eclipse attacks, DDoS resilience
-- [ ] **Formal verification** — Machine-checkable safety proof (or document why deferred)
+- [x] **Formal verification** — TLA+ specification written (`formal/UltraDAGConsensus.tla`) with TLC config (`formal/UltraDAGConsensus.cfg`). Models vertex production, BFT finality (ceil(2N/3) descendants), equivocation, Byzantine actions. Verifies Safety (no conflicting finalized vertices), Liveness (honest vertices eventually finalized), HonestNoEquivocation, FinalizedParentsConsistency. Bounded: 4 validators, 4 rounds, 1 Byzantine.
 - [ ] **CheckpointSync trust anchor** — Fresh nodes trust `state_at_checkpoint` from the first peer they sync from (trust-on-first-use). A malicious peer can feed arbitrary state with forged validator set. Need hardcoded genesis validator keys or checkpoint chain verification from genesis.
 
 ### Protocol
-- [ ] **Governance execution** — `tick_governance()` transitions proposals to "Executed" status but no parameters are actually changed. Must implement `execute_proposal()` to apply ParameterChange effects.
+- [x] **Governance execution** — ParameterChange proposals now apply changes to runtime `GovernanceParams` via `apply_change()` with validation bounds. 7 integration tests verify execution, persistence, and downstream effects.
 - [ ] **Change NETWORK_ID** — Update from `ultradag-testnet-v1` to `ultradag-mainnet-v1`
 - [ ] **Verify genesis parameters** — Confirm MAX_SUPPLY_SATS, INITIAL_REWARD_SATS, HALVING_INTERVAL
 - [ ] **Verify staking parameters** — Confirm MIN_STAKE_SATS, UNSTAKE_COOLDOWN_ROUNDS, MAX_ACTIVE_VALIDATORS

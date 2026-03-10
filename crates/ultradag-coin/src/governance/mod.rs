@@ -161,21 +161,25 @@ impl Proposal {
         self.votes_for.saturating_add(self.votes_against)
     }
 
-    pub fn has_passed(&self, total_staked: u64) -> bool {
-        // Ceiling division for quorum: total_votes must be >= ceil(total_staked * 10 / 100)
+    /// Check if proposal passed with governance-adjustable thresholds.
+    pub fn has_passed_with_params(&self, total_staked: u64, params: &GovernanceParams) -> bool {
         let quorum = total_staked
-            .saturating_mul(GOVERNANCE_QUORUM_NUMERATOR)
+            .saturating_mul(params.quorum_numerator)
             .saturating_add(GOVERNANCE_QUORUM_DENOMINATOR - 1)
             / GOVERNANCE_QUORUM_DENOMINATOR;
         let total = self.total_votes();
         if total < quorum {
             return false;
         }
-        // Ceiling division for approval: votes_for must be >= ceil(total_votes * 66 / 100)
         let threshold = total
-            .saturating_mul(GOVERNANCE_APPROVAL_NUMERATOR)
+            .saturating_mul(params.approval_numerator)
             .saturating_add(GOVERNANCE_APPROVAL_DENOMINATOR - 1)
             / GOVERNANCE_APPROVAL_DENOMINATOR;
         self.votes_for >= threshold
+    }
+
+    /// Check if proposal passed using default constants (for tests and backward compat).
+    pub fn has_passed(&self, total_staked: u64) -> bool {
+        self.has_passed_with_params(total_staked, &GovernanceParams::default())
     }
 }

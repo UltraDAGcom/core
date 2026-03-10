@@ -1313,16 +1313,21 @@ async fn handle_request(
         // ====== Governance GET endpoints ======
 
         (&Method::GET, ["governance", "config"]) => {
+            let state = read_lock_or_503!(server.state);
+            let gp = state.governance_params();
             json_response(
                 StatusCode::OK,
                 &serde_json::json!({
-                    "min_stake_to_propose": ultradag_coin::constants::MIN_STAKE_TO_PROPOSE,
-                    "min_stake_to_propose_udag": ultradag_coin::constants::MIN_STAKE_TO_PROPOSE as f64 / 100_000_000.0,
-                    "voting_period_rounds": ultradag_coin::constants::GOVERNANCE_VOTING_PERIOD_ROUNDS,
-                    "quorum_percent": (ultradag_coin::constants::GOVERNANCE_QUORUM_NUMERATOR as f64 / ultradag_coin::constants::GOVERNANCE_QUORUM_DENOMINATOR as f64) * 100.0,
-                    "approval_percent": (ultradag_coin::constants::GOVERNANCE_APPROVAL_NUMERATOR as f64 / ultradag_coin::constants::GOVERNANCE_APPROVAL_DENOMINATOR as f64) * 100.0,
-                    "execution_delay_rounds": ultradag_coin::constants::GOVERNANCE_EXECUTION_DELAY_ROUNDS,
-                    "max_active_proposals": ultradag_coin::constants::MAX_ACTIVE_PROPOSALS,
+                    "min_stake_to_propose": gp.min_stake_to_propose,
+                    "min_stake_to_propose_udag": gp.min_stake_to_propose as f64 / 100_000_000.0,
+                    "voting_period_rounds": gp.voting_period_rounds,
+                    "quorum_percent": (gp.quorum_numerator as f64 / ultradag_coin::constants::GOVERNANCE_QUORUM_DENOMINATOR as f64) * 100.0,
+                    "approval_percent": (gp.approval_numerator as f64 / ultradag_coin::constants::GOVERNANCE_APPROVAL_DENOMINATOR as f64) * 100.0,
+                    "execution_delay_rounds": gp.execution_delay_rounds,
+                    "max_active_proposals": gp.max_active_proposals,
+                    "min_fee_sats": gp.min_fee_sats,
+                    "observer_reward_percent": gp.observer_reward_percent,
+                    "governable_params": ultradag_coin::governance::GovernanceParams::param_names(),
                 }),
             )
         }

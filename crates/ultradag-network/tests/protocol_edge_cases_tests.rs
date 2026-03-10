@@ -387,8 +387,9 @@ fn test_checkpoint_sync_message() {
         proposals: vec![],
         votes: vec![],
         next_proposal_id: 0,
+        governance_params: Default::default(),
     };
-    
+
     let msg = Message::CheckpointSync {
         checkpoint,
         suffix_vertices: vec![vertex],

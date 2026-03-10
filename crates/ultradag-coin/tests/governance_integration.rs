@@ -402,6 +402,304 @@ fn test_double_voting_prevention() {
     assert_eq!(proposal.votes_against, 0);
 }
 
+// --- Governance Execution Tests ---
+
+/// Helper: set up a state with a proposer and voters who pass a ParameterChange proposal.
+/// Returns (state, voting_ends_round) with proposal at id=0 in Active status.
+fn setup_passing_proposal(
+    param: &str,
+    new_value: &str,
+) -> (StateEngine, u64) {
+    let mut state = StateEngine::new_with_genesis();
+
+    let proposer = SecretKey::generate();
+    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
+    let mut stake_tx = StakeTx {
+        from: proposer.address(),
+        amount: MIN_STAKE_TO_PROPOSE,
+        nonce: 0,
+        pub_key: proposer.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
+    state.apply_stake_tx(&stake_tx).unwrap();
+
+    let proposal_tx = make_proposal_tx(
+        &proposer, 0, "Change Param", "Test param change",
+        ProposalType::ParameterChange { param: param.to_string(), new_value: new_value.to_string() },
+        10_000, 1,
+    );
+    state.apply_create_proposal(&proposal_tx, 100).unwrap();
+
+    // Create 2 voters with large stake so they exceed quorum
+    let voter1 = SecretKey::generate();
+    let voter2 = SecretKey::generate();
+    for sk in [&voter1, &voter2] {
+        let addr = sk.address();
+        state.faucet_credit(&addr, 60_000 * 100_000_000 + 1_000_000).unwrap();
+        let mut stx = StakeTx {
+            from: addr,
+            amount: 50_000 * 100_000_000,
+            nonce: 0,
+            pub_key: sk.verifying_key().to_bytes(),
+            signature: Signature([0u8; 64]),
+        };
+        stx.signature = sk.sign(&stx.signable_bytes());
+        state.apply_stake_tx(&stx).unwrap();
+    }
+
+    // Both vote YES
+    let v1 = make_vote_tx(&voter1, 0, true, 10_000, 1);
+    let v2 = make_vote_tx(&voter2, 0, true, 10_000, 1);
+    state.apply_vote(&v1, 150).unwrap();
+    state.apply_vote(&v2, 200).unwrap();
+
+    let voting_ends = state.proposal(0).unwrap().voting_ends;
+    (state, voting_ends)
+}
+
+#[test]
+fn test_parameter_change_execution_updates_governance_params() {
+    let (mut state, voting_ends) = setup_passing_proposal("min_fee_sats", "50000");
+
+    // Before execution, min_fee_sats should be the default
+    assert_eq!(state.governance_params().min_fee_sats, ultradag_coin::constants::MIN_FEE_SATS);
+
+    // Tick past voting end — proposal transitions to PassedPending
+    state.tick_governance(voting_ends + 1);
+    let p = state.proposal(0).unwrap();
+    assert!(matches!(p.status, ultradag_coin::governance::ProposalStatus::PassedPending { .. }));
+
+    // Get execute_at_round
+    let execute_at = match p.status {
+        ultradag_coin::governance::ProposalStatus::PassedPending { execute_at_round } => execute_at_round,
+        _ => panic!("Expected PassedPending"),
+    };
+
+    // Tick at execution round — proposal transitions to Executed and param changes
+    state.tick_governance(execute_at);
+    let p = state.proposal(0).unwrap();
+    assert_eq!(p.status, ultradag_coin::governance::ProposalStatus::Executed);
+
+    // Governance params should be updated
+    assert_eq!(state.governance_params().min_fee_sats, 50_000);
+}
+
+#[test]
+fn test_text_proposal_execution_has_no_param_effect() {
+    let mut state = StateEngine::new_with_genesis();
+
+    let proposer = SecretKey::generate();
+    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
+    let mut stake_tx = StakeTx {
+        from: proposer.address(),
+        amount: MIN_STAKE_TO_PROPOSE,
+        nonce: 0,
+        pub_key: proposer.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
+    state.apply_stake_tx(&stake_tx).unwrap();
+
+    let proposal_tx = make_proposal_tx(
+        &proposer, 0, "Text Only", "Informational proposal",
+        ProposalType::TextProposal, 10_000, 1,
+    );
+    state.apply_create_proposal(&proposal_tx, 100).unwrap();
+
+    // Vote to pass
+    let voter = SecretKey::generate();
+    state.faucet_credit(&voter.address(), 60_000 * 100_000_000 + 1_000_000).unwrap();
+    let mut stx = StakeTx {
+        from: voter.address(),
+        amount: 50_000 * 100_000_000,
+        nonce: 0,
+        pub_key: voter.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stx.signature = voter.sign(&stx.signable_bytes());
+    state.apply_stake_tx(&stx).unwrap();
+    let v = make_vote_tx(&voter, 0, true, 10_000, 1);
+    state.apply_vote(&v, 150).unwrap();
+
+    let voting_ends = state.proposal(0).unwrap().voting_ends;
+    let params_before = state.governance_params().clone();
+
+    // Transition to PassedPending then Executed
+    state.tick_governance(voting_ends + 1);
+    let execute_at = match state.proposal(0).unwrap().status {
+        ultradag_coin::governance::ProposalStatus::PassedPending { execute_at_round } => execute_at_round,
+        _ => panic!("Expected PassedPending"),
+    };
+    state.tick_governance(execute_at);
+
+    assert_eq!(state.proposal(0).unwrap().status, ultradag_coin::governance::ProposalStatus::Executed);
+    // All params should be unchanged
+    let params_after = state.governance_params();
+    assert_eq!(params_before.min_fee_sats, params_after.min_fee_sats);
+    assert_eq!(params_before.quorum_numerator, params_after.quorum_numerator);
+    assert_eq!(params_before.approval_numerator, params_after.approval_numerator);
+    assert_eq!(params_before.voting_period_rounds, params_after.voting_period_rounds);
+}
+
+#[test]
+fn test_invalid_param_name_still_transitions_to_executed() {
+    let (mut state, voting_ends) = setup_passing_proposal("nonexistent_param", "42");
+
+    state.tick_governance(voting_ends + 1);
+    let execute_at = match state.proposal(0).unwrap().status {
+        ultradag_coin::governance::ProposalStatus::PassedPending { execute_at_round } => execute_at_round,
+        _ => panic!("Expected PassedPending"),
+    };
+    state.tick_governance(execute_at);
+
+    // Proposal still Executed (determinism), but no params changed
+    assert_eq!(state.proposal(0).unwrap().status, ultradag_coin::governance::ProposalStatus::Executed);
+    // All defaults still in place
+    assert_eq!(state.governance_params().min_fee_sats, ultradag_coin::constants::MIN_FEE_SATS);
+}
+
+#[test]
+fn test_param_validation_bounds_enforced() {
+    // approval_numerator must be 51-100, so "30" should fail
+    let (mut state, voting_ends) = setup_passing_proposal("approval_numerator", "30");
+
+    state.tick_governance(voting_ends + 1);
+    let execute_at = match state.proposal(0).unwrap().status {
+        ultradag_coin::governance::ProposalStatus::PassedPending { execute_at_round } => execute_at_round,
+        _ => panic!("Expected PassedPending"),
+    };
+    state.tick_governance(execute_at);
+
+    // Proposal Executed but param NOT changed (validation rejected it)
+    assert_eq!(state.proposal(0).unwrap().status, ultradag_coin::governance::ProposalStatus::Executed);
+    assert_eq!(
+        state.governance_params().approval_numerator,
+        GOVERNANCE_APPROVAL_NUMERATOR,
+        "approval_numerator should remain at default because 30 < 51"
+    );
+}
+
+#[test]
+fn test_changed_params_persist_across_snapshot() {
+    let (mut state, voting_ends) = setup_passing_proposal("quorum_numerator", "25");
+
+    // Execute the proposal
+    state.tick_governance(voting_ends + 1);
+    let execute_at = match state.proposal(0).unwrap().status {
+        ultradag_coin::governance::ProposalStatus::PassedPending { execute_at_round } => execute_at_round,
+        _ => panic!("Expected PassedPending"),
+    };
+    state.tick_governance(execute_at);
+    assert_eq!(state.governance_params().quorum_numerator, 25);
+
+    // Snapshot and restore
+    let snapshot = state.snapshot();
+    let restored = StateEngine::from_snapshot(snapshot);
+    assert_eq!(restored.governance_params().quorum_numerator, 25);
+}
+
+#[test]
+fn test_changed_voting_period_affects_new_proposals() {
+    // Change voting_period_rounds from default to 200 (minimum is 100)
+    let (mut state, voting_ends) = setup_passing_proposal("voting_period_rounds", "200");
+
+    // Execute the proposal
+    state.tick_governance(voting_ends + 1);
+    let execute_at = match state.proposal(0).unwrap().status {
+        ultradag_coin::governance::ProposalStatus::PassedPending { execute_at_round } => execute_at_round,
+        _ => panic!("Expected PassedPending"),
+    };
+    state.tick_governance(execute_at);
+    assert_eq!(state.governance_params().voting_period_rounds, 200);
+
+    // Create a new proposal — it should use the NEW voting_period_rounds
+    let proposer2 = SecretKey::generate();
+    state.faucet_credit(&proposer2.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
+    let mut stx = StakeTx {
+        from: proposer2.address(),
+        amount: MIN_STAKE_TO_PROPOSE,
+        nonce: 0,
+        pub_key: proposer2.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stx.signature = proposer2.sign(&stx.signable_bytes());
+    state.apply_stake_tx(&stx).unwrap();
+
+    let creation_round = execute_at + 10;
+    let p2_tx = make_proposal_tx(
+        &proposer2, 1, "Next Proposal", "Uses new voting period",
+        ProposalType::TextProposal, 10_000, 1,
+    );
+    state.apply_create_proposal(&p2_tx, creation_round).unwrap();
+
+    let p2 = state.proposal(1).unwrap();
+    assert_eq!(p2.voting_ends, creation_round + 200, "New proposal should use updated voting_period_rounds");
+}
+
+#[test]
+fn test_multiple_param_changes_via_sequential_proposals() {
+    // First proposal: change min_fee_sats
+    let (mut state, voting_ends) = setup_passing_proposal("min_fee_sats", "20000");
+
+    state.tick_governance(voting_ends + 1);
+    let execute_at = match state.proposal(0).unwrap().status {
+        ultradag_coin::governance::ProposalStatus::PassedPending { execute_at_round } => execute_at_round,
+        _ => panic!("Expected PassedPending"),
+    };
+    state.tick_governance(execute_at);
+    assert_eq!(state.governance_params().min_fee_sats, 20_000);
+
+    // Second proposal: change observer_reward_percent
+    let proposer2 = SecretKey::generate();
+    state.faucet_credit(&proposer2.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
+    let mut stx = StakeTx {
+        from: proposer2.address(),
+        amount: MIN_STAKE_TO_PROPOSE,
+        nonce: 0,
+        pub_key: proposer2.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stx.signature = proposer2.sign(&stx.signable_bytes());
+    state.apply_stake_tx(&stx).unwrap();
+
+    let round2 = execute_at + 10;
+    let p2_tx = make_proposal_tx(
+        &proposer2, 1, "Change Observer Reward", "Set to 30%",
+        ProposalType::ParameterChange { param: "observer_reward_percent".to_string(), new_value: "30".to_string() },
+        10_000, 1,
+    );
+    state.apply_create_proposal(&p2_tx, round2).unwrap();
+
+    // Vote to pass proposal 1 (id=1)
+    let voter = SecretKey::generate();
+    state.faucet_credit(&voter.address(), 60_000 * 100_000_000 + 1_000_000).unwrap();
+    let mut vstx = StakeTx {
+        from: voter.address(),
+        amount: 50_000 * 100_000_000,
+        nonce: 0,
+        pub_key: voter.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    vstx.signature = voter.sign(&vstx.signable_bytes());
+    state.apply_stake_tx(&vstx).unwrap();
+
+    let v = make_vote_tx(&voter, 1, true, 10_000, 1);
+    state.apply_vote(&v, round2 + 50).unwrap();
+
+    let voting_ends2 = state.proposal(1).unwrap().voting_ends;
+    state.tick_governance(voting_ends2 + 1);
+    let execute_at2 = match state.proposal(1).unwrap().status {
+        ultradag_coin::governance::ProposalStatus::PassedPending { execute_at_round } => execute_at_round,
+        _ => panic!("Expected PassedPending for proposal 1"),
+    };
+    state.tick_governance(execute_at2);
+
+    // Both changes should be in effect
+    assert_eq!(state.governance_params().min_fee_sats, 20_000);
+    assert_eq!(state.governance_params().observer_reward_percent, 30);
+}
+
 #[test]
 fn test_insufficient_stake_to_propose() {
     let mut state = StateEngine::new_with_genesis();
