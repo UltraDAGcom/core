@@ -540,7 +540,7 @@ async fn handle_request(
                 // Compute nonce: highest pending + 1, or state nonce if no pending
                 let base_nonce = state.nonce(&sender);
                 let nonce = match mp.pending_nonce(&sender) {
-                    Some(max_pending) => max_pending + 1,
+                    Some(max_pending) => max_pending.saturating_add(1),
                     None => base_nonce,
                 };
 
@@ -689,7 +689,7 @@ async fn handle_request(
 
                 let base_nonce = state.nonce(&faucet_addr);
                 let nonce = match mp.pending_nonce(&faucet_addr) {
-                    Some(max_pending) => max_pending + 1,
+                    Some(max_pending) => max_pending.saturating_add(1),
                     None => base_nonce,
                 };
 
@@ -699,7 +699,7 @@ async fn handle_request(
                     .filter(|t| t.from() == faucet_addr)
                     .map(|t| t.total_cost())
                     .sum();
-                let total_needed = pending_cost.saturating_add(faucet_req.amount);
+                let total_needed = pending_cost.saturating_add(faucet_req.amount).saturating_add(fee);
                 if balance < total_needed {
                     return Ok(error_response(
                         StatusCode::BAD_REQUEST,
@@ -816,7 +816,7 @@ async fn handle_request(
 
                 let base_nonce = state.nonce(&sender);
                 let nonce = match mp.pending_nonce(&sender) {
-                    Some(max_pending) => max_pending + 1,
+                    Some(max_pending) => max_pending.saturating_add(1),
                     None => base_nonce,
                 };
 
@@ -924,7 +924,7 @@ async fn handle_request(
 
                 let base_nonce = state.nonce(&sender);
                 let nonce = match mp.pending_nonce(&sender) {
-                    Some(max_pending) => max_pending + 1,
+                    Some(max_pending) => max_pending.saturating_add(1),
                     None => base_nonce,
                 };
 
@@ -1065,7 +1065,7 @@ async fn handle_request(
 
                 let base_nonce = state.nonce(&sender);
                 let nonce = match mp.pending_nonce(&sender) {
-                    Some(max_pending) => max_pending + 1,
+                    Some(max_pending) => max_pending.saturating_add(1),
                     None => base_nonce,
                 };
 
@@ -1149,7 +1149,7 @@ async fn handle_request(
 
                 let base_nonce = state.nonce(&sender);
                 let nonce = match mp.pending_nonce(&sender) {
-                    Some(max_pending) => max_pending + 1,
+                    Some(max_pending) => max_pending.saturating_add(1),
                     None => base_nonce,
                 };
 

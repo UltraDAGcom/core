@@ -557,34 +557,7 @@ async fn main() {
 
             let sender = auto_sk.address();
 
-            // Check if already staked
-            {
-                let state = server_clone.state.read().await;
-                let current_stake = state.stake_of(&sender);
-                if current_stake >= ultradag_coin::MIN_STAKE_SATS {
-                    info!("Auto-stake: already staked {} UDAG, skipping",
-                        current_stake / 100_000_000);
-                    return;
-                }
-            }
-
-            // Check balance
-            let (balance, nonce) = {
-                let state = server_clone.state.read().await;
-                (state.balance(&sender), state.nonce(&sender))
-            };
-
-            let total_needed = auto_stake_sats.saturating_add(ultradag_coin::constants::MIN_FEE_SATS);
-            if balance < total_needed {
-                warn!("Auto-stake: balance {} UDAG insufficient for stake of {} UDAG (need {} sats incl. fee, have {} sats)",
-                    balance / 100_000_000,
-                    auto_stake_udag,
-                    total_needed,
-                    balance);
-                return;
-            }
-
-            // Check minimum stake
+            // Check minimum stake (static check, no locks needed)
             if auto_stake_sats < ultradag_coin::MIN_STAKE_SATS {
                 warn!("Auto-stake: {} UDAG below minimum stake of {} UDAG",
                     auto_stake_udag,
@@ -592,32 +565,64 @@ async fn main() {
                 return;
             }
 
-            // Build and submit stake transaction
-            let nonce = {
-                let mp = server_clone.mempool.read().await;
-                match mp.pending_nonce(&sender) {
-                    Some(max_pending) => max_pending + 1,
-                    None => nonce,
+            // Atomic check-and-insert: hold state read + mempool write together
+            // to prevent TOCTOU between balance check and mempool insertion.
+            let tx = {
+                let state = server_clone.state.read().await;
+
+                // Check if already staked
+                let current_stake = state.stake_of(&sender);
+                if current_stake >= ultradag_coin::MIN_STAKE_SATS {
+                    info!("Auto-stake: already staked {} UDAG, skipping",
+                        current_stake / 100_000_000);
+                    return;
                 }
-            };
 
-            let mut stake_tx = ultradag_coin::StakeTx {
-                from: sender,
-                amount: auto_stake_sats,
-                nonce,
-                pub_key: auto_sk.verifying_key().to_bytes(),
-                signature: ultradag_coin::Signature([0u8; 64]),
-            };
-            stake_tx.signature = auto_sk.sign(&stake_tx.signable_bytes());
-            let tx = ultradag_coin::Transaction::Stake(stake_tx);
-
-            {
+                // Check balance including pending mempool costs
                 let mut mp = server_clone.mempool.write().await;
+                let pending_cost: u64 = mp.best(10_000)
+                    .iter()
+                    .filter(|t| t.from() == sender)
+                    .map(|t| t.total_cost())
+                    .sum();
+                let total_needed = pending_cost
+                    .saturating_add(auto_stake_sats)
+                    .saturating_add(ultradag_coin::constants::MIN_FEE_SATS);
+                let balance = state.balance(&sender);
+                if balance < total_needed {
+                    warn!("Auto-stake: balance {} UDAG insufficient for stake of {} UDAG (need {} sats incl. pending+fee, have {} sats)",
+                        balance / 100_000_000,
+                        auto_stake_udag,
+                        total_needed,
+                        balance);
+                    return;
+                }
+
+                // Compute nonce under same lock
+                let base_nonce = state.nonce(&sender);
+                let nonce = match mp.pending_nonce(&sender) {
+                    Some(max_pending) => max_pending.saturating_add(1),
+                    None => base_nonce,
+                };
+
+                // Build, sign, and insert under same lock scope
+                let mut stake_tx = ultradag_coin::StakeTx {
+                    from: sender,
+                    amount: auto_stake_sats,
+                    nonce,
+                    pub_key: auto_sk.verifying_key().to_bytes(),
+                    signature: ultradag_coin::Signature([0u8; 64]),
+                };
+                stake_tx.signature = auto_sk.sign(&stake_tx.signable_bytes());
+                let tx = ultradag_coin::Transaction::Stake(stake_tx);
+
                 if !mp.insert(tx.clone()) {
                     warn!("Auto-stake: failed to insert stake tx into mempool");
                     return;
                 }
-            }
+
+                tx
+            };
 
             // Broadcast to peers
             server_clone.peers.broadcast(&ultradag_network::Message::NewTx(tx.clone()), "").await;

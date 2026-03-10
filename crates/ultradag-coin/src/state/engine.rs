@@ -312,7 +312,7 @@ impl StateEngine {
 
     /// Total UDAG currently staked across all validators.
     pub fn total_staked(&self) -> u64 {
-        self.stake_accounts.values().map(|s| s.staked).sum()
+        self.stake_accounts.values().fold(0u64, |acc, s| acc.saturating_add(s.staked))
     }
 
     /// Stake of a specific address.
