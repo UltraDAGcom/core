@@ -24,6 +24,8 @@ pub struct StateSnapshot {
     pub votes: Vec<((u64, Address), bool)>,
     #[serde(default)]
     pub next_proposal_id: u64,
+    #[serde(default)]
+    pub governance_params: crate::governance::GovernanceParams,
 }
 
 impl StateSnapshot {

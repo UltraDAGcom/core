@@ -50,6 +50,8 @@ pub struct StateEngine {
     votes: HashMap<(u64, Address), bool>,
     /// Monotonically increasing proposal counter.
     next_proposal_id: u64,
+    /// Runtime-adjustable governance parameters (changed via ParameterChange proposals).
+    governance_params: crate::governance::GovernanceParams,
 }
 
 impl StateEngine {
@@ -64,6 +66,7 @@ impl StateEngine {
             proposals: HashMap::new(),
             votes: HashMap::new(),
             next_proposal_id: 0,
+            governance_params: crate::governance::GovernanceParams::default(),
         }
     }
 
@@ -746,6 +749,7 @@ impl StateEngine {
 
     /// Called at the end of each finalized round.
     /// Checks all active proposals and updates their status.
+    /// When proposals transition to Executed, applies ParameterChange effects.
     pub fn tick_governance(&mut self, current_round: u64) {
         let total_staked = self.total_staked();
         let mut to_update = vec![];
@@ -755,7 +759,9 @@ impl StateEngine {
                 crate::governance::ProposalStatus::Active if current_round > proposal.voting_ends => {
                     let new_status = if proposal.has_passed(total_staked) {
                         crate::governance::ProposalStatus::PassedPending {
-                            execute_at_round: current_round.saturating_add(crate::constants::GOVERNANCE_EXECUTION_DELAY_ROUNDS),
+                            execute_at_round: current_round.saturating_add(
+                                self.governance_params.execution_delay_rounds
+                            ),
                         }
                     } else {
                         crate::governance::ProposalStatus::Rejected
@@ -773,6 +779,24 @@ impl StateEngine {
 
         for (id, status) in to_update {
             if let Some(p) = self.proposals.get_mut(&id) {
+                // Execute ParameterChange proposals when transitioning to Executed
+                if status == crate::governance::ProposalStatus::Executed {
+                    if let crate::governance::ProposalType::ParameterChange { ref param, ref new_value } = p.proposal_type {
+                        match self.governance_params.apply_change(param, new_value) {
+                            Ok(()) => {
+                                // Parameter changed successfully — this is deterministic
+                                // across all nodes since they process the same finalized vertices
+                            }
+                            Err(_e) => {
+                                // Invalid parameter change — proposal passes but effect is rejected.
+                                // This can happen if validation rules changed between proposal
+                                // creation and execution. The proposal still transitions to Executed
+                                // to maintain determinism (all nodes must agree on status).
+                            }
+                        }
+                    }
+                    // TextProposal: no execution effect (informational only)
+                }
                 p.status = status;
             }
         }
@@ -798,6 +822,11 @@ impl StateEngine {
         self.next_proposal_id
     }
 
+    /// Get the current governance parameters (may differ from constants if changed via proposals).
+    pub fn governance_params(&self) -> &crate::governance::GovernanceParams {
+        &self.governance_params
+    }
+
     /// Create a snapshot of the current state (for checkpoints).
     /// All collections are sorted by key for deterministic serialization —
     /// HashMap iteration order is non-deterministic, so without sorting,
@@ -821,6 +850,7 @@ impl StateEngine {
             proposals,
             votes,
             next_proposal_id: self.next_proposal_id,
+            governance_params: self.governance_params.clone(),
         }
     }
 
@@ -836,6 +866,7 @@ impl StateEngine {
             proposals: snapshot.proposals.into_iter().collect(),
             votes: snapshot.votes.into_iter().collect(),
             next_proposal_id: snapshot.next_proposal_id,
+            governance_params: snapshot.governance_params,
         }
     }
 
