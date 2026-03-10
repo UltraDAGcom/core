@@ -2041,12 +2041,14 @@ async function loadGovernance() {
 function renderGovernanceUI() {
   if (!connected || !governanceConfig) return;
   
-  const activeProposals = proposals.filter(p => p.status === 'active');
-  const pastProposals = proposals.filter(p => p.status !== 'active');
+  // Backend returns status as 'Active', 'Rejected', 'Executed', or {PassedPending: {execute_at_round: N}}
+  const activeProposals = proposals.filter(p => p.status === 'Active');
+  const pastProposals = proposals.filter(p => p.status !== 'Active');
   
   document.getElementById('gov-active-count').textContent = activeProposals.length;
   
-  const totalVotes = proposals.reduce((sum, p) => sum + (p.yes_votes || 0) + (p.no_votes || 0), 0);
+  // Backend uses votes_for and votes_against (not yes_votes/no_votes)
+  const totalVotes = proposals.reduce((sum, p) => sum + (p.votes_for || 0) + (p.votes_against || 0), 0);
   document.getElementById('gov-total-votes').textContent = totalVotes;
   
   updateMyVotingPower();
@@ -2085,9 +2087,9 @@ function renderActiveProposals(activeProposals) {
   }
   
   el.innerHTML = activeProposals.map(p => {
-    const totalVotes = (p.yes_votes || 0) + (p.no_votes || 0);
-    const yesPercent = totalVotes > 0 ? ((p.yes_votes || 0) / totalVotes * 100).toFixed(1) : 0;
-    const noPercent = totalVotes > 0 ? ((p.no_votes || 0) / totalVotes * 100).toFixed(1) : 0;
+    const totalVotes = (p.votes_for || 0) + (p.votes_against || 0);
+    const yesPercent = totalVotes > 0 ? ((p.votes_for || 0) / totalVotes * 100).toFixed(1) : 0;
+    const noPercent = totalVotes > 0 ? ((p.votes_against || 0) / totalVotes * 100).toFixed(1) : 0;
     const myVote = myVotes.get(p.id);
     const canVote = keystore && connected;
     
@@ -2097,7 +2099,7 @@ function renderActiveProposals(activeProposals) {
           <div>
             <div style="font-family:'Cormorant',serif;font-size:20px;font-weight:300;color:var(--white);margin-bottom:4px">${esc(p.title)}</div>
             <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:0.04em;text-transform:uppercase">
-              Proposal #${p.id} · ${p.proposal_type} · Ends at block ${p.end_block}
+              Proposal #${p.id} · ${typeof p.proposal_type === 'string' ? p.proposal_type : 'ParameterChange'} · Ends round ${p.voting_ends}
             </div>
           </div>
           <div style="font-family:'DM Mono',monospace;font-size:11px;padding:4px 10px;background:var(--accent-dim);border:1px solid rgba(139,92,246,0.3);color:var(--accent);letter-spacing:0.06em;text-transform:uppercase">
@@ -2107,10 +2109,10 @@ function renderActiveProposals(activeProposals) {
         <div style="font-family:'Cormorant',serif;font-size:16px;font-weight:300;color:var(--subtle);line-height:1.6;margin-bottom:16px">
           ${esc(p.description)}
         </div>
-        ${p.proposal_type === 'parameter' ? `
+        ${typeof p.proposal_type === 'object' && p.proposal_type.ParameterChange ? `
           <div style="background:var(--bg3);border:1px solid var(--border);padding:12px;margin-bottom:16px;font-family:'DM Mono',monospace;font-size:12px">
             <div style="color:var(--dim);margin-bottom:4px">Parameter Change:</div>
-            <div style="color:var(--white)"><strong>${esc(p.parameter_name || '')}</strong> → ${esc(p.parameter_value || '')}</div>
+            <div style="color:var(--white)"><strong>${esc(p.proposal_type.ParameterChange.param || '')}</strong> → ${esc(p.proposal_type.ParameterChange.new_value || '')}</div>
           </div>
         ` : ''}
         <div style="margin-bottom:12px">
@@ -2123,8 +2125,8 @@ function renderActiveProposals(activeProposals) {
             <div style="width:${noPercent}%;background:var(--red);transition:width 0.3s"></div>
           </div>
           <div style="display:flex;justify-content:space-between;margin-top:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--dim)">
-            <span>${formatUdag(p.yes_votes || 0)} UDAG</span>
-            <span>${formatUdag(p.no_votes || 0)} UDAG</span>
+            <span>${formatUdag(p.votes_for || 0)} UDAG</span>
+            <span>${formatUdag(p.votes_against || 0)} UDAG</span>
           </div>
         </div>
         ${myVote ? `
@@ -2155,21 +2157,23 @@ function renderProposalHistory(pastProposals) {
   }
   
   el.innerHTML = pastProposals.map(p => {
-    const totalVotes = (p.yes_votes || 0) + (p.no_votes || 0);
-    const yesPercent = totalVotes > 0 ? ((p.yes_votes || 0) / totalVotes * 100).toFixed(1) : 0;
-    const noPercent = totalVotes > 0 ? ((p.no_votes || 0) / totalVotes * 100).toFixed(1) : 0;
+    const totalVotes = (p.votes_for || 0) + (p.votes_against || 0);
+    const yesPercent = totalVotes > 0 ? ((p.votes_for || 0) / totalVotes * 100).toFixed(1) : 0;
+    const noPercent = totalVotes > 0 ? ((p.votes_against || 0) / totalVotes * 100).toFixed(1) : 0;
     
+    // Backend returns 'Executed', 'Rejected', or {PassedPending: {execute_at_round: N}}
     let statusColor = 'var(--dim)';
-    if (p.status === 'passed') statusColor = 'var(--green)';
-    else if (p.status === 'rejected') statusColor = 'var(--red)';
-    else if (p.status === 'expired') statusColor = 'var(--yellow)';
+    let statusText = typeof p.status === 'string' ? p.status : 'PassedPending';
+    if (p.status === 'Executed') statusColor = 'var(--green)';
+    else if (p.status === 'Rejected') statusColor = 'var(--red)';
+    else if (typeof p.status === 'object' && p.status.PassedPending) statusColor = 'var(--yellow)';
     
     return `
       <div class="card-body" style="border-bottom:1px solid var(--border)">
         <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
           <div style="font-family:'Cormorant',serif;font-size:18px;font-weight:300;color:var(--subtle)">${esc(p.title)}</div>
           <div style="font-family:'DM Mono',monospace;font-size:11px;padding:4px 10px;background:var(--bg3);border:1px solid var(--border);color:${statusColor};letter-spacing:0.06em;text-transform:uppercase">
-            ${p.status}
+            ${statusText}
           </div>
         </div>
         <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:0.04em;text-transform:uppercase;margin-bottom:12px">
