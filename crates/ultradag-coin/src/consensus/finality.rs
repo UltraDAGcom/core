@@ -98,9 +98,10 @@ impl FinalityTracker {
 
         let genesis: [u8; 32] = [0u8; 32];
 
-        // Only scan rounds from last_finalized_round to current_round (frontier).
-        // Vertices in older rounds are either already finalized or unreachable.
-        let scan_from = self.last_finalized_round;
+        // Only scan rounds from after last_finalized_round to current_round (frontier).
+        // Vertices at or below last_finalized_round are already finalized.
+        // Use saturating_add to avoid overflow at round 0.
+        let scan_from = if self.last_finalized_round == 0 { 0 } else { self.last_finalized_round + 1 };
         let scan_to = dag.current_round();
 
         let mut ready: BTreeSet<[u8; 32]> = BTreeSet::new();

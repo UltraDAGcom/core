@@ -48,9 +48,9 @@ const MAX_MEMPOOL_SCAN: usize = 10_000;
 /// Max request body size (1MB)
 const MAX_REQUEST_SIZE: usize = 1_048_576;
 
-fn json_response(status: StatusCode, json: &serde_json::Value) -> Response<BoxBody> {
+fn json_response(status: StatusCode, json: &impl Serialize) -> Response<BoxBody> {
     let json = serde_json::to_string_pretty(json).unwrap_or_else(|e| {
-        format!(r#"{{"error": "serialization failed: {}"}}", e)
+        format!("{{\"error\": \"serialization failed: {}\"}}", e)
     });
     Response::builder()
         .status(status)
@@ -61,10 +61,7 @@ fn json_response(status: StatusCode, json: &serde_json::Value) -> Response<BoxBo
         .body(Full::new(Bytes::from(json)))
         .unwrap_or_else(|e| {
             tracing::error!("Failed to build JSON response: {}", e);
-            Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(full(r#"{"error": "response build failed"}"#))
-                .unwrap_or_else(|_| Response::new(full("error")))
+            Response::new(Full::new(Bytes::from("{\"error\": \"response build failed\"}")))
         })
 }
 
@@ -103,12 +100,108 @@ struct StatusResponse {
     total_staked: u64,
     active_stakers: usize,
     bootstrap_connected: bool,
+    // System resource metrics
+    #[serde(skip_serializing_if = "Option::is_none")]
+    memory_usage_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cpu_usage_percent: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    uptime_seconds: Option<u64>,
 }
 
 /// Cached /status response — serves last good data when locks are contended.
 static STATUS_CACHE: std::sync::OnceLock<tokio::sync::Mutex<Option<StatusResponse>>> = std::sync::OnceLock::new();
 fn status_cache() -> &'static tokio::sync::Mutex<Option<StatusResponse>> {
     STATUS_CACHE.get_or_init(|| tokio::sync::Mutex::new(None))
+}
+
+/// Get current process memory usage in bytes (best-effort, returns None on failure)
+fn get_memory_usage() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|content| {
+                content.lines()
+                    .find(|line| line.starts_with("VmRSS:"))
+                    .and_then(|line| {
+                        line.split_whitespace()
+                            .nth(1)
+                            .and_then(|kb| kb.parse::<u64>().ok())
+                            .map(|kb| kb * 1024) // Convert KB to bytes
+                    })
+            })
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        Command::new("ps")
+            .args(&["-o", "rss=", "-p", &std::process::id().to_string()])
+            .output()
+            .ok()
+            .and_then(|output| {
+                String::from_utf8(output.stdout)
+                    .ok()
+                    .and_then(|s| s.trim().parse::<u64>().ok())
+                    .map(|kb| kb * 1024) // Convert KB to bytes
+            })
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        None
+    }
+}
+
+/// Get current process CPU usage percentage (best-effort, returns None on failure)
+fn get_cpu_usage() -> Option<f32> {
+    // CPU usage requires sampling over time, which is complex for a single call
+    // For now, return None - can be enhanced with a background sampling thread
+    None
+}
+
+/// Get system uptime in seconds (best-effort, returns None on failure)
+fn get_uptime() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        std::fs::read_to_string("/proc/uptime")
+            .ok()
+            .and_then(|content| {
+                content.split_whitespace()
+                    .next()
+                    .and_then(|s| s.parse::<f64>().ok())
+                    .map(|seconds| seconds as u64)
+            })
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        Command::new("sysctl")
+            .args(&["-n", "kern.boottime"])
+            .output()
+            .ok()
+            .and_then(|output| {
+                String::from_utf8(output.stdout)
+                    .ok()
+                    .and_then(|s| {
+                        // Parse "{ sec = 1234567890, usec = 0 }" format
+                        s.split("sec = ")
+                            .nth(1)
+                            .and_then(|s| s.split(',').next())
+                            .and_then(|s| s.trim().parse::<u64>().ok())
+                            .map(|boot_time| {
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_secs()
+                                    .saturating_sub(boot_time)
+                            })
+                    })
+            })
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        None
+    }
 }
 
 #[derive(Serialize)]
@@ -232,7 +325,7 @@ async fn handle_request(
             .body(Full::new(Bytes::new()))
             .unwrap_or_else(|e| {
                 tracing::error!("Failed to build CORS response: {}", e);
-                Response::new(full(""))
+                Response::new(Full::new(Bytes::new()))
             }));
     }
 
@@ -416,6 +509,11 @@ async fn handle_request(
                 .iter()
                 .any(|bn| connected_addrs.iter().any(|ca| ca == *bn));
 
+            // Gather system resource metrics (best-effort, don't fail if unavailable)
+            let memory_usage_bytes = get_memory_usage();
+            let cpu_usage_percent = get_cpu_usage();
+            let uptime_seconds = get_uptime();
+
             let status = StatusResponse {
                 last_finalized_round,
                 peer_count: peers,
@@ -430,6 +528,9 @@ async fn handle_request(
                 total_staked,
                 active_stakers: active_stakers_len,
                 bootstrap_connected,
+                memory_usage_bytes,
+                cpu_usage_percent,
+                uptime_seconds,
             };
 
             *status_cache().lock().await = Some(status.clone());
@@ -1286,18 +1387,15 @@ async fn handle_request(
         (&Method::GET, ["metrics"]) => {
             // Prometheus format
             let metrics = server.checkpoint_metrics.export_prometheus();
-            Ok(Response::builder()
+            Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "text/plain; version=0.0.4")
                 .header("Access-Control-Allow-Origin", "*")
                 .body(Full::new(Bytes::from(metrics)))
                 .unwrap_or_else(|e| {
                     tracing::error!("Failed to build metrics response: {}", e);
-                    Response::builder()
-                        .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .body(full("error building metrics response"))
-                        .unwrap_or_else(|_| Response::new(full("error")))
-                }))
+                    Response::new(Full::new(Bytes::from("{\"error\": \"metrics build failed\"}")))
+                })
         }
 
         (&Method::GET, ["metrics", "json"]) => {

@@ -1170,9 +1170,26 @@ async fn handle_peer(
                     continue;
                 }
 
-                // checkpoint.round == our_finalized: verify our state_root matches
-                let our_snapshot = state.read().await.snapshot();
+                // checkpoint.round == our_finalized: verify state_root matches
+                // We need to compute state at the checkpoint round, not current state
+                // (which may have advanced beyond checkpoint.round)
+                let state_r = state.read().await;
+                let checkpoint_round_finalized = state_r.last_finalized_round().unwrap_or(0);
+                
+                // Only validate if we've applied state up to exactly this checkpoint round
+                if checkpoint_round_finalized != checkpoint.round {
+                    debug!(
+                        "Checkpoint at round {} but our state is at round {} - skipping validation",
+                        checkpoint.round, checkpoint_round_finalized
+                    );
+                    drop(state_r);
+                    continue;
+                }
+                
+                let our_snapshot = state_r.snapshot();
                 let our_root = ultradag_coin::consensus::compute_state_root(&our_snapshot);
+                drop(state_r);
+                
                 if our_root != checkpoint.state_root {
                     warn!(
                         "Checkpoint at round {} has mismatched state_root — possible fork",

@@ -41,6 +41,15 @@
 - Key priority: `--pkey` > disk (`validator.key`) > generate new
 - Auto-stake waits 20s for sync, checks balance/existing stake, logs outcome clearly
 
+**Third Hardening Pass (March 10, 2026):**
+- **Faucet fee in balance check** — `total_needed` now includes transaction fee. Previously faucet could create txs exceeding available balance.
+- **Auto-stake TOCTOU fix** — Balance check, nonce assignment, and mempool insert now happen under a single lock scope. Previously had race between balance check and insertion.
+- **Auto-stake pending cost check** — Now accounts for pending mempool costs (matching RPC `/stake` behavior). Previously only checked state balance.
+- **Nonce overflow protection** — All `max_pending + 1` in RPC endpoints changed to `saturating_add(1)`. Prevents u64 wrap on nonce computation.
+- **total_staked() overflow protection** — Changed from `.sum()` to `.fold(0, saturating_add)`. Prevents silent u64 overflow in reward calculations.
+- **json_response panic safety** — Fixed `unwrap()` fallback paths using `Full::new(Bytes::from(...))` instead of undefined `full()`.
+- **Metrics endpoint return type** — Fixed `Ok(Response)` vs `Response` mismatch in metrics endpoint.
+
 **Hardening Audit (March 10, 2026):**
 - **credit() overflow protection** — `credit()` in StateEngine now uses `saturating_add()` instead of unchecked `+=`. Prevents balance overflow breaking supply invariant.
 - **Vote weight overflow protection** — `votes_for` and `votes_against` now use `saturating_add()`. Prevents governance manipulation via vote counter overflow.
@@ -1243,6 +1252,18 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 39. **CheckpointSync stale mempool (March 10, 2026)** — After `load_snapshot()` in fast-sync, mempool retained transactions with stale nonces/balances. Could cause invalid block production.
     - **Fix:** Clear mempool after applying checkpoint state snapshot
     - **Result:** Clean mempool after fast-sync, no stale transaction interference
+40. **Faucet balance check missing fee (March 10, 2026)** — Faucet `total_needed` omitted the tx fee, allowing creation of underfunded transactions.
+    - **Fix:** Added `.saturating_add(fee)` to faucet balance check
+    - **Result:** Faucet transactions always have sufficient balance for amount + fee
+41. **Auto-stake TOCTOU race condition (March 10, 2026)** — Balance check and mempool insertion were in separate lock scopes. Between them, other transactions could consume the balance or collide on nonce.
+    - **Fix:** Combined balance check, pending cost scan, nonce assignment, tx build, and mempool insert into one atomic lock scope (state read + mempool write held together)
+    - **Result:** No race window between validation and insertion
+42. **Nonce overflow in RPC endpoints (March 10, 2026)** — All 6 RPC endpoints and auto-stake used `max_pending + 1` which could wrap at u64::MAX.
+    - **Fix:** Changed to `saturating_add(1)` in all 7 locations
+    - **Result:** Nonce saturates instead of wrapping
+43. **total_staked() sum overflow (March 10, 2026)** — `Iterator::sum()` on stake amounts could silently wrap at u64::MAX, producing incorrect reward calculations.
+    - **Fix:** Changed to `fold(0u64, |acc, s| acc.saturating_add(s.staked))`
+    - **Result:** Total staked computation bounded to u64::MAX
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.

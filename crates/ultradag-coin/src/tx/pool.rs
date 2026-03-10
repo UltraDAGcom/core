@@ -26,8 +26,10 @@ impl Mempool {
             return false;
         }
 
-        // Reject transactions with fee below minimum (spam prevention)
-        if tx.fee() < crate::constants::MIN_FEE_SATS {
+        // Reject transactions with fee below minimum (spam prevention).
+        // Stake/Unstake are fee-exempt (they have fee=0 by design).
+        let fee_exempt = matches!(tx, Transaction::Stake(_) | Transaction::Unstake(_));
+        if !fee_exempt && tx.fee() < crate::constants::MIN_FEE_SATS {
             return false;
         }
 

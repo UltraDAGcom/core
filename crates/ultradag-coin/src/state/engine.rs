@@ -160,8 +160,17 @@ impl StateEngine {
             total_round_reward / n
         };
 
-        // Validate coinbase claims correct amount
-        let expected_coinbase = validator_reward.saturating_add(total_fees);
+        // Supply cap enforcement: cap reward BEFORE coinbase validation
+        // so that the validator produces a coinbase matching the capped amount.
+        let max_supply = crate::constants::MAX_SUPPLY_SATS;
+        let capped_reward = if snapshot.total_supply.saturating_add(validator_reward) > max_supply {
+            max_supply.saturating_sub(snapshot.total_supply)
+        } else {
+            validator_reward
+        };
+
+        // Validate coinbase claims correct (capped) amount
+        let expected_coinbase = capped_reward.saturating_add(total_fees);
 
         if vertex.block.coinbase.amount != expected_coinbase {
             return Err(CoinError::InvalidCoinbase {
@@ -170,12 +179,6 @@ impl StateEngine {
             });
         }
 
-        // Supply cap enforcement
-        let max_supply = crate::constants::MAX_SUPPLY_SATS;
-        let mut capped_reward = validator_reward;
-        if snapshot.total_supply.saturating_add(capped_reward) > max_supply {
-            capped_reward = max_supply.saturating_sub(snapshot.total_supply);
-        }
         snapshot.total_supply = snapshot.total_supply.saturating_add(capped_reward);
 
         // Credit proposer: capped block reward + fees

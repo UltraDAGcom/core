@@ -289,6 +289,20 @@ async fn main() {
 
     let args = Args::parse();
 
+    // Validate CLI arguments
+    if args.round_ms == 0 {
+        error!("--round-ms must be at least 1 (recommended: 1000+)");
+        std::process::exit(1);
+    }
+    if let Some(0) = args.validators {
+        error!("--validators must be at least 1");
+        std::process::exit(1);
+    }
+    if args.pruning_depth == 0 && !args.archive {
+        error!("--pruning-depth must be at least 1 (use --archive to disable pruning)");
+        std::process::exit(1);
+    }
+
     let data_dir = PathBuf::from(&args.data_dir);
     std::fs::create_dir_all(&data_dir).expect("Failed to create data directory");
 

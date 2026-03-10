@@ -196,13 +196,13 @@ pub async fn validator_loop(
             dag_round, height, mempool_snap.len(), dag_tips.len(),
         );
 
-        // Compute per-validator reward for this round
+        // Compute per-validator reward for this round (capped at supply limit)
         let total_round_reward = ultradag_coin::block_reward(height);
         let validator_reward = {
             let state = server.state.read().await;
             let total_stake = state.total_staked();
             let own_stake = state.stake_of(&validator);
-            if total_stake > 0 && own_stake > 0 {
+            let base_reward = if total_stake > 0 && own_stake > 0 {
                 // Proportional to stake
                 ((total_round_reward as u128)
                     .saturating_mul(own_stake as u128)
@@ -211,6 +211,14 @@ pub async fn validator_loop(
                 // Pre-staking fallback: each vertex gets full block_reward.
                 // Matches StateEngine::apply_finalized_vertices pre-staking mode (count=1).
                 total_round_reward
+            };
+            // Cap at supply limit (must match StateEngine validation)
+            let max_supply = ultradag_coin::constants::MAX_SUPPLY_SATS;
+            let total_supply = state.total_supply();
+            if total_supply.saturating_add(base_reward) > max_supply {
+                max_supply.saturating_sub(total_supply)
+            } else {
+                base_reward
             }
         };
 
