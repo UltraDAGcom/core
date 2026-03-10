@@ -484,7 +484,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <pre>|DV(v, G_A)| + |DV(v', G_B)| &ge; 2 &middot; &lceil;2n/3&rceil; &gt; n + f</pre>
   <p>Therefore DV(v, G<sub>A</sub>) &cap; DV(v&prime;, G<sub>B</sub>) must contain at least one <strong>honest</strong> validator. This honest validator&rsquo;s DAG would contain both conflicting vertices, triggering equivocation detection &mdash; a contradiction.</p>
   <p>For transaction-level conflicts, safety is ensured by deterministic ordering: the vertex finalized first wins.</p>
-  <p><strong>Note:</strong> This is an argument sketch, not a formal proof.</p>
+  <p><strong>Formal verification:</strong> This safety argument has been machine-checked via TLA+ model checking. The TLC model checker exhaustively explored 32.6 million states (N=4 validators, 1 Byzantine, 2 rounds) and verified six invariants with zero violations: TypeOK, Safety (no conflicting finalized vertices), HonestNoEquivocation, FinalizedParentsConsistency, RoundMonotonicity, and ByzantineBound. See <a href="https://github.com/UltraDAGcom/core/blob/main/formal/VERIFICATION.md">formal/VERIFICATION.md</a> for full results. Bounded model checking (MAX_ROUNDS=2) provides exhaustive coverage within bounds; infinite-horizon proof is future work.</p>
 
   <!-- 7. LIVENESS -->
   <h2 id="s7"><span class="sec-num">7.</span> Liveness</h2>
@@ -669,7 +669,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 
   <h3>Known Limitations</h3>
   <ol>
-    <li><strong>No formal safety proof</strong> &mdash; argument sketch only</li>
+    <li><strong>Bounded formal verification</strong> &mdash; TLA+ safety verified at MAX_ROUNDS=2 (32.6M states); infinite-horizon proof is future work</li>
     <li><strong>Timer-based rounds</strong> &mdash; clock synchronization dependency (mitigated by optimistic responsiveness)</li>
     <li><strong>Implicit votes only</strong> &mdash; descendant coverage, not explicit attestations</li>
   </ol>
@@ -753,7 +753,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <li><strong>Per-peer rate limiting</strong> &mdash; defense against message flooding from individual peers</li>
     <li><strong>Checkpoint broadcasting</strong> &mdash; broadcast pruning checkpoints to peers for verification</li>
     <li><strong>State root proofs</strong> &mdash; Merkle proofs for light client verification from checkpoints</li>
-    <li><strong>Formal verification</strong> &mdash; machine-checkable safety proof</li>
+    <li><strong>Extended formal verification</strong> &mdash; liveness checking and larger bounds (N&gt;4, rounds&gt;2)</li>
     <li><strong>Data availability separation</strong> &mdash; optional Narwhal-style mode for high-throughput deployments</li>
     <li><strong>Wire protocol versioning</strong> &mdash; forward-compatible upgrades</li>
   </ol>
@@ -766,6 +766,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <li><strong>✅ DAG pruning</strong> &mdash; automatic pruning of vertices older than 1000 rounds prevents unbounded memory growth</li>
     <li><strong>✅ Slashing mechanism</strong> &mdash; 50% stake burn on equivocation detection</li>
     <li><strong>✅ Recursive parent fetch</strong> &mdash; DAG convergence after network partitions via <code>GetParents</code>/<code>ParentVertices</code></li>
+    <li><strong>✅ TLA+ formal verification</strong> &mdash; consensus safety verified by TLC model checker across 32.6M states (N=4, f=1, 2 rounds); six invariants with zero violations</li>
   </ul>
 
   <!-- 18. CONCLUSION -->
