@@ -12,7 +12,12 @@ pub enum DagInsertError {
     Equivocation { validator: Address, round: u64 },
     /// Vertex references parent hashes that do not exist in the DAG.
     MissingParents(Vec<[u8; 32]>),
+    /// Vertex has too many parent references.
+    TooManyParents,
 }
+
+/// Maximum number of parent references allowed per DagVertex.
+pub const MAX_PARENTS: usize = 64;
 
 /// Number of rounds to keep in memory before pruning older finalized vertices.
 /// Keeps last 1000 rounds = ~7 days at 10-second rounds.
@@ -57,7 +62,8 @@ pub struct BlockDag {
     /// NOTE: This is the old temporary store. Use evidence_store for permanent retention.
     equivocation_evidence: HashMap<(Address, u64), [[u8; 32]; 2]>,
     /// Permanent equivocation evidence store (survives pruning).
-    evidence_store: HashMap<Address, EquivocationEvidence>,
+    /// Multiple equivocations per validator are tracked.
+    evidence_store: HashMap<Address, Vec<EquivocationEvidence>>,
     /// Incremental descendant validator tracking for O(1) finality checks.
     /// Maps vertex hash -> set of distinct validators that have at least one descendant.
     descendant_validators: HashMap<[u8; 32], HashSet<Address>>,
@@ -171,6 +177,11 @@ impl BlockDag {
 
         if self.vertices.contains_key(&hash) {
             return Ok(false);
+        }
+
+        // Reject vertices with too many parents
+        if vertex.parent_hashes.len() > MAX_PARENTS {
+            return Err(DagInsertError::TooManyParents);
         }
 
         // Reject vertices from Byzantine validators
@@ -412,8 +423,10 @@ impl BlockDag {
         self.equivocation_evidence.insert(key, [vertex1_hash, vertex2_hash]);
         
         // Also store in permanent evidence_store (survives pruning)
-        if !self.evidence_store.contains_key(&validator) {
-            self.evidence_store.insert(validator, EquivocationEvidence {
+        let entries = self.evidence_store.entry(validator).or_default();
+        // Avoid duplicate evidence for the same round
+        if !entries.iter().any(|e| e.round == round) {
+            entries.push(EquivocationEvidence {
                 validator,
                 round,
                 vertex_hash_1: vertex1_hash,
@@ -431,13 +444,13 @@ impl BlockDag {
     }
 
     /// Get permanent equivocation evidence for a validator (survives pruning).
-    pub fn get_permanent_evidence(&self, validator: &Address) -> Option<&EquivocationEvidence> {
-        self.evidence_store.get(validator)
+    pub fn get_permanent_evidence(&self, validator: &Address) -> Option<&[EquivocationEvidence]> {
+        self.evidence_store.get(validator).map(|v| v.as_slice())
     }
 
     /// Get all permanent equivocation evidence.
     pub fn all_evidence(&self) -> Vec<&EquivocationEvidence> {
-        self.evidence_store.values().collect()
+        self.evidence_store.values().flat_map(|v| v.iter()).collect()
     }
 
     /// Verify and process equivocation evidence from a peer.

@@ -49,7 +49,9 @@ const MAX_MEMPOOL_SCAN: usize = 10_000;
 const MAX_REQUEST_SIZE: usize = 1_048_576;
 
 fn json_response(status: StatusCode, body: &impl Serialize) -> Response<BoxBody> {
-    let json = serde_json::to_string_pretty(body).unwrap();
+    let json = serde_json::to_string_pretty(body).unwrap_or_else(|e| {
+        format!("{{\"error\":\"serialization failed: {}\"}}", e)
+    });
     Response::builder()
         .status(status)
         .header("Content-Type", "application/json")
@@ -815,7 +817,7 @@ async fn handle_request(
                     .filter(|t| t.from() == sender)
                     .map(|t| t.total_cost())
                     .sum();
-                let total_needed = pending_cost.saturating_add(stake_req.amount);
+                let total_needed = pending_cost.saturating_add(stake_req.amount).saturating_add(ultradag_coin::constants::MIN_FEE_SATS);
 
                 if stake_req.amount < MIN_STAKE_SATS {
                     return Ok(error_response(StatusCode::BAD_REQUEST,
@@ -1015,6 +1017,16 @@ async fn handle_request(
                 return Ok(error_response(StatusCode::BAD_REQUEST,
                     "invalid JSON: need {proposer_secret, title, description, proposal_type}"));
             };
+
+            // Validate title/description lengths before doing any crypto work
+            if prop_req.title.len() > ultradag_coin::constants::PROPOSAL_TITLE_MAX_BYTES {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    &format!("title too long: max {} bytes", ultradag_coin::constants::PROPOSAL_TITLE_MAX_BYTES)));
+            }
+            if prop_req.description.len() > ultradag_coin::constants::PROPOSAL_DESCRIPTION_MAX_BYTES {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    &format!("description too long: max {} bytes", ultradag_coin::constants::PROPOSAL_DESCRIPTION_MAX_BYTES)));
+            }
 
             let sk = match parse_secret_key(&prop_req.proposer_secret) {
                 Ok(sk) => sk,

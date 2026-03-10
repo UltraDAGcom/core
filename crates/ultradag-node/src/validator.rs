@@ -165,10 +165,15 @@ pub async fn validator_loop(
         let dag_tips = {
             let dag = server.dag.read().await;
             let prev_round = dag_round.saturating_sub(1);
-            let parents: Vec<[u8; 32]> = dag.vertices_in_round(prev_round)
+            let mut parents: Vec<[u8; 32]> = dag.vertices_in_round(prev_round)
                 .iter()
                 .map(|v| v.hash())
                 .collect();
+            // Cap at MAX_PARENTS to stay consistent with try_insert() validation.
+            // With >64 validators in a round, we take the first 64 parents.
+            if parents.len() > ultradag_coin::consensus::dag::MAX_PARENTS {
+                parents.truncate(ultradag_coin::consensus::dag::MAX_PARENTS);
+            }
             if parents.is_empty() {
                 vec![[0u8; 32]] // Genesis
             } else {
@@ -311,28 +316,6 @@ pub async fn validator_loop(
                 if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
                     warn!("Failed to apply finalized vertices to state: {}", e);
                 } else {
-                    // Update high-water mark after successful finalization
-                    let last_finalized_round = state_w.last_finalized_round().unwrap_or(0);
-                    if last_finalized_round > 0 {
-                        use ultradag_coin::persistence::monotonicity::HighWaterMark;
-                        let hwm_path = HighWaterMark::path_in_dir(&data_dir);
-                        
-                        match HighWaterMark::load_or_create(&hwm_path) {
-                            Ok(mut hwm) => {
-                                let state_snapshot = state_w.snapshot();
-                                let state_hash = ultradag_coin::consensus::compute_state_root(&state_snapshot);
-                                hwm.update(last_finalized_round, state_hash);
-                                
-                                if let Err(e) = hwm.save(&hwm_path) {
-                                    warn!("Failed to save high-water mark: {}", e);
-                                }
-                            }
-                            Err(e) => {
-                                warn!("Failed to load high-water mark for update: {}", e);
-                            }
-                        }
-                    }
-                    
                     // Epoch transition: sync active validator set to FinalityTracker
                     if state_w.epoch_just_changed(prev_round) {
                         sync_epoch_validators(&mut fin, &state_w);
@@ -485,6 +468,25 @@ pub async fn validator_loop(
             let mp = server.mempool.read().await;
             if let Err(e) = mp.save(&mempool_path) { warn!("Persist mempool: {}", e); }
             drop(mp);
+
+            // Update high-water mark AFTER all state files are persisted.
+            // This prevents crash loops: if we crash between HWM update and state save,
+            // on restart the HWM would be ahead of persisted state, blocking startup.
+            let last_fin = server.finality.read().await.last_finalized_round();
+            if last_fin > 0 {
+                use ultradag_coin::persistence::monotonicity::HighWaterMark;
+                let hwm_path = HighWaterMark::path_in_dir(&data_dir);
+                if let Ok(mut hwm) = HighWaterMark::load_or_create(&hwm_path) {
+                    let st = server.state.read().await;
+                    let state_hash = ultradag_coin::consensus::compute_state_root(&st.snapshot());
+                    drop(st);
+                    hwm.update(last_fin, state_hash);
+                    if let Err(e) = hwm.save(&hwm_path) {
+                        warn!("Failed to save high-water mark: {}", e);
+                    }
+                }
+            }
+
             info!("State persisted at round {}", dag_round);
         }
     }

@@ -68,11 +68,36 @@ docker-compose up -d
 
 **[Full Docker Guide →](./docs/getting-started/docker-guide.md)**
 
+### Running a Validator
+
+The fastest way to get a validator running on testnet:
+
+```bash
+# Step 1: Generate a keypair
+curl https://ultradag-node-1.fly.dev/keygen
+
+# Step 2: Get testnet UDAG (100,000 UDAG for staking)
+curl -X POST https://ultradag-node-1.fly.dev/faucet \
+  -H "Content-Type: application/json" \
+  -d '{"address":"<your-address>","amount":10000000000000}'
+
+# Step 3: Run your validator node (auto-stakes 10,000 UDAG on startup)
+cargo run --release -p ultradag-node -- \
+  --port 9333 --validate \
+  --pkey <your-secret-key> \
+  --auto-stake 10000
+```
+
+The `--pkey` flag lets you bring your own Ed25519 private key (64-char hex) instead of auto-generating one. The `--auto-stake` flag automatically submits a stake transaction after the node syncs with the network.
+
 ### From Source
 
 ```bash
 # Run a validator node (RPC on port 10333)
 cargo run --release -p ultradag-node -- --port 9333 --validate
+
+# Bring your own key
+cargo run --release -p ultradag-node -- --port 9333 --validate --pkey <hex-secret-key>
 
 # Connect a second validator
 cargo run --release -p ultradag-node -- --port 9334 --seed 127.0.0.1:9333 --validate
@@ -201,7 +226,7 @@ HTTP RPC runs on P2P port + 1000 (e.g., P2P 9333 → RPC 10333).
 cargo test --workspace --release
 ```
 
-**394 tests passing** (all pass, none ignored)
+**480 tests passing** (all pass, none ignored)
 
 - ultradag-coin: 116 unit + 241 integration tests
 - ultradag-network: 25 unit + 12 integration tests

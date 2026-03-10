@@ -4,12 +4,12 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, Mutex, Notify, RwLock};
 use tokio::time::Instant;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use std::path::PathBuf;
 
 use ultradag_coin::{BlockDag, DagVertex, FinalityTracker, Mempool, SecretKey, StateEngine, Transaction, sync_epoch_validators};
-use ultradag_coin::consensus::dag::DagInsertError;
+use ultradag_coin::consensus::dag::{DagInsertError, MAX_PARENTS};
 
 use crate::peer::{split_connection, PeerReader, PeerRegistry};
 use crate::protocol::Message;
@@ -22,7 +22,6 @@ const PROTOCOL_VERSION: u32 = 1;
 const MAX_CONNECTIONS_PER_IP: usize = 3;
 
 /// Maximum number of suffix vertices to include in a GetCheckpoint response.
-#[allow(dead_code)]
 const MAX_CHECKPOINT_SUFFIX_VERTICES: usize = 500;
 
 /// Maximum orphan buffer size in bytes (50MB).
@@ -643,7 +642,12 @@ async fn handle_peer(
         tokio::task::yield_now().await;
 
         match msg {
-            Message::Hello { version: _, height, listen_port } => {
+            Message::Hello { version, height, listen_port } => {
+                if version != PROTOCOL_VERSION {
+                    warn!("Peer {} sent Hello with unsupported protocol version {} (expected {}), disconnecting",
+                        peer_addr, version, PROTOCOL_VERSION);
+                    return Ok(());
+                }
                 let our_round = dag.read().await.current_round();
                 peers
                     .send_to(&peer_addr, &Message::HelloAck {
@@ -791,6 +795,10 @@ async fn handle_peer(
                         }
                         continue;
                     }
+                    Err(DagInsertError::TooManyParents) => {
+                        warn!("Rejected vertex from {} with too many parents (>{MAX_PARENTS})", peer_addr);
+                        continue;
+                    }
                     Err(DagInsertError::MissingParents(missing)) => {
                         warn!(
                             "Orphaned vertex {} round={} from {} — missing {} parents, buffering",
@@ -826,8 +834,8 @@ async fn handle_peer(
                         peer_addr,
                     );
 
-                    // Check finality and apply to state (multi-pass for parent finality guarantee)
-                    {
+                    // Check finality (multi-pass for parent finality guarantee)
+                    let (all_finalized, finalized_vertices) = {
                         let mut fin = finality.write().await;
                         fin.register_validator(validator);
                         let dag_r = dag.read().await;
@@ -841,36 +849,37 @@ async fn handle_peer(
                             all_finalized.extend(newly_finalized);
                         }
 
-                        if !all_finalized.is_empty() {
-                            info!("DAG-BFT finalized {} vertices", all_finalized.len());
+                        let finalized_vertices: Vec<DagVertex> = all_finalized
+                            .iter()
+                            .filter_map(|h| dag_r.get(h).cloned())
+                            .collect();
+                        // Drop finality + dag locks before state application
+                        (all_finalized, finalized_vertices)
+                    };
 
-                            let finalized_vertices: Vec<DagVertex> = all_finalized
-                                .iter()
-                                .filter_map(|h| dag_r.get(h).cloned())
-                                .collect();
+                    if !all_finalized.is_empty() {
+                        info!("DAG-BFT finalized {} vertices", all_finalized.len());
 
-                            drop(dag_r);
-
-                            let mut state_w = state.write().await;
-                            let prev_round = state_w.last_finalized_round();
-                            if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
-                                warn!("Failed to apply finalized vertices to state: {}", e);
-                            } else {
-                                // Epoch transition: sync active validator set to FinalityTracker
-                                if state_w.epoch_just_changed(prev_round) {
-                                    sync_epoch_validators(&mut fin, &state_w);
-                                    info!("Epoch transition to epoch {} — active set: {} validators",
-                                        state_w.current_epoch(), state_w.active_validators().len());
-                                }
-                                let mut mp = mempool.write().await;
-                                for v in &finalized_vertices {
-                                    for tx in &v.block.transactions {
-                                        mp.remove(&tx.hash());
-                                    }
+                        let mut state_w = state.write().await;
+                        let prev_round = state_w.last_finalized_round();
+                        if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
+                            warn!("Failed to apply finalized vertices to state: {}", e);
+                        } else {
+                            // Epoch transition: sync active validator set to FinalityTracker
+                            if state_w.epoch_just_changed(prev_round) {
+                                let mut fin = finality.write().await;
+                                sync_epoch_validators(&mut fin, &state_w);
+                                info!("Epoch transition to epoch {} — active set: {} validators",
+                                    state_w.current_epoch(), state_w.active_validators().len());
+                            }
+                            let mut mp = mempool.write().await;
+                            for v in &finalized_vertices {
+                                for tx in &v.block.transactions {
+                                    mp.remove(&tx.hash());
                                 }
                             }
-                            drop(state_w);
                         }
+                        drop(state_w);
                     }
 
                     peers.broadcast(&Message::DagProposal(vertex), &peer_addr).await;
@@ -886,12 +895,15 @@ async fn handle_peer(
                     warn!("GetDagVertices: DAG lock contended, skipping for {}", peer_addr);
                     continue;
                 };
+                // Cap max_count to prevent CPU exhaustion from huge range iterations
+                let capped_count = (max_count as usize).min(500);
+                let end_round = from_round.saturating_add(capped_count as u64);
                 let mut vertices = Vec::new();
-                for round in from_round..from_round + max_count as u64 {
+                for round in from_round..end_round {
                     for v in dag_r.vertices_in_round(round) {
                         vertices.push(v.clone());
                     }
-                    if vertices.len() >= max_count as usize {
+                    if vertices.len() >= capped_count {
                         break;
                     }
                 }
@@ -925,6 +937,9 @@ async fn handle_peer(
                             Err(DagInsertError::MissingParents(missing)) => {
                                 all_missing_parents.extend(&missing);
                                 failed_vertices.push((hash, vertex));
+                            }
+                            Err(DagInsertError::TooManyParents) => {
+                                // Silently reject
                             }
                             Err(DagInsertError::Equivocation { .. }) => {
                                 warn!(
@@ -1010,7 +1025,8 @@ async fn handle_peer(
             }
 
             Message::GetPeers => {
-                let known = peers.known_peers().await;
+                let mut known = peers.known_peers().await;
+                known.truncate(100); // Cap response size to prevent topology leakage
                 peers.send_to(&peer_addr, &Message::Peers(known)).await?;
             }
 
@@ -1144,7 +1160,17 @@ async fn handle_peer(
                     continue;
                 }
 
-                // 2. Verify our own state_root matches
+                // 2. Reject stale checkpoints — we've moved past this round,
+                // our current state includes later vertices so state_root won't match
+                if checkpoint.round < our_finalized {
+                    debug!(
+                        "Ignoring stale checkpoint for round {} (our finalized={})",
+                        checkpoint.round, our_finalized
+                    );
+                    continue;
+                }
+
+                // checkpoint.round == our_finalized: verify our state_root matches
                 let our_snapshot = state.read().await.snapshot();
                 let our_root = ultradag_coin::consensus::compute_state_root(&our_snapshot);
                 if our_root != checkpoint.state_root {
@@ -1180,10 +1206,18 @@ async fn handle_peer(
                     checkpoint_metrics.record_checkpoint_cosigned(checkpoint.signatures.len() as u64);
                 }
 
-                // 5. Store as pending (waiting for quorum)
+                // 5. Store as pending (waiting for quorum), with eviction cap
                 let round = checkpoint.round;
                 let mut pending = pending_checkpoints.write().await;
                 pending.insert(round, checkpoint);
+                // Evict oldest pending checkpoints if over cap
+                while pending.len() > 10 {
+                    if let Some(&oldest) = pending.keys().min() {
+                        pending.remove(&oldest);
+                    } else {
+                        break;
+                    }
+                }
                 checkpoint_metrics.update_pending_checkpoints_count(pending.len() as u64);
                 drop(pending);
 
@@ -1289,9 +1323,12 @@ async fn handle_peer(
                     };
                     let current_round = dag_r.current_round();
                     let mut suffix_vertices = Vec::new();
-                    for r in checkpoint.round..=current_round {
+                    'outer: for r in checkpoint.round..=current_round {
                         for vertex in dag_r.vertices_in_round(r) {
                             suffix_vertices.push(vertex.clone());
+                            if suffix_vertices.len() >= MAX_CHECKPOINT_SUFFIX_VERTICES {
+                                break 'outer;
+                            }
                         }
                     }
                     drop(dag_r);
@@ -1358,6 +1395,16 @@ async fn handle_peer(
                 {
                     let mut state_w = state.write().await;
                     state_w.load_snapshot(state_at_checkpoint);
+                }
+
+                // Clear mempool — old transactions may reference stale nonces/balances
+                {
+                    let mut mp = mempool.write().await;
+                    let cleared = mp.len();
+                    mp.clear();
+                    if cleared > 0 {
+                        info!("CheckpointSync: cleared {} stale mempool transactions", cleared);
+                    }
                 }
 
                 // Fix 3: Insert suffix vertices with signature verification

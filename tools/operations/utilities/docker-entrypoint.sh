@@ -1,18 +1,14 @@
 #!/bin/sh
 set -e
 
-# Always remove high-water mark on startup — it causes crash loops after
-# redeployments because the network advances while the node is down.
-# The node will catch up via P2P sync from its persisted state.
-rm -f "${DATA_DIR:-/data}/high_water_mark.json"
-
 # Clean state on startup if requested (for fresh testnet resets)
 if [ "${CLEAN_STATE:-}" = "true" ] || [ "${CLEAN_STATE:-}" = "1" ]; then
   echo "CLEAN_STATE: removing persisted state files..."
-  # Remove DAG/state data but keep validator.key (node identity must survive resets
-  # so addresses continue to match the permissioned validator allowlist)
+  # Remove DAG/state data and high-water mark, but keep validator.key
+  # (node identity must survive resets so addresses match the permissioned validator allowlist)
   rm -f "${DATA_DIR:-/data}/dag.json" "${DATA_DIR:-/data}/finality.json" \
-        "${DATA_DIR:-/data}/state.json" "${DATA_DIR:-/data}/mempool.json"
+        "${DATA_DIR:-/data}/state.json" "${DATA_DIR:-/data}/mempool.json" \
+        "${DATA_DIR:-/data}/high_water_mark.json"
 fi
 
 ARGS="--port ${PORT:-9333} --rpc-port ${RPC_PORT:-10333} --data-dir ${DATA_DIR:-/data} --validate"

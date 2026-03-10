@@ -9,8 +9,7 @@
 ## 🚨 Emergency Contacts
 
 **Core Team:**
-- Primary: [Contact info]
-- Secondary: [Contact info]
+- Primary: info@ultradag.com
 
 **Validator Coordination:**
 - Telegram: @ultra_dag

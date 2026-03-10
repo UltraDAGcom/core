@@ -101,6 +101,11 @@ impl Mempool {
         self.txs.is_empty()
     }
 
+    /// Remove all transactions from the mempool.
+    pub fn clear(&mut self) {
+        self.txs.clear();
+    }
+
     /// Check if a transaction is in the pool.
     pub fn contains(&self, hash: &[u8; 32]) -> bool {
         self.txs.contains_key(hash)

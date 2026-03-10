@@ -75,6 +75,17 @@ struct Args {
     /// Skip fast-sync on startup. Use local state only.
     #[arg(long)]
     skip_fast_sync: bool,
+
+    /// Validator private key (64-char hex). Use instead of auto-generated key.
+    /// Overrides any key saved in data_dir/validator.key.
+    #[arg(long)]
+    pkey: Option<String>,
+
+    /// Auto-stake this many UDAG after startup and sync.
+    /// Submits a stake transaction if balance is sufficient and not already staked.
+    /// Example: --auto-stake 10000 stakes 10,000 UDAG.
+    #[arg(long)]
+    auto_stake: Option<u64>,
 }
 
 fn default_data_dir() -> String {
@@ -279,9 +290,23 @@ async fn main() {
     let data_dir = PathBuf::from(&args.data_dir);
     std::fs::create_dir_all(&data_dir).expect("Failed to create data directory");
 
-    // Load or generate validator keypair (persisted to data_dir/validator.key)
+    // Load validator keypair: --pkey flag > disk > generate new
     let key_path = data_dir.join("validator.key");
-    let validator_sk = if key_path.exists() {
+    let validator_sk = if let Some(ref pkey_hex) = args.pkey {
+        let pkey_hex = pkey_hex.trim();
+        if pkey_hex.len() != 64 || !pkey_hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            error!("--pkey must be exactly 64 hex characters");
+            std::process::exit(1);
+        }
+        let mut bytes = [0u8; 32];
+        for (i, chunk) in pkey_hex.as_bytes().chunks(2).enumerate() {
+            bytes[i] = u8::from_str_radix(std::str::from_utf8(chunk).unwrap(), 16).unwrap();
+        }
+        let sk = SecretKey::from_bytes(bytes);
+        info!("Using validator keypair from --pkey:");
+        info!("  Address: {}", sk.address().to_hex());
+        sk
+    } else if key_path.exists() {
         let hex = std::fs::read_to_string(&key_path).expect("Failed to read validator key");
         let hex = hex.trim();
         let mut bytes = [0u8; 32];
@@ -503,6 +528,93 @@ async fn main() {
         });
     } else {
         info!("Fast-sync disabled (--skip-fast-sync)");
+    }
+
+    // Auto-stake: submit a stake transaction after sync if requested
+    if let Some(auto_stake_udag) = args.auto_stake {
+        let auto_stake_sats = auto_stake_udag.saturating_mul(100_000_000);
+        let server_clone = server.clone();
+        let auto_sk = validator_sk.clone();
+        tokio::spawn(async move {
+            // Wait for fast-sync and peer connections to settle
+            tokio::time::sleep(Duration::from_secs(20)).await;
+
+            let sender = auto_sk.address();
+
+            // Check if already staked
+            {
+                let state = server_clone.state.read().await;
+                let current_stake = state.stake_of(&sender);
+                if current_stake >= ultradag_coin::MIN_STAKE_SATS {
+                    info!("Auto-stake: already staked {} UDAG, skipping",
+                        current_stake / 100_000_000);
+                    return;
+                }
+            }
+
+            // Check balance
+            let (balance, nonce) = {
+                let state = server_clone.state.read().await;
+                (state.balance(&sender), state.nonce(&sender))
+            };
+
+            let total_needed = auto_stake_sats.saturating_add(ultradag_coin::constants::MIN_FEE_SATS);
+            if balance < total_needed {
+                warn!("Auto-stake: balance {} UDAG insufficient for stake of {} UDAG (need {} sats incl. fee, have {} sats)",
+                    balance / 100_000_000,
+                    auto_stake_udag,
+                    total_needed,
+                    balance);
+                return;
+            }
+
+            // Check minimum stake
+            if auto_stake_sats < ultradag_coin::MIN_STAKE_SATS {
+                warn!("Auto-stake: {} UDAG below minimum stake of {} UDAG",
+                    auto_stake_udag,
+                    ultradag_coin::MIN_STAKE_SATS / 100_000_000);
+                return;
+            }
+
+            // Build and submit stake transaction
+            let nonce = {
+                let mp = server_clone.mempool.read().await;
+                match mp.pending_nonce(&sender) {
+                    Some(max_pending) => max_pending + 1,
+                    None => nonce,
+                }
+            };
+
+            let mut stake_tx = ultradag_coin::StakeTx {
+                from: sender,
+                amount: auto_stake_sats,
+                nonce,
+                pub_key: auto_sk.verifying_key().to_bytes(),
+                signature: ultradag_coin::Signature([0u8; 64]),
+            };
+            stake_tx.signature = auto_sk.sign(&stake_tx.signable_bytes());
+            let tx = ultradag_coin::Transaction::Stake(stake_tx);
+
+            {
+                let mut mp = server_clone.mempool.write().await;
+                if !mp.insert(tx.clone()) {
+                    warn!("Auto-stake: failed to insert stake tx into mempool");
+                    return;
+                }
+            }
+
+            // Broadcast to peers
+            server_clone.peers.broadcast(&ultradag_network::Message::NewTx(tx.clone()), "").await;
+            let _ = server_clone.tx_tx.send(tx);
+
+            let current_epoch = {
+                let state = server_clone.state.read().await;
+                state.current_epoch()
+            };
+            let next_epoch_round = (current_epoch + 1) * ultradag_coin::constants::EPOCH_LENGTH_ROUNDS;
+            info!("Auto-stake: submitted stake of {} UDAG, will be active at next epoch boundary (round {})",
+                auto_stake_udag, next_epoch_round);
+        });
     }
 
     // Start validator loop

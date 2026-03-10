@@ -173,13 +173,13 @@ impl StateEngine {
         // Supply cap enforcement
         let max_supply = crate::constants::MAX_SUPPLY_SATS;
         let mut capped_reward = validator_reward;
-        if snapshot.total_supply + capped_reward > max_supply {
+        if snapshot.total_supply.saturating_add(capped_reward) > max_supply {
             capped_reward = max_supply.saturating_sub(snapshot.total_supply);
         }
-        snapshot.total_supply += capped_reward;
+        snapshot.total_supply = snapshot.total_supply.saturating_add(capped_reward);
 
         // Credit proposer: capped block reward + fees
-        snapshot.credit(proposer, capped_reward + total_fees);
+        snapshot.credit(proposer, capped_reward.saturating_add(total_fees));
 
         // Apply transactions
         for tx in &vertex.block.transactions {
@@ -222,7 +222,7 @@ impl StateEngine {
                     snapshot.debit(&stake_tx.from, stake_tx.amount);
                     // Credit stake account
                     let stake = snapshot.stake_accounts.entry(stake_tx.from).or_default();
-                    stake.staked += stake_tx.amount;
+                    stake.staked = stake.staked.saturating_add(stake_tx.amount);
                     stake.unlock_at_round = None;
                     // Increment nonce
                     snapshot.increment_nonce(&stake_tx.from);
@@ -409,10 +409,10 @@ impl StateEngine {
         self.debit(&tx.from, tx.amount);
         // Credit stake account
         let stake = self.stake_accounts.entry(tx.from).or_default();
-        stake.staked += tx.amount;
+        stake.staked = stake.staked.saturating_add(tx.amount);
         stake.unlock_at_round = None;
         // Increment nonce
-        self.accounts.entry(tx.from).or_default().nonce += 1;
+        self.increment_nonce(&tx.from);
         Ok(())
     }
 
@@ -441,8 +441,8 @@ impl StateEngine {
             return Err(CoinError::AlreadyUnstaking);
         }
         // Begin cooldown
-        stake.unlock_at_round = Some(current_round + UNSTAKE_COOLDOWN_ROUNDS);
-        self.accounts.entry(tx.from).or_default().nonce += 1;
+        stake.unlock_at_round = Some(current_round.saturating_add(UNSTAKE_COOLDOWN_ROUNDS));
+        self.increment_nonce(&tx.from);
         Ok(())
     }
 
@@ -458,10 +458,11 @@ impl StateEngine {
             }
         }
         for (addr, amount) in to_return {
-            let stake = self.stake_accounts.get_mut(&addr).unwrap();
-            stake.staked = 0;
-            stake.unlock_at_round = None;
-            self.credit(&addr, amount);
+            if let Some(stake) = self.stake_accounts.get_mut(&addr) {
+                stake.staked = 0;
+                stake.unlock_at_round = None;
+                self.credit(&addr, amount);
+            }
         }
     }
 
@@ -476,8 +477,8 @@ impl StateEngine {
     pub fn slash(&mut self, addr: &Address) {
         const SLASH_PERCENTAGE: u64 = 50;
         if let Some(stake) = self.stake_accounts.get_mut(addr) {
-            let slash_amount = stake.staked * SLASH_PERCENTAGE / 100;
-            stake.staked -= slash_amount;
+            let slash_amount = stake.staked.saturating_mul(SLASH_PERCENTAGE) / 100;
+            stake.staked = stake.staked.saturating_sub(slash_amount);
             // Slashed amount is burned (not credited anywhere)
             self.total_supply = self.total_supply.saturating_sub(slash_amount);
             // Immediately remove from active set if below minimum stake
@@ -513,7 +514,7 @@ impl StateEngine {
 
     fn credit(&mut self, address: &Address, amount: u64) {
         let account = self.accounts.entry(*address).or_default();
-        account.balance += amount;
+        account.balance = account.balance.saturating_add(amount);
     }
 
     fn debit(&mut self, address: &Address, amount: u64) {
@@ -523,7 +524,7 @@ impl StateEngine {
 
     fn increment_nonce(&mut self, address: &Address) {
         let account = self.accounts.entry(*address).or_default();
-        account.nonce += 1;
+        account.nonce = account.nonce.saturating_add(1);
     }
 
     // ========================================
@@ -606,7 +607,7 @@ impl StateEngine {
             description: tx.description.clone(),
             proposal_type: tx.proposal_type.clone(),
             voting_starts: current_round,
-            voting_ends: current_round + crate::constants::GOVERNANCE_VOTING_PERIOD_ROUNDS,
+            voting_ends: current_round.saturating_add(crate::constants::GOVERNANCE_VOTING_PERIOD_ROUNDS),
             votes_for: 0,
             votes_against: 0,
             status: crate::governance::ProposalStatus::Active,
@@ -616,7 +617,7 @@ impl StateEngine {
         self.proposals.insert(tx.proposal_id, proposal);
 
         // 13. Increment next_proposal_id
-        self.next_proposal_id += 1;
+        self.next_proposal_id = self.next_proposal_id.saturating_add(1);
 
         Ok(())
     }
@@ -660,8 +661,11 @@ impl StateEngine {
             return Err(CoinError::AlreadyVoted);
         }
 
-        // 7. Get voter's staked amount — this is the vote weight
-        let vote_weight = self.stake_of(&tx.from);
+        // 7. Get voter's staked amount — this is the vote weight.
+        // Exclude unstaking addresses: validators in cooldown should not influence governance.
+        let vote_weight = self.stake_accounts.get(&tx.from)
+            .filter(|s| s.unlock_at_round.is_none())
+            .map_or(0, |s| s.staked);
 
         // 8. Deduct fee from voter balance
         let balance = self.balance(&tx.from);
@@ -678,11 +682,13 @@ impl StateEngine {
         self.increment_nonce(&tx.from);
 
         // 10. Add vote weight to proposal.votes_for or votes_against
-        let proposal = self.proposals.get_mut(&tx.proposal_id).unwrap();
+        // Safety: proposal existence was checked at step 4 above; no mutations remove proposals.
+        let proposal = self.proposals.get_mut(&tx.proposal_id)
+            .ok_or(CoinError::ProposalNotFound)?;
         if tx.vote {
-            proposal.votes_for += vote_weight;
+            proposal.votes_for = proposal.votes_for.saturating_add(vote_weight);
         } else {
-            proposal.votes_against += vote_weight;
+            proposal.votes_against = proposal.votes_against.saturating_add(vote_weight);
         }
 
         // 11. Insert (proposal_id, from) -> vote into self.votes
@@ -696,22 +702,28 @@ impl StateEngine {
     pub fn tick_governance(&mut self, current_round: u64) {
         let total_staked = self.total_staked();
         let mut to_update = vec![];
-        
+
         for (id, proposal) in &self.proposals {
-            if matches!(proposal.status, crate::governance::ProposalStatus::Active)
-                && current_round > proposal.voting_ends
-            {
-                let new_status = if proposal.has_passed(total_staked) {
-                    crate::governance::ProposalStatus::PassedPending {
-                        execute_at_round: current_round + crate::constants::GOVERNANCE_EXECUTION_DELAY_ROUNDS,
-                    }
-                } else {
-                    crate::governance::ProposalStatus::Rejected
-                };
-                to_update.push((*id, new_status));
+            match &proposal.status {
+                crate::governance::ProposalStatus::Active if current_round > proposal.voting_ends => {
+                    let new_status = if proposal.has_passed(total_staked) {
+                        crate::governance::ProposalStatus::PassedPending {
+                            execute_at_round: current_round.saturating_add(crate::constants::GOVERNANCE_EXECUTION_DELAY_ROUNDS),
+                        }
+                    } else {
+                        crate::governance::ProposalStatus::Rejected
+                    };
+                    to_update.push((*id, new_status));
+                }
+                crate::governance::ProposalStatus::PassedPending { execute_at_round }
+                    if current_round >= *execute_at_round =>
+                {
+                    to_update.push((*id, crate::governance::ProposalStatus::Executed));
+                }
+                _ => {}
             }
         }
-        
+
         for (id, status) in to_update {
             if let Some(p) = self.proposals.get_mut(&id) {
                 p.status = status;

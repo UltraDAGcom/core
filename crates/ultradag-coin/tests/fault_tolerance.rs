@@ -189,6 +189,9 @@ fn test_byzantine_equivocator_detected_and_rejected() {
             ultradag_coin::consensus::dag::DagInsertError::MissingParents(_) => {
                 panic!("Unexpected MissingParents error");
             }
+            ultradag_coin::consensus::dag::DagInsertError::TooManyParents => {
+                panic!("Unexpected TooManyParents error");
+            }
         }
     }
     

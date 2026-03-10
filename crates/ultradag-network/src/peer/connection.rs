@@ -2,8 +2,12 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::Mutex;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::protocol::{Message, MAX_MESSAGE_SIZE};
+
+/// Timeout for reading a complete message from a peer (prevents slowloris).
+const READ_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Read half of a peer connection.
 pub struct PeerReader {
@@ -24,7 +28,14 @@ impl PeerReader {
     }
 
     /// Receive a message from this peer.
+    /// Applies a read timeout to prevent slowloris-style attacks.
     pub async fn recv(&mut self) -> std::io::Result<Message> {
+        tokio::time::timeout(READ_TIMEOUT, self.recv_inner())
+            .await
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "read timeout"))?
+    }
+
+    async fn recv_inner(&mut self) -> std::io::Result<Message> {
         // Read 4-byte length prefix
         let mut len_buf = [0u8; 4];
         self.reader.read_exact(&mut len_buf).await?;

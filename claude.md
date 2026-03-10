@@ -35,6 +35,12 @@
 - **HWM timing safety** — High-water mark update moved from finality block (every finality advance) to persistence block (every 10 rounds, after state files saved). Prevents HWM racing ahead of persisted state, which could cause crash loops.
 - **Docker entrypoint HWM preservation** — Removed unconditional `rm -f high_water_mark.json` on every startup. HWM now only removed during `CLEAN_STATE` resets, preserving monotonicity protection across normal restarts.
 
+**Validator Onboarding (March 10, 2026):**
+- Added `--pkey <hex>` flag: bring your own Ed25519 private key (64-char hex) instead of auto-generating
+- Added `--auto-stake <UDAG>` flag: automatically submit stake transaction after startup and sync
+- Key priority: `--pkey` > disk (`validator.key`) > generate new
+- Auto-stake waits 20s for sync, checks balance/existing stake, logs outcome clearly
+
 **Hardening Audit (March 10, 2026):**
 - **credit() overflow protection** — `credit()` in StateEngine now uses `saturating_add()` instead of unchecked `+=`. Prevents balance overflow breaking supply invariant.
 - **Vote weight overflow protection** — `votes_for` and `votes_against` now use `saturating_add()`. Prevents governance manipulation via vote counter overflow.
@@ -53,6 +59,10 @@
 - **Slash saturating arithmetic** — `slash()` now uses `saturating_mul()` and `saturating_sub()` for slash amount calculation.
 - **json_response panic prevention** — `serde_json::to_string_pretty()` now uses `unwrap_or_else` with error fallback instead of `unwrap()`.
 - **Governance execution transition** — `tick_governance()` now transitions `PassedPending` proposals to `Executed` when `execute_at_round` is reached.
+- **Complete saturating arithmetic** — All remaining unchecked arithmetic in StateEngine fixed: `total_supply +=` (line 179), `capped_reward + total_fees` (line 182), `stake.staked +=` in `apply_vertex` and `apply_stake_tx`, nonce increments, `next_proposal_id`, `voting_ends`, `execute_at_round`, unstake cooldown. Zero unchecked arithmetic remains in financial/counter paths.
+- **MAX_PARENTS validator-side cap** — Validator loop now truncates parents to `MAX_PARENTS` before calling `insert()`. Previously `try_insert()` (peer path) enforced the limit but `insert()` (local path) did not. Prevents local validator from producing oversized vertices.
+- **CheckpointSync mempool cleanup** — After `load_snapshot()` in CheckpointSync handler, mempool is now cleared. Old transactions referencing stale nonces/balances could cause invalid block production after fast-sync.
+- **Mempool::clear()** — Added `clear()` method to Mempool for bulk removal of all transactions.
 
 **Dashboard Fixes (March 9, 2026):**
 - Fixed faucet request: added missing `amount` field (`{address, amount: 10000000000}`)
@@ -527,6 +537,8 @@ pub struct NodeServer {
 --pruning-depth <N>        # Rounds to keep before pruning (default: 1000)
 --archive                  # Disable pruning, keep full history
 --skip-fast-sync           # Skip fast-sync on startup, use local state only
+--pkey <HEX>               # Validator private key (64-char hex). Overrides disk/auto-generated key.
+--auto-stake <UDAG>        # Auto-stake N UDAG after startup+sync. Skips if already staked or insufficient balance.
 ```
 
 ### Validator Loop (`validator.rs`)
@@ -580,14 +592,26 @@ if last_finalized_round > 0 && last_finalized_round % CHECKPOINT_INTERVAL == 0 {
 ### Node Startup Sequence
 
 1. Parse CLI arguments
-2. Create or load validator keypair
+2. Load validator keypair: `--pkey` flag > disk (`validator.key`) > generate new
 3. Initialize or load state from disk (DAG, finality, state, mempool)
 4. Apply permissioned validator allowlist if `--validator-key` specified
 5. Start NodeServer P2P listener on `--port`
 6. Connect to seed peers (`--seed`) or bootstrap nodes (unless `--no-bootstrap`)
-7. Start HTTP RPC server on `--rpc-port`
-8. Start validator loop if `--validate` enabled
-9. Install graceful shutdown handler (SIGTERM/SIGINT)
+7. Fast-sync from checkpoint (unless `--skip-fast-sync`)
+8. Auto-stake if `--auto-stake` provided (waits 20s for sync, checks balance/stake status)
+9. Start HTTP RPC server on `--rpc-port`
+10. Start validator loop if `--validate` enabled
+11. Install graceful shutdown handler (SIGTERM/SIGINT)
+
+### Auto-Stake Flow (`--auto-stake`)
+
+When `--auto-stake <UDAG>` is provided:
+1. Waits 20 seconds after startup for peer connections and fast-sync to settle
+2. Checks if validator address already has stake >= MIN_STAKE_SATS → skip if so
+3. Checks if balance >= (stake amount + MIN_FEE_SATS) → warn and skip if insufficient
+4. Checks if amount >= MIN_STAKE_SATS (10,000 UDAG) → warn and skip if below minimum
+5. Builds a signed `StakeTx`, inserts into mempool, broadcasts via P2P
+6. Logs: "Auto-stake: submitted stake of X UDAG, will be active at next epoch boundary (round Y)"
 
 ### HTTP RPC Server (`rpc.rs`)
 
@@ -674,6 +698,12 @@ cargo run --release -p ultradag-node -- --port 9333 --validate --pruning-depth 2
 
 # Archive mode (disable pruning, keep full history)
 cargo run --release -p ultradag-node -- --port 9333 --validate --archive
+
+# Bring your own key (64-char hex private key)
+cargo run --release -p ultradag-node -- --port 9333 --validate --pkey <hex-secret-key>
+
+# Full validator onboarding: own key + auto-stake 10,000 UDAG
+cargo run --release -p ultradag-node -- --port 9333 --validate --pkey <hex-secret-key> --auto-stake 10000
 
 # 4-node local testnet
 ./tools/operations/deployment/testnet/testnet-local.sh
@@ -1195,6 +1225,15 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 36. **Governance proposals never execute (March 10, 2026)** — `tick_governance()` only transitioned Active→PassedPending/Rejected. PassedPending proposals stayed in that state forever.
     - **Fix:** Added `PassedPending { execute_at_round }` → `Executed` transition when `current_round >= execute_at_round`
     - **Result:** Proposals complete their full lifecycle
+37. **Remaining unchecked arithmetic in StateEngine (March 10, 2026)** — 7 additional unchecked `+=` operations found in engine.rs: `total_supply`, `capped_reward + total_fees`, `stake.staked` (2 locations), nonce increments, `next_proposal_id`, governance round calculations.
+    - **Fix:** All changed to `saturating_add()` / `saturating_mul()`
+    - **Result:** Zero unchecked arithmetic in any financial or counter path
+38. **MAX_PARENTS bypass via local insert() (March 10, 2026)** — `try_insert()` (peer path) enforced MAX_PARENTS but `insert()` (local validator path) did not. Local validator could produce oversized vertices.
+    - **Fix:** Validator loop truncates parents to `MAX_PARENTS` before calling `insert()`
+    - **Result:** Both local and remote paths respect MAX_PARENTS limit
+39. **CheckpointSync stale mempool (March 10, 2026)** — After `load_snapshot()` in fast-sync, mempool retained transactions with stale nonces/balances. Could cause invalid block production.
+    - **Fix:** Clear mempool after applying checkpoint state snapshot
+    - **Result:** Clean mempool after fast-sync, no stale transaction interference
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.

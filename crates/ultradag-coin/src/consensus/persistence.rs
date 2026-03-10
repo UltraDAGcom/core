@@ -20,7 +20,7 @@ pub struct DagSnapshot {
     pub pruning_floor: u64,
     /// Permanent equivocation evidence store (survives pruning).
     #[serde(default)]
-    pub evidence_store: Vec<(Address, crate::consensus::dag::EquivocationEvidence)>,
+    pub evidence_store: Vec<(Address, Vec<crate::consensus::dag::EquivocationEvidence>)>,
 }
 
 impl DagSnapshot {

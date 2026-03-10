@@ -47,15 +47,19 @@ impl Proposal {
     }
 
     pub fn has_passed(&self, total_staked: u64) -> bool {
+        // Ceiling division for quorum: total_votes must be >= ceil(total_staked * 10 / 100)
         let quorum = total_staked
             .saturating_mul(GOVERNANCE_QUORUM_NUMERATOR)
+            .saturating_add(GOVERNANCE_QUORUM_DENOMINATOR - 1)
             / GOVERNANCE_QUORUM_DENOMINATOR;
         let total = self.total_votes();
         if total < quorum {
             return false;
         }
+        // Ceiling division for approval: votes_for must be >= ceil(total_votes * 66 / 100)
         let threshold = total
             .saturating_mul(GOVERNANCE_APPROVAL_NUMERATOR)
+            .saturating_add(GOVERNANCE_APPROVAL_DENOMINATOR - 1)
             / GOVERNANCE_APPROVAL_DENOMINATOR;
         self.votes_for >= threshold
     }

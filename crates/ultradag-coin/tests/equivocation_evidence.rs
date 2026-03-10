@@ -73,7 +73,7 @@ fn test_equivocation_evidence_survives_pruning() {
     assert!(dag.is_byzantine(&sk2.address()));
     let evidence = dag.get_permanent_evidence(&sk2.address());
     assert!(evidence.is_some(), "Permanent evidence should be stored");
-    let evidence = evidence.unwrap();
+    let evidence = &evidence.unwrap()[0];
     assert_eq!(evidence.validator, sk2.address());
     assert_eq!(evidence.round, 5);
 
@@ -85,7 +85,7 @@ fn test_equivocation_evidence_survives_pruning() {
     // Verify evidence still exists after pruning
     let evidence_after_prune = dag.get_permanent_evidence(&sk2.address());
     assert!(evidence_after_prune.is_some(), "Evidence should survive pruning");
-    let evidence_after = evidence_after_prune.unwrap();
+    let evidence_after = &evidence_after_prune.unwrap()[0];
     assert_eq!(evidence_after.validator, sk2.address());
     assert_eq!(evidence_after.round, 5);
     assert_eq!(evidence_after.vertex_hash_1, equivocating_v1.hash());
@@ -125,7 +125,7 @@ fn test_evidence_persists_across_save_load() {
     // Verify evidence survived save/load
     let evidence = loaded_dag.get_permanent_evidence(&sk2.address());
     assert!(evidence.is_some(), "Evidence should persist across save/load");
-    assert_eq!(evidence.unwrap().validator, sk2.address());
+    assert_eq!(evidence.unwrap()[0].validator, sk2.address());
     assert!(loaded_dag.is_byzantine(&sk2.address()));
 
     std::fs::remove_file(&path).ok();
