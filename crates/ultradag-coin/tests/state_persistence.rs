@@ -63,6 +63,7 @@ fn make_vertex_unique(
         validator: validator.address(),
         pub_key: validator.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        topo_level: 0,
     };
 
     vertex.signature = validator.sign(&vertex.signable_bytes());

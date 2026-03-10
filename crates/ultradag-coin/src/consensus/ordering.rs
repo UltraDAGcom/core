@@ -1,70 +1,30 @@
-use std::collections::HashSet;
-
 use crate::consensus::dag::BlockDag;
 use crate::consensus::vertex::DagVertex;
 
 /// Produces a deterministic total ordering of DAG vertices.
-/// Uses round number as primary key, then topological order within a round,
+/// Uses round number as primary key, then pre-computed topological level,
 /// then hash as final tiebreaker for determinism.
 ///
 /// # Performance
-/// O(N log N) for sorting, but O(N²) worst case due to ancestor traversal during comparison.
-/// Each `count_ancestors_in_set()` call traverses the full DAG via `dag.ancestors()`.
-/// For N finalized vertices, this can result in N² ancestor traversals.
-///
-/// **Impact:** Acceptable for small/medium DAGs (<5-10K vertices) and low finalization rates.
-/// Not the primary bottleneck (finality check optimization was P2, now complete).
-///
-/// **Future optimization (P3 - non-urgent):**
-/// - Memoize ancestor counts during sort (HashMap cache)
-/// - Pre-compute topological levels during finality collection
-/// - Incremental tracking similar to descendant validator counts
-///
-/// Estimated effort: 1-2 days when needed for high-throughput deployments.
+/// O(N log N) — single sort pass with O(1) per-comparison cost.
+/// Topological levels are pre-computed during DAG insertion.
 pub fn order_vertices<'a>(
     hashes: &[[u8; 32]],
     dag: &'a BlockDag,
 ) -> Vec<&'a DagVertex> {
-    let hash_set: HashSet<[u8; 32]> = hashes.iter().copied().collect();
-
     let mut vertices: Vec<&DagVertex> = hashes
         .iter()
         .filter_map(|h| dag.get(h))
         .collect();
 
-    // Sort by: (round, topological depth, hash)
+    // Sort by: (round, topo_level, hash)
     vertices.sort_by(|a, b| {
-        // Primary: round number
-        let round_cmp = a.round.cmp(&b.round);
-        if round_cmp != std::cmp::Ordering::Equal {
-            return round_cmp;
-        }
-
-        // Secondary: number of ancestors in the set (topological depth)
-        let depth_a = count_ancestors_in_set(&a.hash(), dag, &hash_set);
-        let depth_b = count_ancestors_in_set(&b.hash(), dag, &hash_set);
-        let depth_cmp = depth_a.cmp(&depth_b);
-        if depth_cmp != std::cmp::Ordering::Equal {
-            return depth_cmp;
-        }
-
-        // Tertiary: deterministic hash tiebreak
-        a.hash().cmp(&b.hash())
+        a.round.cmp(&b.round)
+            .then_with(|| a.topo_level.cmp(&b.topo_level))
+            .then_with(|| a.hash().cmp(&b.hash()))
     });
 
     vertices
-}
-
-/// Count how many of a vertex's ancestors are in the given set.
-fn count_ancestors_in_set(
-    hash: &[u8; 32],
-    dag: &BlockDag,
-    set: &HashSet<[u8; 32]>,
-) -> usize {
-    dag.ancestors(hash)
-        .iter()
-        .filter(|h| set.contains(*h))
-        .count()
 }
 
 #[cfg(test)]
@@ -163,5 +123,51 @@ mod tests {
         let dag = BlockDag::new();
         let ordered = order_vertices(&[], &dag);
         assert!(ordered.is_empty());
+    }
+
+    #[test]
+    fn topo_level_computed_on_insert() {
+        let mut dag = BlockDag::new();
+
+        // Genesis vertex (no real parents) -> topo_level 0
+        let v1 = make_vertex(1, 0, vec![], &SecretKey::generate());
+        let h1 = v1.hash();
+        dag.insert(v1);
+        assert_eq!(dag.get(&h1).unwrap().topo_level, 0);
+
+        // Child of v1 -> topo_level 1
+        let v2 = make_vertex(2, 1, vec![h1], &SecretKey::generate());
+        let h2 = v2.hash();
+        dag.insert(v2);
+        assert_eq!(dag.get(&h2).unwrap().topo_level, 1);
+
+        // Child of v2 -> topo_level 2
+        let v3 = make_vertex(3, 2, vec![h2], &SecretKey::generate());
+        let h3 = v3.hash();
+        dag.insert(v3);
+        assert_eq!(dag.get(&h3).unwrap().topo_level, 2);
+    }
+
+    #[test]
+    fn topo_level_takes_max_parent() {
+        let mut dag = BlockDag::new();
+
+        let v1 = make_vertex(1, 0, vec![], &SecretKey::generate());
+        let h1 = v1.hash();
+        dag.insert(v1);
+
+        let v2 = make_vertex(2, 1, vec![h1], &SecretKey::generate());
+        let h2 = v2.hash();
+        dag.insert(v2);
+
+        let v3 = make_vertex(3, 2, vec![h2], &SecretKey::generate());
+        let h3 = v3.hash();
+        dag.insert(v3);
+
+        // v4 has parents v1 (level 0) and v3 (level 2) -> max + 1 = 3
+        let v4 = make_vertex(4, 3, vec![h1, h3], &SecretKey::generate());
+        let h4 = v4.hash();
+        dag.insert(v4);
+        assert_eq!(dag.get(&h4).unwrap().topo_level, 3);
     }
 }

@@ -118,6 +118,23 @@ impl BlockDag {
             return false;
         }
 
+        // Compute topo_level: max(parent.topo_level) + 1
+        let mut max_parent_level: u64 = 0;
+        let genesis_topo: [u8; 32] = [0u8; 32];
+        for parent in &vertex.parent_hashes {
+            if *parent != genesis_topo {
+                if let Some(pv) = self.vertices.get(parent) {
+                    max_parent_level = max_parent_level.max(pv.topo_level);
+                }
+            }
+        }
+        let mut vertex = vertex;
+        vertex.topo_level = if vertex.parent_hashes.is_empty() || (vertex.parent_hashes.len() == 1 && vertex.parent_hashes[0] == genesis_topo) {
+            0
+        } else {
+            max_parent_level + 1
+        };
+
         // Update parent -> child edges
         for parent in &vertex.parent_hashes {
             self.children

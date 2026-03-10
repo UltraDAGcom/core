@@ -842,6 +842,23 @@ async fn handle_peer(
                             "Detected equivocation from validator {} in round {} (peer {})",
                             validator, round, peer_addr,
                         );
+                        
+                        // Execute slashing immediately
+                        let mut state_w = state.write().await;
+                        let stake_before = state_w.stake_of(&validator);
+                        state_w.slash(&validator);
+                        let stake_after = state_w.stake_of(&validator);
+                        let burned = stake_before.saturating_sub(stake_after);
+                        drop(state_w);
+                        
+                        warn!(
+                            "Slashed validator {}: burned {} UDAG for equivocation (stake: {} -> {})",
+                            validator.to_hex(),
+                            burned as f64 / 100_000_000.0,
+                            stake_before as f64 / 100_000_000.0,
+                            stake_after as f64 / 100_000_000.0
+                        );
+                        
                         let dag_w = dag.read().await;
                         if let Some([hash1, hash2]) = dag_w.get_equivocation_evidence(&validator, round) {
                             if let (Some(v1), Some(v2)) = (dag_w.get_including_equivocations(&hash1), dag_w.get_including_equivocations(&hash2)) {
@@ -994,6 +1011,7 @@ async fn handle_peer(
                 {
                     let mut dag_w = dag.write().await;
                     let mut equivocation_msgs: Vec<Message> = Vec::new();
+                    let mut equivocating_validators: Vec<ultradag_coin::Address> = Vec::new();
                     for vertex in filtered {
                         let validator = vertex.validator;
                         let hash = vertex.hash();
@@ -1016,6 +1034,7 @@ async fn handle_peer(
                                     "Equivocation in sync vertex from validator {} round {} (peer {})",
                                     validator, vertex.round, peer_addr,
                                 );
+                                equivocating_validators.push(validator);
                                 // Collect equivocation evidence for broadcast after loop
                                 // (don't break — remaining vertices may be legitimate)
                                 if let Some([h1, h2]) = dag_w.get_equivocation_evidence(&validator, vertex.round) {
@@ -1029,8 +1048,29 @@ async fn handle_peer(
                             }
                         }
                     }
-                    // Broadcast equivocation evidence after loop (outside dag write scope below)
                     drop(dag_w);
+                    
+                    // Execute slashing for all equivocating validators
+                    if !equivocating_validators.is_empty() {
+                        let mut state_w = state.write().await;
+                        for validator in equivocating_validators {
+                            let stake_before = state_w.stake_of(&validator);
+                            state_w.slash(&validator);
+                            let stake_after = state_w.stake_of(&validator);
+                            let burned = stake_before.saturating_sub(stake_after);
+                            
+                            warn!(
+                                "Slashed validator {}: burned {} UDAG for equivocation (stake: {} -> {})",
+                                validator.to_hex(),
+                                burned as f64 / 100_000_000.0,
+                                stake_before as f64 / 100_000_000.0,
+                                stake_after as f64 / 100_000_000.0
+                            );
+                        }
+                        drop(state_w);
+                    }
+                    
+                    // Broadcast equivocation evidence after loop
                     for msg in equivocation_msgs {
                         peers.broadcast(&msg, "").await;
                     }
@@ -1144,13 +1184,30 @@ async fn handle_peer(
                 let newly_marked = dag_w.process_equivocation_evidence(&vertex1, &vertex2);
                 
                 if newly_marked {
+                    let validator_addr = vertex1.validator;
                     warn!(
                         "Marked validator {} as Byzantine due to equivocation in round {} (evidence from {})",
-                        vertex1.validator, vertex1.round, peer_addr
+                        validator_addr, vertex1.round, peer_addr
+                    );
+                    
+                    // Execute slashing immediately
+                    drop(dag_w);
+                    let mut state_w = state.write().await;
+                    let stake_before = state_w.stake_of(&validator_addr);
+                    state_w.slash(&validator_addr);
+                    let stake_after = state_w.stake_of(&validator_addr);
+                    let burned = stake_before.saturating_sub(stake_after);
+                    drop(state_w);
+                    
+                    warn!(
+                        "Slashed validator {}: burned {} UDAG for equivocation (stake: {} -> {})",
+                        validator_addr.to_hex(),
+                        burned as f64 / 100_000_000.0,
+                        stake_before as f64 / 100_000_000.0,
+                        stake_after as f64 / 100_000_000.0
                     );
                     
                     // Broadcast evidence to all other peers
-                    drop(dag_w);
                     let evidence_msg = Message::EquivocationEvidence {
                         vertex1: vertex1.clone(),
                         vertex2: vertex2.clone(),

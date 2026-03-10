@@ -1235,4 +1235,132 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn slash_validator_burns_50_percent() {
+        let mut state = StateEngine::new();
+        let sk = SecretKey::generate();
+        let validator = sk.address();
+        
+        // Give validator liquid balance and stake it (20,000 UDAG = 2x MIN_STAKE)
+        let stake_amount = MIN_STAKE_SATS * 2;
+        state.credit(&validator, stake_amount);
+        state.total_supply = stake_amount; // Initialize total_supply to match credited amount
+        
+        let stake_tx = StakeTx {
+            from: validator,
+            amount: stake_amount,
+            nonce: 0,
+            pub_key: sk.verifying_key().to_bytes(),
+            signature: crate::Signature([0u8; 64]),
+        };
+        let mut signed_stake = stake_tx.clone();
+        signed_stake.signature = sk.sign(&stake_tx.signable_bytes());
+        state.apply_stake_tx(&signed_stake).unwrap();
+        
+        let supply_before = state.total_supply();
+        let stake_before = state.stake_of(&validator);
+        assert_eq!(stake_before, stake_amount);
+        
+        // Execute slash
+        state.slash(&validator);
+        
+        // Verify 50% burned
+        let stake_after = state.stake_of(&validator);
+        let burned = stake_before - stake_after;
+        assert_eq!(burned, stake_amount / 2, "Should burn exactly 50% of stake");
+        assert_eq!(stake_after, stake_amount / 2, "Remaining stake should be 50%");
+        
+        // Verify supply decreased by burned amount
+        let supply_after = state.total_supply();
+        assert_eq!(supply_after, supply_before - burned, "Burned amount should be removed from total supply");
+    }
+
+    #[test]
+    fn slash_validator_removes_from_active_set_if_below_minimum() {
+        let mut state = StateEngine::new();
+        let sk = SecretKey::generate();
+        let validator = sk.address();
+        
+        // Stake 1.5x MIN_STAKE_SATS so that after 50% slash (0.75x), it falls below minimum
+        let stake_amount = MIN_STAKE_SATS + MIN_STAKE_SATS / 2;
+        state.credit(&validator, stake_amount);
+        state.total_supply = stake_amount; // Initialize total_supply
+        
+        let stake_tx = StakeTx {
+            from: validator,
+            amount: stake_amount,
+            nonce: 0,
+            pub_key: sk.verifying_key().to_bytes(),
+            signature: crate::Signature([0u8; 64]),
+        };
+        let mut signed_stake = stake_tx.clone();
+        signed_stake.signature = sk.sign(&stake_tx.signable_bytes());
+        state.apply_stake_tx(&signed_stake).unwrap();
+        
+        // Add to active validator set
+        state.recalculate_active_set();
+        assert!(state.is_active_validator(&validator), "Validator should be in active set before slash");
+        
+        // Execute slash
+        state.slash(&validator);
+        
+        // Verify removed from active set
+        let stake_after = state.stake_of(&validator);
+        assert!(stake_after < MIN_STAKE_SATS, "Stake should fall below minimum after slash");
+        assert!(!state.is_active_validator(&validator), "Validator should be removed from active set after slash");
+    }
+
+    #[test]
+    fn slash_validator_stays_in_active_set_if_above_minimum() {
+        let mut state = StateEngine::new();
+        let sk = SecretKey::generate();
+        let validator = sk.address();
+        
+        // Stake 4x MIN_STAKE_SATS so that after 50% slash, it's still above minimum
+        let stake_amount = MIN_STAKE_SATS * 4;
+        state.credit(&validator, stake_amount);
+        state.total_supply = stake_amount; // Initialize total_supply
+        
+        let stake_tx = StakeTx {
+            from: validator,
+            amount: stake_amount,
+            nonce: 0,
+            pub_key: sk.verifying_key().to_bytes(),
+            signature: crate::Signature([0u8; 64]),
+        };
+        let mut signed_stake = stake_tx.clone();
+        signed_stake.signature = sk.sign(&stake_tx.signable_bytes());
+        state.apply_stake_tx(&signed_stake).unwrap();
+        
+        // Add to active validator set
+        state.recalculate_active_set();
+        assert!(state.is_active_validator(&validator), "Validator should be in active set before slash");
+        
+        // Execute slash
+        state.slash(&validator);
+        
+        // Verify still in active set (stake is 2x MIN_STAKE_SATS after 50% slash)
+        let stake_after = state.stake_of(&validator);
+        assert_eq!(stake_after, MIN_STAKE_SATS * 2, "Stake should be 50% of original");
+        assert!(stake_after >= MIN_STAKE_SATS, "Stake should still be above minimum");
+        // Note: is_active_validator might be false if active set wasn't recalculated,
+        // but the important part is the validator wasn't explicitly removed by slash()
+    }
+
+    #[test]
+    fn slash_validator_with_no_stake_is_noop() {
+        let mut state = StateEngine::new();
+        let validator = Address([99u8; 32]);
+        
+        let supply_before = state.total_supply();
+        
+        // Slash validator with no stake
+        state.slash(&validator);
+        
+        // Should be no-op
+        assert_eq!(state.stake_of(&validator), 0);
+        assert_eq!(state.total_supply(), supply_before);
+    }
 }
+

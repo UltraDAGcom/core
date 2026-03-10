@@ -20,6 +20,11 @@ pub struct DagVertex {
     pub pub_key: [u8; 32],
     /// Ed25519 signature over the vertex's signable bytes.
     pub signature: Signature,
+    /// Pre-computed topological level: max(parent.topo_level) + 1.
+    /// Used for O(N log N) deterministic ordering without ancestor traversal.
+    /// Derived data — not included in hash() or signable_bytes().
+    #[serde(default)]
+    pub topo_level: u64,
 }
 
 impl DagVertex {
@@ -38,6 +43,7 @@ impl DagVertex {
             validator,
             pub_key,
             signature,
+            topo_level: 0,
         }
     }
 
@@ -121,6 +127,7 @@ mod tests {
             validator: addr,
             pub_key: sk.verifying_key().to_bytes(),
             signature: Signature([0u8; 64]),
+            topo_level: 0,
         };
         v.signature = sk.sign(&v.signable_bytes());
         v
