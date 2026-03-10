@@ -12,6 +12,7 @@ use clap::Parser;
 use tracing::{info, warn, error};
 
 use ultradag_coin::{BlockDag, FinalityTracker, Mempool, SecretKey, StateEngine};
+use ultradag_coin::persistence::wal::FinalityWal;
 use ultradag_network::NodeServer;
 
 #[derive(Parser)]
@@ -377,6 +378,71 @@ async fn main() {
 
     // Load persisted state
     load_state(&server, &data_dir).await;
+
+    // Initialize WAL and replay any entries from last crash
+    match FinalityWal::open(&data_dir) {
+        Ok(wal) => {
+            // Replay WAL entries to recover state since last snapshot
+            match FinalityWal::replay(&data_dir) {
+                Ok((header, entries)) => {
+                    if !entries.is_empty() {
+                        info!("WAL: replaying {} entries from snapshot round {}", entries.len(), header.snapshot_round);
+                        let mut state_w = server.state.write().await;
+                        let mut replayed = 0;
+                        for entry in &entries {
+                            match state_w.apply_finalized_vertices(&entry.vertices) {
+                                Ok(()) => {
+                                    replayed += 1;
+                                    // Verify state root matches
+                                    let current_root = ultradag_coin::consensus::compute_state_root(&state_w.snapshot());
+                                    if current_root != entry.state_root {
+                                        warn!("WAL: state root mismatch at seq={}, stopping replay", entry.sequence);
+                                        break;
+                                    }
+                                }
+                                Err(e) => {
+                                    // Vertices may already be applied (idempotent replay)
+                                    warn!("WAL: entry seq={} apply error: {} (may be already applied)", entry.sequence, e);
+                                }
+                            }
+                        }
+                        drop(state_w);
+
+                        // Update finality tracker with replayed vertices
+                        if replayed > 0 {
+                            let last_entry = &entries[replayed - 1];
+                            let mut fin = server.finality.write().await;
+                            for entry in &entries[..replayed] {
+                                for v in &entry.vertices {
+                                    fin.mark_as_finalized(v.hash());
+                                    fin.register_validator(v.validator);
+                                }
+                            }
+                            fin.set_last_finalized_round(last_entry.finalized_round);
+                            drop(fin);
+
+                            // Insert vertices into DAG (idempotent)
+                            let mut dag_w = server.dag.write().await;
+                            for entry in &entries[..replayed] {
+                                for v in &entry.vertices {
+                                    dag_w.insert(v.clone());
+                                }
+                            }
+                            drop(dag_w);
+                        }
+
+                        info!("WAL: recovered {} entries, now at finalized round {}",
+                            replayed,
+                            entries.get(replayed.saturating_sub(1)).map(|e| e.finalized_round).unwrap_or(0));
+                    }
+                }
+                Err(e) => warn!("WAL: replay failed: {} (starting from snapshot)", e),
+            }
+            server.set_wal(wal);
+            info!("WAL: initialized at {}/wal.jsonl", data_dir.display());
+        }
+        Err(e) => warn!("WAL: failed to open: {} (crash recovery disabled)", e),
+    }
 
     // Load permissioned validator allowlist BEFORE rebuilding validator set from DAG.
     // This ensures the allowlist gates which validators get registered during rebuild.

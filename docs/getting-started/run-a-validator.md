@@ -225,10 +225,17 @@ Specify multiple seeds for redundancy:
 The `--data-dir` stores:
 - `state.json` — StateEngine snapshot
 - `dag.json` — Recent DAG vertices
+- `finality.json` — Finalized vertex hashes, validator set
+- `mempool.json` — Pending transactions
 - `monotonicity.json` — Round monotonicity tracker
+- `wal.jsonl` — Write-ahead log (finalized vertex batches for crash recovery)
+- `wal_header.json` — WAL metadata (snapshot round, sequence counter)
+
+**Crash recovery:** Between full snapshots (every 10 rounds), finalized vertex batches are appended to the WAL with fsync. On startup, any WAL entries since the last snapshot are replayed to recover lost state.
 
 **Backup strategy:**
-- State is checkpointed every 1,000 rounds
+- State is checkpointed every 100 finalized rounds
+- WAL ensures no finalized transactions are lost between snapshots
 - If data is lost, node will fast-sync from peers
 - No need for manual backups (testnet)
 

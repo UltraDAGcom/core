@@ -634,6 +634,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 
   <h3>12.3 Persistence</h3>
   <p>All node state is periodically saved to disk using atomic file operations (write to .tmp, then rename). State is saved every 10 rounds and on graceful shutdown.</p>
+  <p>A <strong>write-ahead log (WAL)</strong> records every finalized vertex batch between full snapshots. Each entry is fsync'd to disk before acknowledgement. On startup, WAL entries are replayed to recover any state lost between the last snapshot and a crash. The WAL is truncated after each successful full snapshot, keeping disk usage bounded.</p>
 
   <h3>12.4 Configured Validator Count</h3>
   <p>The <code>--validators N</code> flag fixes the quorum threshold at &lceil;2N/3&rceil; regardless of dynamic registrations. This prevents phantom validator inflation &mdash; a class of bugs where stale registrations raise the quorum beyond what active validators can satisfy.</p>

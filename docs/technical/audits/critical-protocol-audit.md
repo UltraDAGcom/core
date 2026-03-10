@@ -825,14 +825,16 @@ pub fn save<T: Serialize>(data: &T, path: &Path) -> Result<(), PersistenceError>
 
 ### Q: If state.json and dag.json become inconsistent, what happens?
 
-**ANSWER: UNDEFINED - No consistency check**
+**ANSWER: MITIGATED - Write-Ahead Log (WAL)**
 
 **Evidence**:
 - `main.rs:105-140` - Loads each file independently
-- No validation that state matches DAG
-- If state is 10 rounds ahead, inconsistency undetected
+- WAL (`wal.jsonl`) records every finalized vertex batch between full snapshots
+- On startup, WAL entries are replayed with state_root verification per entry
+- If state and DAG diverge due to a crash mid-snapshot, WAL replay brings them back into consistency
+- Each WAL entry includes a Blake3 state_root for integrity verification
 
-**Status**: ❌ MISSING - No consistency validation
+**Status**: ✅ MITIGATED - WAL provides crash recovery between snapshots
 
 ---
 

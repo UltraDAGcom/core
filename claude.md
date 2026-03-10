@@ -294,7 +294,7 @@ Three crates, strict layering:
 
 ```
 crates/
-  ultradag-coin/src/       # address/ block/ block_producer/ consensus/ state/ tx/ constants.rs error.rs
+  ultradag-coin/src/       # address/ block/ block_producer/ consensus/ persistence/ state/ tx/ constants.rs error.rs
   ultradag-network/src/    # protocol/ peer/ node/
   ultradag-node/src/       # main.rs validator.rs rpc.rs bin/loadtest.rs
 sdk/
@@ -365,8 +365,8 @@ site/
 - `checkpoint.rs` — `Checkpoint`: signed snapshots for fast-sync; includes `state_root`, `dag_tip`, `total_supply`, validator signatures; `sign()`, `verify()`, `is_accepted()` with quorum validation
 - `epoch.rs` — `sync_epoch_validators()`: synchronizes FinalityTracker with StateEngine's active validator set at epoch boundaries
 - `validator_set.rs` — `ValidatorSet`: tracks validator addresses, computes `quorum_threshold()` = ceil(2n/3), `has_quorum(count)` check, `configured_validators` field, permissioned allowlist with `set_allowed_validators()`
-- `ordering.rs` — `order_vertices()`: deterministic total ordering of finalized vertices
-- `persistence.rs` — `DagSnapshot`, `FinalitySnapshot`: serializable state for save/load
+- `ordering.rs` — `order_vertices()`: deterministic total ordering of finalized vertices (uses pre-computed `topo_level`)
+- `persistence.rs` — `DagSnapshot`, `FinalitySnapshot`: serializable state for save/load; `wal.rs` — `FinalityWal`: append-only crash recovery log
 
 ### State module layout (`ultradag-coin/src/state/`):
 - `engine.rs` — `StateEngine`: derives account state from finalized DAG vertices
@@ -631,25 +631,39 @@ if last_finalized_round > 0 && last_finalized_round % CHECKPOINT_INTERVAL == 0 {
 - `state.json` — Account balances, nonces, stake accounts, active validators, total supply
 - `mempool.json` — Pending transactions
 - `checkpoints/checkpoint_<round>.json` — Accepted checkpoints (every 100 finalized rounds)
+- `wal.jsonl` — Write-ahead log: append-only JSON Lines of finalized vertex batches
+- `wal_header.json` — WAL metadata: snapshot round, next sequence, snapshot state root
+
+**Write-Ahead Log (WAL):**
+- Records finalized vertex batches between full snapshots for crash recovery
+- Appended after every `apply_finalized_vertices` call (in both validator loop and P2P handlers)
+- Truncated after each successful full snapshot (every 10 rounds)
+- On startup, WAL entries are replayed: vertices re-applied to StateEngine, state_root verified per entry
+- Format: JSON Lines (`wal.jsonl`), one `WalEntry` per line (sequence, finalized_round, vertices, state_root)
+- Uses `fsync` for durability after each append
+- `std::sync::Mutex` (not tokio) since WAL writes are pure I/O with no await points
+- Implementation: `crates/ultradag-coin/src/persistence/wal.rs`
 
 **Persistence triggers:**
-- Every 10 rounds during validator loop
+- Every 10 rounds during validator loop (full snapshot + WAL truncation)
 - On graceful shutdown (SIGTERM/SIGINT)
 - Atomic write: `.tmp` file → rename (crash-safe)
+- WAL append: after every finality batch (crash recovery between snapshots)
 
 ### Node Startup Sequence
 
 1. Parse CLI arguments
 2. Load validator keypair: `--pkey` flag > disk (`validator.key`) > generate new
 3. Initialize or load state from disk (DAG, finality, state, mempool)
-4. Apply permissioned validator allowlist if `--validator-key` specified
-5. Start NodeServer P2P listener on `--port`
-6. Connect to seed peers (`--seed`) or bootstrap nodes (unless `--no-bootstrap`)
-7. Fast-sync from checkpoint (unless `--skip-fast-sync`)
-8. Auto-stake if `--auto-stake` provided (waits 20s for sync, checks balance/stake status)
-9. Start HTTP RPC server on `--rpc-port`
-10. Start validator loop if `--validate` enabled
-11. Install graceful shutdown handler (SIGTERM/SIGINT)
+4. Open WAL and replay any entries since last snapshot (crash recovery)
+5. Apply permissioned validator allowlist if `--validator-key` specified
+6. Start NodeServer P2P listener on `--port`
+7. Connect to seed peers (`--seed`) or bootstrap nodes (unless `--no-bootstrap`)
+8. Fast-sync from checkpoint (unless `--skip-fast-sync`)
+9. Auto-stake if `--auto-stake` provided (waits 20s for sync, checks balance/stake status)
+10. Start HTTP RPC server on `--rpc-port`
+11. Start validator loop if `--validate` enabled
+12. Install graceful shutdown handler (SIGTERM/SIGINT)
 
 ### Auto-Stake Flow (`--auto-stake`)
 
@@ -781,7 +795,7 @@ test result: ok. 557 passed; 0 failed; 0 ignored
 ```
 
 ### Test Breakdown by Crate:
-- **ultradag-coin**: 129 unit tests + 245 integration tests
+- **ultradag-coin**: 141 unit tests + 245 integration tests (includes 6 WAL tests)
 - **ultradag-network**: 25 unit tests + 12 integration tests
 
 ### Integration Test Files (ultradag-coin/tests/):
@@ -990,6 +1004,7 @@ let dag_round = {
 - Nodes survive restarts without data loss.
 - `#[serde(default)]` on stake_accounts, active_validator_set, current_epoch for backward compatibility.
 - Stale epoch detection on load: recalculates active set if persisted epoch doesn't match actual round.
+- **Write-ahead log (WAL)**: `FinalityWal` in `persistence/wal.rs` records finalized vertex batches between full snapshots. Replayed on startup for crash recovery. Truncated after each full snapshot.
 
 ## Faucet System
 
@@ -1475,34 +1490,17 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 
 **Status:** Production-ready for testnet. Checkpoint broadcasting and state proofs recommended before mainnet.
 
+### ✅ Vertex Ordering Optimization (P3 — COMPLETED)
+**Before:** `order_vertices()` used `count_ancestors_in_set()` calling `dag.ancestors(hash)` per vertex — O(N²).
+
+**After:** Pre-computed `topo_level` assigned during DAG insertion via BFS. Ordering uses `(round, topo_level, hash)` — O(N log N).
+
+**Implementation:**
+- Added `topo_level: u64` to `DagVertex` (max parent topo_level + 1, computed on insert)
+- `order_vertices()` sorts by `(round, topo_level, hash)` without any DAG traversal
+- Committed as a2ff09f
+
 ### Known Performance Limitations (Non-Critical)
-
-#### Vertex Ordering O(V²) Complexity
-**Location:** `crates/ultradag-coin/src/consensus/ordering.rs`
-
-**Current behavior:**
-- `order_vertices()` sorts finalized vertices by (round, topological_depth, hash)
-- `count_ancestors_in_set()` calls `dag.ancestors(hash)` for every vertex during comparison
-- When finalizing N vertices: O(N²) worst case (N vertices × N ancestor traversals)
-- Example: 500 finalized vertices = potentially 500 full DAG traversals
-
-**Performance impact:**
-- Small/medium DAGs (<5-10K vertices): acceptable
-- Low finalization rate (typical 2-3 rounds): minimal impact
-- Contributes to overall finality overhead but not the primary bottleneck
-
-**Future optimization (P3 - non-urgent):**
-1. **Memoization:** Cache ancestor counts during sort (simple HashMap)
-2. **Pre-computation:** Assign topological levels during finality collection
-3. **Incremental tracking:** Similar to descendant validator tracking
-
-**Why deferred:**
-- Not a bottleneck for IoT-scale workloads (target use case)
-- Finality check optimization (P2) was the critical path - now complete
-- DAG pruning (P1) is higher priority for mainnet readiness
-- Easy to optimize later without protocol changes
-
-**Estimated effort:** 1-2 days when needed.
 
 #### Equivocation Check O(vertices_in_round)
 **Location:** `crates/ultradag-coin/src/consensus/dag.rs:try_insert()`

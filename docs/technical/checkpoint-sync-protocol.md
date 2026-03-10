@@ -62,6 +62,20 @@ pub struct Checkpoint {
 
 **Loading:** On startup, node loads the latest checkpoint from disk
 
+### Write-Ahead Log (WAL)
+
+Between checkpoints and full snapshots, finalized vertex batches are recorded in `wal.jsonl` (append-only JSON Lines). Each entry contains the sequence number, finalized round, full vertices, and a Blake3 state_root for integrity verification. The WAL is fsync'd after each append for durability.
+
+**On startup:** WAL entries since the last snapshot are replayed, re-applying finalized vertices to the StateEngine. Each entry's state_root is verified during replay — a mismatch halts replay to prevent state corruption.
+
+**After full snapshot:** The WAL is truncated (header updated atomically, log file cleared). This keeps WAL disk usage bounded.
+
+**Crash recovery flow:**
+1. Load snapshot files (dag.json, state.json, finality.json, mempool.json)
+2. Open WAL and replay entries since last snapshot
+3. Verify state_root per entry to ensure consistency
+4. Resume normal operation with recovered state
+
 ## Fast-Sync Protocol
 
 ### Overview

@@ -395,6 +395,10 @@ curl http://localhost:10333/health/detailed | jq '.components.finality.finality_
 5. Syncs recent vertices after checkpoint
 6. Node is current in 30-120 seconds
 
+### What happens if a node crashes?
+
+Between full snapshots (every 10 rounds), every finalized vertex batch is recorded in a **write-ahead log (WAL)** (`wal.jsonl`). Each WAL entry is fsync'd to disk before the node proceeds. On restart, WAL entries since the last snapshot are replayed with state_root verification, recovering any finalized transactions that weren't captured in the last snapshot. This ensures no finalized work is lost, even during a crash between snapshots.
+
 ### What cryptography does UltraDAG use?
 
 | Purpose | Algorithm |

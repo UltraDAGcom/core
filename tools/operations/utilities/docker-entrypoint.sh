@@ -8,7 +8,8 @@ if [ "${CLEAN_STATE:-}" = "true" ] || [ "${CLEAN_STATE:-}" = "1" ]; then
   # (node identity must survive resets so addresses match the permissioned validator allowlist)
   rm -f "${DATA_DIR:-/data}/dag.json" "${DATA_DIR:-/data}/finality.json" \
         "${DATA_DIR:-/data}/state.json" "${DATA_DIR:-/data}/mempool.json" \
-        "${DATA_DIR:-/data}/high_water_mark.json"
+        "${DATA_DIR:-/data}/high_water_mark.json" \
+        "${DATA_DIR:-/data}/wal.jsonl" "${DATA_DIR:-/data}/wal_header.json"
 fi
 
 ARGS="--port ${PORT:-9333} --rpc-port ${RPC_PORT:-10333} --data-dir ${DATA_DIR:-/data} --validate"

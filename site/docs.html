@@ -440,9 +440,14 @@ fmt.Printf(<span class="str">"DAG round: %d\n"</span>, status.DagRound)</pre>
       <li><code>finality.json</code> &mdash; Finalized vertex hashes, validator set</li>
       <li><code>state.json</code> &mdash; Account balances, nonces, stake accounts</li>
       <li><code>mempool.json</code> &mdash; Pending transactions</li>
-      <li><code>checkpoints/</code> &mdash; Accepted checkpoints (every 1000 rounds)</li>
+      <li><code>checkpoints/</code> &mdash; Accepted checkpoints (every 100 finalized rounds)</li>
+      <li><code>wal.jsonl</code> &mdash; Write-ahead log for crash recovery (finalized vertex batches)</li>
+      <li><code>wal_header.json</code> &mdash; WAL metadata (snapshot round, sequence counter)</li>
     </ul>
     <p>State is saved every 10 rounds and on graceful shutdown (SIGTERM/SIGINT). Writes are crash-safe via atomic rename.</p>
+
+    <h3>Write-Ahead Log (WAL)</h3>
+    <p>Between full snapshots, every finalized vertex batch is appended to <code>wal.jsonl</code> with an fsync for durability. On startup, any WAL entries since the last snapshot are replayed to recover state lost by a crash. The WAL is truncated after each successful full snapshot (every 10 rounds). This closes the consistency gap between the 4 independent JSON files &mdash; even if a crash occurs mid-snapshot, the WAL ensures no finalized transactions are lost.</p>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════ -->

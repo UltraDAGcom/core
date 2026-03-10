@@ -78,6 +78,7 @@ Rollback amount: Z rounds
 rm ~/.ultradag/node/dag.json
 rm ~/.ultradag/node/state.json
 rm ~/.ultradag/node/finality.json
+rm -f ~/.ultradag/node/wal.jsonl ~/.ultradag/node/wal_header.json
 
 # Restart node - will sync from peers
 ultradag-node --validator <key> --seed <peers>

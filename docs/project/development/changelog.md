@@ -497,24 +497,35 @@ if last_finalized_round > 0 && last_finalized_round % CHECKPOINT_INTERVAL == 0 {
 - `finality.json` — Finalized vertex hashes, validator set, last_finalized_round
 - `state.json` — Account balances, nonces, stake accounts, active validators, total supply
 - `mempool.json` — Pending transactions
-- `checkpoints/checkpoint_<round>.json` — Accepted checkpoints (every 1000 rounds)
+- `checkpoints/checkpoint_<round>.json` — Accepted checkpoints (every 100 finalized rounds)
+- `wal.jsonl` — Write-ahead log: append-only JSON Lines of finalized vertex batches
+- `wal_header.json` — WAL metadata: snapshot round, next sequence, snapshot state root
+
+**Write-Ahead Log (WAL):**
+- Records finalized vertex batches between full snapshots for crash recovery
+- Appended after every `apply_finalized_vertices` call (in both validator loop and P2P handlers)
+- Truncated after each successful full snapshot (every 10 rounds)
+- On startup, WAL entries are replayed with state_root verification per entry
+- Uses `fsync` for durability after each append
 
 **Persistence triggers:**
-- Every 10 rounds during validator loop
+- Every 10 rounds during validator loop (full snapshot + WAL truncation)
 - On graceful shutdown (SIGTERM/SIGINT)
 - Atomic write: `.tmp` file → rename (crash-safe)
+- WAL append: after every finality batch (crash recovery between snapshots)
 
 ### Node Startup Sequence
 
 1. Parse CLI arguments
 2. Create or load validator keypair
 3. Initialize or load state from disk (DAG, finality, state, mempool)
-4. Apply permissioned validator allowlist if `--validator-key` specified
-5. Start NodeServer P2P listener on `--port`
-6. Connect to seed peers (`--seed`) or bootstrap nodes (unless `--no-bootstrap`)
-7. Start HTTP RPC server on `--rpc-port`
-8. Start validator loop if `--validate` enabled
-9. Install graceful shutdown handler (SIGTERM/SIGINT)
+4. Open WAL and replay any entries since last snapshot (crash recovery)
+5. Apply permissioned validator allowlist if `--validator-key` specified
+6. Start NodeServer P2P listener on `--port`
+7. Connect to seed peers (`--seed`) or bootstrap nodes (unless `--no-bootstrap`)
+8. Start HTTP RPC server on `--rpc-port`
+9. Start validator loop if `--validate` enabled
+10. Install graceful shutdown handler (SIGTERM/SIGINT)
 
 ### HTTP RPC Server (`rpc.rs`)
 

@@ -361,6 +361,10 @@ pub async fn validator_loop(
                     false
                 } else {
                     let changed = state_w.epoch_just_changed(prev_round);
+                    // WAL: log finalized vertices for crash recovery
+                    let fin_round = state_w.last_finalized_round().unwrap_or(0);
+                    let sr = ultradag_coin::consensus::compute_state_root(&state_w.snapshot());
+                    server.wal_append(&finalized_vertices, fin_round, sr);
                     let mut mp = server.mempool.write().await;
                     for v in &finalized_vertices {
                         for tx in &v.block.transactions {
@@ -555,6 +559,13 @@ pub async fn validator_loop(
                     }
                 }
             }
+
+            // Truncate WAL after successful full snapshot
+            let st = server.state.read().await;
+            let state_root = ultradag_coin::consensus::compute_state_root(&st.snapshot());
+            drop(st);
+            let last_fin = server.finality.read().await.last_finalized_round();
+            server.wal_truncate(last_fin, state_root);
 
             info!("State persisted at round {}", dag_round);
         }

@@ -125,7 +125,7 @@ Note: With 4 validators producing vertices per round, each vertex included ~125 
 - **Restarted node-2** via `flyctl machines restart`
 - **After 30s**: Node-2 responded with `last_finalized_round=127` (advanced, not reset)
 - Wallet balance: 48,998,300,000 sats (preserved exactly)
-- **Proves**: State persistence (dag.json, finality.json, state.json, mempool.json, validator.key) works correctly in production
+- **Proves**: State persistence (dag.json, finality.json, state.json, mempool.json, wal.jsonl, validator.key) works correctly in production
 
 ### Test 12 — Equivocation Resistance (PASS)
 

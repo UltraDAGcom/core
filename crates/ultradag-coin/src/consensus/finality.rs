@@ -64,6 +64,13 @@ impl FinalityTracker {
         self.finalized.insert(hash);
     }
 
+    /// Set the last finalized round (used during WAL replay).
+    pub fn set_last_finalized_round(&mut self, round: u64) {
+        if round > self.last_finalized_round {
+            self.last_finalized_round = round;
+        }
+    }
+
     /// Evaluate finality for a vertex. Returns true if newly finalized.
     /// Uses O(1) precomputed descendant validator counts.
     pub fn check_finality(&mut self, hash: &[u8; 32], dag: &BlockDag) -> bool {

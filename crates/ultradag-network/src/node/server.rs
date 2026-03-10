@@ -10,6 +10,7 @@ use std::path::PathBuf;
 
 use ultradag_coin::{BlockDag, DagVertex, FinalityTracker, Mempool, SecretKey, StateEngine, Transaction, sync_epoch_validators};
 use ultradag_coin::consensus::dag::{DagInsertError, MAX_PARENTS};
+use ultradag_coin::persistence::wal::FinalityWal;
 
 use crate::peer::{split_connection, PeerReader, PeerRegistry};
 use crate::protocol::Message;
@@ -68,6 +69,8 @@ pub struct NodeServer {
     pub seed_addrs: Arc<Vec<String>>,
     /// Metrics for checkpoint production and synchronization.
     pub checkpoint_metrics: Arc<crate::CheckpointMetrics>,
+    /// Write-ahead log for finalized vertex batches (crash recovery).
+    pub wal: Arc<std::sync::Mutex<Option<FinalityWal>>>,
 }
 
 impl NodeServer {
@@ -93,6 +96,7 @@ impl NodeServer {
             banned_peers: Arc::new(Mutex::new(HashMap::new())),
             seed_addrs: Arc::new(Vec::new()),
             checkpoint_metrics: Arc::new(crate::CheckpointMetrics::new()),
+            wal: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
@@ -109,6 +113,33 @@ impl NodeServer {
     /// Set seed/bootstrap addresses for automatic reconnection.
     pub fn set_seed_addrs(&mut self, addrs: Vec<String>) {
         self.seed_addrs = Arc::new(addrs);
+    }
+
+    /// Initialize the write-ahead log for crash recovery.
+    pub fn set_wal(&self, wal: FinalityWal) {
+        *self.wal.lock().unwrap() = Some(wal);
+    }
+
+    /// Append a finalized vertex batch to the WAL. Non-fatal on failure.
+    pub fn wal_append(&self, vertices: &[DagVertex], finalized_round: u64, state_root: [u8; 32]) {
+        if let Ok(mut guard) = self.wal.lock() {
+            if let Some(ref mut wal) = *guard {
+                if let Err(e) = wal.append(vertices, finalized_round, state_root) {
+                    tracing::warn!("WAL append failed: {} (crash recovery degraded)", e);
+                }
+            }
+        }
+    }
+
+    /// Truncate the WAL after a successful full snapshot.
+    pub fn wal_truncate(&self, snapshot_round: u64, state_root: [u8; 32]) {
+        if let Ok(mut guard) = self.wal.lock() {
+            if let Some(ref mut wal) = *guard {
+                if let Err(e) = wal.truncate_after_snapshot(snapshot_round, state_root) {
+                    tracing::warn!("WAL truncate failed: {}", e);
+                }
+            }
+        }
     }
 
     /// Attempt fast-sync from a connected peer using checkpoint protocol.
@@ -244,9 +275,10 @@ impl NodeServer {
 
             let listen_port = self.port;
             let checkpoint_metrics = self.checkpoint_metrics.clone();
+            let wal = self.wal.clone();
             tokio::spawn(async move {
                 // handle_peer may rename peer_addr via Hello; remove both keys on disconnect
-                if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers, &checkpoint_metrics).await {
+                if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers, &checkpoint_metrics, &wal).await {
                     warn!("Peer {} disconnected: {}", addr_str, e);
                 }
                 // Remove by original ephemeral addr and any possible listen addr
@@ -275,6 +307,7 @@ impl NodeServer {
         let validator_sk = self.validator_sk.clone();
         let banned_peers = self.banned_peers.clone();
         let checkpoint_metrics = self.checkpoint_metrics.clone();
+        let wal = self.wal.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30));
             // Consume first tick (fires immediately) — let seed connections establish first
@@ -327,6 +360,7 @@ impl NodeServer {
                             validator_sk.clone(),
                             banned_peers.clone(),
                             checkpoint_metrics.clone(),
+                            wal.clone(),
                         ));
                     }
                 }
@@ -387,9 +421,10 @@ impl NodeServer {
         let banned_peers = self.banned_peers.clone();
         let listen_port = self.port;
         let checkpoint_metrics = self.checkpoint_metrics.clone();
+        let wal = self.wal.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers, &checkpoint_metrics).await {
+            if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers, &checkpoint_metrics, &wal).await {
                 warn!("Peer {} disconnected: {}", addr_str, e);
             }
             peers.remove_peer(&addr_str).await;
@@ -411,6 +446,7 @@ async fn resolve_orphans(
     peers: &PeerRegistry,
     peer_addr: &str,
     _round_notify: &Arc<Notify>,
+    wal: &Arc<std::sync::Mutex<Option<FinalityWal>>>,
 ) {
     let mut resolved = true;
     while resolved {
@@ -467,6 +503,17 @@ async fn resolve_orphans(
                                 epoch_changed = false;
                             } else {
                                 epoch_changed = state_w.epoch_just_changed(prev_round);
+                                // WAL: log finalized vertices for crash recovery
+                                let fin_round = state_w.last_finalized_round().unwrap_or(0);
+                                let sr = ultradag_coin::consensus::compute_state_root(&state_w.snapshot());
+                                if let Ok(mut wg) = wal.lock() {
+                                    if let Some(ref mut w) = *wg {
+                                        let finalized_vec: Vec<DagVertex> = finalized_vertices.clone();
+                                        if let Err(e) = w.append(&finalized_vec, fin_round, sr) {
+                                            warn!("WAL append failed: {}", e);
+                                        }
+                                    }
+                                }
                                 let mut mp = mempool.write().await;
                                 for v in &finalized_vertices {
                                     for tx in &v.block.transactions {
@@ -524,6 +571,7 @@ async fn try_connect_peer(
     validator_sk: Option<SecretKey>,
     banned_peers: Arc<Mutex<HashMap<String, Instant>>>,
     checkpoint_metrics: Arc<crate::CheckpointMetrics>,
+    wal: Arc<std::sync::Mutex<Option<FinalityWal>>>,
 ) {
     // Don't connect to ourselves — check loopback, wildcard, .internal hostname
     let loopback_addrs = [
@@ -644,7 +692,7 @@ async fn try_connect_peer(
                     reader, &state, &mempool, &dag, &finality, &peers_clone,
                     &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify,
                     &pending_checkpoints, &data_dir, validator_sk.as_ref(),
-                    &banned_peers, &checkpoint_metrics,
+                    &banned_peers, &checkpoint_metrics, &wal,
                 ));
                 if let Err(e) = fut.await {
                     warn!("Peer {} disconnected: {}", addr_clone, e);
@@ -671,16 +719,17 @@ async fn handle_peer(
     dag: &Arc<RwLock<BlockDag>>,
     finality: &Arc<RwLock<FinalityTracker>>,
     peers: &PeerRegistry,
-    _vertex_tx: &broadcast::Sender<DagVertex>,
+    vertex_tx: &broadcast::Sender<DagVertex>,
     tx_tx: &broadcast::Sender<Transaction>,
     orphans: &Arc<Mutex<HashMap<[u8; 32], DagVertex>>>,
-    listen_port: u16,
+    _listen_port: u16,
     round_notify: &Arc<Notify>,
     pending_checkpoints: &Arc<RwLock<HashMap<u64, ultradag_coin::Checkpoint>>>,
-    data_dir: &std::path::Path,
+    data_dir: &PathBuf,
     validator_sk: Option<&SecretKey>,
     banned_peers: &Arc<Mutex<HashMap<String, Instant>>>,
     checkpoint_metrics: &Arc<crate::CheckpointMetrics>,
+    wal: &Arc<std::sync::Mutex<Option<FinalityWal>>>,
 ) -> std::io::Result<()> {
     let peer_addr = reader.addr.clone();
     let mut allowlist_rejections: u32 = 0;
@@ -947,6 +996,17 @@ async fn handle_peer(
                                 epoch_changed = false;
                             } else {
                                 epoch_changed = state_w.epoch_just_changed(prev_round);
+                                // WAL: log finalized vertices for crash recovery
+                                let fin_round = state_w.last_finalized_round().unwrap_or(0);
+                                let sr = ultradag_coin::consensus::compute_state_root(&state_w.snapshot());
+                                if let Ok(mut wg) = wal.lock() {
+                                    if let Some(ref mut w) = *wg {
+                                        let finalized_vec: Vec<DagVertex> = finalized_vertices.clone();
+                                        if let Err(e) = w.append(&finalized_vec, fin_round, sr) {
+                                            warn!("WAL append failed: {}", e);
+                                        }
+                                    }
+                                }
                                 let mut mp = mempool.write().await;
                                 for v in &finalized_vertices {
                                     for tx in &v.block.transactions {
@@ -971,7 +1031,7 @@ async fn handle_peer(
                     peers.broadcast(&Message::DagProposal(vertex), &peer_addr).await;
 
                     // Try to resolve orphaned vertices now that a new vertex was inserted
-                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify).await;
+                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify, wal).await;
                 }
             }
 
@@ -1132,6 +1192,17 @@ async fn handle_peer(
                                 } else {
                                     None
                                 };
+                                // WAL: log finalized vertices for crash recovery
+                                let fin_round = state_w.last_finalized_round().unwrap_or(0);
+                                let sr = ultradag_coin::consensus::compute_state_root(&state_w.snapshot());
+                                if let Ok(mut wg) = wal.lock() {
+                                    if let Some(ref mut w) = *wg {
+                                        let finalized_vec: Vec<DagVertex> = finalized_vertices.clone();
+                                        if let Err(e) = w.append(&finalized_vec, fin_round, sr) {
+                                            warn!("WAL append failed: {}", e);
+                                        }
+                                    }
+                                }
                                 let mut mp = mempool.write().await;
                                 for v in &finalized_vertices {
                                     for tx in &v.block.transactions {
@@ -1151,7 +1222,7 @@ async fn handle_peer(
                             }
                         }
                     }
-                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify).await;
+                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify, wal).await;
                 }
             }
 
@@ -1286,7 +1357,7 @@ async fn handle_peer(
                 // If we inserted any parent vertices, try to resolve orphans
                 if inserted_any {
                     // Don't notify here — ParentVertices is bulk sync context.
-                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify).await;
+                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify, wal).await;
                 }
             }
 
