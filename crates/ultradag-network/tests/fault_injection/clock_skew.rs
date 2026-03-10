@@ -3,7 +3,7 @@
 /// Simulates time drift between nodes to test timestamp validation,
 /// round synchronization, and timeout handling.
 
-use super::{FaultInjector, TestNode};
+use super::{FaultInjector, TestNode, simulate_rounds};
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -95,10 +95,10 @@ pub async fn test_sync_with_moderate_skew(
         let offset = (rand::random::<i64>() % (2 * max_skew_secs)) - max_skew_secs;
         injector.set_clock_offset(i, offset);
     }
-    
-    // Allow nodes to produce vertices and sync
-    sleep(Duration::from_secs(10)).await;
-    
+
+    // Simulate rounds with clock skew active
+    simulate_rounds(nodes, injector, 10).await;
+
     // Check that nodes are making progress despite skew
     let mut any_progress = false;
     for node in nodes {
@@ -107,16 +107,16 @@ pub async fn test_sync_with_moderate_skew(
             break;
         }
     }
-    
+
     // Clear skew
     for i in 0..nodes.len() {
         injector.set_clock_offset(i, 0);
     }
-    
+
     if !any_progress {
         return Err("Nodes did not make progress with moderate clock skew".to_string());
     }
-    
+
     Ok(())
 }
 

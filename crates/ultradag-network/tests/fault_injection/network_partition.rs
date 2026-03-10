@@ -2,7 +2,7 @@
 /// 
 /// Simulates split-brain scenarios where groups of nodes cannot communicate.
 
-use super::{FaultInjector, TestNode};
+use super::{FaultInjector, TestNode, simulate_rounds};
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -82,17 +82,19 @@ pub async fn test_minority_cannot_finalize(
         (0..minority_size).collect(),
         (minority_size..nodes.len()).collect(),
     ];
-    
+
     // Record finalized rounds before partition
     let mut before_rounds = Vec::new();
     for node in nodes {
         before_rounds.push(node.finalized_round().await);
     }
-    
+
     // Create partition
     injector.partition(groups);
-    sleep(Duration::from_secs(10)).await;
-    
+
+    // Simulate rounds under partition
+    simulate_rounds(nodes, injector, 10).await;
+
     // Check that minority nodes did NOT make progress
     for i in 0..minority_size {
         let round_after = nodes[i].finalized_round().await;
@@ -103,7 +105,7 @@ pub async fn test_minority_cannot_finalize(
             ));
         }
     }
-    
+
     // Check that majority nodes DID make progress
     let mut majority_progressed = false;
     for i in minority_size..nodes.len() {
@@ -113,13 +115,13 @@ pub async fn test_minority_cannot_finalize(
             break;
         }
     }
-    
+
     injector.heal_partitions();
-    
+
     if !majority_progressed {
         return Err("Majority partition did not make progress".to_string());
     }
-    
+
     Ok(())
 }
 

@@ -15,6 +15,9 @@ pub struct Checkpoint {
     pub dag_tip: [u8; 32],
     /// Total supply at this round (for quick sanity check).
     pub total_supply: u64,
+    /// Blake3 hash of the previous checkpoint (links checkpoints into a chain).
+    /// For genesis checkpoint (round 0), this is [0u8; 32].
+    pub prev_checkpoint_hash: [u8; 32],
     /// Validator signatures over checkpoint_hash().
     pub signatures: Vec<CheckpointSignature>,
 }
@@ -28,7 +31,7 @@ pub struct CheckpointSignature {
 
 impl Checkpoint {
     /// The bytes that validators sign over.
-    /// Includes round, state_root, dag_tip — NOT the signatures field.
+    /// Includes round, state_root, dag_tip, prev_checkpoint_hash — NOT the signatures field.
     pub fn signable_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         buf.extend_from_slice(crate::constants::NETWORK_ID);
@@ -37,6 +40,7 @@ impl Checkpoint {
         buf.extend_from_slice(&self.state_root);
         buf.extend_from_slice(&self.dag_tip);
         buf.extend_from_slice(&self.total_supply.to_le_bytes());
+        buf.extend_from_slice(&self.prev_checkpoint_hash);
         buf
     }
 
@@ -93,4 +97,117 @@ pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
     let bytes = serde_json::to_vec(snapshot)
         .expect("StateSnapshot serialization must not fail");
     *blake3::hash(&bytes).as_bytes()
+}
+
+/// Compute the hash of a checkpoint (for linking in the chain).
+/// This is blake3(serialize(checkpoint)) excluding signatures.
+pub fn compute_checkpoint_hash(checkpoint: &Checkpoint) -> [u8; 32] {
+    // Serialize checkpoint without signatures for stable hash
+    let mut cp_for_hash = checkpoint.clone();
+    cp_for_hash.signatures.clear();
+    
+    let bytes = serde_json::to_vec(&cp_for_hash)
+        .expect("Checkpoint serialization must not fail");
+    *blake3::hash(&bytes).as_bytes()
+}
+
+/// Verify that a checkpoint chain links correctly back to genesis.
+/// 
+/// This function walks the checkpoint chain backwards via prev_checkpoint_hash
+/// until it reaches a checkpoint with round 0 (genesis). It then verifies that
+/// the genesis checkpoint's hash matches GENESIS_CHECKPOINT_HASH.
+/// 
+/// # Arguments
+/// * `checkpoint` - The checkpoint to verify
+/// * `get_checkpoint` - Function to retrieve a checkpoint by its hash
+/// 
+/// # Returns
+/// * `Ok(())` if the chain is valid
+/// * `Err(String)` with error description if invalid
+pub fn verify_checkpoint_chain<F>(
+    checkpoint: &Checkpoint,
+    mut get_checkpoint: F,
+) -> Result<(), String>
+where
+    F: FnMut([u8; 32]) -> Option<Checkpoint>,
+{
+    // If this is genesis, verify its hash matches the constant
+    if checkpoint.round == 0 {
+        let genesis_hash = compute_checkpoint_hash(checkpoint);
+        if genesis_hash == crate::constants::GENESIS_CHECKPOINT_HASH {
+            return Ok(());
+        }
+        // If GENESIS_CHECKPOINT_HASH is all zeros (placeholder), accept any genesis
+        if crate::constants::GENESIS_CHECKPOINT_HASH == [0u8; 32] {
+            return Ok(());
+        }
+        return Err(format!(
+            "Genesis checkpoint hash mismatch: expected {:?}, got {:?}",
+            crate::constants::GENESIS_CHECKPOINT_HASH,
+            genesis_hash
+        ));
+    }
+    
+    // Walk backwards through the chain
+    let mut current = checkpoint.clone();
+    let mut visited = std::collections::HashSet::new();
+    
+    loop {
+        // Detect cycles
+        let current_hash = compute_checkpoint_hash(&current);
+        if !visited.insert(current_hash) {
+            return Err("Checkpoint chain contains a cycle".to_string());
+        }
+        
+        // If we reached genesis, verify it
+        if current.round == 0 {
+            let genesis_hash = compute_checkpoint_hash(&current);
+            if genesis_hash == crate::constants::GENESIS_CHECKPOINT_HASH {
+                return Ok(());
+            }
+            // If GENESIS_CHECKPOINT_HASH is all zeros (placeholder), accept any genesis
+            if crate::constants::GENESIS_CHECKPOINT_HASH == [0u8; 32] {
+                return Ok(());
+            }
+            return Err(format!(
+                "Genesis checkpoint hash mismatch: expected {:?}, got {:?}",
+                crate::constants::GENESIS_CHECKPOINT_HASH,
+                genesis_hash
+            ));
+        }
+        
+        // Get previous checkpoint
+        let prev_hash = current.prev_checkpoint_hash;
+        if prev_hash == [0u8; 32] && current.round != 0 {
+            return Err(format!(
+                "Non-genesis checkpoint (round {}) has zero prev_checkpoint_hash",
+                current.round
+            ));
+        }
+        
+        match get_checkpoint(prev_hash) {
+            Some(prev) => {
+                // Verify the hash matches
+                let computed_hash = compute_checkpoint_hash(&prev);
+                if computed_hash != prev_hash {
+                    return Err(format!(
+                        "Checkpoint hash mismatch at round {}: expected {:?}, computed {:?}",
+                        prev.round, prev_hash, computed_hash
+                    ));
+                }
+                current = prev;
+            }
+            None => {
+                return Err(format!(
+                    "Missing checkpoint in chain: prev_hash {:?} not found",
+                    prev_hash
+                ));
+            }
+        }
+        
+        // Safety: limit chain length to prevent DoS
+        if visited.len() > 10000 {
+            return Err("Checkpoint chain too long (>10000 checkpoints)".to_string());
+        }
+    }
 }

@@ -6,6 +6,7 @@ use std::time::Duration;
 use tracing::{info, warn};
 
 use ultradag_coin::{DagVertex, SecretKey, Signature, create_block, sync_epoch_validators};
+use ultradag_coin::safety::circuit_breaker::CircuitBreaker;
 use ultradag_network::{Message, NodeServer};
 
 
@@ -27,6 +28,10 @@ pub async fn validator_loop(
     let mut in_recovery = false;
     let last_fin = server.finality.read().await.last_finalized_round();
     let mut last_checkpoint_round: u64 = (last_fin / ultradag_coin::CHECKPOINT_INTERVAL) * ultradag_coin::CHECKPOINT_INTERVAL;
+    let circuit_breaker = CircuitBreaker::new(true);
+    if last_fin > 0 {
+        circuit_breaker.check_finality(last_fin);
+    }
     const MAX_SKIPS_BEFORE_RECOVERY: u32 = 3;
     // Minimum time between vertex productions to prevent runaway optimistic loops.
     // Must equal round_duration: if set lower, fast validators race ahead of peers
@@ -385,6 +390,10 @@ pub async fn validator_loop(
             }
         }
 
+        // Circuit breaker: halt if finality rolls back (critical safety check)
+        let current_fin = server.finality.read().await.last_finalized_round();
+        circuit_breaker.check_finality(current_fin);
+
         // Checkpoint generation: runs independently of finality block above.
         // P2P handler may finalize vertices before validator loop, making all_finalized empty.
         // We check last_finalized_round directly from the finality tracker.
@@ -410,11 +419,31 @@ pub async fn validator_loop(
             let dag_tip = dag_r.tips().first().copied().unwrap_or([0u8; 32]);
             drop(dag_r);
 
+            // Get previous checkpoint hash for chain linking
+            let prev_checkpoint_hash = if checkpoint_round == 0 {
+                [0u8; 32] // Genesis has no predecessor
+            } else {
+                // Try to load the previous checkpoint from disk
+                let prev_round = checkpoint_round.saturating_sub(ultradag_coin::CHECKPOINT_INTERVAL);
+                match ultradag_coin::persistence::load_latest_checkpoint(&data_dir) {
+                    Some(prev_cp) if prev_cp.round == prev_round => {
+                        ultradag_coin::consensus::compute_checkpoint_hash(&prev_cp)
+                    }
+                    _ => {
+                        // If we can't find the previous checkpoint, use zero hash
+                        // This can happen on first checkpoint after node restart
+                        warn!("Could not find previous checkpoint at round {}, using zero hash", prev_round);
+                        [0u8; 32]
+                    }
+                }
+            };
+
             let mut checkpoint = ultradag_coin::Checkpoint {
                 round: checkpoint_round,
                 state_root,
                 dag_tip,
                 total_supply,
+                prev_checkpoint_hash,
                 signatures: vec![],
             };
 
@@ -472,12 +501,13 @@ pub async fn validator_loop(
         }
 
         // Prune old rounds to bound memory (every 50 rounds to amortize cost)
-        if dag_round % 50 == 0 {
+        // pruning_depth=0 means archive mode (no pruning)
+        if dag_round % 50 == 0 && server.pruning_depth > 0 {
             let last_fin = server.finality.read().await.last_finalized_round();
             if last_fin > 0 {
                 let pruned = {
                     let mut dag_w = server.dag.write().await;
-                    dag_w.prune_old_rounds(last_fin)
+                    dag_w.prune_old_rounds_with_depth(last_fin, server.pruning_depth)
                 };
                 if pruned > 0 {
                     info!("Pruned {} old vertices (floor={})", last_fin, last_fin);

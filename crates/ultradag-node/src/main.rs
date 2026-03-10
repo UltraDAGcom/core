@@ -373,6 +373,7 @@ async fn main() {
     let mut server_inner = NodeServer::new(args.port);
     server_inner.set_data_dir(data_dir.clone());
     server_inner.set_validator_sk(validator_sk.clone());
+    server_inner.pruning_depth = if args.archive { 0 } else { args.pruning_depth };
     server_inner.set_seed_addrs(seeds.clone());
     let server = Arc::new(server_inner);
 

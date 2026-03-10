@@ -3,7 +3,7 @@
 /// Simulates node crashes and validates that state can be recovered from
 /// persistent storage (checkpoints + WAL).
 
-use super::{FaultInjector, TestNode};
+use super::{FaultInjector, TestNode, simulate_rounds};
 use std::time::Duration;
 use tokio::time::sleep;
 use ultradag_coin::{BlockDag, FinalityTracker, StateEngine};
@@ -43,16 +43,19 @@ pub async fn test_crash_during_consensus(
     nodes: &mut [TestNode],
     crash_node_id: usize,
 ) -> Result<(), String> {
+    // Run some initial rounds so nodes have state
+    simulate_rounds(nodes, injector, 5).await;
+
     // Record state before crash
     let before_round = nodes[crash_node_id].finalized_round().await;
-    let before_supply = nodes[crash_node_id].total_supply().await;
-    
-    // Crash the node
-    crash_and_restart(injector, &mut nodes[crash_node_id], Duration::from_secs(2)).await;
-    
-    // Allow other nodes to continue
-    sleep(Duration::from_secs(5)).await;
-    
+
+    // Crash the node (keep it crashed while others continue)
+    injector.crash_node(crash_node_id);
+    nodes[crash_node_id].crash().await;
+
+    // Simulate rounds with the crashed node absent
+    simulate_rounds(nodes, injector, 10).await;
+
     // Check that other nodes made progress
     let mut others_progressed = false;
     for (i, node) in nodes.iter().enumerate() {
@@ -65,11 +68,14 @@ pub async fn test_crash_during_consensus(
             break;
         }
     }
-    
+
+    // Restart the crashed node
+    injector.restart_node(crash_node_id);
+
     if !others_progressed {
         return Err("Other nodes did not make progress during crash".to_string());
     }
-    
+
     Ok(())
 }
 
@@ -171,18 +177,18 @@ pub async fn test_simultaneous_crashes(
     if crash_node_ids.len() >= (nodes.len() * 2) / 3 {
         return Err("Cannot crash >= 2/3 of nodes (would halt consensus)".to_string());
     }
-    
+
     println!("💥 Crashing {} nodes simultaneously", crash_node_ids.len());
-    
+
     // Crash all specified nodes
     for &node_id in &crash_node_ids {
         injector.crash_node(node_id);
         nodes[node_id].crash().await;
     }
-    
-    // Wait for remaining nodes to continue
-    sleep(Duration::from_secs(5)).await;
-    
+
+    // Simulate rounds with remaining nodes
+    simulate_rounds(nodes, injector, 10).await;
+
     // Verify remaining nodes can still make progress
     let mut any_progress = false;
     for (i, node) in nodes.iter().enumerate() {
@@ -195,16 +201,16 @@ pub async fn test_simultaneous_crashes(
             break;
         }
     }
-    
+
     if !any_progress {
         return Err("Remaining nodes did not make progress".to_string());
     }
-    
+
     // Restart crashed nodes
     for &node_id in &crash_node_ids {
         injector.restart_node(node_id);
     }
-    
+
     Ok(())
 }
 

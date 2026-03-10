@@ -573,8 +573,17 @@ impl BlockDag {
     /// # Returns
     /// Number of vertices pruned
     pub fn prune_old_rounds(&mut self, last_finalized_round: u64) -> usize {
+        self.prune_old_rounds_with_depth(last_finalized_round, PRUNING_HORIZON)
+    }
+
+    /// Prune old rounds with a custom pruning depth.
+    /// depth=0 means no pruning (archive mode).
+    pub fn prune_old_rounds_with_depth(&mut self, last_finalized_round: u64, depth: u64) -> usize {
+        if depth == 0 {
+            return 0; // Archive mode: never prune
+        }
         // Calculate the new pruning floor
-        let new_floor = last_finalized_round.saturating_sub(PRUNING_HORIZON);
+        let new_floor = last_finalized_round.saturating_sub(depth);
         
         // Only prune if we've advanced beyond the current floor
         if new_floor <= self.pruning_floor {

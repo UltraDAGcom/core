@@ -61,11 +61,24 @@
   - Supply consistency across nodes
   - Double-spend prevention
   - Automated violation detection and reporting
-- **Test Results:** ✅ 35/35 tests passed (3.31s)
+- **Test Results:** ✅ 28/28 Jepsen tests passed (14 unit + 14 integration)
+  - Integration tests use `simulate_rounds()` to drive actual DAG consensus across TestNodes
+  - Tests verify: split-brain safety, minority cannot finalize, partition convergence, clock skew tolerance, message delay/reorder/drop resilience, crash-restart recovery, simultaneous crashes, extreme chaos survival
 - **Performance:** Thread-safe concurrent access (10 tasks), no race conditions, accurate probabilistic behavior
 - **Location:** `crates/ultradag-network/tests/fault_injection/`
-- **Usage:** `cargo test --test fault_injection_basic_tests`
+- **Usage:** `cargo test --test jepsen_tests -p ultradag-network -- --include-ignored`
 - **Metrics endpoint return type** — Fixed `Ok(Response)` vs `Response` mismatch in metrics endpoint.
+
+**Integration Audit (March 10, 2026):**
+Comprehensive review of all recently added features to verify they are truly integrated into production code paths (not loose/dead code):
+- ✅ **WAL** — Opened at startup, replayed on crash recovery, appended at all 3 finality paths in server.rs, truncated after snapshots
+- ✅ **Slashing** — Equivocation detected at DAG insert → `state.slash()` → 50% stake burned → active set removal → evidence P2P broadcast → permanent persistence
+- ✅ **Checkpoints & Fast-Sync** — Produced every 100 finalized rounds, co-signed via P2P, quorum-verified, saved to disk, served via GetCheckpoint/CheckpointSync, fast-sync retries on startup
+- ✅ **CircuitBreaker** — Checked every validator loop iteration, `std::process::exit(100)` on finality rollback, cannot be bypassed
+- ✅ **HighWaterMark** — Checked at startup before state load, blocks startup on state rollback, cannot be bypassed
+- ✅ **Staking + Epochs** — Full flow: Transaction enum → P2P broadcast → DAG inclusion → finalized vertex processing → epoch transitions → active set recalculation → validator gate
+- ✅ **Pruning + Archive** — CLI args → NodeServer → validator loop (every 50 rounds) → `prune_old_rounds_with_depth()` → `prune_finalized()`. Archive mode (depth=0) skips pruning.
+- ⚠️ **Governance** — 90% integrated: proposals/votes flow through consensus correctly. **Gap:** proposal execution is a no-op — when ParameterChange passes, no parameters are actually changed. Must fix before mainnet.
 
 **Hardening Audit (March 10, 2026):**
 - **credit() overflow protection** — `credit()` in StateEngine now uses `saturating_add()` instead of unchecked `+=`. Prevents balance overflow breaking supply invariant.
@@ -1556,10 +1569,10 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 
 ### Testing
 - [ ] **Extended testnet run** — Minimum 1 month continuous operation with 21 validators
-- [x] **Chaos testing** — Jepsen-style fault injection framework implemented (35 tests: network partitions, clock skew, message chaos, crash-restart, invariant checkers)
+- [x] **Chaos testing** — Jepsen-style fault injection framework with full consensus simulation (28 tests: network partitions, clock skew, message chaos, crash-restart, invariant checkers, integration tests with `simulate_rounds()`)
 - [ ] **Load testing** — Sustained high transaction volume, mempool saturation
 - [ ] **Upgrade testing** — Binary upgrade without consensus failure
-- [x] **All tests passing** — 557 automated tests + 35 fault injection tests, 0 failures, 0 ignored (March 10, 2026)
+- [x] **All tests passing** — 141 coin unit + integration tests + 28 Jepsen fault injection tests, 0 failures (March 10, 2026)
 
 ### Documentation
 - [ ] **Remove testnet warnings** — Update all references from testnet to mainnet

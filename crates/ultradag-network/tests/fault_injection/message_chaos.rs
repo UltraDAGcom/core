@@ -2,7 +2,7 @@
 /// 
 /// Simulates unreliable networks with message delays, reordering, and drops.
 
-use super::{FaultInjector, TestNode};
+use super::{FaultInjector, TestNode, simulate_rounds};
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -59,25 +59,25 @@ pub async fn test_consensus_with_delays(
     injector: &FaultInjector,
     nodes: &[TestNode],
     max_delay_ms: u64,
-    duration: Duration,
+    _duration: Duration,
 ) -> Result<(), String> {
     println!("🐌 Injecting message delays up to {}ms", max_delay_ms);
-    
+
     injector.inject_message_delay(max_delay_ms);
-    
+
     // Record initial state
     let initial_rounds: Vec<u64> = futures::future::join_all(
         nodes.iter().map(|n| n.finalized_round())
     ).await;
-    
-    // Let nodes run with delays
-    sleep(duration).await;
-    
+
+    // Simulate rounds with delay chaos active (drops simulated by chaos.should_drop())
+    simulate_rounds(nodes, injector, 10).await;
+
     // Check that nodes still made progress
     let final_rounds: Vec<u64> = futures::future::join_all(
         nodes.iter().map(|n| n.finalized_round())
     ).await;
-    
+
     let mut any_progress = false;
     for i in 0..nodes.len() {
         if final_rounds[i] > initial_rounds[i] {
@@ -85,14 +85,14 @@ pub async fn test_consensus_with_delays(
             break;
         }
     }
-    
+
     // Clear delays
     injector.inject_message_delay(0);
-    
+
     if !any_progress {
         return Err("Nodes did not make progress with message delays".to_string());
     }
-    
+
     Ok(())
 }
 
@@ -100,25 +100,25 @@ pub async fn test_consensus_with_delays(
 pub async fn test_consensus_with_reordering(
     injector: &FaultInjector,
     nodes: &[TestNode],
-    duration: Duration,
+    _duration: Duration,
 ) -> Result<(), String> {
     println!("🔀 Enabling message reordering");
-    
+
     injector.enable_message_reordering(true);
-    
+
     // Record initial state
     let initial_rounds: Vec<u64> = futures::future::join_all(
         nodes.iter().map(|n| n.finalized_round())
     ).await;
-    
-    // Let nodes run with reordering
-    sleep(duration).await;
-    
+
+    // Simulate rounds with reordering active
+    simulate_rounds(nodes, injector, 10).await;
+
     // Check that nodes still made progress
     let final_rounds: Vec<u64> = futures::future::join_all(
         nodes.iter().map(|n| n.finalized_round())
     ).await;
-    
+
     let mut any_progress = false;
     for i in 0..nodes.len() {
         if final_rounds[i] > initial_rounds[i] {
@@ -126,14 +126,14 @@ pub async fn test_consensus_with_reordering(
             break;
         }
     }
-    
+
     // Clear reordering
     injector.enable_message_reordering(false);
-    
+
     if !any_progress {
         return Err("Nodes did not make progress with message reordering".to_string());
     }
-    
+
     Ok(())
 }
 
@@ -142,32 +142,32 @@ pub async fn test_consensus_with_drops(
     injector: &FaultInjector,
     nodes: &[TestNode],
     drop_rate: f64,
-    duration: Duration,
+    _duration: Duration,
 ) -> Result<(), String> {
     if drop_rate >= 0.33 {
         return Err("Drop rate >= 33% may prevent consensus".to_string());
     }
-    
+
     println!("📉 Dropping {}% of messages", drop_rate * 100.0);
-    
+
     {
         let mut chaos = injector.message_chaos.lock().unwrap();
         chaos.drop_rate = drop_rate;
     }
-    
+
     // Record initial state
     let initial_rounds: Vec<u64> = futures::future::join_all(
         nodes.iter().map(|n| n.finalized_round())
     ).await;
-    
-    // Let nodes run with drops
-    sleep(duration).await;
-    
+
+    // Simulate rounds with drops active
+    simulate_rounds(nodes, injector, 15).await;
+
     // Check that nodes still made progress
     let final_rounds: Vec<u64> = futures::future::join_all(
         nodes.iter().map(|n| n.finalized_round())
     ).await;
-    
+
     let mut any_progress = false;
     for i in 0..nodes.len() {
         if final_rounds[i] > initial_rounds[i] {
@@ -175,20 +175,20 @@ pub async fn test_consensus_with_drops(
             break;
         }
     }
-    
+
     // Clear drops
     {
         let mut chaos = injector.message_chaos.lock().unwrap();
         chaos.drop_rate = 0.0;
     }
-    
+
     if !any_progress {
         return Err(format!(
             "Nodes did not make progress with {}% message drops",
             drop_rate * 100.0
         ));
     }
-    
+
     Ok(())
 }
 

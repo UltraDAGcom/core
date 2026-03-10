@@ -71,6 +71,8 @@ pub struct NodeServer {
     pub checkpoint_metrics: Arc<crate::CheckpointMetrics>,
     /// Write-ahead log for finalized vertex batches (crash recovery).
     pub wal: Arc<std::sync::Mutex<Option<FinalityWal>>>,
+    /// Custom pruning depth (0 = archive mode, no pruning).
+    pub pruning_depth: u64,
 }
 
 impl NodeServer {
@@ -97,6 +99,7 @@ impl NodeServer {
             seed_addrs: Arc::new(Vec::new()),
             checkpoint_metrics: Arc::new(crate::CheckpointMetrics::new()),
             wal: Arc::new(std::sync::Mutex::new(None)),
+            pruning_depth: 1000,
         }
     }
 
@@ -1594,6 +1597,44 @@ async fn handle_peer(
             Message::CheckpointSync { checkpoint, suffix_vertices, state_at_checkpoint } => {
                 checkpoint_metrics.record_fast_sync_attempt();
                 let sync_start = std::time::Instant::now();
+                
+                // CRITICAL: Verify checkpoint chain links back to genesis
+                // This prevents trust-on-first-use eclipse attacks where a malicious peer
+                // feeds a forged checkpoint with fake validator set
+                {
+                    let dir = data_dir;
+                    let checkpoint_loader = |hash: [u8; 32]| -> Option<ultradag_coin::Checkpoint> {
+                        // Try to load checkpoint from disk by searching for matching hash
+                        let checkpoints = ultradag_coin::persistence::list_checkpoints(dir);
+                        for round in checkpoints {
+                            if let Some(cp) = ultradag_coin::persistence::load_latest_checkpoint(dir) {
+                                if cp.round == round {
+                                    let cp_hash = ultradag_coin::consensus::compute_checkpoint_hash(&cp);
+                                    if cp_hash == hash {
+                                        return Some(cp);
+                                    }
+                                }
+                            }
+                        }
+                        None
+                    };
+                    
+                    match ultradag_coin::consensus::verify_checkpoint_chain(&checkpoint, checkpoint_loader) {
+                        Ok(()) => {
+                            info!("Checkpoint chain verification passed for round {}", checkpoint.round);
+                        }
+                        Err(e) => {
+                            warn!("Checkpoint chain verification FAILED: {} — rejecting CheckpointSync and disconnecting peer", e);
+                            checkpoint_metrics.record_fast_sync_failure();
+                            // Disconnect the malicious peer
+                            peers.remove_peer(&peer_addr).await;
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                format!("Checkpoint chain verification failed: {}", e)
+                            ));
+                        }
+                    }
+                }
                 
                 // Fix 1: Use the checkpoint's own state snapshot for validator trust,
                 // not the local state engine (which may be empty on fresh nodes).

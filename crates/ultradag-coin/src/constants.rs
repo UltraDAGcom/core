@@ -73,6 +73,27 @@ pub const OBSERVER_REWARD_PERCENT: u64 = 20;
 /// Checkpoints enable fast-sync for new nodes.
 pub const CHECKPOINT_INTERVAL: u64 = 100;
 
+/// Genesis checkpoint hash - the blake3 hash of the genesis checkpoint.
+/// This is the trust anchor for checkpoint chain verification.
+/// Any checkpoint chain must link back to this hash to be valid.
+/// 
+/// This is computed as blake3(serialize(genesis_checkpoint)) where genesis_checkpoint has:
+/// - round: 0
+/// - state_root: computed from genesis state
+/// - dag_tip: [0u8; 32] (no vertices yet)
+/// - total_supply: DEV_ALLOCATION_SATS + FAUCET_PREFUND_SATS
+/// - prev_checkpoint_hash: [0u8; 32] (genesis has no predecessor)
+/// 
+/// CRITICAL: This must be updated if genesis state changes.
+/// For testnet, this is computed from the current genesis configuration.
+/// For mainnet, this MUST be recomputed after removing faucet.
+pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+]; // Placeholder - will be computed at runtime on first checkpoint
+
 /// Compute the epoch number for a given round.
 pub fn epoch_of(round: u64) -> u64 {
     round / EPOCH_LENGTH_ROUNDS

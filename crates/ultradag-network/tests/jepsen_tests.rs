@@ -371,17 +371,17 @@ async fn test_message_chaos_with_crash() {
 
 /// Helper: Print test summary
 fn print_test_summary(test_name: &str, violations: &[InvariantViolation]) {
-    println!("\n{'='*60}");
+    println!("\n{}", "=".repeat(60));
     println!("Test: {}", test_name);
-    println!("{'='*60}");
-    
+    println!("{}", "=".repeat(60));
+
     if violations.is_empty() {
-        println!("✅ PASSED - No invariant violations");
+        println!("PASSED - No invariant violations");
     } else {
-        println!("⚠️  {} violation(s) detected", violations.len());
+        println!("{} violation(s) detected", violations.len());
         for v in violations {
             println!("  - {:?}", v);
         }
     }
-    println!("{'='*60}\n");
+    println!("{}\n", "=".repeat(60));
 }

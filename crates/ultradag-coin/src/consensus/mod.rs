@@ -7,7 +7,7 @@ pub mod persistence;
 pub mod validator_set;
 pub mod vertex;
 
-pub use checkpoint::{Checkpoint, CheckpointSignature, compute_state_root};
+pub use checkpoint::{Checkpoint, CheckpointSignature, compute_state_root, compute_checkpoint_hash, verify_checkpoint_chain};
 pub use dag::{BlockDag, DagInsertError, EquivocationEvidence, K_PARENTS, MAX_PARENTS};
 pub use epoch::sync_epoch_validators;
 pub use finality::FinalityTracker;
