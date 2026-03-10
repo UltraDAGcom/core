@@ -1341,6 +1341,12 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 63. **Dead peer cleanup leaks connected_listen_addrs (March 10, 2026)** — `broadcast()` and heartbeat removed dead peers using ephemeral writer keys (e.g., `192.168.1.1:54321`), then tried to remove from `connected_listen_addrs` using the same key. But `connected_listen_addrs` stores canonical listen addresses (e.g., `192.168.1.1:9333`). Keys never matched, so stale entries accumulated forever, eventually blocking peer reconnection.
     - **Fix:** Added `writer_to_listen: HashMap<String, String>` mapping in PeerRegistry. Hello handler links writer key → listen addr. `remove_peer()` now also removes the associated listen addr. `broadcast()` uses `remove_peer()` for cleanup.
     - **Result:** Dead peer cleanup correctly removes both writer and listen addr entries
+64. **Stake RPC adds phantom fee to balance check (March 10, 2026)** — `/stake` endpoint added `MIN_FEE_SATS` to `total_needed` balance check, but `StakeTx` has zero fee by design. Users with exact stake balance were rejected with "insufficient balance".
+    - **Fix:** Removed `.saturating_add(MIN_FEE_SATS)` from stake balance check. StakeTx `total_cost()` already returns just the stake amount.
+    - **Result:** Users can stake their full available balance
+65. **Orphan buffer not cleared on CheckpointSync (March 10, 2026)** — After fast-sync replaced the DAG and state, the orphan buffer still held vertices from the pre-sync DAG. These orphans referenced parents that had been pruned, causing spurious `GetParents` requests and wasting memory.
+    - **Fix:** Clear orphan buffer alongside mempool during CheckpointSync, before inserting suffix vertices.
+    - **Result:** Clean orphan buffer after fast-sync, no stale parent requests
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.

@@ -936,7 +936,8 @@ async fn handle_request(
                     .filter(|t| t.from() == sender)
                     .map(|t| t.total_cost())
                     .sum();
-                let total_needed = pending_cost.saturating_add(stake_req.amount).saturating_add(ultradag_coin::constants::MIN_FEE_SATS);
+                // StakeTx has zero fee — don't add MIN_FEE_SATS
+                let total_needed = pending_cost.saturating_add(stake_req.amount);
 
                 if stake_req.amount < MIN_STAKE_SATS {
                     return Ok(error_response(StatusCode::BAD_REQUEST,

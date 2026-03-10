@@ -1489,6 +1489,16 @@ async fn handle_peer(
                     }
                 }
 
+                // Clear orphan buffer — orphans from the old DAG reference pruned parents
+                {
+                    let mut orph = orphans.lock().await;
+                    let cleared = orph.len();
+                    orph.clear();
+                    if cleared > 0 {
+                        info!("CheckpointSync: cleared {} stale orphan vertices", cleared);
+                    }
+                }
+
                 // Fix 3: Insert suffix vertices with signature verification
                 let mut inserted = 0;
                 let mut skipped = 0;
