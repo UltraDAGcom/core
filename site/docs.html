@@ -27,8 +27,8 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
 /* NAV */
 nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(8,11,15,.9);backdrop-filter:blur(12px)}
-.nav-logo{font-family:'Syne',sans-serif;font-size:22px;font-weight:400;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px}
-.nav-logo-mark{width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center}
+.nav-logo{font-family:'Cormorant',serif;font-size:22px;font-weight:300;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px}
+.nav-logo-mark{width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
 .nav-logo-mark::after{content:'';width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)}
 .nav-links{display:flex;align-items:center;gap:32px;list-style:none}
 .nav-links a{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s}
@@ -145,11 +145,12 @@ footer{text-align:center;padding:48px 24px;border-top:1px solid var(--border);ma
     UltraDAG
   </a>
   <ul class="nav-links">
-    <li><a href="index.html">Home</a></li>
+    <li><a href="index.html#consensus">Why UltraDAG</a></li>
     <li><a href="whitepaper.html">Whitepaper</a></li>
     <li><a href="docs.html" class="active">Docs</a></li>
     <li><a href="testnet.html">Testnet</a></li>
     <li><a href="consensus-viz.html">Consensus Demo</a></li>
+    <li><a href="index.html#sdks">SDKs</a></li>
     <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
     <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
   </ul>
