@@ -8,6 +8,13 @@
 
 ## Recent Updates (March 2026)
 
+**Pruning-Finality Interaction Fix (March 11, 2026):**
+- **Root cause (Bug #74):** `prune_finalized()` removed finalized hashes for pruned vertices, but `find_newly_finalized()` required `finalized.contains(parent)` for the parent check. After pruning removed both the vertex and its finalized hash, the parent check failed permanently. Finality stalled with 1137-round lag on testnet.
+- **Fix:** Parent is now considered "ok" if pruned from DAG (`dag.get(p).is_none()`) — pruned vertices are by definition deeply finalized.
+- **Root cause (Bug #75):** Stall recovery reset `in_recovery=false` after each production, causing a tight loop: produce → reset → 3 skips → recovery → produce. Generated 8 rounds in 1 second with 1 parent each.
+- **Fix:** Recovery mode only exits when quorum actually resumes, not after each production.
+- **Result:** Testnet recovered from 1137-round lag to lag=2 after clean deploy with fix.
+
 **Finality Fix (March 9, 2026):**
 - **Root cause:** Validators used `dag.tips()` for parent selection, which returns only childless vertices (typically 1 — our own last vertex). This created parallel linear chains instead of a dense DAG, causing finality lag of 250-314 rounds.
 - **Fix:** Changed parent selection to `dag.vertices_in_round(prev_round)`, referencing ALL known vertices from the previous round. This creates dense cross-links so descendant validator sets grow quickly.
@@ -1452,6 +1459,12 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 73. **Supply invariant only checked in debug builds (March 10, 2026)** — `#[cfg(debug_assertions)]` guard meant supply invariant (`liquid + staked == total_supply`) was never validated in release builds. A `debit()` underflow via `saturating_sub` could corrupt state silently in production.
     - **Fix:** Made supply invariant check unconditional. Returns `CoinError::ValidationError` instead of panicking.
     - **Result:** State corruption detected immediately in all build configurations
+74. **CRITICAL: Pruned parents block finality chain forever (March 11, 2026)** — `prune_finalized()` removed finalized hashes for pruned vertices from the `finalized` HashSet. But `find_newly_finalized()` checks `self.finalized.contains(parent)` — if a parent's hash was pruned from both the DAG and the finalized set, the parent check failed permanently. Vertices whose parents were deeply finalized (and pruned) could never finalize, causing a cascading finality stall. Finality lag grew unboundedly (observed: 1137 rounds on testnet).
+    - **Fix:** Added `dag.get(p).is_none()` as third condition in parent check: a parent that's been pruned from the DAG is by definition deeply finalized. Applied in both initial scan (line ~127) and forward propagation (line ~159).
+    - **Result:** Finality survives pruning cycles. Lag returned to 2 after fix deployment.
+75. **Stall recovery tight loop amplifies problems (March 11, 2026)** — After stall recovery produced a vertex, `in_recovery` was reset to `false` and `consecutive_skips` to 0. This caused a cycle: produce → reset → 3 skips → recovery → produce → reset, generating vertices in rapid succession (8 rounds in 1 second) with only 1 parent each. The rapid-fire production created sparse linear chains instead of a dense DAG, worsening finality.
+    - **Fix:** Removed `in_recovery = false` reset after production. Recovery mode only exits when quorum actually resumes (existing check at line ~138-141).
+    - **Result:** Stall recovery produces at normal round intervals, not in tight loops.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.
