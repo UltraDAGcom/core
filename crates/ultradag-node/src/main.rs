@@ -281,7 +281,9 @@ async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("ultradag=info".parse().unwrap()),
+                .add_directive("ultradag=info".parse().unwrap_or_else(|_| {
+                    tracing::Level::INFO.into()
+                })),
         )
         .init();
 
@@ -300,7 +302,14 @@ async fn main() {
         }
         let mut bytes = [0u8; 32];
         for (i, chunk) in pkey_hex.as_bytes().chunks(2).enumerate() {
-            bytes[i] = u8::from_str_radix(std::str::from_utf8(chunk).unwrap(), 16).unwrap();
+            let hex_str = std::str::from_utf8(chunk).unwrap_or_else(|_| {
+                error!("Invalid UTF-8 in --pkey hex string");
+                std::process::exit(1);
+            });
+            bytes[i] = u8::from_str_radix(hex_str, 16).unwrap_or_else(|_| {
+                error!("Invalid hex digit in --pkey: {}", hex_str);
+                std::process::exit(1);
+            });
         }
         let sk = SecretKey::from_bytes(bytes);
         info!("Using validator keypair from --pkey:");
@@ -311,7 +320,14 @@ async fn main() {
         let hex = hex.trim();
         let mut bytes = [0u8; 32];
         for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
-            bytes[i] = u8::from_str_radix(std::str::from_utf8(chunk).unwrap(), 16).unwrap();
+            let hex_str = std::str::from_utf8(chunk).unwrap_or_else(|_| {
+                error!("Invalid UTF-8 in validator key file");
+                std::process::exit(1);
+            });
+            bytes[i] = u8::from_str_radix(hex_str, 16).unwrap_or_else(|_| {
+                error!("Invalid hex digit in validator key file: {}", hex_str);
+                std::process::exit(1);
+            });
         }
         let sk = SecretKey::from_bytes(bytes);
         info!("Loaded validator keypair from disk:");

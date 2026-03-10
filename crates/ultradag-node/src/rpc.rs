@@ -48,9 +48,9 @@ const MAX_MEMPOOL_SCAN: usize = 10_000;
 /// Max request body size (1MB)
 const MAX_REQUEST_SIZE: usize = 1_048_576;
 
-fn json_response(status: StatusCode, body: &impl Serialize) -> Response<BoxBody> {
-    let json = serde_json::to_string_pretty(body).unwrap_or_else(|e| {
-        format!("{{\"error\":\"serialization failed: {}\"}}", e)
+fn json_response(status: StatusCode, json: &serde_json::Value) -> Response<BoxBody> {
+    let json = serde_json::to_string_pretty(json).unwrap_or_else(|e| {
+        format!(r#"{{"error": "serialization failed: {}"}}", e)
     });
     Response::builder()
         .status(status)
@@ -59,7 +59,13 @@ fn json_response(status: StatusCode, body: &impl Serialize) -> Response<BoxBody>
         .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         .header("Access-Control-Allow-Headers", "Content-Type")
         .body(Full::new(Bytes::from(json)))
-        .unwrap()
+        .unwrap_or_else(|e| {
+            tracing::error!("Failed to build JSON response: {}", e);
+            Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(full(r#"{"error": "response build failed"}"#))
+                .unwrap_or_else(|_| Response::new(full("error")))
+        })
 }
 
 fn error_response(status: StatusCode, msg: &str) -> Response<BoxBody> {
@@ -219,12 +225,15 @@ async fn handle_request(
     // Handle CORS preflight
     if req.method() == Method::OPTIONS {
         return Ok(Response::builder()
-            .status(200)
+            .status(StatusCode::NO_CONTENT)
             .header("Access-Control-Allow-Origin", "*")
             .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             .header("Access-Control-Allow-Headers", "Content-Type")
             .body(Full::new(Bytes::new()))
-            .unwrap());
+            .unwrap_or_else(|e| {
+                tracing::error!("Failed to build CORS response: {}", e);
+                Response::new(full(""))
+            }));
     }
 
     let method = req.method();
@@ -1277,12 +1286,18 @@ async fn handle_request(
         (&Method::GET, ["metrics"]) => {
             // Prometheus format
             let metrics = server.checkpoint_metrics.export_prometheus();
-            Response::builder()
+            Ok(Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "text/plain; version=0.0.4")
                 .header("Access-Control-Allow-Origin", "*")
                 .body(Full::new(Bytes::from(metrics)))
-                .unwrap()
+                .unwrap_or_else(|e| {
+                    tracing::error!("Failed to build metrics response: {}", e);
+                    Response::builder()
+                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .body(full("error building metrics response"))
+                        .unwrap_or_else(|_| Response::new(full("error")))
+                }))
         }
 
         (&Method::GET, ["metrics", "json"]) => {
