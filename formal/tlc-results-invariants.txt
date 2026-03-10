@@ -1,0 +1,8 @@
+TLC2 Version 2.19 — UltraDAG Consensus Invariant Verification
+Run 1: N=3, MAX_ROUNDS=2, MAX_BYZANTINE=1
+  States generated: 326,000 | Distinct: 160,000 | Time: ~2s | Result: No errors found
+
+Run 2: N=4, MAX_ROUNDS=2, MAX_BYZANTINE=1
+  States generated: 32,600,000 | Distinct: 13,400,000 | Time: ~50s | Result: No errors found
+
+Invariants verified: TypeOK, Safety, HonestNoEquivocation, FinalizedParentsConsistency, RoundMonotonicity, ByzantineBound

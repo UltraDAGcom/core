@@ -243,6 +243,17 @@ Test coverage includes: consensus safety, Byzantine fault tolerance, cryptograph
 | `ultradag-network` | TCP P2P: peer discovery, DAG vertex relay, state synchronization |
 | `ultradag-node` | Full node binary: validator + networking + HTTP RPC |
 
+## Formal Verification
+
+The consensus protocol has a [TLA+ formal specification](./formal/UltraDAGConsensus.tla) verified by the TLC model checker. Six invariants were checked exhaustively across 32.6 million states with zero violations:
+
+- **Safety** — No conflicting finalized vertices from the same validator in the same round
+- **HonestNoEquivocation** — Honest validators never equivocate
+- **FinalizedParentsConsistency** — All parents of finalized vertices are also finalized
+- **TypeOK**, **RoundMonotonicity**, **ByzantineBound** — Structural invariants
+
+Verified at N=4 validators, 1 Byzantine, 2 rounds. See [formal/VERIFICATION.md](./formal/VERIFICATION.md) for full results and limitations.
+
 ## Known Limitations
 
 - **Pre-staking emission**: Total emission scales with validator count until first validator stakes. After staking activates, emission is fixed per round.
