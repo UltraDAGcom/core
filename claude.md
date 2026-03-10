@@ -357,6 +357,8 @@ site/
 formal/
   UltraDAGConsensus.tla   # TLA+ formal specification of DAG-BFT consensus
   UltraDAGConsensus.cfg   # TLC model checker configuration (4 validators, 4 rounds, 1 Byzantine)
+  VERIFICATION.md         # Verification results, methodology, and limitations
+  tlc-results-invariants.txt  # Raw TLC output summary (32.6M states, zero violations)
 ```
 
 ## Conventions
@@ -1470,6 +1472,7 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 ## Formal Verification (TLA+)
 
 **Location:** `formal/UltraDAGConsensus.tla` + `formal/UltraDAGConsensus.cfg`
+**Results:** `formal/VERIFICATION.md` + `formal/tlc-results-invariants.txt`
 
 TLA+ specification of UltraDAG's DAG-BFT consensus, derived directly from the Rust implementation. Models vertex production, parent referencing, BFT finality, and Byzantine behavior.
 
@@ -1481,14 +1484,24 @@ TLA+ specification of UltraDAG's DAG-BFT consensus, derived directly from the Ru
 - `ByzantineAction(v, r)` — Byzantine validator can equivocate (multiple vertices per round) or stay silent
 - `AdvanceRound` — system advances to next round
 
-**Properties verified:**
+**Invariants verified (March 10, 2026):**
 - **Safety** — No two finalized vertices from same validator in same round with different content
 - **HonestNoEquivocation** — Honest validators never produce two vertices in the same round
 - **FinalizedParentsConsistency** — All parents of finalized vertices are also finalized
-- **Liveness** — Every honest vertex is eventually finalized (under weak fairness)
 - **TypeOK**, **RoundMonotonicity**, **ByzantineBound** — structural invariants
 
-**Bounds:** VALIDATORS = {"v1","v2","v3","v4"}, MAX_ROUNDS = 4, MAX_BYZANTINE = 1. QuorumThreshold = ceil(8/3) = 3.
+**TLC Model Checking Results:**
+
+| Configuration | States Generated | Distinct States | Time | Result |
+|---------------|-----------------|-----------------|------|--------|
+| N=3, f=1, MAX_ROUNDS=2 | 326,000 | 160,000 | ~2s | No errors |
+| N=4, f=1, MAX_ROUNDS=2 | 32,600,000 | 13,400,000 | ~50s | No errors |
+
+**Total: 32.9 million states explored, zero violations.**
+
+**Liveness:** Specified (`Liveness` temporal property) but not yet model-checked — deferred due to TLC resource requirements for liveness checking at this state space size.
+
+**Limitations:** Bounded model checking at MAX_ROUNDS=2. Bugs manifesting only at round 3+ would not be caught. See `formal/VERIFICATION.md` for full discussion.
 
 **Run:** `java -jar tla2tools.jar -config UltraDAGConsensus.cfg UltraDAGConsensus.tla`
 
@@ -1602,7 +1615,7 @@ TLA+ specification of UltraDAG's DAG-BFT consensus, derived directly from the Ru
 - [ ] **Verify max supply** — After faucet removal, confirm total circulating supply at genesis = 1,050,000 UDAG (dev allocation only), and max supply = 21,000,000 UDAG exactly
 - [ ] **Security audit** — External audit of consensus, state, and cryptographic implementations
 - [ ] **Penetration testing** — Network-level attacks, eclipse attacks, DDoS resilience
-- [x] **Formal verification** — TLA+ specification written (`formal/UltraDAGConsensus.tla`) with TLC config (`formal/UltraDAGConsensus.cfg`). Models vertex production, BFT finality (ceil(2N/3) descendants), equivocation, Byzantine actions. Verifies Safety (no conflicting finalized vertices), Liveness (honest vertices eventually finalized), HonestNoEquivocation, FinalizedParentsConsistency. Bounded: 4 validators, 4 rounds, 1 Byzantine.
+- [x] **Formal verification** — TLA+ specification (`formal/UltraDAGConsensus.tla`) verified by TLC model checker. 32.6M states explored at N=4, f=1, MAX_ROUNDS=2 with zero violations across 6 invariants (Safety, HonestNoEquivocation, FinalizedParentsConsistency, TypeOK, RoundMonotonicity, ByzantineBound). Results: `formal/VERIFICATION.md`. Liveness checking deferred (resource-intensive).
 - [ ] **Hardcode GENESIS_CHECKPOINT_HASH** — Compute blake3 hash of genesis checkpoint (after faucet removal) and replace placeholder `[0u8; 32]` in `constants.rs`. This is the trust anchor for checkpoint chain verification. Any checkpoint chain must link back to this hash. **Critical:** Must be computed from final mainnet genesis state (after faucet removal). For testnet, can use current genesis hash for testing.
 
 ### Protocol

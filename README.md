@@ -272,4 +272,9 @@ Verified at N=4 validators, 1 Byzantine, 2 rounds. See [formal/VERIFICATION.md](
 
 ## License
 
-MIT OR Apache-2.0
+Business Source License 1.1 (BISL) - see [LICENSE](./LICENSE) file.
+
+**Summary:**
+- Free to use for operating validators, building wallets/explorers, and developing applications on UltraDAG
+- Cannot be used to launch competing blockchain networks
+- Converts to MIT License on March 10, 2030
