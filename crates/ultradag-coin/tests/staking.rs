@@ -681,11 +681,12 @@ fn test_24_stale_epoch_on_load_triggers_recalculation() {
     state.apply_vertex(&v0).unwrap();
     assert_eq!(state.current_epoch(), 0);
 
-    // Jump to round 210,001 (epoch 1)
+    // Jump to round 210,001 (epoch 1) — past first halving at 210,000
+    let epoch1_round = EPOCH_LENGTH_ROUNDS + 1;
     let own1 = state.stake_of(&sks[1].address());
     let ts1 = state.total_staked();
-    let r1 = ((block_reward(1) as u128) * own1 as u128 / ts1 as u128) as u64;
-    let v1 = make_vertex(&sks[1], EPOCH_LENGTH_ROUNDS + 1, 1, vec![], r1);
+    let r1 = ((block_reward(epoch1_round) as u128) * own1 as u128 / ts1 as u128) as u64;
+    let v1 = make_vertex(&sks[1], epoch1_round, 1, vec![], r1);
     state.apply_vertex(&v1).unwrap();
     assert_eq!(state.current_epoch(), 1);
 
