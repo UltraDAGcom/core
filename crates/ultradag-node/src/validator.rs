@@ -263,14 +263,27 @@ pub async fn validator_loop(
         );
         vertex.signature = sk.sign(&vertex.signable_bytes());
 
-        // Insert into DAG
+        // Insert into DAG using try_insert to catch equivocation races.
+        // Between the equivocation check (line 151) and here, a P2P vertex from
+        // another node could have been inserted for the same validator+round.
         {
             let mut dag = server.dag.write().await;
-            dag.insert(vertex.clone());
+            match dag.try_insert(vertex.clone()) {
+                Ok(true) => {} // Inserted successfully
+                Ok(false) => {
+                    warn!("Vertex rejected by DAG (duplicate or Byzantine) — skipping broadcast");
+                    continue;
+                }
+                Err(e) => {
+                    warn!("Vertex insertion failed: {:?} — skipping broadcast", e);
+                    continue;
+                }
+            }
         }
 
         // Check finality and apply to state (multi-pass for parent finality guarantee)
-        {
+        // Lock ordering: finality+dag → drop → state → drop → finality (for epoch sync)
+        let (all_finalized, finalized_vertices) = {
             let mut fin = server.finality.write().await;
             fin.register_validator(validator);
             let dag_r = server.dag.read().await;
@@ -319,34 +332,42 @@ pub async fn validator_loop(
                     last_fin, scan_round, total, unfinalized, threshold, sample_info);
             }
 
-            if !all_finalized.is_empty() {
-                info!("DAG-BFT finalized {} vertices", all_finalized.len());
+            let finalized_vertices: Vec<DagVertex> = all_finalized
+                .iter()
+                .filter_map(|h| dag_r.get(h).cloned())
+                .collect();
 
-                let finalized_vertices: Vec<DagVertex> = all_finalized
-                    .iter()
-                    .filter_map(|h| dag_r.get(h).cloned())
-                    .collect();
+            (all_finalized, finalized_vertices)
+        }; // finality + dag locks dropped here
 
-                drop(dag_r);
+        if !all_finalized.is_empty() {
+            info!("DAG-BFT finalized {} vertices", all_finalized.len());
 
+            let epoch_changed = {
                 let mut state_w = server.state.write().await;
                 let prev_round = state_w.last_finalized_round();
                 if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
                     warn!("Failed to apply finalized vertices to state: {}", e);
+                    false
                 } else {
-                    // Epoch transition: sync active validator set to FinalityTracker
-                    if state_w.epoch_just_changed(prev_round) {
-                        sync_epoch_validators(&mut fin, &state_w);
-                        info!("Epoch transition to epoch {} — active set: {} validators",
-                            state_w.current_epoch(), state_w.active_validators().len());
-                    }
+                    let changed = state_w.epoch_just_changed(prev_round);
                     let mut mp = server.mempool.write().await;
                     for v in &finalized_vertices {
                         for tx in &v.block.transactions {
                             mp.remove(&tx.hash());
                         }
                     }
+                    changed
                 }
+            }; // state_w dropped here
+
+            // Epoch transition: acquire finality AFTER dropping state to prevent deadlock
+            if epoch_changed {
+                let mut fin = server.finality.write().await;
+                let state_r = server.state.read().await;
+                sync_epoch_validators(&mut fin, &state_r);
+                info!("Epoch transition to epoch {} — active set: {} validators",
+                    state_r.current_epoch(), state_r.active_validators().len());
             }
         }
 
@@ -393,9 +414,16 @@ pub async fn validator_loop(
             // Store in pending_checkpoints so co-signatures can accumulate
             server.pending_checkpoints.write().await.insert(checkpoint_round, checkpoint.clone());
 
-            // Persist checkpoint to disk
+            // Persist checkpoint and its state snapshot to disk
             match ultradag_coin::persistence::save_checkpoint(&data_dir, &checkpoint) {
-                Ok(_) => server.checkpoint_metrics.record_checkpoint_persist_success(),
+                Ok(_) => {
+                    server.checkpoint_metrics.record_checkpoint_persist_success();
+                    // Save the state snapshot at checkpoint time so GetCheckpoint
+                    // can serve the correct state (not the advanced current state)
+                    if let Err(e) = ultradag_coin::persistence::save_checkpoint_state(&data_dir, checkpoint_round, &state_snapshot) {
+                        warn!("Failed to save checkpoint state for round {}: {}", checkpoint_round, e);
+                    }
+                }
                 Err(e) => {
                     warn!("Failed to save checkpoint: {}", e);
                     server.checkpoint_metrics.record_checkpoint_persist_failure();

@@ -21,6 +21,9 @@ pub struct DagSnapshot {
     /// Permanent equivocation evidence store (survives pruning).
     #[serde(default)]
     pub evidence_store: Vec<(Address, Vec<crate::consensus::dag::EquivocationEvidence>)>,
+    /// Rejected equivocation vertices (not in DAG, needed for evidence broadcasting).
+    #[serde(default)]
+    pub equivocation_vertices: Vec<([u8; 32], DagVertex)>,
 }
 
 impl DagSnapshot {

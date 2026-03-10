@@ -844,7 +844,7 @@ async fn handle_peer(
                         );
                         let dag_w = dag.read().await;
                         if let Some([hash1, hash2]) = dag_w.get_equivocation_evidence(&validator, round) {
-                            if let (Some(v1), Some(v2)) = (dag_w.get(&hash1), dag_w.get(&hash2)) {
+                            if let (Some(v1), Some(v2)) = (dag_w.get_including_equivocations(&hash1), dag_w.get_including_equivocations(&hash2)) {
                                 let evidence_msg = Message::EquivocationEvidence {
                                     vertex1: v1.clone(),
                                     vertex2: v2.clone(),
@@ -1017,7 +1017,7 @@ async fn handle_peer(
                                 );
                                 // Broadcast equivocation evidence
                                 if let Some([h1, h2]) = dag_w.get_equivocation_evidence(&validator, vertex.round) {
-                                    if let (Some(v1), Some(v2)) = (dag_w.get(&h1).cloned(), dag_w.get(&h2).cloned()) {
+                                    if let (Some(v1), Some(v2)) = (dag_w.get_including_equivocations(&h1).cloned(), dag_w.get_including_equivocations(&h2).cloned()) {
                                         let evidence_msg = Message::EquivocationEvidence {
                                             vertex1: v1,
                                             vertex2: v2,
@@ -1072,22 +1072,38 @@ async fn handle_peer(
                     }; // finality + dag locks dropped here
                     if !all_finalized.is_empty() {
                         info!("Sync finalized {} vertices", all_finalized.len());
-                        let mut state_w = state.write().await;
-                        let prev_round = state_w.last_finalized_round();
-                        if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
-                            warn!("Failed to apply sync-finalized vertices: {}", e);
-                        } else {
-                            if state_w.epoch_just_changed(prev_round) {
-                                let mut fin = finality.write().await;
-                                sync_epoch_validators(&mut fin, &state_w);
-                                info!("Epoch transition to epoch {} — active set: {} validators",
-                                    state_w.current_epoch(), state_w.active_validators().len());
-                            }
-                            let mut mp = mempool.write().await;
-                            for v in &finalized_vertices {
-                                for tx in &v.block.transactions {
-                                    mp.remove(&tx.hash());
+                        // Apply finalized vertices and check for epoch change.
+                        // IMPORTANT: drop state_w before acquiring finality.write()
+                        // to maintain lock ordering (finality → state) and avoid deadlock.
+                        let (epoch_changed, epoch_info) = {
+                            let mut state_w = state.write().await;
+                            let prev_round = state_w.last_finalized_round();
+                            if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
+                                warn!("Failed to apply sync-finalized vertices: {}", e);
+                                (false, None)
+                            } else {
+                                let changed = state_w.epoch_just_changed(prev_round);
+                                let info = if changed {
+                                    Some((state_w.current_epoch(), state_w.active_validators().len()))
+                                } else {
+                                    None
+                                };
+                                let mut mp = mempool.write().await;
+                                for v in &finalized_vertices {
+                                    for tx in &v.block.transactions {
+                                        mp.remove(&tx.hash());
+                                    }
                                 }
+                                (changed, info)
+                            }
+                        }; // state_w dropped here
+                        if epoch_changed {
+                            let mut fin = finality.write().await;
+                            let state_r = state.read().await;
+                            sync_epoch_validators(&mut fin, &state_r);
+                            if let Some((epoch, count)) = epoch_info {
+                                info!("Epoch transition to epoch {} — active set: {} validators",
+                                    epoch, count);
                             }
                         }
                     }
@@ -1415,12 +1431,23 @@ async fn handle_peer(
                     }
                     drop(dag_r);
 
-                    let Some(state_r) = state.try_read().ok() else {
-                        warn!("GetCheckpoint: state lock contended, skipping for {}", peer_addr);
-                        continue;
+                    // Load the state snapshot saved at checkpoint production time.
+                    // Using current state would be wrong — it has advanced past the checkpoint round,
+                    // so its state_root wouldn't match the checkpoint's state_root.
+                    let state_snapshot = match ultradag_coin::persistence::load_checkpoint_state(data_dir, checkpoint.round) {
+                        Some(snap) => snap,
+                        None => {
+                            // Fallback to current state if no saved snapshot (legacy checkpoints)
+                            warn!("GetCheckpoint: no saved state for checkpoint round {}, using current state (may cause state_root mismatch)", checkpoint.round);
+                            let Some(state_r) = state.try_read().ok() else {
+                                warn!("GetCheckpoint: state lock contended, skipping for {}", peer_addr);
+                                continue;
+                            };
+                            let snap = state_r.snapshot();
+                            drop(state_r);
+                            snap
+                        }
                     };
-                    let state_snapshot = state_r.snapshot();
-                    drop(state_r);
 
                     let _ = peers.send_to(&peer_addr, &Message::CheckpointSync {
                         checkpoint,

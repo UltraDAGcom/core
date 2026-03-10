@@ -1079,7 +1079,7 @@ async fn handle_request(
             let staked = state.stake_of(&addr);
             let stake_acct = state.stake_account(&addr);
             let unlock_at = stake_acct.and_then(|s| s.unlock_at_round);
-            let is_active = staked >= MIN_STAKE_SATS && unlock_at.is_none();
+            let is_active = state.is_active_validator(&addr);
             json_response(StatusCode::OK, &StakeInfoResponse {
                 address: addr.to_hex(),
                 staked,

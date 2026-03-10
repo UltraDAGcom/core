@@ -64,6 +64,9 @@ pub struct BlockDag {
     /// Permanent equivocation evidence store (survives pruning).
     /// Multiple equivocations per validator are tracked.
     evidence_store: HashMap<Address, Vec<EquivocationEvidence>>,
+    /// Rejected equivocation vertices stored for evidence broadcasting.
+    /// These vertices were NOT inserted into the DAG but are needed to prove equivocation.
+    equivocation_vertices: HashMap<[u8; 32], DagVertex>,
     /// Incremental descendant validator tracking for O(1) finality checks.
     /// Maps vertex hash -> set of distinct validators that have at least one descendant.
     descendant_validators: HashMap<[u8; 32], HashSet<Address>>,
@@ -83,6 +86,7 @@ impl BlockDag {
             byzantine_validators: HashSet::new(),
             equivocation_evidence: HashMap::new(),
             evidence_store: HashMap::new(),
+            equivocation_vertices: HashMap::new(),
             descendant_validators: HashMap::new(),
             pruning_floor: 0,
         }
@@ -218,7 +222,10 @@ impl BlockDag {
                     .copied()
             })
         {
-            // Store equivocation evidence and mark as Byzantine
+            // Store equivocation evidence and mark as Byzantine.
+            // Also store the rejected vertex so evidence can be broadcast
+            // (the vertex is NOT inserted into the DAG, so dag.get(hash) would fail).
+            self.equivocation_vertices.insert(hash, vertex.clone());
             self.store_equivocation_evidence(
                 vertex.validator,
                 vertex.round,
@@ -226,7 +233,7 @@ impl BlockDag {
                 hash,
             );
             self.mark_byzantine(vertex.validator);
-            
+
             return Err(DagInsertError::Equivocation {
                 validator: vertex.validator,
                 round: vertex.round,
@@ -252,6 +259,12 @@ impl BlockDag {
     /// Get a vertex by hash.
     pub fn get(&self, hash: &[u8; 32]) -> Option<&DagVertex> {
         self.vertices.get(hash)
+    }
+
+    /// Get a vertex by hash, also checking rejected equivocation vertices.
+    /// Use this when looking up vertices for equivocation evidence broadcasting.
+    pub fn get_including_equivocations(&self, hash: &[u8; 32]) -> Option<&DagVertex> {
+        self.vertices.get(hash).or_else(|| self.equivocation_vertices.get(hash))
     }
 
     /// Get all current tip hashes.
@@ -570,6 +583,7 @@ impl BlockDag {
             equivocation_evidence: self.equivocation_evidence.iter().map(|(k, v)| (*k, *v)).collect(),
             pruning_floor: self.pruning_floor,
             evidence_store: self.evidence_store.iter().map(|(k, v)| (*k, v.clone())).collect(),
+            equivocation_vertices: self.equivocation_vertices.iter().map(|(k, v)| (*k, v.clone())).collect(),
         };
         snapshot.save(path)
     }
@@ -623,6 +637,7 @@ impl BlockDag {
             byzantine_validators: snapshot.byzantine_validators.into_iter().collect(),
             equivocation_evidence: snapshot.equivocation_evidence.into_iter().collect(),
             evidence_store: snapshot.evidence_store.into_iter().collect(),
+            equivocation_vertices: snapshot.equivocation_vertices.into_iter().collect(),
             descendant_validators,
             pruning_floor: snapshot.pruning_floor,
         })

@@ -112,7 +112,11 @@ impl StateEngine {
     /// in this round. Used for emission splitting when staking is not yet active.
     /// Pass 1 for tests that don't care about proportional rewards.
     pub fn apply_vertex(&mut self, vertex: &DagVertex) -> Result<(), CoinError> {
-        self.apply_vertex_with_validators(vertex, 1)
+        self.apply_vertex_with_validators(vertex, 1)?;
+        // Single-vertex convenience: also update last_finalized_round.
+        // (apply_finalized_vertices handles this per-round for batches.)
+        self.last_finalized_round = Some(vertex.round);
+        Ok(())
     }
 
     /// Apply a finalized vertex with known validator count for reward splitting.
@@ -266,8 +270,9 @@ impl StateEngine {
             }
         }
 
-        // Update last finalized round
-        snapshot.last_finalized_round = Some(vertex.round);
+        // NOTE: last_finalized_round is NOT updated here — it's updated per-round
+        // in apply_finalized_vertices() to ensure all vertices in the same round
+        // compute the same expected_height for coinbase validation.
 
         // Epoch boundary: recalculate active validator set
         let new_epoch = crate::constants::epoch_of(vertex.round);
@@ -279,17 +284,17 @@ impl StateEngine {
         // Tick governance to update proposal statuses
         snapshot.tick_governance(vertex.round);
 
-        // Supply invariant check (debug builds only)
+        // Supply invariant check — unconditional (catches state corruption in release builds too)
         // sum(liquid balances) + sum(staked) == total_supply
-        #[cfg(debug_assertions)]
         {
             let liquid: u64 = snapshot.accounts.values().map(|a| a.balance).sum();
             let staked: u64 = snapshot.stake_accounts.values().map(|s| s.staked).sum();
-            assert_eq!(
-                liquid + staked, snapshot.total_supply,
-                "Supply invariant broken: liquid={} staked={} total_supply={}",
-                liquid, staked, snapshot.total_supply
-            );
+            if liquid.saturating_add(staked) != snapshot.total_supply {
+                return Err(CoinError::ValidationError(format!(
+                    "Supply invariant broken: liquid={} staked={} total_supply={}",
+                    liquid, staked, snapshot.total_supply
+                )));
+            }
         }
 
         // All transactions valid — commit snapshot
@@ -313,14 +318,35 @@ impl StateEngine {
             for v in &sorted {
                 *round_counts.entry(v.round).or_insert(0) += 1;
             }
+            // Group vertices by round. Update last_finalized_round only BETWEEN rounds,
+            // so all vertices in the same round compute the same expected_height.
+            let mut prev_round = None;
             for vertex in &sorted {
+                // Before processing first vertex of a new round, update last_finalized_round
+                // to the previous round (if any). This ensures same-round vertices share height.
+                if prev_round.is_some() && prev_round != Some(vertex.round) {
+                    self.last_finalized_round = prev_round;
+                }
                 let count = round_counts.get(&vertex.round).copied().unwrap_or(1);
                 self.apply_vertex_with_validators(vertex, count)?;
+                prev_round = Some(vertex.round);
+            }
+            // Update for the final round
+            if let Some(r) = prev_round {
+                self.last_finalized_round = Some(r);
             }
         } else {
             // Pre-staking mode: each vertex gets full block_reward (backward compatible)
+            let mut prev_round = None;
             for vertex in &sorted {
+                if prev_round.is_some() && prev_round != Some(vertex.round) {
+                    self.last_finalized_round = prev_round;
+                }
                 self.apply_vertex_with_validators(vertex, 1)?;
+                prev_round = Some(vertex.round);
+            }
+            if let Some(r) = prev_round {
+                self.last_finalized_round = Some(r);
             }
         }
         Ok(())

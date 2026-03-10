@@ -182,7 +182,7 @@
 UltraDAG is **the only chain** where a full validator:
 - Fits in **<2 MB binary** (release build)
 - Runs with **bounded storage** (automatic pruning, configurable depth)
-- Achieves **fast finality** (3 rounds, ~5-15 seconds)
+- Achieves **fast finality** (2 rounds, ~10 seconds at default 5s rounds)
 - Works on **cheap hardware** (proven on $5/mo cloud instances)
 - Has **proper staking/slashing** with BFT security
 
@@ -192,7 +192,7 @@ UltraDAG is **the only chain** where a full validator:
 
 | Project | Launched | Status | Why UltraDAG is Better |
 |---------|----------|--------|------------------------|
-| **IOTA** | 2016 | Active but low adoption | UltraDAG has predictable finality (3 rounds vs IOTA's Coordicide delays), simpler architecture, working pruning |
+| **IOTA** | 2016 | Active but low adoption | UltraDAG has predictable finality (2 rounds vs IOTA's Coordicide delays), simpler architecture, working pruning |
 | **Helium** | 2019 | Successful in LoRaWAN niche | UltraDAG is general-purpose L1, not limited to LoRa networks |
 | **IoTeX** | 2018 | Some partnerships, limited volume | UltraDAG is minimal (~1500 LOC vs bloated EVM), faster finality, lower resource requirements |
 | **MXC** | 2019 | Low activity | UltraDAG has cleaner consensus, no PoW waste, bounded storage |
@@ -202,7 +202,7 @@ UltraDAG is **the only chain** where a full validator:
 **Key insight:** While others claimed "built for IoT/machines", UltraDAG is the first to actually deliver on all four critical requirements:
 1. **Minimal** — Small binary, simple consensus (~900-1500 LOC)
 2. **Bounded storage** — Pruning works in production (not just whitepaper)
-3. **Fast finality** — Predictable 3-round lag, no leaders, no heavy PoS
+3. **Fast finality** — Predictable 2-round lag, no leaders, no heavy PoS
 4. **Cheap hardware** — Runs on embedded/IoT-class devices
 
 **Defensible claims:**
@@ -227,9 +227,9 @@ UltraDAG is **the only chain** where a full validator:
 
 ### 2. **Predictable Fast Finality** (vs IOTA, IoTeX)
 - **Problem:** IOTA's Coordicide still delayed, IoTeX has slow block times
-- **UltraDAG solution:** BFT finality in 3 rounds (~5-15 seconds depending on round time)
+- **UltraDAG solution:** BFT finality in 2 rounds (~10 seconds at 5s round time)
 - **Result:** Sensors can confirm payments in <10 seconds without centralized coordinator
-- **Status:** Proven on 4-node testnet with lag=3 consistently
+- **Status:** Proven on 4-node testnet with lag=2 consistently
 
 ### 3. **Minimal Binary Size** (vs IoTeX, Fetch.ai, MXC)
 - **Problem:** EVM chains and complex VMs require 100+ MB binaries, too large for embedded devices
@@ -427,9 +427,9 @@ When a vertex fails insertion due to missing parents, the node:
 ### Staking & Validator Cap
 - **Minimum stake**: `MIN_STAKE_SATS` = 10,000 UDAG (updated from 1,000)
 - **StakeTx**: locks UDAG from liquid balance into stake account
-- **UnstakeTx**: begins cooldown period (`UNSTAKE_COOLDOWN_ROUNDS` = 2,016 rounds ≈ 1 week)
+- **UnstakeTx**: begins cooldown period (`UNSTAKE_COOLDOWN_ROUNDS` = 2,016 rounds ≈ 2.8 hours at 5s rounds)
 - **Max active validators**: `MAX_ACTIVE_VALIDATORS` = 21 (odd number for clean BFT quorum: ceil(2×21/3) = 14)
-- **Epoch-based validator set**: recalculated every `EPOCH_LENGTH_ROUNDS` = 210,000 rounds (~1 year at 5s rounds)
+- **Epoch-based validator set**: recalculated every `EPOCH_LENGTH_ROUNDS` = 210,000 rounds (~12 days at 5s rounds)
   - `epoch_of(round)` = round / 210,000
   - `is_epoch_boundary(round)` = round % 210,000 == 0
   - Top 21 stakers by amount become active validators; set frozen between epoch boundaries
@@ -617,7 +617,7 @@ if last_finalized_round > 0 && last_finalized_round % CHECKPOINT_INTERVAL == 0 {
 - `finality.json` — Finalized vertex hashes, validator set, last_finalized_round
 - `state.json` — Account balances, nonces, stake accounts, active validators, total supply
 - `mempool.json` — Pending transactions
-- `checkpoints/checkpoint_<round>.json` — Accepted checkpoints (every 1000 rounds)
+- `checkpoints/checkpoint_<round>.json` — Accepted checkpoints (every 100 finalized rounds)
 
 **Persistence triggers:**
 - Every 10 rounds during validator loop
@@ -760,11 +760,11 @@ cargo test --workspace
 
 ## Tests
 
-**492 tests passing** (all pass, zero failures, zero ignored):
+**557 tests passing** (all pass, zero failures, zero ignored):
 
 Run `cargo test --workspace --release` to verify:
 ```
-test result: ok. 469 passed; 0 failed; 0 ignored
+test result: ok. 557 passed; 0 failed; 0 ignored
 ```
 
 ### Test Breakdown by Crate:
@@ -1347,6 +1347,30 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 65. **Orphan buffer not cleared on CheckpointSync (March 10, 2026)** — After fast-sync replaced the DAG and state, the orphan buffer still held vertices from the pre-sync DAG. These orphans referenced parents that had been pruned, causing spurious `GetParents` requests and wasting memory.
     - **Fix:** Clear orphan buffer alongside mempool during CheckpointSync, before inserting suffix vertices.
     - **Result:** Clean orphan buffer after fast-sync, no stale parent requests
+66. **DagVertices handler deadlock (March 10, 2026)** — `DagVertices` handler acquired `state.write()` (line 1075) then `finality.write()` (line 1081) for epoch sync while state lock was still held. Other handlers (DagProposal, resolve_orphans) acquire finality before state, causing ABBA deadlock.
+    - **Fix:** Restructured to drop `state.write()` before acquiring `finality.write()` for epoch sync, matching the pattern used by DagProposal and resolve_orphans.
+    - **Result:** Consistent lock ordering across all code paths prevents deadlock
+67. **`/stake/:address` is_active_validator incorrect (March 10, 2026)** — RPC endpoint used `staked >= MIN_STAKE_SATS && unlock_at.is_none()` to determine if address is active validator. This ignores the actual top-21 active validator set — any address with sufficient non-unstaking stake would show as "active".
+    - **Fix:** Changed to `state.is_active_validator(&addr)` which checks the actual active validator set.
+    - **Result:** `/stake/:address` accurately reflects whether address is in the active validator set
+68. **GetCheckpoint sends advanced state (March 10, 2026)** — GetCheckpoint handler served the current state snapshot when responding to fast-sync requests. By the time a peer requests the checkpoint, state has advanced past the checkpoint round. The `state_root` in the checkpoint was computed at checkpoint time, so it won't match the current state, causing receiver to reject the fast-sync.
+    - **Fix:** Save state snapshot alongside checkpoint at production time (`save_checkpoint_state()`). GetCheckpoint loads saved snapshot (`load_checkpoint_state()`). Falls back to current state for legacy checkpoints with warning.
+    - **Result:** Fast-sync state_root always matches checkpoint, enabling reliable new node sync
+69. **CRITICAL: Validator `insert()` bypasses equivocation check (March 10, 2026)** — Validator loop checked equivocation at line 151 (read lock), dropped the lock, did block creation/signing, then inserted via `dag.insert()` which does NOT check equivocation. A P2P vertex from another node could be inserted between the check and the insert, causing the local validator to accidentally equivocate, resulting in 50% stake slashing.
+    - **Fix:** Changed to `dag.try_insert()` which checks equivocation. Abort broadcast on error or duplicate.
+    - **Result:** No TOCTOU race between equivocation check and DAG insertion
+70. **CRITICAL: Same-round vertices compute different expected_height (March 10, 2026)** — `apply_vertex_with_validators()` updated `last_finalized_round` after each vertex. When two vertices share a round, the second vertex computed `expected_height = round + 1` instead of `round`, mismatching the producing validator's coinbase. At halving boundaries (every 210,000 rounds), the reward amount differs between heights, causing coinbase validation to fail and rejecting the entire finalized batch.
+    - **Fix:** Moved `last_finalized_round` update from `apply_vertex_with_validators()` to `apply_finalized_vertices()`, applied per-round (not per-vertex). All vertices in the same round now compute the same expected_height.
+    - **Result:** Coinbase validation correct across same-round vertices and halving boundaries
+71. **Validator loop holds finality+state write locks simultaneously (March 10, 2026)** — `finality.write()` held at line 274 across the entire finality+state block including `state.write()` at line 332. P2P handlers use the opposite ordering in some paths, creating deadlock potential and extended lock contention.
+    - **Fix:** Restructured to match P2P handler pattern: scoped finality+dag block returns finalized data, drops locks, then acquires state separately. Epoch transition acquires finality after state is dropped.
+    - **Result:** Consistent lock ordering (finality → drop → state → drop → finality for epoch)
+72. **Equivocation evidence never propagates (March 10, 2026)** — When `try_insert()` detects equivocation, it stores `[existing_hash, new_hash]` but rejects the equivocating vertex (never inserts it). When the server tries to broadcast evidence via `dag.get(hash2)`, the rejected vertex is not found, so evidence is silently not broadcast. Byzantine validators escape slashing.
+    - **Fix:** Added `equivocation_vertices` map to store rejected vertices separately. Added `get_including_equivocations()` method. Server uses it when building evidence messages.
+    - **Result:** Equivocation evidence correctly broadcast to peers for slashing
+73. **Supply invariant only checked in debug builds (March 10, 2026)** — `#[cfg(debug_assertions)]` guard meant supply invariant (`liquid + staked == total_supply`) was never validated in release builds. A `debit()` underflow via `saturating_sub` could corrupt state silently in production.
+    - **Fix:** Made supply invariant check unconditional. Returns `CoinError::ValidationError` instead of panicking.
+    - **Result:** State corruption detected immediately in all build configurations
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.
@@ -1403,7 +1427,7 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 - Nodes joining after pruning fetch from checkpoint + recent DAG
 - Full history available from archive nodes (optional deployment)
 
-**Current status:** Checkpoint infrastructure fully integrated and operational at runtime. All 492 tests passing.
+**Current status:** Checkpoint infrastructure fully integrated and operational at runtime. All 557 tests passing.
 
 **Completed implementation:**
 1. ✅ **Checkpoint data structures** - Checkpoint signing, verification, quorum acceptance
@@ -1413,7 +1437,7 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 5. ✅ **Tunable pruning depth** - `--pruning-depth N` CLI flag (default: 1000)
 
 **Runtime behavior:**
-- Validators automatically produce checkpoints every 1000 finalized rounds
+- Validators automatically produce checkpoints every 100 finalized rounds
 - Checkpoints are signed, broadcast, and co-signed by other validators
 - When quorum (ceil(2n/3)) signatures collected, checkpoint is accepted and persisted to disk
 - New nodes can fast-sync from checkpoint via GetCheckpoint/CheckpointSync
@@ -1492,6 +1516,7 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 - [ ] **Security audit** — External audit of consensus, state, and cryptographic implementations
 - [ ] **Penetration testing** — Network-level attacks, eclipse attacks, DDoS resilience
 - [ ] **Formal verification** — Machine-checkable safety proof (or document why deferred)
+- [ ] **CheckpointSync trust anchor** — Fresh nodes trust `state_at_checkpoint` from the first peer they sync from (trust-on-first-use). A malicious peer can feed arbitrary state with forged validator set. Need hardcoded genesis validator keys or checkpoint chain verification from genesis.
 
 ### Protocol
 - [ ] **Change NETWORK_ID** — Update from `ultradag-testnet-v1` to `ultradag-mainnet-v1`
@@ -1506,7 +1531,7 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 - [ ] **Chaos testing** — Network partitions, validator crashes, Byzantine behavior simulation
 - [ ] **Load testing** — Sustained high transaction volume, mempool saturation
 - [ ] **Upgrade testing** — Binary upgrade without consensus failure
-- [x] **All tests passing** — 492 automated tests, 0 failures, 0 ignored (March 10, 2026)
+- [x] **All tests passing** — 557 automated tests, 0 failures, 0 ignored (March 10, 2026)
 
 ### Documentation
 - [ ] **Remove testnet warnings** — Update all references from testnet to mainnet

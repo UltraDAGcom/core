@@ -51,6 +51,28 @@ pub fn save_checkpoint(dir: &Path, checkpoint: &crate::consensus::Checkpoint) ->
     Ok(())
 }
 
+/// Save the state snapshot that corresponds to a checkpoint.
+/// This must be called at checkpoint production time so GetCheckpoint
+/// can serve the correct state (not the current, advanced state).
+pub fn save_checkpoint_state(dir: &Path, round: u64, snapshot: &crate::state::persistence::StateSnapshot) -> std::io::Result<()> {
+    let path = dir.join(format!("checkpoint_state_{:010}.json", round));
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, serde_json::to_vec(snapshot).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?)?;
+    std::fs::rename(tmp, path)?;
+    Ok(())
+}
+
+/// Load the state snapshot for a specific checkpoint round.
+pub fn load_checkpoint_state(dir: &Path, round: u64) -> Option<crate::state::persistence::StateSnapshot> {
+    let path = dir.join(format!("checkpoint_state_{:010}.json", round));
+    if path.exists() {
+        let bytes = std::fs::read(&path).ok()?;
+        serde_json::from_slice(&bytes).ok()
+    } else {
+        None
+    }
+}
+
 /// Load the latest checkpoint from disk, if any.
 pub fn load_latest_checkpoint(dir: &Path) -> Option<crate::consensus::Checkpoint> {
     let mut latest: Option<(u64, crate::consensus::Checkpoint)> = None;
@@ -123,6 +145,11 @@ pub fn prune_old_checkpoints(dir: &Path, keep_count: usize) -> std::io::Result<u
             } else {
                 deleted += 1;
             }
+        }
+        // Also delete the corresponding state snapshot
+        let state_path = dir.join(format!("checkpoint_state_{:010}.json", round));
+        if state_path.exists() {
+            let _ = std::fs::remove_file(&state_path);
         }
     }
     

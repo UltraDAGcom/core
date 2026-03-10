@@ -76,4 +76,7 @@ pub enum CoinError {
 
     #[error("already voted on this proposal")]
     AlreadyVoted,
+
+    #[error("validation error: {0}")]
+    ValidationError(String),
 }
