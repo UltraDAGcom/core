@@ -25,3 +25,6 @@ sdk/javascript/dist/
 sdk/rust/target/
 sdk/go/ultradag/testdata/
 *.pyc
+
+# TLA+ state files (can be very large)
+formal/states/
