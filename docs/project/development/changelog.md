@@ -8,10 +8,30 @@
 
 ## Recent Updates (March 2026)
 
+**Partial Parent Selection for Unlimited Validator Scaling (March 10, 2026):**
+- **Problem:** Old approach referenced ALL vertices from previous round, hitting MAX_PARENTS=64 limit at N=64 validators
+- **Solution:** Implemented K_PARENTS=32 partial parent selection (Narwhal approach)
+  - Each validator selects K=32 parents deterministically based on proposer address
+  - Networks with ≤32 validators: no change (all parents selected)
+  - Networks with >32 validators: deterministic sampling keeps parent count bounded
+- **Result:** **Removes N=64 validator ceiling entirely** — can now scale to 100s or 1000s of validators
+- **Impact:** Finality time unchanged (1-2 rounds), DAG stays well-connected through cross-references
+- **Tests:** 8 comprehensive tests including 200-validator scenario (previously impossible)
+
+**Equivocation Slashing Implementation (March 10, 2026):**
+- **Problem:** Equivocation was detected and stored but validators kept their stake
+- **Solution:** Execute slashing immediately when evidence is accepted
+  - Burns 50% of validator's stake (permanently removed from total_supply)
+  - Removes validator from active set if stake falls below MIN_STAKE_SATS
+  - Applied at 3 detection points: DagProposal, DagVertices sync, EquivocationEvidence message
+- **Result:** Byzantine validators are penalized immediately (security over epoch stability)
+- **Tests:** 4 comprehensive slashing tests verify burn amount, active set removal, and edge cases
+
 **Finality Fix (March 9, 2026):**
 - **Root cause:** Validators used `dag.tips()` for parent selection, which returns only childless vertices (typically 1 — our own last vertex). This created parallel linear chains instead of a dense DAG, causing finality lag of 250-314 rounds.
 - **Fix:** Changed parent selection to `dag.vertices_in_round(prev_round)`, referencing ALL known vertices from the previous round. This creates dense cross-links so descendant validator sets grow quickly.
 - **Result:** Finality lag dropped from 250-314 to lag=2 (near-optimal)
+- **Note:** Later enhanced with K_PARENTS partial selection to remove validator ceiling
 
 **P2P Connectivity Fix (March 9, 2026):**
 - Fly-to-Fly P2P connections via dedicated IPv4 were unstable (TCP proxy kills persistent connections with "early eof" / "Connection reset by peer")

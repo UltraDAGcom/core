@@ -446,10 +446,16 @@ When a vertex fails insertion due to missing parents, the node:
 - DAG vertices: Ed25519-signed by the proposing validator. Peers reject vertices with invalid signatures or equivocation.
 
 ### Key Constants (`constants.rs` and `dag.rs`)
-- `MAX_PARENTS` = 64 — Maximum parent references per DagVertex (in `dag.rs`)
+- `K_PARENTS` = 32 — **Target number of parents per vertex (partial parent selection)**
+  - **Enables unlimited validator scaling** by keeping parent count bounded at K regardless of validator count N
+  - Follows Narwhal approach: deterministic sampling based on proposer address
+  - Networks with ≤32 validators use all parents (no change in behavior)
+  - Networks with >32 validators select K=32 parents deterministically
+  - **Removes the old N=64 validator ceiling entirely**
+- `MAX_PARENTS` = 64 — Maximum parent references per DagVertex (legacy limit, now bypassed by K_PARENTS)
 - `PRUNING_HORIZON` = 1000 rounds — Number of finalized rounds to keep in memory before pruning
 - `CHECKPOINT_INTERVAL` = 100 rounds — How often to produce checkpoints for fast-sync (~8 min at 5s rounds)
-- `MAX_ACTIVE_VALIDATORS` = 21 — Maximum number of active validators
+- `MAX_ACTIVE_VALIDATORS` = 21 — Maximum number of active validators (can be increased to 100s or 1000s with K_PARENTS)
 - `EPOCH_LENGTH_ROUNDS` = 210,000 — Rounds between validator set recalculations
 - `MIN_STAKE_SATS` = 10,000 UDAG — Minimum stake to become a validator
 - `MIN_FEE_SATS` = 10,000 sats (0.0001 UDAG) — Minimum transaction fee for spam prevention

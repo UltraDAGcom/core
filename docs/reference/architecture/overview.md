@@ -198,13 +198,20 @@ At each epoch boundary, the StateEngine:
 
 1. Collects all stake accounts with `staked >= MIN_STAKE_SATS` (10,000 UDAG)
 2. Sorts by stake amount (descending)
-3. Takes top `MAX_ACTIVE_VALIDATORS` (currently 21)
+3. Takes top `MAX_ACTIVE_VALIDATORS` (currently 21, can be increased to 100s or 1000s)
 4. This becomes the active validator set for the next epoch
 
+**Scalability Note:**
+- With **partial parent selection** (K_PARENTS=32), UltraDAG can scale to **unlimited validators**
+- Each validator references K=32 parents instead of all N validators
+- This removes the old N=64 ceiling that existed when validators referenced all parents
+- Networks with ≤32 validators see no change (all parents still selected)
+- Networks with >32 validators use deterministic sampling for parent selection
+
 **Observer rewards:**
-- Validators ranked 22-100 are "observers"
+- Validators ranked beyond MAX_ACTIVE_VALIDATORS are "observers"
 - They don't participate in consensus but earn 20% of block rewards
-- This incentivizes running nodes even if you're not in the top 21
+- This incentivizes running nodes even if you're not in the active set
 
 ### Stake Changes During an Epoch
 
