@@ -15,6 +15,9 @@ pub struct PeerRegistry {
     /// Prevents try_connect_peer from creating duplicate connections
     /// when the writer key uses an ephemeral port.
     connected_listen_addrs: Arc<RwLock<HashSet<String>>>,
+    /// Maps writer key (possibly ephemeral port) → canonical listen address.
+    /// Used to clean up connected_listen_addrs when a peer is removed by writer key.
+    writer_to_listen: Arc<RwLock<HashMap<String, String>>>,
 }
 
 impl PeerRegistry {
@@ -23,6 +26,7 @@ impl PeerRegistry {
             known: Arc::new(RwLock::new(HashSet::new())),
             writers: Arc::new(RwLock::new(HashMap::new())),
             connected_listen_addrs: Arc::new(RwLock::new(HashSet::new())),
+            writer_to_listen: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -36,16 +40,29 @@ impl PeerRegistry {
 
     pub async fn remove_peer(&self, addr: &str) {
         self.writers.write().await.remove(addr);
+        // Also remove the linked listen address (handles ephemeral → canonical mapping)
+        if let Some(listen_addr) = self.writer_to_listen.write().await.remove(addr) {
+            self.connected_listen_addrs.write().await.remove(&listen_addr);
+        }
     }
 
-    /// Record a peer's canonical listen address as connected.
-    pub async fn add_connected_listen_addr(&self, addr: String) {
-        self.connected_listen_addrs.write().await.insert(addr);
+    /// Record a peer's canonical listen address as connected,
+    /// and map the writer key to the listen address for cleanup.
+    pub async fn add_connected_listen_addr(&self, listen_addr: String) {
+        self.connected_listen_addrs.write().await.insert(listen_addr);
+    }
+
+    /// Link a writer key to a canonical listen address so dead peer cleanup
+    /// can remove the correct listen address when only the writer key is known.
+    pub async fn link_writer_to_listen(&self, writer_key: String, listen_addr: String) {
+        self.writer_to_listen.write().await.insert(writer_key, listen_addr);
     }
 
     /// Remove a peer's canonical listen address from the connected set.
     pub async fn remove_connected_listen_addr(&self, addr: &str) {
         self.connected_listen_addrs.write().await.remove(addr);
+        // Also clean up the reverse mapping
+        self.writer_to_listen.write().await.retain(|_, v| v != addr);
     }
 
     /// Check if we have a connection to a peer by listen address.
@@ -116,15 +133,8 @@ impl PeerRegistry {
 
         // Remove dead peers outside the read lock
         if !dead_peers.is_empty() {
-            let mut writers = self.writers.write().await;
             for addr in &dead_peers {
-                writers.remove(addr);
-            }
-            drop(writers);
-            // Also clean up listen addr tracking
-            let mut listen_addrs = self.connected_listen_addrs.write().await;
-            for addr in &dead_peers {
-                listen_addrs.remove(addr);
+                self.remove_peer(addr).await;
             }
         }
     }

@@ -760,7 +760,7 @@ cargo test --workspace
 
 ## Tests
 
-**480 tests passing** (all pass, zero failures, zero ignored):
+**492 tests passing** (all pass, zero failures, zero ignored):
 
 Run `cargo test --workspace --release` to verify:
 ```
@@ -1320,6 +1320,27 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 56. **Faucet unlimited drain (March 10, 2026)** — `/faucet` endpoint accepted any amount in request body with no cap. Single request could drain entire 1,000,000 UDAG faucet reserve.
     - **Fix:** Added `MAX_FAUCET_SATS = 100 UDAG` cap with clear error message.
     - **Result:** Maximum 100 UDAG per faucet request
+57. **DagProposal epoch transition deadlock (March 10, 2026)** — Epoch transitions in DagProposal handler acquired `finality.write()` while still holding `state.write()`. DagVertices handler acquires locks in reverse order (finality→state), causing deadlock on epoch boundaries.
+    - **Fix:** Drop `state.write()` before acquiring `finality.write()` for epoch transition. Check `epoch_just_changed()` inside state scope, then acquire finality separately.
+    - **Result:** Consistent lock ordering (always finality before state) prevents deadlock
+58. **Validator height mismatch with engine (March 10, 2026)** — Validator loop computed height as `last_finalized_round.unwrap_or(0) + 1`, but engine computes it as `last_finalized_round.map(|r| r + 1).unwrap_or(0)`. When `last_finalized_round=None`, validator used height=1 but engine expected height=0, causing coinbase rejection.
+    - **Fix:** Changed validator.rs to use `match` pattern matching engine.rs exactly: `None → 0`, `Some(r) → r + 1`.
+    - **Result:** Validator and engine always agree on expected height
+59. **NewTx accepts forged transactions (March 10, 2026)** — P2P `NewTx` handler inserted transactions into mempool without verifying Ed25519 signatures. Any peer could inject transactions with forged signatures, which would fail at block application but pollute mempools network-wide.
+    - **Fix:** Added `tx.verify_signature()` check before mempool insertion with warning log on failure.
+    - **Result:** Only cryptographically valid transactions enter mempool from P2P
+60. **Finalized HashSet grows unbounded (March 10, 2026)** — `FinalityTracker.finalized` HashSet accumulated finalized hashes indefinitely. DAG pruning removed vertices but corresponding finalized hashes were never cleaned up, causing unbounded memory growth proportional to chain lifetime.
+    - **Fix:** Added `prune_finalized(&dag)` method that retains only hashes still in DAG. Called after `prune_old_rounds()` in validator loop.
+    - **Result:** Finalized set stays bounded to approximately `PRUNING_HORIZON` entries
+61. **CRITICAL: Non-deterministic state root (March 10, 2026)** — `StateEngine::snapshot()` iterated `HashMap` (non-deterministic order) into Vec, then `compute_state_root()` hashed the JSON. Different nodes computed different state_root hashes for identical state, causing checkpoint co-signing to always fail (validators disagreed on state_root).
+    - **Fix:** Sort all Vec entries by key (address bytes, proposal ID, vote key) before returning snapshot. Comment documents why sorting is required.
+    - **Result:** All nodes compute identical state_root for the same state — checkpoint consensus works
+62. **resolve_orphans deadlock risk (March 10, 2026)** — `resolve_orphans()` held `finality.write()` while acquiring `state.write()` (lines 437-457). DagProposal handler drops finality before state, then re-acquires finality for epoch transitions. A concurrent DagProposal + resolve_orphans could deadlock: resolve_orphans holds finality→wants state, DagProposal (epoch path) wants finality while state is blocked.
+    - **Fix:** Restructured to match DagProposal pattern: scoped finality+dag block returns finalized data, drops locks, then acquires state separately. Epoch transition acquires finality after state is dropped.
+    - **Result:** Consistent lock ordering across all code paths (finality→drop→state→drop→finality for epoch)
+63. **Dead peer cleanup leaks connected_listen_addrs (March 10, 2026)** — `broadcast()` and heartbeat removed dead peers using ephemeral writer keys (e.g., `192.168.1.1:54321`), then tried to remove from `connected_listen_addrs` using the same key. But `connected_listen_addrs` stores canonical listen addresses (e.g., `192.168.1.1:9333`). Keys never matched, so stale entries accumulated forever, eventually blocking peer reconnection.
+    - **Fix:** Added `writer_to_listen: HashMap<String, String>` mapping in PeerRegistry. Hello handler links writer key → listen addr. `remove_peer()` now also removes the associated listen addr. `broadcast()` uses `remove_peer()` for cleanup.
+    - **Result:** Dead peer cleanup correctly removes both writer and listen addr entries
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.
@@ -1376,7 +1397,7 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 - Nodes joining after pruning fetch from checkpoint + recent DAG
 - Full history available from archive nodes (optional deployment)
 
-**Current status:** Checkpoint infrastructure fully integrated and operational at runtime. All 480 tests passing.
+**Current status:** Checkpoint infrastructure fully integrated and operational at runtime. All 492 tests passing.
 
 **Completed implementation:**
 1. ✅ **Checkpoint data structures** - Checkpoint signing, verification, quorum acceptance
@@ -1479,7 +1500,7 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 - [ ] **Chaos testing** — Network partitions, validator crashes, Byzantine behavior simulation
 - [ ] **Load testing** — Sustained high transaction volume, mempool saturation
 - [ ] **Upgrade testing** — Binary upgrade without consensus failure
-- [x] **All tests passing** — 480 automated tests, 0 failures, 0 ignored (March 10, 2026)
+- [x] **All tests passing** — 492 automated tests, 0 failures, 0 ignored (March 10, 2026)
 
 ### Documentation
 - [ ] **Remove testnet warnings** — Update all references from testnet to mainnet

@@ -184,11 +184,14 @@ pub async fn validator_loop(
         // Snapshot mempool
         let mempool_snap = server.mempool.read().await.clone();
 
-        // Calculate height based on finalized rounds
-        // Each finalized round = one "block" for reward purposes
+        // Calculate height based on finalized rounds — must match engine.rs expected_height.
+        // Engine: snapshot.last_finalized_round.map(|r| r + 1).unwrap_or(0)
         let height = {
             let state = server.state.read().await;
-            state.last_finalized_round().unwrap_or(0) + 1
+            match state.last_finalized_round() {
+                Some(r) => r + 1,
+                None => 0,
+            }
         };
 
         info!(
@@ -430,10 +433,17 @@ pub async fn validator_loop(
         if dag_round % 50 == 0 {
             let last_fin = server.finality.read().await.last_finalized_round();
             if last_fin > 0 {
-                let mut dag_w = server.dag.write().await;
-                let pruned = dag_w.prune_old_rounds(last_fin);
+                let pruned = {
+                    let mut dag_w = server.dag.write().await;
+                    dag_w.prune_old_rounds(last_fin)
+                };
                 if pruned > 0 {
-                    info!("Pruned {} old vertices (floor={})", pruned, dag_w.pruning_floor());
+                    info!("Pruned {} old vertices (floor={})", last_fin, last_fin);
+                    // Also prune finalized hash set to prevent unbounded memory growth.
+                    // Acquire dag read (not write) after dropping dag write above.
+                    let mut fin = server.finality.write().await;
+                    let dag_r = server.dag.read().await;
+                    fin.prune_finalized(&dag_r);
                 }
             }
         }

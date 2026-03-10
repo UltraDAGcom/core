@@ -768,16 +768,27 @@ impl StateEngine {
     }
 
     /// Create a snapshot of the current state (for checkpoints).
+    /// All collections are sorted by key for deterministic serialization —
+    /// HashMap iteration order is non-deterministic, so without sorting,
+    /// different nodes would compute different state_root hashes for identical state.
     pub fn snapshot(&self) -> crate::state::persistence::StateSnapshot {
+        let mut accounts: Vec<_> = self.accounts.iter().map(|(k, v)| (*k, v.clone())).collect();
+        accounts.sort_by_key(|(addr, _)| addr.0);
+        let mut stake_accounts: Vec<_> = self.stake_accounts.iter().map(|(k, v)| (*k, v.clone())).collect();
+        stake_accounts.sort_by_key(|(addr, _)| addr.0);
+        let mut proposals: Vec<_> = self.proposals.iter().map(|(k, v)| (*k, v.clone())).collect();
+        proposals.sort_by_key(|(id, _)| *id);
+        let mut votes: Vec<_> = self.votes.iter().map(|(k, v)| (*k, *v)).collect();
+        votes.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.0.1.0.cmp(&b.0.1.0)));
         crate::state::persistence::StateSnapshot {
-            accounts: self.accounts.iter().map(|(k, v)| (*k, v.clone())).collect(),
-            stake_accounts: self.stake_accounts.iter().map(|(k, v)| (*k, v.clone())).collect(),
+            accounts,
+            stake_accounts,
             active_validator_set: self.active_validator_set.clone(),
             current_epoch: self.current_epoch,
             total_supply: self.total_supply,
             last_finalized_round: self.last_finalized_round,
-            proposals: self.proposals.iter().map(|(k, v)| (*k, v.clone())).collect(),
-            votes: self.votes.iter().map(|(k, v)| (*k, *v)).collect(),
+            proposals,
+            votes,
             next_proposal_id: self.next_proposal_id,
         }
     }

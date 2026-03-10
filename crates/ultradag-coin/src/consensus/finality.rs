@@ -190,6 +190,12 @@ impl FinalityTracker {
         dag.prune_old_rounds(self.last_finalized_round)
     }
 
+    /// Remove finalized hashes for vertices that have been pruned from the DAG.
+    /// Call after `prune_dag()` to keep the finalized set bounded.
+    pub fn prune_finalized(&mut self, dag: &BlockDag) {
+        self.finalized.retain(|hash| dag.get(hash).is_some());
+    }
+
     /// Number of finalized vertices.
     pub fn finalized_count(&self) -> usize {
         self.finalized.len()

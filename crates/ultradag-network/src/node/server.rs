@@ -433,7 +433,8 @@ async fn resolve_orphans(
 
                     let validator = vertex.validator;
                     // Register validator + check finality (multi-pass)
-                    {
+                    // Lock ordering: finality+dag → drop both → state (matches DagProposal handler)
+                    let (all_finalized, finalized_vertices) = {
                         let mut fin = finality.write().await;
                         fin.register_validator(validator);
                         let dag_r = dag.read().await;
@@ -447,23 +448,25 @@ async fn resolve_orphans(
                             all_finalized.extend(newly_finalized);
                         }
 
-                        if !all_finalized.is_empty() {
-                            info!("Orphan resolve: finalized {} vertices", all_finalized.len());
-                            let finalized_vertices: Vec<DagVertex> = all_finalized
-                                .iter()
-                                .filter_map(|h| dag_r.get(h).cloned())
-                                .collect();
-                            drop(dag_r);
+                        let finalized_vertices: Vec<DagVertex> = all_finalized
+                            .iter()
+                            .filter_map(|h| dag_r.get(h).cloned())
+                            .collect();
+                        // Drop finality + dag locks before state application
+                        (all_finalized, finalized_vertices)
+                    };
+
+                    if !all_finalized.is_empty() {
+                        info!("Orphan resolve: finalized {} vertices", all_finalized.len());
+                        let epoch_changed;
+                        {
                             let mut state_w = state.write().await;
                             let prev_round = state_w.last_finalized_round();
                             if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
                                 warn!("Failed to apply finalized vertices: {}", e);
+                                epoch_changed = false;
                             } else {
-                                if state_w.epoch_just_changed(prev_round) {
-                                    sync_epoch_validators(&mut fin, &state_w);
-                                    info!("Epoch transition to epoch {} — active set: {} validators",
-                                        state_w.current_epoch(), state_w.active_validators().len());
-                                }
+                                epoch_changed = state_w.epoch_just_changed(prev_round);
                                 let mut mp = mempool.write().await;
                                 for v in &finalized_vertices {
                                     for tx in &v.block.transactions {
@@ -471,6 +474,15 @@ async fn resolve_orphans(
                                     }
                                 }
                             }
+                        } // state_w dropped here
+
+                        // Epoch transition: acquire finality AFTER dropping state
+                        if epoch_changed {
+                            let mut fin = finality.write().await;
+                            let state_r = state.read().await;
+                            sync_epoch_validators(&mut fin, &state_r);
+                            info!("Epoch transition to epoch {} — active set: {} validators",
+                                state_r.current_epoch(), state_r.active_validators().len());
                         }
                     }
                     peers.broadcast(&Message::DagProposal(vertex), peer_addr).await;
@@ -724,7 +736,9 @@ async fn handle_peer(
                     peers.add_known(listen_addr.clone()).await;
                     // Also mark this as a connected listen address so
                     // try_connect_peer won't create duplicate connections
-                    peers.add_connected_listen_addr(listen_addr).await;
+                    peers.add_connected_listen_addr(listen_addr.clone()).await;
+                    // Link ephemeral writer key → canonical listen addr for dead peer cleanup
+                    peers.link_writer_to_listen(peer_addr.to_string(), listen_addr).await;
                 }
 
                 // Request peer list for mesh discovery
@@ -757,11 +771,17 @@ async fn handle_peer(
             }
 
             Message::NewTx(tx) => {
-                let mut mp = mempool.write().await;
-                if mp.insert(tx.clone()) {
-                    let _ = tx_tx.send(tx.clone());
-                    drop(mp);
-                    peers.broadcast(&Message::NewTx(tx), &peer_addr).await;
+                // Verify signature before accepting into mempool to prevent
+                // forged transactions from consuming mempool space and bandwidth.
+                if !tx.verify_signature() {
+                    warn!("Rejected NewTx with invalid signature from {}", peer_addr);
+                } else {
+                    let mut mp = mempool.write().await;
+                    if mp.insert(tx.clone()) {
+                        let _ = tx_tx.send(tx.clone());
+                        drop(mp);
+                        peers.broadcast(&Message::NewTx(tx), &peer_addr).await;
+                    }
                 }
             }
 
@@ -900,26 +920,35 @@ async fn handle_peer(
                     if !all_finalized.is_empty() {
                         info!("DAG-BFT finalized {} vertices", all_finalized.len());
 
-                        let mut state_w = state.write().await;
-                        let prev_round = state_w.last_finalized_round();
-                        if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
-                            warn!("Failed to apply finalized vertices to state: {}", e);
-                        } else {
-                            // Epoch transition: sync active validator set to FinalityTracker
-                            if state_w.epoch_just_changed(prev_round) {
-                                let mut fin = finality.write().await;
-                                sync_epoch_validators(&mut fin, &state_w);
-                                info!("Epoch transition to epoch {} — active set: {} validators",
-                                    state_w.current_epoch(), state_w.active_validators().len());
-                            }
-                            let mut mp = mempool.write().await;
-                            for v in &finalized_vertices {
-                                for tx in &v.block.transactions {
-                                    mp.remove(&tx.hash());
+                        // Track whether epoch changed for finality sync below
+                        let epoch_changed;
+                        {
+                            let mut state_w = state.write().await;
+                            let prev_round = state_w.last_finalized_round();
+                            if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
+                                warn!("Failed to apply finalized vertices to state: {}", e);
+                                epoch_changed = false;
+                            } else {
+                                epoch_changed = state_w.epoch_just_changed(prev_round);
+                                let mut mp = mempool.write().await;
+                                for v in &finalized_vertices {
+                                    for tx in &v.block.transactions {
+                                        mp.remove(&tx.hash());
+                                    }
                                 }
                             }
+                        } // state_w dropped here
+
+                        // Epoch transition: acquire finality AFTER dropping state to prevent deadlock.
+                        // All other code paths (resolve_orphans, DagVertices, validator loop) acquire
+                        // finality before state — we must not hold state while acquiring finality.
+                        if epoch_changed {
+                            let mut fin = finality.write().await;
+                            let state_r = state.read().await;
+                            sync_epoch_validators(&mut fin, &state_r);
+                            info!("Epoch transition to epoch {} — active set: {} validators",
+                                state_r.current_epoch(), state_r.active_validators().len());
                         }
-                        drop(state_w);
                     }
 
                     peers.broadcast(&Message::DagProposal(vertex), &peer_addr).await;
