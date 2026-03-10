@@ -438,6 +438,13 @@ When a vertex fails insertion due to missing parents, the node:
   - Observer reward = `block_reward(h) × (own_stake / total_stake) × 20 / 100`
 - **Slashing**: 50% stake burn on equivocation (slashed amount removed from total_supply)
   - **Slash policy**: slash immediately removes from active validator set if stake drops below `MIN_STAKE_SATS`. Security trumps epoch stability — Byzantine actors should not continue earning rewards.
+  - **Implementation**: Slashing executes automatically at 3 detection points:
+    1. `DagProposal` handler: when node locally detects equivocation during vertex insertion
+    2. `DagVertices` sync handler: when equivocation detected during batch sync
+    3. `EquivocationEvidence` message handler: when peer reports evidence
+  - **Evidence storage**: Equivocation evidence stored permanently in `evidence_store` (survives pruning)
+  - **Logging**: Emits clear log with validator address, burned amount, and stake before/after
+  - **Current limitation**: No reporter rewards yet — validators aren't economically incentivized to submit evidence they witness. On small testnets this is fine (nodes naturally detect equivocation), but larger networks would benefit from reporter rewards (medium-priority future enhancement).
 - **Stale epoch recovery**: on `StateEngine::load()`, if persisted `current_epoch` doesn't match `epoch_of(last_finalized_round)`, active set is recalculated
 - Ed25519 signatures on all staking transactions with NETWORK_ID prefix
 

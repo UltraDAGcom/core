@@ -26,6 +26,7 @@
   - Applied at 3 detection points: DagProposal, DagVertices sync, EquivocationEvidence message
 - **Result:** Byzantine validators are penalized immediately (security over epoch stability)
 - **Tests:** 4 comprehensive slashing tests verify burn amount, active set removal, and edge cases
+- **Future Enhancement:** Reporter rewards not yet implemented — validators currently have no economic incentive to submit evidence they witness. Fine for small testnets (nodes naturally detect equivocation), but larger networks would benefit from reporter rewards (medium-priority future item)
 
 **Finality Fix (March 9, 2026):**
 - **Root cause:** Validators used `dag.tips()` for parent selection, which returns only childless vertices (typically 1 — our own last vertex). This created parallel linear chains instead of a dense DAG, causing finality lag of 250-314 rounds.
