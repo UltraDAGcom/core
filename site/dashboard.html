@@ -2311,12 +2311,31 @@ function updateProposalForm() {
   document.getElementById('param-fields').style.display = type === 'parameter' ? '' : 'none';
 }
 
-function populateProposalWallets() {
+async function populateProposalWallets() {
   if (!keystore) return;
-  const opts = keystore.wallets.map((w, i) =>
-    `<option value="${i}">${esc(w.name)} (${formatUdag(0)} UDAG)</option>`
-  ).join('');
-  document.getElementById('proposal-wallet').innerHTML = opts || '<option>No wallets</option>';
+  const el = document.getElementById('proposal-wallet');
+  
+  // Show loading state
+  el.innerHTML = '<option>Loading balances...</option>';
+  
+  // Fetch balances for all wallets
+  const walletOptions = [];
+  for (let i = 0; i < keystore.wallets.length; i++) {
+    const w = keystore.wallets[i];
+    let balance = 0;
+    if (connected) {
+      try {
+        const res = await fetch(nodeUrl + '/balance/' + w.address);
+        const data = await res.json();
+        balance = data.balance;
+      } catch (e) {
+        console.error('Failed to fetch balance for', w.address, e);
+      }
+    }
+    walletOptions.push(`<option value="${i}">${esc(w.name)} (${formatUdag(balance)} UDAG)</option>`);
+  }
+  
+  el.innerHTML = walletOptions.join('') || '<option>No wallets</option>';
 }
 
 function updateGovBadge(count) {

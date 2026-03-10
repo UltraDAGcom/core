@@ -1603,7 +1603,7 @@ TLA+ specification of UltraDAG's DAG-BFT consensus, derived directly from the Ru
 - [ ] **Security audit** — External audit of consensus, state, and cryptographic implementations
 - [ ] **Penetration testing** — Network-level attacks, eclipse attacks, DDoS resilience
 - [x] **Formal verification** — TLA+ specification written (`formal/UltraDAGConsensus.tla`) with TLC config (`formal/UltraDAGConsensus.cfg`). Models vertex production, BFT finality (ceil(2N/3) descendants), equivocation, Byzantine actions. Verifies Safety (no conflicting finalized vertices), Liveness (honest vertices eventually finalized), HonestNoEquivocation, FinalizedParentsConsistency. Bounded: 4 validators, 4 rounds, 1 Byzantine.
-- [ ] **CheckpointSync trust anchor** — Fresh nodes trust `state_at_checkpoint` from the first peer they sync from (trust-on-first-use). A malicious peer can feed arbitrary state with forged validator set. Need hardcoded genesis validator keys or checkpoint chain verification from genesis.
+- [ ] **Hardcode GENESIS_CHECKPOINT_HASH** — Compute blake3 hash of genesis checkpoint (after faucet removal) and replace placeholder `[0u8; 32]` in `constants.rs`. This is the trust anchor for checkpoint chain verification. Any checkpoint chain must link back to this hash. **Critical:** Must be computed from final mainnet genesis state (after faucet removal). For testnet, can use current genesis hash for testing.
 
 ### Protocol
 - [x] **Governance execution** — ParameterChange proposals now apply changes to runtime `GovernanceParams` via `apply_change()` with validation bounds. 7 integration tests verify execution, persistence, and downstream effects.
