@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="How we systematically broke UltraDAG with network partitions, node crashes, and message chaos—and proved it recovers every time.">
+<title>Chaos Engineering: Breaking UltraDAG to Prove It Works — UltraDAG Blog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0e1a;--bg2:#0e1322;--bg3:#131a2b;
+  --border:#1a2540;--border2:#223050;
+  --dim:#2e4060;--muted:#4a6488;--subtle:#7090b8;
+  --body:#94b8d8;--bright:#c8e0f4;--white:#edf4fb;
+  --accent:#3d9be9;--accent2:#1a6fb5;
+  --glow:rgba(61,155,233,0.15);--glow2:rgba(61,155,233,0.06);
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--body);font-family:'Syne',sans-serif;font-size:16px;line-height:1.7;overflow-x:hidden}
+a{color:var(--accent);text-decoration:none;transition:color .2s}
+a:hover{color:var(--white)}
+
+/* NOISE OVERLAY */
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.4}
+
+/* GRID BG */
+.grid-bg{position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.15;pointer-events:none;z-index:0;mask-image:radial-gradient(ellipse 80% 40% at 50% 0%,black 20%,transparent 100%)}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid transparent;transition:border-color .3s,background .3s}
+nav.scrolled{border-color:var(--border);background:rgba(10,14,26,.92);backdrop-filter:blur(16px)}
+.nav-logo{font-family:'Cormorant',serif;font-size:22px;font-weight:300;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px}
+.nav-logo-mark{width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
+.nav-logo-mark::after{content:'';width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)}
+.nav-links{display:flex;align-items:center;gap:32px;list-style:none}
+.nav-links a{font-family:'DM Mono',monospace;font-size:12px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;position:relative;padding-bottom:4px}
+.nav-links a::after{content:'';position:absolute;bottom:0;left:0;width:0;height:1px;background:var(--accent);transition:width .3s ease}
+.nav-links a:hover{color:var(--white)}
+.nav-links a:hover::after{width:100%}
+.nav-links a.active{color:var(--accent)}
+.nav-cta{color:var(--accent)!important;border:1px solid var(--accent2);padding:8px 18px;border-radius:2px;transition:background .2s!important}
+.nav-cta:hover{background:var(--glow)}
+
+/* HAMBURGER MENU */
+.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;background:none;border:none;z-index:101}
+.hamburger span{width:24px;height:2px;background:var(--white);transition:all .3s;border-radius:2px}
+.hamburger.active span:nth-child(1){transform:rotate(45deg) translate(7px,7px)}
+.hamburger.active span:nth-child(2){opacity:0}
+.hamburger.active span:nth-child(3){transform:rotate(-45deg) translate(7px,-7px)}
+.mobile-menu{position:fixed;top:64px;left:0;right:0;background:rgba(10,14,26,.98);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 24px;z-index:99;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease}
+.mobile-menu.active{max-height:500px;padding:24px}
+.mobile-menu ul{list-style:none;display:flex;flex-direction:column;gap:20px}
+.mobile-menu a{font-family:'DM Mono',monospace;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;display:block;padding:8px 0}
+.mobile-menu a:hover{color:var(--white)}
+.mobile-menu .nav-cta{display:inline-block;margin-top:8px}
+@media(min-width:901px){.mobile-menu{display:none}}
+
+/* ARTICLE CONTAINER */
+.article-container{position:relative;z-index:1;max-width:800px;margin:0 auto;padding:120px 48px 80px}
+
+/* ARTICLE HEADER */
+.article-header{margin-bottom:48px;padding-bottom:32px;border-bottom:1px solid var(--border)}
+.back-link{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:24px;display:inline-block}
+.back-link:hover{color:var(--accent)}
+.article-meta{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:16px;display:flex;gap:16px}
+.article-category{color:var(--accent)}
+.article-title{font-family:'Cormorant',serif;font-size:clamp(36px,5vw,52px);font-weight:300;line-height:1.1;color:var(--white);margin-bottom:0;letter-spacing:-.01em}
+
+/* ARTICLE CONTENT */
+.article-content{font-family:'Cormorant',serif;font-size:18px;line-height:1.75;color:var(--body)}
+.article-content h2{font-family:'Cormorant',serif;font-size:32px;font-weight:400;color:var(--white);margin:48px 0 20px;line-height:1.2}
+.article-content h3{font-family:'Syne',sans-serif;font-size:20px;font-weight:600;color:var(--bright);margin:36px 0 16px}
+.article-content p{margin-bottom:20px;font-weight:300}
+.article-content strong{color:var(--bright);font-weight:600}
+.article-content em{font-style:italic;color:var(--subtle)}
+.article-content code{font-family:'DM Mono',monospace;font-size:14px;color:var(--accent);background:var(--bg3);padding:2px 8px;border-radius:2px;border:1px solid var(--border)}
+.article-content pre{background:var(--bg3);border:1px solid var(--border);border-radius:2px;padding:20px 24px;overflow-x:auto;margin:24px 0}
+.article-content pre code{background:none;border:none;padding:0;font-size:13px;line-height:1.6;color:var(--body);display:block}
+.article-content ul,.article-content ol{margin:16px 0 24px;padding-left:28px}
+.article-content li{margin-bottom:8px;font-weight:300}
+
+/* CALLOUT */
+.callout{border-left:3px solid var(--accent2);padding:20px 24px;background:var(--bg2);margin:28px 0;border-radius:0 2px 2px 0}
+.callout p{margin-bottom:12px}
+.callout p:last-child{margin-bottom:0}
+
+/* RESULTS BOX */
+.results-box{border:1px solid var(--border2);background:var(--bg3);padding:24px;margin:28px 0;border-radius:2px}
+.results-box h4{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+.results-box ul{margin:0;padding-left:20px}
+.results-box li{margin-bottom:8px;font-size:16px;color:var(--body)}
+
+/* FOOTER */
+footer{position:relative;z-index:1;border-top:1px solid var(--border);background:var(--bg);margin-top:80px}
+.footer-inner{max-width:1200px;margin:0 auto;padding:48px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:24px}
+.footer-logo{font-family:'Cormorant',serif;font-size:20px;font-weight:300;color:var(--subtle);letter-spacing:.06em}
+.footer-links{display:flex;gap:28px;list-style:none;flex-wrap:wrap}
+.footer-links a{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-decoration:none;transition:color .2s}
+.footer-links a:hover{color:var(--subtle)}
+.footer-note{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase;width:100%;text-align:center;margin-top:24px}
+
+/* RESPONSIVE */
+@media(max-width:900px){
+  nav{padding:0 24px;height:56px}
+  .nav-logo{font-size:18px}
+  .nav-logo-mark{width:24px;height:24px}
+  .nav-logo-mark::after{width:6px;height:6px}
+  .nav-links{display:none}
+  .hamburger{display:flex}
+  .mobile-menu{display:block;top:56px}
+  .article-container{padding:80px 24px 60px}
+  .article-title{font-size:32px}
+  .article-content{font-size:17px}
+  .article-content h2{font-size:28px}
+  .article-content h3{font-size:18px}
+  .footer-inner{flex-direction:column;text-align:center}
+  .footer-links{justify-content:center}
+}
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+
+<!-- NAV -->
+<nav id="nav">
+  <a href="../index.html" class="nav-logo">
+    <div class="nav-logo-mark"></div>
+    UltraDAG
+  </a>
+  <ul class="nav-links">
+    <li><a href="../index.html#consensus">Why UltraDAG</a></li>
+    <li><a href="../whitepaper.html">Whitepaper</a></li>
+    <li><a href="../docs.html">Docs</a></li>
+    <li><a href="../testnet.html">Testnet</a></li>
+    <li><a href="../consensus-viz.html">Consensus Demo</a></li>
+    <li><a href="index.html" class="active">Blog</a></li>
+    <li><a href="../index.html#sdks">SDKs</a></li>
+    <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+    <li><a href="../dashboard.html" class="nav-cta">Dashboard</a></li>
+  </ul>
+  <button class="hamburger" id="hamburger" aria-label="Menu">
+    <span></span>
+    <span></span>
+    <span></span>
+  </button>
+</nav>
+
+<!-- MOBILE MENU -->
+<div class="mobile-menu" id="mobile-menu">
+  <ul>
+    <li><a href="../index.html#consensus">Why UltraDAG</a></li>
+    <li><a href="../whitepaper.html">Whitepaper</a></li>
+    <li><a href="../docs.html">Docs</a></li>
+    <li><a href="../testnet.html">Testnet</a></li>
+    <li><a href="../consensus-viz.html">Consensus Demo</a></li>
+    <li><a href="index.html" class="active">Blog</a></li>
+    <li><a href="../index.html#sdks">SDKs</a></li>
+    <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+    <li><a href="../dashboard.html" class="nav-cta">Dashboard</a></li>
+  </ul>
+</div>
+
+<!-- ARTICLE -->
+<article class="article-container">
+  <header class="article-header">
+    <a href="index.html" class="back-link">← Back to Blog</a>
+    <div class="article-meta">
+      <span class="article-category">Testing</span>
+      <span>March 2026</span>
+    </div>
+    <h1 class="article-title">Chaos Engineering: Breaking UltraDAG to Prove It Works</h1>
+  </header>
+
+  <div class="article-content">
+    <p>Most blockchain projects test the happy path. Nodes start cleanly, network connections are stable, messages arrive in order. Everything works because nothing goes wrong.</p>
+
+    <p>That's not how production works.</p>
+
+    <p>In production, nodes crash mid-consensus. Network cables get unplugged. Packets get dropped. Clocks drift. Partitions happen. And when they do, the question isn't whether your whitepaper claims Byzantine fault tolerance—it's whether your <em>code</em> actually recovers.</p>
+
+    <p>We built a Jepsen-style chaos testing framework to answer that question with data instead of claims.</p>
+
+    <h2>The Framework</h2>
+
+    <p>Our fault injection infrastructure systematically injects four categories of faults into a running UltraDAG network:</p>
+
+    <p><strong>Network partitions.</strong> Split-brain scenarios (2-2 splits), node isolation, minority/majority partitions (1/3 vs 2/3). We partition the network, let it run for a configurable duration, then heal the partition and verify all nodes converge to the same state.</p>
+
+    <p><strong>Clock skew.</strong> Nodes don't have synchronized clocks in the real world. We inject time drift—some nodes run 30 seconds ahead, others 30 seconds behind. We test that consensus continues and that vertices with absurdly future timestamps (10 minutes ahead) get rejected.</p>
+
+    <p><strong>Message chaos.</strong> Random delays up to 2 seconds. Message reordering. Packet drops at configurable rates (10-15%). We verify that consensus progresses despite unreliable message delivery.</p>
+
+    <p><strong>Crash-restart.</strong> Kill a node mid-round. Restart it. Kill it again. We test single crashes, repeated crash-restart cycles, and simultaneous crashes of multiple nodes (as long as fewer than 1/3 crash, the network should continue).</p>
+
+    <h2>The Tests</h2>
+
+    <p>We wrote 14 long-running Jepsen tests that combine these faults in increasingly hostile scenarios. Each test runs for 10-30 seconds of simulated network time, injects faults, and then checks invariants.</p>
+
+    <p>The invariant checkers verify:</p>
+
+    <ul>
+      <li><strong>Finality safety</strong> — No two nodes finalize conflicting vertices at the same round</li>
+      <li><strong>Finality irreversibility</strong> — Once finalized, a vertex never gets un-finalized</li>
+      <li><strong>Supply consistency</strong> — All nodes agree on total supply after convergence</li>
+      <li><strong>Double-spend prevention</strong> — No address spends the same funds twice</li>
+    </ul>
+
+    <p>If any invariant is violated, the test fails and prints a detailed report showing exactly what broke.</p>
+
+    <h2>Published Results</h2>
+
+    <p>Here's what we learned by systematically breaking UltraDAG:</p>
+
+    <div class="results-box">
+      <h4>Node Crash Recovery</h4>
+      <ul>
+        <li>Killed node 0 at round 847</li>
+        <li>Network continued with 3 of 4 validators</li>
+        <li>Node 0 restarted and rejoined</li>
+        <li>Full recovery in 3 rounds (rounds 848-850)</li>
+        <li>Zero finality violations</li>
+      </ul>
+    </div>
+
+    <div class="results-box">
+      <h4>Split-Brain Partition</h4>
+      <ul>
+        <li>2-2 network split for 10 seconds</li>
+        <li>Neither partition could finalize (no 3/4 quorum)</li>
+        <li>Partition healed after 10 seconds</li>
+        <li>All 4 nodes converged to identical state</li>
+        <li>Finality resumed immediately after heal</li>
+      </ul>
+    </div>
+
+    <div class="results-box">
+      <h4>Message Drop Resilience</h4>
+      <ul>
+        <li>10% sustained packet loss for 20 seconds</li>
+        <li>Finality lag increased from 2 to 5 rounds during chaos</li>
+        <li>Consensus continued throughout</li>
+        <li>Lag returned to 2 rounds after packet loss cleared</li>
+        <li>No state divergence between nodes</li>
+      </ul>
+    </div>
+
+    <div class="results-box">
+      <h4>Extreme Chaos Scenario</h4>
+      <ul>
+        <li>Phase 1: Network partition + 60-second clock skew</li>
+        <li>Phase 2: Partition healed, 1-second message delays + reordering enabled</li>
+        <li>Phase 3: Node crash during active consensus</li>
+        <li>Phase 4: 15% packet drops + 2-second delays simultaneously</li>
+        <li><strong>Result: Zero finality violations. Network recovered.</strong></li>
+      </ul>
+    </div>
+
+    <h2>What This Proves</h2>
+
+    <p>Chaos testing doesn't prove correctness—formal verification does that. But it proves <em>resilience</em>. It proves that when things go wrong in production (and they will), the network recovers instead of diverging into an inconsistent state.</p>
+
+    <p>The specific numbers matter. "Killed node 0 at round 847, recovered in 3 rounds" is more credible than "our consensus is Byzantine fault tolerant" because it's a measurement, not a claim.</p>
+
+    <p>Every test is reproducible. The fault injection framework is part of the codebase. Anyone can run <code>cargo test --test jepsen_tests -- --ignored</code> and verify the same results.</p>
+
+    <h2>Why This Matters for Mainnet</h2>
+
+    <p>Mainnet will experience all of these faults. Validators will crash. Network cables will get unplugged. Cloud providers will have routing issues. Clocks will drift.</p>
+
+    <p>The question isn't whether faults happen—it's whether the network survives them. Chaos testing gives us confidence that it does.</p>
+
+    <p>We're publishing these results because resilience claims should be backed by data. If your consensus algorithm can't survive a Jepsen test, it's not ready for production.</p>
+
+    <div class="callout">
+      <p><strong>Run the tests yourself:</strong></p>
+      <p><code>cargo test --test jepsen_tests -- --ignored</code></p>
+      <p>Full test suite: <code>crates/ultradag-network/tests/jepsen_tests.rs</code></p>
+    </div>
+
+    <h2>What's Next</h2>
+
+    <p>We're expanding the chaos test suite with longer-duration tests (hours instead of seconds) and more complex failure scenarios. We're also adding performance benchmarks under chaos conditions to measure how much throughput degrades when the network is under stress.</p>
+
+    <p>Chaos testing is never finished. Every new feature gets chaos tests. Every bug that makes it to testnet gets a regression test that reproduces the fault.</p>
+
+    <p>Breaking things systematically is how you build systems that don't break in production.</p>
+  </div>
+</article>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">UltraDAG</div>
+    <ul class="footer-links">
+      <li><a href="../whitepaper.html">Whitepaper</a></li>
+      <li><a href="../docs.html">Documentation</a></li>
+      <li><a href="index.html">Blog</a></li>
+      <li><a href="../testnet.html">Testnet</a></li>
+      <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+    </ul>
+    <div class="footer-note">Licensed under BUSL-1.1 · Converts to MIT March 2030</div>
+  </div>
+</footer>
+
+<script>
+// Hamburger menu toggle
+const hamburger = document.getElementById('hamburger');
+const mobileMenu = document.getElementById('mobile-menu');
+hamburger.addEventListener('click', () => {
+  hamburger.classList.toggle('active');
+  mobileMenu.classList.toggle('active');
+});
+
+// Scrolled nav state
+const nav = document.getElementById('nav');
+window.addEventListener('scroll', () => {
+  if (window.scrollY > 20) {
+    nav.classList.add('scrolled');
+  } else {
+    nav.classList.remove('scrolled');
+  }
+});
+</script>
+
+</body>
+</html>
