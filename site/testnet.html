@@ -5,24 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>UltraDAG Testnet Status</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#080b0f;--bg2:#0d1118;--bg3:#111820;
-  --border:#1e2a38;--border2:#253040;
-  --dim:#2e4055;--muted:#4a6480;--subtle:#6b8aaa;
-  --body:#8fafc8;--bright:#c4daf0;--white:#e8f2fa;
+  --bg:#0a0e1a;--bg2:#0e1322;--bg3:#131a2b;
+  --border:#1a2540;--border2:#223050;
+  --dim:#2e4060;--muted:#4a6488;--subtle:#7090b8;
+  --body:#94b8d8;--bright:#c8e0f4;--white:#edf4fb;
   --accent:#3d9be9;--accent2:#1a6fb5;
-  --glow:rgba(61,155,233,0.12);--glow2:rgba(61,155,233,0.04);
-  --green:#4ade80;--red:#f87171;--yellow:#fbbf24;
+  --glow:rgba(61,155,233,0.15);--glow2:rgba(61,155,233,0.06);
+  --success:#34d399;--warning:#fbbf24;--danger:#f87171;
+  --green:#34d399;--red:#f87171;--yellow:#fbbf24;
 }
 html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--body);font-family:'Syne',sans-serif;font-size:16px;line-height:1.6;overflow-x:hidden;padding:24px}
+body{background:var(--bg);color:var(--body);font-family:'Syne',sans-serif;font-size:16px;line-height:1.7;overflow-x:hidden;cursor:default}
 
-.container{max-width:1400px;margin:0 auto}
+/* NOISE OVERLAY */
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.4}
+
+/* GRID BG */
+.grid-bg{position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.5625;pointer-events:none;z-index:0;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,black 30%,transparent 100%)}
+
+.container{max-width:1200px;margin:0 auto;padding:0 48px;position:relative;z-index:1}
 .header{text-align:center;margin-bottom:48px}
-h1{font-size:48px;color:var(--white);margin-bottom:12px;font-weight:700}
+h1{font-family:'Cormorant',serif;font-size:clamp(44px,6vw,72px);font-weight:300;line-height:1.05;letter-spacing:-.02em;color:var(--white);margin-bottom:12px}
 .subtitle{font-family:'DM Mono',monospace;font-size:14px;color:var(--subtle);letter-spacing:.1em}
 .live-indicator{display:inline-flex;align-items:center;gap:8px;margin-top:16px;padding:8px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:4px}
 .live-dot{width:8px;height:8px;background:var(--green);border-radius:50%;animation:pulse 2s infinite}
@@ -61,7 +68,7 @@ h1{font-size:48px;color:var(--white);margin-bottom:12px;font-weight:700}
 .error-message{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:var(--red);padding:16px;border-radius:6px;margin-bottom:24px;font-family:'DM Mono',monospace;font-size:13px}
 
 /* NAV */
-nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(8,11,15,.9);backdrop-filter:blur(12px)}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(10,14,26,.92);backdrop-filter:blur(16px)}
 .nav-logo{font-family:'Cormorant',serif;font-size:22px;font-weight:300;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px}
 .nav-logo-mark{width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
 .nav-logo-mark::after{content:'';width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)}
@@ -95,9 +102,8 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
   .nav-links{display:none}
   .hamburger{display:flex}
   .mobile-menu{display:block;top:56px}
-  body{padding:16px}
-  .container{padding-top:72px!important}
-  h1{font-size:36px}
+  .container{padding:0 24px}
+  h1{font-size:clamp(36px,8vw,48px)}
   .subtitle{font-size:12px}
   .stats-grid{grid-template-columns:repeat(2,1fr);gap:16px}
   .node-metrics{grid-template-columns:1fr 1fr 1fr}
@@ -112,9 +118,8 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
 }
 @media(max-width:600px){
   nav{padding:0 16px}
-  body{padding:12px}
-  .container{padding-top:68px!important}
-  h1{font-size:28px}
+  .container{padding:0 16px}
+  h1{font-size:clamp(28px,10vw,36px)}
   .subtitle{font-size:11px}
   .live-indicator{font-size:11px;padding:6px 12px}
   .stats-grid{grid-template-columns:1fr 1fr;gap:12px}
@@ -137,6 +142,8 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
 </style>
 </head>
 <body>
+
+<div class="grid-bg"></div>
 
 <!-- NAV -->
 <nav id="nav">
