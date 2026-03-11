@@ -505,20 +505,14 @@ code{
       <a class="nav-item" href="#arch">Architecture</a>
       <a class="nav-sub" href="#arch-consensus">DAG-BFT Consensus</a>
       <a class="nav-sub" href="#arch-crypto">Cryptography</a>
+      <a class="nav-item" href="#transactions">Transaction Format</a>
+      <a class="nav-item" href="#governance">Governance</a>
+      <a class="nav-item" href="#checkpoints">Checkpoints & Fast-Sync</a>
     </div>
     <div class="nav-section">
-      <div class="nav-section-title">Read Endpoints</div>
-      <a class="nav-item" href="#ep-health"><span class="method method-get">GET</span>/health</a>
-      <a class="nav-item" href="#ep-status"><span class="method method-get">GET</span>/status</a>
-      <a class="nav-item" href="#ep-balance"><span class="method method-get">GET</span>/balance</a>
-      <a class="nav-item" href="#ep-round"><span class="method method-get">GET</span>/round</a>
-      <a class="nav-item" href="#ep-validators"><span class="method method-get">GET</span>/validators</a>
-    </div>
-    <div class="nav-section">
-      <div class="nav-section-title">Write Endpoints</div>
-      <a class="nav-item" href="#ep-tx"><span class="method method-post">POST</span>/tx</a>
-      <a class="nav-item" href="#ep-faucet"><span class="method method-post">POST</span>/faucet</a>
-      <a class="nav-item" href="#ep-stake"><span class="method method-post">POST</span>/stake</a>
+      <div class="nav-section-title">Operations</div>
+      <a class="nav-item" href="#monitoring">Metrics & Monitoring</a>
+      <a class="nav-item" href="#troubleshooting">Troubleshooting</a>
     </div>
   </aside>
 
@@ -995,6 +989,388 @@ git <span class="fn">clone</span> https://github.com/UltraDAGcom/core
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- ── Section: Transactions ──────────────────────────────────────── -->
+  <div class="doc-section" id="transactions">
+    <div class="prose">
+      <div class="section-tag">Transactions</div>
+      <h2>Transaction <em>Format</em></h2>
+      <p>UltraDAG supports 5 transaction types, all signed with Ed25519. Every transaction includes a nonce for replay protection and a fee in sats.</p>
+
+      <h3>Transaction Types</h3>
+      <table class="endpoint-table">
+        <thead><tr><th>Type</th><th>Purpose</th><th>Fee</th></tr></thead>
+        <tbody>
+          <tr><td>Transfer</td><td>Send UDAG between addresses</td><td>≥ 1 sat</td></tr>
+          <tr><td>Stake</td><td>Lock UDAG to become validator</td><td>0 (exempt)</td></tr>
+          <tr><td>Unstake</td><td>Begin unstake cooldown</td><td>0 (exempt)</td></tr>
+          <tr><td>CreateProposal</td><td>Submit governance proposal</td><td>≥ 1 sat</td></tr>
+          <tr><td>Vote</td><td>Vote on governance proposal</td><td>≥ 1 sat</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Transfer Transaction</h3>
+      <p>Standard payment transaction with optional memo field (max 256 bytes).</p>
+      <table class="param-table">
+        <tr><td><div class="param-name">from</div><div class="param-type">Address (32 bytes)</div></td><td><div class="param-desc">Sender address (blake3 of pubkey)</div></td></tr>
+        <tr><td><div class="param-name">to</div><div class="param-type">Address (32 bytes)</div></td><td><div class="param-desc">Recipient address</div></td></tr>
+        <tr><td><div class="param-name">amount</div><div class="param-type">u64</div></td><td><div class="param-desc">Amount in sats (1 UDAG = 100M sats)</div></td></tr>
+        <tr><td><div class="param-name">fee</div><div class="param-type">u64</div></td><td><div class="param-desc">Transaction fee in sats (min 1)</div></td></tr>
+        <tr><td><div class="param-name">nonce</div><div class="param-type">u64</div></td><td><div class="param-desc">Account nonce (increments per tx)</div></td></tr>
+        <tr><td><div class="param-name">memo</div><div class="param-type">Option&lt;Vec&lt;u8&gt;&gt;</div></td><td><div class="param-desc">Optional memo (max 256 bytes)</div></td></tr>
+        <tr><td><div class="param-name">pub_key</div><div class="param-type">[u8; 32]</div></td><td><div class="param-desc">Ed25519 public key</div></td></tr>
+        <tr><td><div class="param-name">signature</div><div class="param-type">[u8; 64]</div></td><td><div class="param-desc">Ed25519 signature over signable_bytes</div></td></tr>
+      </table>
+
+      <h3>Signable Bytes Format</h3>
+      <p>Transactions are signed over a deterministic byte representation:</p>
+      <div class="code-inline">
+        <div class="code-inline-header">
+          <div class="code-inline-dots"><span style="background:#ff5f56"></span><span style="background:#ffbd2e"></span><span style="background:#27c93f"></span></div>
+          <span class="code-inline-lang">format</span>
+        </div>
+        <pre>b"transfer" || from || to || amount || fee || nonce || memo_len || memo</pre>
+      </div>
+      <p>All integers are little-endian u64. Type prefix prevents cross-type signature replay.</p>
+
+      <h3>Nonce Management</h3>
+      <p>Each address has a nonce counter starting at 0. Transactions must use <code>current_nonce + 1</code>. Check current nonce via <code>GET /balance/:address</code>. Mempool transactions increment the expected nonce, so pending transactions must be sequential.</p>
+    </div>
+    <div class="code-col">
+      <div class="code-block">
+        <div class="code-tabs">
+          <div class="code-tab active">Transfer TX</div>
+        </div>
+        <div class="code-content">
+<pre><span class="cm">// Create and sign transfer</span>
+<span class="kw">const</span> tx <span class="op">=</span> {
+  from: <span class="st">"abc123..."</span>,
+  to: <span class="st">"def456..."</span>,
+  amount: <span class="nm">100_000_000</span>, <span class="cm">// 1 UDAG</span>
+  fee: <span class="nm">100</span>,
+  nonce: <span class="nm">5</span>,
+  memo: <span class="st">"Payment for sensors"</span>,
+  pub_key: <span class="st">"..."</span>,
+  signature: <span class="st">"..."</span>
+}
+
+<span class="cm">// Submit via RPC</span>
+<span class="kw">const</span> res <span class="op">=</span> <span class="kw">await</span> <span class="fn">fetch</span>(<span class="st">'/tx'</span>, {
+  method: <span class="st">'POST'</span>,
+  body: <span class="fn">JSON</span>.<span class="fn">stringify</span>(tx)
+})
+
+<span class="cm">// Response</span>
+{
+  <span class="st">"hash"</span>: <span class="st">"abc123..."</span>,
+  <span class="st">"status"</span>: <span class="st">"pending"</span>
+}</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Section: Governance ────────────────────────────────────────── -->
+  <div class="doc-section" id="governance">
+    <div class="prose">
+      <div class="section-tag">Governance</div>
+      <h2>Governance <em>System</em></h2>
+      <p>On-chain governance allows validators to propose and vote on protocol parameter changes. Proposals require minimum stake and go through a multi-phase lifecycle.</p>
+
+      <h3>Proposal Lifecycle</h3>
+      <div class="params-grid">
+        <div class="param-cell">
+          <div class="param-cell-label">1. Pending</div>
+          <div class="param-cell-desc">Just created, voting not started</div>
+        </div>
+        <div class="param-cell">
+          <div class="param-cell-label">2. Active</div>
+          <div class="param-cell-desc">Voting period open (default: 10,080 rounds)</div>
+        </div>
+        <div class="param-cell">
+          <div class="param-cell-label">3. Passed Pending</div>
+          <div class="param-cell-desc">Passed, waiting for execution delay</div>
+        </div>
+        <div class="param-cell">
+          <div class="param-cell-label">4. Executed</div>
+          <div class="param-cell-desc">Changes applied to runtime params</div>
+        </div>
+        <div class="param-cell">
+          <div class="param-cell-label">5. Rejected</div>
+          <div class="param-cell-desc">Failed quorum or approval threshold</div>
+        </div>
+        <div class="param-cell">
+          <div class="param-cell-label">6. Expired</div>
+          <div class="param-cell-desc">Voting period ended without quorum</div>
+        </div>
+      </div>
+
+      <h3>Voting Requirements</h3>
+      <table class="param-table">
+        <tr><td><div class="param-name">Quorum</div></td><td><div class="param-desc">≥ 33% of total staked UDAG must vote</div></td></tr>
+        <tr><td><div class="param-name">Approval</div></td><td><div class="param-desc">≥ 66% of votes must be "yes"</div></td></tr>
+        <tr><td><div class="param-name">Min Stake</div></td><td><div class="param-desc">50 UDAG to create proposal</div></td></tr>
+        <tr><td><div class="param-name">Voting Period</div></td><td><div class="param-desc">10,080 rounds (~14 hours at 5s)</div></td></tr>
+        <tr><td><div class="param-name">Execution Delay</div></td><td><div class="param-desc">1,008 rounds (~1.4 hours) after passing</div></td></tr>
+      </table>
+
+      <h3>Proposal Types</h3>
+      <p><strong>ParameterChange</strong> — Modify runtime governance parameters (quorum threshold, voting period, execution delay, min stake, observer reward %, max active proposals).</p>
+      <p><strong>TextProposal</strong> — Signal voting for off-chain coordination (no automatic execution).</p>
+
+      <h3>Vote Weight</h3>
+      <p>Vote weight equals staked amount at proposal creation. Addresses in unstake cooldown cannot vote. One address = one vote (no vote splitting).</p>
+    </div>
+    <div class="code-col">
+      <div class="code-block">
+        <div class="code-tabs">
+          <div class="code-tab active">Create Proposal</div>
+        </div>
+        <div class="code-content">
+<pre><span class="cm">// Create parameter change proposal</span>
+<span class="kw">const</span> proposal <span class="op">=</span> <span class="kw">await</span> <span class="fn">fetch</span>(<span class="st">'/proposal'</span>, {
+  method: <span class="st">'POST'</span>,
+  body: <span class="fn">JSON</span>.<span class="fn">stringify</span>({
+    proposer_secret: <span class="st">"..."</span>,
+    title: <span class="st">"Reduce min stake"</span>,
+    description: <span class="st">"Lower barrier..."</span>,
+    proposal_type: {
+      ParameterChange: {
+        param: <span class="st">"min_stake_to_propose"</span>,
+        new_value: <span class="nm">25_00_000_000</span>
+      }
+    }
+  })
+})
+
+<span class="cm">// Vote on proposal</span>
+<span class="kw">const</span> vote <span class="op">=</span> <span class="kw">await</span> <span class="fn">fetch</span>(<span class="st">'/vote'</span>, {
+  method: <span class="st">'POST'</span>,
+  body: <span class="fn">JSON</span>.<span class="fn">stringify</span>({
+    voter_secret: <span class="st">"..."</span>,
+    proposal_id: <span class="nm">1</span>,
+    vote: <span class="st">"yes"</span> <span class="cm">// or "no"</span>
+  })
+})</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Section: Checkpoints ───────────────────────────────────────── -->
+  <div class="doc-section" id="checkpoints">
+    <div class="prose">
+      <div class="section-tag">Fast-Sync</div>
+      <h2>Checkpoints <em>&amp; Fast-Sync</em></h2>
+      <p>Checkpoints enable new nodes to sync from a recent snapshot instead of replaying the entire DAG history. Validators co-sign checkpoints every 100 finalized rounds.</p>
+
+      <h3>Checkpoint Structure</h3>
+      <table class="param-table">
+        <tr><td><div class="param-name">round</div></td><td><div class="param-desc">Finalized round number</div></td></tr>
+        <tr><td><div class="param-name">state_root</div></td><td><div class="param-desc">Blake3 hash of account state</div></td></tr>
+        <tr><td><div class="param-name">dag_tip</div></td><td><div class="param-desc">Hash of latest finalized vertex</div></td></tr>
+        <tr><td><div class="param-name">total_supply</div></td><td><div class="param-desc">Total UDAG in circulation</div></td></tr>
+        <tr><td><div class="param-name">prev_checkpoint_hash</div></td><td><div class="param-desc">Hash of previous checkpoint (chain)</div></td></tr>
+        <tr><td><div class="param-name">signatures</div></td><td><div class="param-desc">Map of validator → Ed25519 signature</div></td></tr>
+      </table>
+
+      <h3>Co-Signing Protocol</h3>
+      <p>When a validator produces a checkpoint (every 100 finalized rounds):</p>
+      <ol style="margin-left:20px;color:var(--text2);font-size:14px;line-height:1.8">
+        <li>Compute <code>state_root</code> from current account balances</li>
+        <li>Sign checkpoint with validator key</li>
+        <li>Broadcast <code>CheckpointProposal</code> to all peers</li>
+        <li>Peers verify state_root, sign if valid, send <code>CheckpointSignature</code></li>
+        <li>Collect signatures until quorum (⌈2n/3⌉) reached</li>
+        <li>Save accepted checkpoint to <code>checkpoints/</code> directory</li>
+      </ol>
+
+      <h3>Fast-Sync Process</h3>
+      <p>New nodes joining the network:</p>
+      <ol style="margin-left:20px;color:var(--text2);font-size:14px;line-height:1.8">
+        <li>Send <code>GetCheckpoint</code> to bootstrap peer</li>
+        <li>Receive checkpoint + suffix vertices + state snapshot</li>
+        <li>Verify checkpoint chain back to genesis</li>
+        <li>Verify quorum signatures (⌈2n/3⌉ validators)</li>
+        <li>Load state snapshot into StateEngine</li>
+        <li>Insert suffix vertices into DAG</li>
+        <li>Begin normal consensus participation</li>
+      </ol>
+
+      <h3>Security</h3>
+      <p>Checkpoints form a hash chain via <code>prev_checkpoint_hash</code>, linking back to hardcoded <code>GENESIS_CHECKPOINT_HASH</code>. Forged checkpoints are rejected (chain break detected). Eclipse attacks require rewriting from genesis (infeasible).</p>
+
+      <div class="callout callout-info">
+        <div class="callout-icon">ℹ</div>
+        <p>Checkpoint pruning keeps only the 10 most recent checkpoints to limit disk usage. Older checkpoints are automatically deleted after new ones are produced.</p>
+      </div>
+    </div>
+    <div class="code-col"></div>
+  </div>
+
+  <!-- ── Section: Monitoring ────────────────────────────────────────── -->
+  <div class="doc-section" id="monitoring">
+    <div class="prose">
+      <div class="section-tag">Monitoring</div>
+      <h2>Metrics <em>&amp; Monitoring</em></h2>
+      <p>UltraDAG exposes Prometheus-compatible metrics for production monitoring. Use <code>/metrics</code> for Prometheus scraping or <code>/metrics/json</code> for custom dashboards.</p>
+
+      <h3>Key Metrics</h3>
+      <table class="endpoint-table">
+        <thead><tr><th>Metric</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>dag_round</td><td>Gauge</td><td>Current DAG round</td></tr>
+          <tr><td>finalized_round</td><td>Gauge</td><td>Last finalized round</td></tr>
+          <tr><td>finality_lag</td><td>Gauge</td><td>dag_round - finalized_round</td></tr>
+          <tr><td>mempool_size</td><td>Gauge</td><td>Pending transactions</td></tr>
+          <tr><td>peer_count</td><td>Gauge</td><td>Connected peers</td></tr>
+          <tr><td>total_supply</td><td>Gauge</td><td>Total UDAG in circulation</td></tr>
+          <tr><td>checkpoint_productions</td><td>Counter</td><td>Checkpoints produced</td></tr>
+          <tr><td>checkpoint_quorum_reached</td><td>Counter</td><td>Checkpoints with quorum</td></tr>
+          <tr><td>fastsync_duration_ms</td><td>Histogram</td><td>Fast-sync time distribution</td></tr>
+          <tr><td>vertices_inserted</td><td>Counter</td><td>Total vertices inserted</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Health Check Endpoints</h3>
+      <table class="endpoint-table">
+        <thead><tr><th>Endpoint</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>GET /health</code></td><td>Simple OK check (200 if running)</td></tr>
+          <tr><td><code>GET /health/detailed</code></td><td>Component-level diagnostics</td></tr>
+          <tr><td><code>GET /status</code></td><td>Cached network status (fast)</td></tr>
+          <tr><td><code>GET /metrics</code></td><td>Prometheus format</td></tr>
+          <tr><td><code>GET /metrics/json</code></td><td>JSON format for dashboards</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Alert Thresholds</h3>
+      <table class="param-table">
+        <tr><td><div class="param-name">Finality Lag &gt; 10</div></td><td><div class="param-desc">Warning — possible network partition or validator issues</div></td></tr>
+        <tr><td><div class="param-name">Finality Lag &gt; 50</div></td><td><div class="param-desc">Critical — consensus stalled, investigate immediately</div></td></tr>
+        <tr><td><div class="param-name">Peer Count &lt; 2</div></td><td><div class="param-desc">Warning — risk of isolation</div></td></tr>
+        <tr><td><div class="param-name">Mempool &gt; 1000</div></td><td><div class="param-desc">Warning — transaction backlog</div></td></tr>
+        <tr><td><div class="param-name">Memory &gt; 80%</div></td><td><div class="param-desc">Warning — consider reducing pruning depth</div></td></tr>
+      </table>
+    </div>
+    <div class="code-col">
+      <div class="code-block">
+        <div class="code-tabs">
+          <div class="code-tab active">Prometheus</div>
+        </div>
+        <div class="code-content">
+<pre><span class="cm"># Prometheus scrape config</span>
+scrape_configs:
+  - job_name: <span class="st">'ultradag'</span>
+    scrape_interval: <span class="nm">15</span>s
+    static_configs:
+      - targets:
+        - <span class="st">'node1:10333'</span>
+        - <span class="st">'node2:10333'</span>
+        - <span class="st">'node3:10333'</span>
+
+<span class="cm"># Alert rules</span>
+groups:
+  - name: ultradag
+    rules:
+      - alert: FinalityLagHigh
+        expr: finality_lag <span class="op">&gt;</span> <span class="nm">10</span>
+        <span class="kw">for</span>: <span class="nm">5</span>m
+        annotations:
+          summary: <span class="st">"Finality lag high"</span>
+
+      - alert: PeerCountLow
+        expr: peer_count <span class="op">&lt;</span> <span class="nm">2</span>
+        <span class="kw">for</span>: <span class="nm">2</span>m
+        annotations:
+          summary: <span class="st">"Low peer count"</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Section: Troubleshooting ───────────────────────────────────── -->
+  <div class="doc-section" id="troubleshooting">
+    <div class="prose">
+      <div class="section-tag">Troubleshooting</div>
+      <h2>Common <em>Issues</em></h2>
+      <p>Solutions to frequently encountered problems when running UltraDAG nodes.</p>
+
+      <h3>High Finality Lag</h3>
+      <p><strong>Symptom:</strong> <code>finality_lag &gt; 10</code> rounds, transactions not confirming</p>
+      <p><strong>Causes:</strong></p>
+      <ul style="margin-left:20px;color:var(--text2);font-size:14px;line-height:1.8">
+        <li>Network partition — validator can't reach 2/3 quorum</li>
+        <li>Clock skew — validator timestamps rejected by peers</li>
+        <li>Insufficient peers — isolated from network</li>
+        <li>Validator not producing — check <code>--validate</code> flag</li>
+      </ul>
+      <p><strong>Solutions:</strong></p>
+      <ol style="margin-left:20px;color:var(--text2);font-size:14px;line-height:1.8">
+        <li>Check peer count: <code>curl http://localhost:10333/peers</code></li>
+        <li>Verify network connectivity to seed nodes</li>
+        <li>Check system clock: <code>timedatectl status</code></li>
+        <li>Review logs for "equivocation" or "signature verification failed"</li>
+        <li>Restart node with <code>--seed</code> pointing to known-good peers</li>
+      </ol>
+
+      <h3>Transaction Stuck in Mempool</h3>
+      <p><strong>Symptom:</strong> Transaction shows in <code>/mempool</code> but never confirms</p>
+      <p><strong>Causes:</strong></p>
+      <ul style="margin-left:20px;color:var(--text2);font-size:14px;line-height:1.8">
+        <li>Incorrect nonce — must be exactly <code>current_nonce + 1</code></li>
+        <li>Insufficient balance — amount + fee exceeds available balance</li>
+        <li>Fee too low — other transactions have higher priority</li>
+        <li>Signature invalid — pubkey doesn't match sender address</li>
+      </ul>
+      <p><strong>Solutions:</strong></p>
+      <ol style="margin-left:20px;color:var(--text2);font-size:14px;line-height:1.8">
+        <li>Check current nonce: <code>GET /balance/:address</code></li>
+        <li>Verify balance covers amount + fee + pending tx costs</li>
+        <li>Increase fee to at least 100 sats for priority</li>
+        <li>Verify signature over correct signable_bytes format</li>
+      </ol>
+
+      <h3>Node Won't Start</h3>
+      <p><strong>Symptom:</strong> Process exits immediately or fails to bind port</p>
+      <p><strong>Solutions:</strong></p>
+      <ol style="margin-left:20px;color:var(--text2);font-size:14px;line-height:1.8">
+        <li>Check port availability: <code>lsof -i :9333</code></li>
+        <li>Verify data directory permissions: <code>ls -la ~/.ultradag/node</code></li>
+        <li>Check for corrupted state: try <code>--clean-state</code> (testnet only)</li>
+        <li>Review logs in <code>~/.ultradag/node/ultradag.log</code></li>
+        <li>Ensure sufficient disk space (min 1GB free)</li>
+      </ol>
+
+      <h3>Peer Connection Failures</h3>
+      <p><strong>Symptom:</strong> <code>peer_count = 0</code>, "connection refused" in logs</p>
+      <p><strong>Solutions:</strong></p>
+      <ol style="margin-left:20px;color:var(--text2);font-size:14px;line-height:1.8">
+        <li>Verify firewall allows TCP on P2P port (default 9333)</li>
+        <li>Check seed node addresses are correct and reachable</li>
+        <li>Try multiple seed nodes: <code>--seed node1:9333 --seed node2:9333</code></li>
+        <li>Verify DNS resolution if using hostnames</li>
+        <li>Check for NAT/firewall blocking outbound connections</li>
+      </ol>
+
+      <h3>Memory Usage Growing</h3>
+      <p><strong>Symptom:</strong> RSS memory increases over time, eventual OOM</p>
+      <p><strong>Solutions:</strong></p>
+      <ol style="margin-left:20px;color:var(--text2);font-size:14px;line-height:1.8">
+        <li>Reduce pruning depth: <code>--pruning-depth 500</code> (default 1000)</li>
+        <li>Verify pruning is enabled (not <code>--archive</code> mode)</li>
+        <li>Check for orphan buffer growth (indicates sync issues)</li>
+        <li>Monitor checkpoint count (should stay ≤ 10)</li>
+        <li>Restart node periodically if memory leak suspected</li>
+      </ol>
+
+      <div class="callout callout-warn">
+        <div class="callout-icon">⚠</div>
+        <p>For production issues, always check <code>/health/detailed</code> first for component-level diagnostics. Enable debug logging with <code>RUST_LOG=debug</code> for detailed troubleshooting.</p>
+      </div>
+    </div>
+    <div class="code-col"></div>
   </div>
 
   </div><!-- /content-wrap -->
