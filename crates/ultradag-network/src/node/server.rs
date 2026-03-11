@@ -73,6 +73,9 @@ pub struct NodeServer {
     pub wal: Arc<std::sync::Mutex<Option<FinalityWal>>>,
     /// Custom pruning depth (0 = archive mode, no pruning).
     pub pruning_depth: u64,
+    /// Highest round reported by any peer via Hello/HelloAck.
+    /// Used by fast-sync task to determine if we're caught up.
+    pub peer_max_round: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl NodeServer {
@@ -102,6 +105,7 @@ impl NodeServer {
             checkpoint_metrics: Arc::new(crate::CheckpointMetrics::new()),
             wal: Arc::new(std::sync::Mutex::new(None)),
             pruning_depth: 1000,
+            peer_max_round: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 
