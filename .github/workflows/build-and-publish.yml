@@ -1,0 +1,51 @@
+name: Build and Publish Latest Binary
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    name: Build Linux Binary
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Install musl tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Build
+        run: cargo build --release --target x86_64-unknown-linux-musl -p ultradag-node
+
+      - name: Prepare binary
+        run: |
+          mkdir -p release
+          cp target/x86_64-unknown-linux-musl/release/ultradag-node release/ultradag-node-linux-x86_64
+          chmod +x release/ultradag-node-linux-x86_64
+
+      - name: Upload to latest release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: latest
+          name: Latest Build
+          files: release/ultradag-node-linux-x86_64
+          draft: false
+          prerelease: true
+          generate_release_notes: false
+          body: |
+            Latest automated build from main branch.
+            Commit: ${{ github.sha }}
+            
+            This is a pre-release for deployment purposes.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
