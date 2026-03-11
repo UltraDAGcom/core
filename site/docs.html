@@ -39,19 +39,52 @@ body{
   min-height:100vh;
 }
 
+/* ── Navigation ───────────────────────────────────────────────────────── */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between}
+.nav-logo{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:300;letter-spacing:.08em;color:var(--text);text-decoration:none;display:flex;align-items:center;gap:10px}
+.nav-logo-mark{width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
+.nav-logo-mark::after{content:'';width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)}
+.nav-links{display:flex;align-items:center;gap:32px;list-style:none}
+.nav-links a{font-family:'DM Mono',monospace;font-size:12px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--text2);text-decoration:none;transition:color .2s;position:relative;padding-bottom:4px}
+.nav-links a::after{content:'';position:absolute;bottom:0;left:0;width:0;height:1px;background:var(--accent);transition:width .3s ease}
+.nav-links a:hover{color:var(--text)}
+.nav-links a:hover::after{width:100%}
+.nav-cta{color:var(--accent)!important;border:1px solid rgba(61,155,233,.3);padding:8px 18px;border-radius:2px;transition:background .2s!important}
+.nav-cta:hover{background:rgba(61,155,233,.1)}
+.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;background:none;border:none;z-index:101}
+.hamburger span{width:24px;height:2px;background:var(--text);transition:all .3s;border-radius:2px}
+.hamburger.active span:nth-child(1){transform:rotate(45deg) translate(7px,7px)}
+.hamburger.active span:nth-child(2){opacity:0}
+.hamburger.active span:nth-child(3){transform:rotate(-45deg) translate(7px,-7px)}
+.mobile-menu{position:fixed;top:64px;left:0;right:0;background:rgba(10,14,26,.98);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 24px;z-index:99;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease}
+.mobile-menu.active{max-height:500px;padding:24px}
+.mobile-menu ul{list-style:none;display:flex;flex-direction:column;gap:20px}
+.mobile-menu a{font-family:'DM Mono',monospace;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--text2);text-decoration:none;transition:color .2s;display:block;padding:8px 0}
+.mobile-menu a:hover{color:var(--text)}
+.mobile-menu .nav-cta{display:inline-block;margin-top:8px}
+@media(min-width:901px){.mobile-menu{display:none}}
+@media(max-width:900px){.nav-links{display:none}.hamburger{display:flex}}
 
+/* ── Footer ───────────────────────────────────────────────────────────── */
+footer{border-top:1px solid var(--border);padding:48px 40px;margin-top:80px;background:var(--surface)}
+.footer-inner{max-width:1200px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:32px}
+.footer-links{display:flex;gap:32px;flex-wrap:wrap}
+.footer-links a{font-family:'DM Mono',monospace;font-size:12px;color:var(--text3);text-decoration:none;transition:color .2s}
+.footer-links a:hover{color:var(--accent)}
+.footer-note{font-family:'DM Mono',monospace;font-size:11px;color:var(--text3)}
 
 /* ── Layout shell ─────────────────────────────────────────────────────── */
 .shell{
   display:flex;
   min-height:100vh;
+  padding-top:64px;
 }
 
 /* ── Left sidebar ─────────────────────────────────────────────────────── */
 .sidebar{
   width:var(--nav-w);
   flex-shrink:0;
-  position:fixed;top:0;left:0;bottom:0;
+  position:fixed;top:64px;left:0;bottom:0;
   overflow-y:auto;
   border-right:1px solid var(--border);
   background:var(--bg);
@@ -414,6 +447,43 @@ code{
 </style>
 </head>
 <body>
+
+<!-- NAV -->
+<nav id="nav" style="background:rgba(10,14,26,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)">
+  <a href="/" class="nav-logo">
+    <div class="nav-logo-mark"></div>
+    UltraDAG
+  </a>
+  <ul class="nav-links">
+    <li><a href="/#consensus">Why UltraDAG</a></li>
+    <li><a href="whitepaper.html">Whitepaper</a></li>
+    <li><a href="docs.html" style="color:var(--accent)">Docs</a></li>
+    <li><a href="testnet.html">Testnet</a></li>
+    <li><a href="consensus-viz.html">Consensus Demo</a></li>
+    <li><a href="blog/index.html">Blog</a></li>
+    <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+    <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
+  </ul>
+  <button class="hamburger" id="hamburger" aria-label="Menu">
+    <span></span>
+    <span></span>
+    <span></span>
+  </button>
+</nav>
+
+<!-- MOBILE MENU -->
+<div class="mobile-menu" id="mobile-menu">
+  <ul>
+    <li><a href="/#consensus">Why UltraDAG</a></li>
+    <li><a href="whitepaper.html">Whitepaper</a></li>
+    <li><a href="docs.html">Docs</a></li>
+    <li><a href="testnet.html">Testnet</a></li>
+    <li><a href="consensus-viz.html">Consensus Demo</a></li>
+    <li><a href="blog/index.html">Blog</a></li>
+    <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+    <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
+  </ul>
+</div>
 
 <!-- ── Shell ────────────────────────────────────────────────────────────── -->
 <div class="shell">
@@ -931,6 +1001,21 @@ git <span class="fn">clone</span> https://github.com/UltraDAGcom/core
   </main>
 </div><!-- /shell -->
 
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-links">
+      <a href="/">Home</a>
+      <a href="whitepaper.html">Whitepaper</a>
+      <a href="docs.html">Docs</a>
+      <a href="testnet.html">Testnet</a>
+      <a href="blog/index.html">Blog</a>
+      <a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a>
+      <a href="dashboard.html">Dashboard</a>
+    </div>
+    <div class="footer-note">MIT / Apache-2.0</div>
+  </div>
+</footer>
 
 <script>
 // ── Tab switcher (curl/python/js) ──────────────────────────────────────────
@@ -976,6 +1061,22 @@ const obs = new IntersectionObserver(entries => {
 }, { rootMargin: '-20% 0px -60% 0px', threshold: 0 });
 
 sections.forEach(s => obs.observe(s));
+
+// ── Hamburger menu toggle ──────────────────────────────────────────────────
+const hamburger = document.getElementById('hamburger');
+const mobileMenu = document.getElementById('mobile-menu');
+if (hamburger && mobileMenu) {
+  hamburger.addEventListener('click', () => {
+    hamburger.classList.toggle('active');
+    mobileMenu.classList.toggle('active');
+  });
+  mobileMenu.querySelectorAll('a').forEach(link => {
+    link.addEventListener('click', () => {
+      hamburger.classList.remove('active');
+      mobileMenu.classList.remove('active');
+    });
+  });
+}
 </script>
 <script src="js/docs-playground.js"></script>
 </body>
