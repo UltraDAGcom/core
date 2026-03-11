@@ -32,8 +32,8 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 h1{font-family:'Cormorant',serif;font-size:clamp(44px,6vw,72px);font-weight:300;line-height:1.05;letter-spacing:-.02em;color:var(--white);margin-bottom:12px}
 .subtitle{font-family:'DM Mono',monospace;font-size:14px;color:var(--subtle);letter-spacing:.1em}
 .live-indicator{display:inline-flex;align-items:center;gap:8px;margin-top:16px;padding:8px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:4px}
-.live-dot{width:8px;height:8px;background:var(--green);border-radius:50%;animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.live-dot{width:8px;height:8px;background:var(--success);border-radius:50%;box-shadow:0 0 6px var(--success);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.2)}}
 
 .stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-bottom:48px}
 .stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:24px;transition:border-color .3s}
@@ -46,12 +46,12 @@ h1{font-family:'Cormorant',serif;font-size:clamp(44px,6vw,72px);font-weight:300;
 .section-title{font-size:24px;color:var(--white);margin-bottom:24px;font-weight:600}
 .nodes-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}
 .node-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px;position:relative}
-.node-card.online{border-color:var(--green)}
+.node-card.online{border-color:var(--success)}
 .node-card.offline{border-color:var(--red);opacity:.6}
 .node-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
 .node-name{font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--white)}
 .node-status{font-family:'DM Mono',monospace;font-size:11px;padding:4px 10px;border-radius:3px;text-transform:uppercase;letter-spacing:.1em}
-.node-status.online{background:rgba(74,222,128,.15);color:var(--green);border:1px solid rgba(74,222,128,.3)}
+.node-status.online{background:rgba(52,211,153,.15);color:var(--success);border:1px solid rgba(52,211,153,.3)}
 .node-status.offline{background:rgba(248,113,113,.15);color:var(--red);border:1px solid rgba(248,113,113,.3)}
 .node-metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 .node-metric{display:flex;flex-direction:column}
@@ -182,15 +182,13 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
   </ul>
 </div>
 
-<div class="container" style="padding-top:80px">
+<div class="container" style="padding-top:120px">
   <div class="header">
-    <h1>UltraDAG Testnet</h1>
-    <div class="subtitle">Live Network Status</div>
     <div class="live-indicator">
       <div class="live-dot"></div>
-      <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--green)">LIVE</span>
+      <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--success)">LIVE</span>
       <span style="color:var(--dim);margin:0 8px">•</span>
-      <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle)">Auto-refresh: 5s</span>
+      <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle)">Updated 0s ago</span>
     </div>
   </div>
 
@@ -319,7 +317,7 @@ async function updateAllNodes() {
 
 function lagColor(lag) {
   if (lag == null) return 'var(--muted)';
-  if (lag <= 3) return 'var(--green)';
+  if (lag <= 3) return 'var(--success)';
   if (lag <= 10) return 'var(--yellow)';
   return 'var(--red)';
 }
@@ -389,7 +387,7 @@ function updateGlobalStats() {
   const healthSub = document.getElementById('network-health-sub');
   healthEl.textContent = online.length + '/' + total;
   if (online.length === total) {
-    healthEl.style.color = 'var(--green)';
+    healthEl.style.color = 'var(--success)';
     healthSub.textContent = 'All nodes operational';
   } else if (online.length > 0) {
     healthEl.style.color = 'var(--yellow)';
