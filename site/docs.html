@@ -3,591 +3,980 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UltraDAG — Documentation</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<title>Documentation — UltraDAG</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+/* ── Reset & base ─────────────────────────────────────────────────────── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0a0e1a;--bg2:#0e1322;--bg3:#131a2b;
-  --border:#1a2540;--border2:#223050;
-  --dim:#2e4060;--muted:#4a6488;--subtle:#7090b8;
-  --body:#94b8d8;--bright:#c8e0f4;--white:#edf4fb;
-  --accent:#3d9be9;--accent2:#1a6fb5;
-  --glow:rgba(61,155,233,0.15);
-  --success:#34d399;--red:#f87171;--yellow:#fbbf24;
+  --bg:       #080c16;
+  --surface:  #0d1220;
+  --border:   #162030;
+  --border2:  #0f1828;
+  --text:     #c8ddf0;
+  --text2:    #6888a8;
+  --text3:    #384e68;
+  --accent:   #3d9be9;
+  --accent-h: #5aaef5;
+  --green:    #22d3a0;
+  --green-bg: rgba(34,211,160,.08);
+  --blue-bg:  rgba(61,155,233,.08);
+  --amber:    #f59e0b;
+  --amber-bg: rgba(245,158,11,.08);
+  --code-bg:  #060910;
+  --code-line:#0e1520;
+  --nav-w:    248px;
+  --content-w:680px;
+  --code-w:   360px;
+  --gap:      48px;
 }
-html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--body);font-family:'Syne',sans-serif;font-size:16px;line-height:1.7;overflow-x:hidden;cursor:default}
-a{color:var(--accent);text-decoration:none;transition:color .2s}
-a:hover{color:var(--white)}
-
-body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.4}
-.grid-bg{position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.5625;pointer-events:none;z-index:0;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,black 30%,transparent 100%)}
-
-/* NAV */
-nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(10,14,26,.92);backdrop-filter:blur(16px)}
-.nav-logo{font-family:'Cormorant',serif;font-size:22px;font-weight:300;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px}
-.nav-logo-mark{width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
-.nav-logo-mark::after{content:'';width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)}
-.nav-links{display:flex;align-items:center;gap:32px;list-style:none}
-.nav-links a{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s}
-.nav-links a:hover{color:var(--white)}
-.nav-links a.active{color:var(--white)}
-.nav-cta{color:var(--accent)!important;border:1px solid var(--accent2);padding:8px 18px;border-radius:2px}
-
-/* HAMBURGER MENU */
-.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;background:none;border:none;z-index:101}
-.hamburger span{width:24px;height:2px;background:var(--white);transition:all .3s;border-radius:2px}
-.hamburger.active span:nth-child(1){transform:rotate(45deg) translate(7px,7px)}
-.hamburger.active span:nth-child(2){opacity:0}
-.hamburger.active span:nth-child(3){transform:rotate(-45deg) translate(7px,-7px)}
-.mobile-menu{position:fixed;top:64px;left:0;right:0;background:rgba(10,14,26,.98);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 24px;z-index:99;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease}
-.mobile-menu.active{max-height:500px;padding:24px}
-.mobile-menu ul{list-style:none;display:flex;flex-direction:column;gap:20px}
-.mobile-menu a{font-family:'DM Mono',monospace;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;display:block;padding:8px 0}
-.mobile-menu a:hover{color:var(--white)}
-.mobile-menu .nav-cta{display:inline-block;margin-top:8px}
-@media(min-width:901px){.mobile-menu{display:none}}
-
-/* LAYOUT */
-.page{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:100px 48px 80px}
-.page-title{font-family:'Cormorant',serif;font-size:clamp(36px,5vw,56px);font-weight:300;line-height:1.05;color:var(--white);margin-bottom:12px}
-.page-title em{font-style:italic;color:var(--accent)}
-.page-sub{font-family:'Cormorant',serif;font-size:20px;font-weight:300;color:var(--subtle);margin-bottom:48px;line-height:1.5}
-
-/* SECTIONS */
-.doc-section{margin-bottom:64px}
-.doc-section h2{font-family:'Cormorant',serif;font-size:32px;font-weight:300;color:var(--white);margin-bottom:8px;padding-bottom:12px;border-bottom:1px solid var(--border)}
-.doc-section h3{font-family:'Syne',sans-serif;font-size:18px;font-weight:600;color:var(--bright);margin-top:32px;margin-bottom:12px}
-.doc-section p{font-family:'Cormorant',serif;font-size:17px;color:var(--body);line-height:1.7;margin-bottom:16px}
-.doc-section ul,.doc-section ol{margin:0 0 16px 24px}
-.doc-section li{font-family:'Cormorant',serif;font-size:17px;color:var(--body);line-height:1.7;margin-bottom:6px}
-
-/* TABLE */
-.api-table{width:100%;border-collapse:collapse;margin:16px 0 24px;font-family:'DM Mono',monospace;font-size:13px}
-.api-table th{text-align:left;padding:10px 12px;background:var(--bg3);color:var(--bright);border:1px solid var(--border);font-weight:500;font-size:11px;letter-spacing:.1em;text-transform:uppercase}
-.api-table td{padding:10px 12px;border:1px solid var(--border);color:var(--body);vertical-align:top}
-.api-table tr:hover td{background:var(--bg2)}
-.method{display:inline-block;padding:2px 8px;border-radius:2px;font-size:11px;font-weight:500;letter-spacing:.05em}
-.method-get{background:rgba(52,211,153,.12);color:var(--success);border:1px solid rgba(52,211,153,.25)}
-.method-post{background:rgba(61,155,233,.12);color:var(--accent);border:1px solid rgba(61,155,233,.25)}
-
-/* CODE */
-code{font-family:'DM Mono',monospace;background:var(--bg3);border:1px solid var(--border);padding:2px 6px;border-radius:2px;font-size:.85em;color:var(--accent)}
-.code-example-container{position:relative;margin:12px 0 24px}
-pre{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:16px 20px;margin:0;overflow-x:auto;font-family:'DM Mono',monospace;font-size:13px;line-height:1.6;color:var(--bright)}
-pre .kw{color:var(--accent)}
-pre .str{color:var(--success)}
-pre .comment{color:var(--muted)}
-.code-example-actions{padding:12px 16px;background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 4px 4px;display:flex;justify-content:flex-end}
-.try-it-btn{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;background:var(--accent);color:var(--bg);border:none;padding:8px 16px;border-radius:2px;cursor:pointer;transition:background .2s,transform .15s;font-weight:500}
-.try-it-btn:hover{background:#5aaef0;transform:translateY(-1px)}
-
-/* PLAYGROUND MODAL */
-.playground-modal{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .3s}
-.playground-modal.show{opacity:1;pointer-events:all}
-.playground-modal-overlay{position:absolute;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px)}
-.playground-modal-content{position:relative;background:var(--bg);border:1px solid var(--border);border-radius:6px;width:90%;max-width:1100px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.5);transform:scale(.95);transition:transform .3s cubic-bezier(.16,1,.3,1)}
-.playground-modal.show .playground-modal-content{transform:scale(1)}
-.playground-modal-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-.playground-modal-header h3{font-family:'Cormorant',serif;font-size:24px;font-weight:300;color:var(--white);margin:0}
-.playground-modal-close{background:none;border:none;color:var(--muted);font-size:32px;line-height:1;cursor:pointer;padding:0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;transition:color .2s}
-.playground-modal-close:hover{color:var(--white)}
-.playground-modal-body{flex:1;overflow:hidden;display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border)}
-.playground-editor-section,.playground-output-section{background:var(--bg);display:flex;flex-direction:column;overflow:hidden}
-.playground-label{padding:12px 16px;background:var(--bg3);border-bottom:1px solid var(--border);font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
-.playground-code-editor{flex:1;font-family:'DM Mono',monospace;font-size:13px;line-height:1.6;background:var(--bg);color:var(--bright);padding:20px;border:none;resize:none;overflow-y:auto}
-.playground-code-editor:focus{outline:none}
-.playground-output{flex:1;padding:20px;font-family:'DM Mono',monospace;font-size:12px;line-height:1.6;overflow-y:auto}
-.playground-result{padding:0 20px 20px}
-.log-line{margin-bottom:8px;padding:4px 0}
-.log-info{color:var(--accent)}
-.log-log{color:var(--body)}
-.log-success{color:var(--success)}
-.log-error{color:var(--red)}
-.result-header{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
-.result-data{background:var(--bg3);border:1px solid var(--border);padding:16px;border-radius:2px;color:var(--bright);overflow-x:auto;white-space:pre-wrap;word-break:break-all}
-.playground-modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;background:var(--bg2)}
-.playground-run-btn{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;background:var(--accent);color:var(--bg);border:none;padding:10px 24px;border-radius:2px;cursor:pointer;transition:background .2s;font-weight:500}
-.playground-run-btn:hover:not(:disabled){background:#5aaef0}
-.playground-run-btn:disabled{opacity:.5;cursor:not-allowed}
-@media(max-width:900px){
-  .playground-modal-content{width:95%;max-height:95vh}
-  .playground-modal-body{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
+html{font-size:16px;-webkit-font-smoothing:antialiased;scroll-behavior:smooth;color-scheme:dark}
+body{
+  font-family:'Syne',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  line-height:1.7;
+  min-height:100vh;
 }
 
-/* TOC */
-.toc{background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:24px 28px;margin-bottom:48px}
-.toc-title{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
-.toc ul{list-style:none;margin:0;padding:0}
-.toc li{margin-bottom:6px}
-.toc a{font-family:'Cormorant',serif;font-size:17px;color:var(--subtle);text-decoration:none;transition:color .2s}
-.toc a:hover{color:var(--white)}
 
-/* FOOTER */
-footer{text-align:center;padding:48px 24px;border-top:1px solid var(--border);margin-top:48px}
-.footer-links{display:flex;justify-content:center;gap:32px;margin-bottom:16px;flex-wrap:wrap}
-.footer-links a{font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle);text-decoration:none;transition:color .2s}
-.footer-links a:hover{color:var(--accent)}
-.footer-note{font-family:'DM Mono',monospace;font-size:11px;color:var(--dim)}
 
-@media(max-width:900px){
-  nav{padding:0 24px;height:56px}
-  .nav-logo{font-size:18px}
-  .nav-logo-mark{width:24px;height:24px}
-  .nav-logo-mark::after{width:6px;height:6px}
-  .nav-links{display:none}
-  .hamburger{display:flex}
-  .mobile-menu{display:block;top:56px}
-  .page{padding:80px 24px 60px;max-width:100%}
-  .page-title{font-size:40px}
-  .page-sub{font-size:18px;margin-bottom:32px}
-  .doc-section h2{font-size:28px}
-  .doc-section h3{font-size:16px}
-  .doc-section p,.doc-section li{font-size:16px}
-  .api-table{font-size:12px;overflow-x:auto;display:block}
-  .api-table th,.api-table td{padding:8px 10px;font-size:11px}
-  pre{font-size:12px;padding:12px 16px;overflow-x:auto}
-  .toc{padding:20px 24px}
-  .footer-links{gap:16px}
+/* ── Layout shell ─────────────────────────────────────────────────────── */
+.shell{
+  display:flex;
+  min-height:100vh;
 }
-@media(max-width:600px){
-  nav{padding:0 16px}
-  .page{padding:72px 16px 48px}
-  .page-title{font-size:32px}
-  .page-sub{font-size:16px}
-  .doc-section{margin-bottom:48px}
-  .doc-section h2{font-size:24px;padding-bottom:8px}
-  .doc-section h3{font-size:15px;margin-top:24px}
-  .doc-section p,.doc-section li{font-size:15px}
-  .api-table{font-size:11px}
-  .api-table th,.api-table td{padding:6px 8px;font-size:10px}
-  pre{font-size:11px;padding:10px 12px}
-  code{font-size:.8em}
-  .toc{padding:16px 20px}
-  .toc a{font-size:15px}
-  footer{padding:32px 16px}
+
+/* ── Left sidebar ─────────────────────────────────────────────────────── */
+.sidebar{
+  width:var(--nav-w);
+  flex-shrink:0;
+  position:fixed;top:0;left:0;bottom:0;
+  overflow-y:auto;
+  border-right:1px solid var(--border);
+  background:var(--bg);
+  padding:28px 0 60px;
+  scrollbar-width:thin;
+  scrollbar-color:var(--border) transparent;
+}
+.sidebar::-webkit-scrollbar{width:4px}
+.sidebar::-webkit-scrollbar-track{background:transparent}
+.sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+.nav-section{margin-bottom:28px}
+.nav-section-title{
+  font-size:10.5px;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text3);
+  padding:0 20px;margin-bottom:6px;
+}
+.nav-item{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 20px;font-size:13.5px;color:var(--text2);
+  text-decoration:none;border-left:2px solid transparent;
+  transition:color .12s,background .12s,border-color .12s;
+  position:relative;cursor:pointer;user-select:none;
+}
+.nav-item:hover{color:var(--text);background:rgba(255,255,255,.04)}
+.nav-item.active{
+  color:var(--accent);font-weight:500;
+  border-left-color:var(--accent);
+  background:rgba(61,155,233,.08);
+}
+.nav-item .badge{
+  font-family:'DM Mono',monospace;font-size:9px;font-weight:500;
+  padding:1px 5px;border-radius:3px;margin-left:auto;flex-shrink:0;
+}
+.badge-get{background:rgba(34,211,160,.1);color:var(--green)}
+.badge-post{background:rgba(61,155,233,.1);color:var(--accent)}
+
+.nav-sub{
+  font-size:12.5px;padding:4px 20px 4px 36px;color:var(--text3);
+  text-decoration:none;display:block;
+  transition:color .12s;
+}
+.nav-sub:hover{color:var(--text2)}
+.nav-sub.active{color:var(--accent)}
+
+/* ── Main content area ────────────────────────────────────────────────── */
+.main{
+  margin-left:var(--nav-w);
+  flex:1;
+  min-width:0;
+}
+.content-wrap{
+  max-width:calc(var(--content-w) + var(--gap) + var(--code-w) + 80px);
+  margin:0 auto;
+  padding:0 40px;
+}
+
+/* ── Two-column sections: prose left, code right ─────────────────────── */
+.doc-section{
+  display:grid;
+  grid-template-columns:var(--content-w) var(--gap) var(--code-w);
+  padding:56px 0;
+  border-bottom:1px solid var(--border2);
+  position:relative;
+}
+.doc-section:last-child{border-bottom:none}
+.prose{grid-column:1}
+.code-col{grid-column:3;position:relative}
+
+/* When no code panel */
+.doc-section.full-width{
+  grid-template-columns:var(--content-w);
+}
+
+/* ── Prose typography ─────────────────────────────────────────────────── */
+.section-tag{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:'DM Mono',monospace;font-size:10px;font-weight:500;
+  letter-spacing:.1em;text-transform:uppercase;
+  color:var(--accent);margin-bottom:14px;
+}
+.section-tag::before{content:'';width:18px;height:1px;background:var(--accent);opacity:.5}
+
+h2{
+  font-family:'Cormorant Garamond',serif;
+  font-size:clamp(26px,3vw,36px);font-weight:400;
+  line-height:1.1;letter-spacing:-.02em;
+  color:var(--text);margin-bottom:16px;
+}
+h2 em{font-style:italic;color:var(--accent)}
+h3{
+  font-size:13px;font-weight:600;color:var(--text2);
+  margin:28px 0 10px;letter-spacing:.06em;text-transform:uppercase;
+}
+h4{
+  font-size:11px;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text3);margin:20px 0 8px;
+}
+p{font-size:14.5px;color:var(--text2);margin-bottom:14px;line-height:1.75}
+p:last-child{margin-bottom:0}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+
+code{
+  font-family:'DM Mono',monospace;font-size:12.5px;
+  background:rgba(61,155,233,.1);color:#7ab8e8;
+  padding:1px 5px;border-radius:3px;
+  border:1px solid rgba(61,155,233,.15);
+}
+
+/* ── API endpoint table ───────────────────────────────────────────────── */
+.endpoint-table{width:100%;border-collapse:collapse;margin:16px 0}
+.endpoint-table th{
+  font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--text3);padding:8px 12px;text-align:left;
+  border-bottom:1px solid var(--border);
+}
+.endpoint-table td{
+  font-size:13px;padding:10px 12px;
+  border-bottom:1px solid var(--border2);
+  color:var(--text2);vertical-align:top;
+}
+.endpoint-table tr:last-child td{border-bottom:none}
+.endpoint-table tr:hover td{background:rgba(26,110,245,.02)}
+.endpoint-table td:first-child{
+  font-family:'DM Mono',monospace;font-size:12px;
+  color:var(--text);white-space:nowrap;
+}
+.method{
+  display:inline-block;font-family:'DM Mono',monospace;
+  font-size:10px;font-weight:500;padding:2px 6px;border-radius:3px;
+  margin-right:6px;vertical-align:middle;
+}
+.method-get{background:rgba(34,211,160,.1);color:var(--green)}
+.method-post{background:rgba(61,155,233,.1);color:var(--accent)}
+
+/* ── Param table ──────────────────────────────────────────────────────── */
+.param-table{width:100%;border-collapse:collapse;margin:12px 0}
+.param-table td{font-size:13px;padding:9px 12px;border-bottom:1px solid var(--border2);vertical-align:top}
+.param-table tr:last-child td{border-bottom:none}
+.param-name{font-family:'DM Mono',monospace;font-size:12px;color:var(--text)}
+.param-type{font-family:'DM Mono',monospace;font-size:11px;color:var(--text3);padding-top:2px}
+.param-desc{font-size:13px;color:var(--text2)}
+.param-default{font-family:'DM Mono',monospace;font-size:11px;color:var(--text3)}
+
+/* ── Code block (right panel) ─────────────────────────────────────────── */
+.code-block{
+  background:var(--code-bg);
+  border-radius:10px;
+  overflow:hidden;
+  box-shadow:0 4px 24px rgba(0,0,0,.12),0 1px 4px rgba(0,0,0,.08);
+  position:sticky;top:80px;
+}
+.code-tabs{
+  display:flex;
+  border-bottom:1px solid rgba(255,255,255,.06);
+  padding:0 4px;
+  background:rgba(255,255,255,.03);
+}
+.code-tab{
+  font-family:'DM Mono',monospace;font-size:11px;color:rgba(255,255,255,.35);
+  padding:10px 12px;cursor:pointer;border-bottom:2px solid transparent;
+  transition:color .15s,border-color .15s;letter-spacing:.03em;
+}
+.code-tab:hover{color:rgba(255,255,255,.6)}
+.code-tab.active{color:rgba(255,255,255,.9);border-bottom-color:var(--accent)}
+.code-content{padding:20px 22px;overflow-x:auto}
+.code-content pre{
+  font-family:'DM Mono',monospace;font-size:12.5px;line-height:1.7;
+  color:#e2e8f4;white-space:pre;margin:0;
+}
+/* Syntax colours */
+.kw{color:#c792ea}    /* keyword */
+.st{color:#c3e88d}    /* string */
+.fn{color:#82aaff}    /* function/method */
+.cm{color:#546a8a}    /* comment */
+.nm{color:#f78c6c}    /* number/const */
+.ty{color:#ffcb6b}    /* type */
+.op{color:#89ddff}    /* operator/punctuation */
+.url{color:#c3e88d;text-decoration:underline;cursor:pointer}
+
+/* ── Single code block (inline) ───────────────────────────────────────── */
+.code-inline{
+  background:var(--code-bg);border-radius:8px;overflow:hidden;
+  margin:16px 0;
+  box-shadow:0 2px 12px rgba(0,0,0,.1);
+}
+.code-inline-header{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.06);
+}
+.code-inline-dots{display:flex;gap:5px}
+.code-inline-dots span{width:10px;height:10px;border-radius:50%}
+.code-inline-lang{
+  font-family:'DM Mono',monospace;font-size:10px;
+  color:rgba(255,255,255,.3);letter-spacing:.06em;margin-left:auto;
+}
+.code-copy{
+  font-family:'DM Mono',monospace;font-size:10px;color:rgba(255,255,255,.3);
+  background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:3px;
+  transition:color .15s,background .15s;
+}
+.code-copy:hover{color:rgba(255,255,255,.7);background:rgba(255,255,255,.08)}
+.code-inline pre{
+  font-family:'DM Mono',monospace;font-size:12.5px;line-height:1.7;
+  color:#e2e8f4;padding:16px 20px;overflow-x:auto;white-space:pre;margin:0;
+}
+
+/* ── Callout boxes ────────────────────────────────────────────────────── */
+.callout{
+  border-radius:6px;padding:14px 16px;margin:20px 0;
+  display:flex;gap:12px;align-items:flex-start;
+}
+.callout-info{background:var(--blue-bg);border:1px solid rgba(26,110,245,.15)}
+.callout-warn{background:var(--amber-bg);border:1px solid rgba(180,83,9,.15)}
+.callout-success{background:var(--green-bg);border:1px solid rgba(13,138,90,.15)}
+.callout-icon{font-size:14px;flex-shrink:0;margin-top:1px}
+.callout p{font-size:13.5px;margin:0;line-height:1.6}
+.callout-info p{color:#1a3a70}
+.callout-warn p{color:#7a3c08}
+.callout-success p{color:#0a4a30}
+
+/* ── Unit badge row ───────────────────────────────────────────────────── */
+.unit-row{
+  display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;
+}
+.unit-pill{
+  font-family:'DM Mono',monospace;font-size:12px;
+  background:var(--surface);border:1px solid var(--border);
+  padding:6px 12px;border-radius:5px;color:var(--text2);
+  display:flex;align-items:center;gap:6px;
+}
+.unit-pill .arrow{color:var(--text3)}
+
+/* ── Staking params grid ──────────────────────────────────────────────── */
+.params-grid{
+  display:grid;grid-template-columns:repeat(2,1fr);gap:1px;
+  background:var(--border);border:1px solid var(--border);
+  border-radius:8px;overflow:hidden;margin:16px 0;
+}
+.param-cell{
+  background:var(--surface);padding:16px 20px;
+}
+.param-cell-label{
+  font-size:11px;font-weight:600;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--text3);margin-bottom:4px;
+}
+.param-cell-val{
+  font-family:'DM Mono',monospace;font-size:14px;color:var(--text);font-weight:500;
+}
+.param-cell-desc{font-size:12px;color:var(--text3);margin-top:3px}
+
+/* ── Architecture layer table ────────────────────────────────────────── */
+.arch-table{border-collapse:collapse;width:100%;margin:16px 0}
+.arch-table th{
+  font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--text3);padding:8px 14px;text-align:left;border-bottom:1px solid var(--border);
+}
+.arch-table td{font-size:13.5px;padding:12px 14px;border-bottom:1px solid var(--border2);color:var(--text2)}
+.arch-table tr:last-child td{border-bottom:none}
+.arch-layer{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:22px;height:22px;border-radius:50%;
+  font-family:'DM Mono',monospace;font-size:10px;font-weight:600;
+  background:rgba(61,155,233,.12);color:var(--accent);border:1px solid rgba(61,155,233,.2);
+}
+.crate-name{
+  font-family:'DM Mono',monospace;font-size:12.5px;
+  color:var(--text);background:rgba(61,155,233,.08);
+  border:1px solid rgba(61,155,233,.15);padding:2px 7px;border-radius:4px;
+}
+
+/* ── SDK tab group ────────────────────────────────────────────────────── */
+.sdk-tabs{
+  display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:0;
+}
+.sdk-tab{
+  font-size:13px;font-weight:500;color:var(--text3);
+  padding:10px 18px;cursor:pointer;border-bottom:2px solid transparent;
+  transition:color .15s,border-color .15s;margin-bottom:-1px;
+}
+.sdk-tab:hover{color:var(--text)}
+.sdk-tab.active{color:var(--accent);border-bottom-color:var(--accent)}.sdk-pane{display:none}
+.sdk-pane.active{display:block}
+
+/* ── CLI flag list ────────────────────────────────────────────────────── */
+.flag-list{list-style:none;margin:12px 0}
+.flag-list li{
+  display:grid;grid-template-columns:170px 1fr;gap:12px;
+  padding:9px 0;border-bottom:1px solid var(--border2);
+  font-size:13.5px;
+}
+.flag-list li:last-child{border-bottom:none}
+.flag-name{font-family:'DM Mono',monospace;font-size:12px;color:var(--text)}
+.flag-desc{color:var(--text2)}
+.flag-default{
+  font-family:'DM Mono',monospace;font-size:11px;color:var(--text3);
+  margin-top:3px;
+}
+
+/* ── Live demo pill ───────────────────────────────────────────────────── */
+.try-live{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.04em;
+  color:var(--accent);background:rgba(61,155,233,.08);
+  border:1px solid rgba(61,155,233,.2);
+  padding:4px 10px;border-radius:4px;margin-top:10px;cursor:pointer;
+  text-decoration:none;transition:background .15s,border-color .15s;
+}
+.try-live:hover{background:rgba(61,155,233,.15);border-color:rgba(61,155,233,.4);text-decoration:none}
+.try-live::before{content:'▶';font-size:8px}
+
+/* ── On-this-page ─────────────────────────────────────────────────────── */
+.on-this-page{
+  position:fixed;right:24px;top:80px;width:180px;
+  display:none;
+}
+@media(min-width:1320px){.on-this-page{display:block}}
+.otp-title{
+  font-size:10.5px;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text3);margin-bottom:10px;
+}
+.otp-link{
+  display:block;font-size:12px;color:var(--text3);text-decoration:none;
+  padding:4px 0;border-left:1.5px solid var(--border);
+  padding-left:12px;transition:color .12s,border-color .12s;
+  margin-bottom:2px;
+}
+.otp-link:hover{color:var(--text2)}
+.otp-link.active{color:var(--accent);border-left-color:var(--accent)}
+
+
+
+
+/* ── Animations ───────────────────────────────────────────────────────── */
+@keyframes fadeSlideIn{
+  from{opacity:0;transform:translateY(6px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.doc-section{animation:fadeSlideIn .4s ease both}
+
+/* ── Responsive ───────────────────────────────────────────────────────── */
+@media(max-width:1100px){
+  .doc-section{
+    grid-template-columns:1fr;
+    grid-template-rows:auto auto;
+  }
+  .code-col{grid-column:1;grid-row:1;margin-bottom:24px}
+  .prose{grid-column:1;grid-row:2}
+  .code-block{position:static}
+}
+@media(max-width:768px){
+  :root{--nav-w:0px}
+  .sidebar{transform:translateX(-100%);transition:transform .25s;z-index:90}
+  .sidebar.open{transform:none;width:260px}
+  .topnav-logo{display:none}
+  .content-wrap{padding:0 20px}
+  footer{margin-left:0}
 }
 </style>
 </head>
 <body>
 
-<div class="grid-bg"></div>
+<!-- ── Shell ────────────────────────────────────────────────────────────── -->
+<div class="shell">
 
-<!-- NAV -->
-<nav>
-  <a href="index.html" class="nav-logo">
-    <div class="nav-logo-mark"></div>
-    UltraDAG
-  </a>
-  <ul class="nav-links">
-    <li><a href="index.html#consensus">Why UltraDAG</a></li>
-    <li><a href="whitepaper.html">Whitepaper</a></li>
-    <li><a href="docs.html" class="active">Docs</a></li>
-    <li><a href="testnet.html">Testnet</a></li>
-    <li><a href="consensus-viz.html">Consensus Demo</a></li>
-    <li><a href="blog/index.html">Blog</a></li>
-    <li><a href="index.html#sdks">SDKs</a></li>
-    <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
-    <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
-  </ul>
-  <button class="hamburger" id="hamburger" aria-label="Menu">
-    <span></span>
-    <span></span>
-    <span></span>
-  </button>
-</nav>
+  <!-- ── Sidebar ──────────────────────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="nav-section">
+      <div class="nav-section-title">Getting Started</div>
+      <a class="nav-item active" href="#api">HTTP RPC API</a>
+      <a class="nav-item" href="#sdk">SDK Quickstart</a>
+      <a class="nav-item" href="#node">Running a Node</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Validators</div>
+      <a class="nav-item" href="#staking">Staking & Validation</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Reference</div>
+      <a class="nav-item" href="#arch">Architecture</a>
+      <a class="nav-sub" href="#arch-consensus">DAG-BFT Consensus</a>
+      <a class="nav-sub" href="#arch-crypto">Cryptography</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Read Endpoints</div>
+      <a class="nav-item" href="#ep-health"><span class="method method-get">GET</span>/health</a>
+      <a class="nav-item" href="#ep-status"><span class="method method-get">GET</span>/status</a>
+      <a class="nav-item" href="#ep-balance"><span class="method method-get">GET</span>/balance</a>
+      <a class="nav-item" href="#ep-round"><span class="method method-get">GET</span>/round</a>
+      <a class="nav-item" href="#ep-validators"><span class="method method-get">GET</span>/validators</a>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Write Endpoints</div>
+      <a class="nav-item" href="#ep-tx"><span class="method method-post">POST</span>/tx</a>
+      <a class="nav-item" href="#ep-faucet"><span class="method method-post">POST</span>/faucet</a>
+      <a class="nav-item" href="#ep-stake"><span class="method method-post">POST</span>/stake</a>
+    </div>
+  </aside>
 
-<div class="mobile-menu" id="mobile-menu">
-  <ul>
-    <li><a href="index.html">Home</a></li>
-    <li><a href="whitepaper.html">Whitepaper</a></li>
-    <li><a href="docs.html" class="active">Docs</a></li>
-    <li><a href="testnet.html">Testnet</a></li>
-    <li><a href="consensus-viz.html">Consensus Demo</a></li>
-    <li><a href="blog/index.html">Blog</a></li>
-    <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
-    <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
-  </ul>
-</div>
+  <!-- ── Main ─────────────────────────────────────────────────────────── -->
+  <main class="main">
+  <div class="content-wrap">
 
-<!-- CONTENT -->
-<div class="page">
-
-  <h1 class="page-title">Docu<em>mentation</em></h1>
-  <p class="page-sub">API reference, SDK quickstart, and node operator guide for UltraDAG.</p>
-
-  <div class="toc">
-    <div class="toc-title">Contents</div>
-    <ul>
-      <li><a href="#api">HTTP RPC API Reference</a></li>
-      <li><a href="#sdks">SDK Quickstart</a></li>
-      <li><a href="#node">Running a Node</a></li>
-      <li><a href="#staking">Staking &amp; Validation</a></li>
-      <li><a href="#architecture">Architecture Overview</a></li>
-    </ul>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- ── Section: API Overview ──────────────────────────────────────── -->
   <div class="doc-section" id="api">
-    <h2>HTTP RPC API Reference</h2>
-    <p>Every UltraDAG node exposes an HTTP JSON API. Default port is P2P port + 1000 (e.g., P2P 9333 &rarr; RPC 10333). All responses are JSON with CORS headers enabled.</p>
+    <div class="prose">
+      <div class="section-tag">HTTP RPC API</div>
+      <h2>API <em>Reference</em></h2>
+      <p>Every UltraDAG node exposes a JSON HTTP API. The default RPC port is the P2P port + 1000 — so a node on <code>:9333</code> serves its API at <code>:10333</code>. All responses include <code>Access-Control-Allow-Origin: *</code> headers.</p>
+      <p>The live testnet nodes are accessible at:</p>
+      <div class="unit-row">
+        <div class="unit-pill"><code>ultradag-node-1.fly.dev</code></div>
+        <div class="unit-pill"><code>ultradag-node-2.fly.dev</code></div>
+        <div class="unit-pill"><code>ultradag-node-3.fly.dev</code></div>
+        <div class="unit-pill"><code>ultradag-node-4.fly.dev</code></div>
+      </div>
 
-    <h3>Read Endpoints</h3>
-    <table class="api-table">
-      <thead>
-        <tr><th>Endpoint</th><th>Method</th><th>Description</th></tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><code>/health</code></td>
-          <td><span class="method method-get">GET</span></td>
-          <td>Health check. Returns <code>{"status":"ok"}</code></td>
-        </tr>
-        <tr>
-          <td><code>/status</code></td>
-          <td><span class="method method-get">GET</span></td>
-          <td>Network overview: DAG round, finalized count, total supply, peers, mempool size, validators, staking info</td>
-        </tr>
-        <tr>
-          <td><code>/balance/:address</code></td>
-          <td><span class="method method-get">GET</span></td>
-          <td>Balance (sats + UDAG) and nonce for an address</td>
-        </tr>
-        <tr>
-          <td><code>/round/:round</code></td>
-          <td><span class="method method-get">GET</span></td>
-          <td>All DAG vertices in a round: hash, validator, reward, tx count, parent count</td>
-        </tr>
-        <tr>
-          <td><code>/mempool</code></td>
-          <td><span class="method method-get">GET</span></td>
-          <td>Pending transactions (top 100 by fee)</td>
-        </tr>
-        <tr>
-          <td><code>/keygen</code></td>
-          <td><span class="method method-get">GET</span></td>
-          <td>Generate new Ed25519 keypair (secret_key + address)</td>
-        </tr>
-        <tr>
-          <td><code>/peers</code></td>
-          <td><span class="method method-get">GET</span></td>
-          <td>Connected peers and bootstrap node status</td>
-        </tr>
-        <tr>
-          <td><code>/validators</code></td>
-          <td><span class="method method-get">GET</span></td>
-          <td>Active validators with stake amounts</td>
-        </tr>
-        <tr>
-          <td><code>/stake/:address</code></td>
-          <td><span class="method method-get">GET</span></td>
-          <td>Stake info: staked amount, unlock round, active validator status</td>
-        </tr>
-        <tr>
-          <td><code>/proposals</code></td>
-          <td><span class="method method-get">GET</span></td>
-          <td>Governance proposals list</td>
-        </tr>
-        <tr>
-          <td><code>/governance/config</code></td>
-          <td><span class="method method-get">GET</span></td>
-          <td>Governance configuration parameters</td>
-        </tr>
-      </tbody>
-    </table>
+      <h3>Units</h3>
+      <p>All monetary values in the API use <strong>sats</strong>. 1 UDAG = 100,000,000 sats.</p>
+      <div class="unit-row">
+        <div class="unit-pill">1 UDAG <span class="arrow">→</span> 100,000,000 sats</div>
+        <div class="unit-pill">1 sat <span class="arrow">→</span> 0.00000001 UDAG</div>
+      </div>
 
-    <h3>Write Endpoints</h3>
-    <table class="api-table">
-      <thead>
-        <tr><th>Endpoint</th><th>Method</th><th>Body</th><th>Description</th></tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><code>/tx</code></td>
-          <td><span class="method method-post">POST</span></td>
-          <td><code>{"from_secret", "to", "amount", "fee"}</code></td>
-          <td>Submit signed transaction. Amount and fee in sats.</td>
-        </tr>
-        <tr>
-          <td><code>/faucet</code></td>
-          <td><span class="method method-post">POST</span></td>
-          <td><code>{"address", "amount"}</code></td>
-          <td>Testnet faucet. Creates real signed tx from faucet keypair.</td>
-        </tr>
-        <tr>
-          <td><code>/stake</code></td>
-          <td><span class="method method-post">POST</span></td>
-          <td><code>{"secret_key", "amount"}</code></td>
-          <td>Stake UDAG as validator. Amount in sats.</td>
-        </tr>
-        <tr>
-          <td><code>/unstake</code></td>
-          <td><span class="method method-post">POST</span></td>
-          <td><code>{"secret_key"}</code></td>
-          <td>Begin unstake cooldown (2,016 rounds).</td>
-        </tr>
-        <tr>
-          <td><code>/proposal</code></td>
-          <td><span class="method method-post">POST</span></td>
-          <td><code>{"proposer_secret", "title", "description", "proposal_type", ...}</code></td>
-          <td>Submit governance proposal.</td>
-        </tr>
-        <tr>
-          <td><code>/vote</code></td>
-          <td><span class="method method-post">POST</span></td>
-          <td><code>{"voter_secret", "proposal_id", "vote"}</code></td>
-          <td>Vote on governance proposal.</td>
-        </tr>
-      </tbody>
-    </table>
+      <h3>Read Endpoints</h3>
+      <table class="endpoint-table">
+        <thead><tr><th>Endpoint</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="method method-get">GET</span>/health</td><td>Health check. Returns <code>{"status":"ok"}</code></td></tr>
+          <tr><td><span class="method method-get">GET</span>/status</td><td>DAG round, finalized count, total supply, peers, mempool, validators</td></tr>
+          <tr><td><span class="method method-get">GET</span>/balance/:address</td><td>Balance (sats + UDAG) and nonce for an address</td></tr>
+          <tr><td><span class="method method-get">GET</span>/round/:round</td><td>All DAG vertices in a round: hash, validator, reward, tx count</td></tr>
+          <tr><td><span class="method method-get">GET</span>/mempool</td><td>Pending transactions (top 100 by fee)</td></tr>
+          <tr><td><span class="method method-get">GET</span>/keygen</td><td>Generate a new Ed25519 keypair</td></tr>
+          <tr><td><span class="method method-get">GET</span>/peers</td><td>Connected peers and bootstrap node status</td></tr>
+          <tr><td><span class="method method-get">GET</span>/validators</td><td>Active validators with stake amounts</td></tr>
+          <tr><td><span class="method method-get">GET</span>/stake/:address</td><td>Stake info: amount, unlock round, active status</td></tr>
+        </tbody>
+      </table>
 
-    <h3>Example: Check Balance</h3>
-<pre><span class="kw">curl</span> https://ultradag-node-1.fly.dev/balance/abc123...
+      <h3>Write Endpoints</h3>
+      <table class="endpoint-table">
+        <thead><tr><th>Endpoint</th><th>Body</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="method method-post">POST</span>/tx</td><td><code>from_secret, to, amount, fee</code></td><td>Submit a signed transaction</td></tr>
+          <tr><td><span class="method method-post">POST</span>/faucet</td><td><code>address, amount</code></td><td>Testnet faucet — creates a real signed tx</td></tr>
+          <tr><td><span class="method method-post">POST</span>/stake</td><td><code>secret_key, amount</code></td><td>Stake UDAG to become a validator</td></tr>
+          <tr><td><span class="method method-post">POST</span>/unstake</td><td><code>secret_key</code></td><td>Begin unstake cooldown (2,016 rounds)</td></tr>
+          <tr><td><span class="method method-post">POST</span>/proposal</td><td><code>proposer_secret, title, …</code></td><td>Submit a governance proposal</td></tr>
+          <tr><td><span class="method method-post">POST</span>/vote</td><td><code>voter_secret, proposal_id, vote</code></td><td>Vote on a governance proposal</td></tr>
+        </tbody>
+      </table>
+    </div>
 
-<span class="comment"># Response:</span>
+    <div class="code-col">
+      <div class="code-block">
+        <div class="code-tabs">
+          <div class="code-tab active" onclick="switchTab(this,'curl')">curl</div>
+          <div class="code-tab" onclick="switchTab(this,'python')">python</div>
+          <div class="code-tab" onclick="switchTab(this,'js')">js</div>
+        </div>
+        <div class="code-content" id="tab-curl">
+<pre><span class="cm"># Check balance</span>
+<span class="fn">curl</span> https://ultradag-node-1.fly.dev<span class="op">/</span>balance<span class="op">/</span>abc123
+
+<span class="cm"># Response</span>
 {
-  <span class="str">"address"</span>: <span class="str">"abc123..."</span>,
-  <span class="str">"balance"</span>: 10000000000,
-  <span class="str">"nonce"</span>: 0,
-  <span class="str">"balance_tdag"</span>: 100.0
-}</pre>
+  <span class="st">"address"</span>: <span class="st">"abc123..."</span>,
+  <span class="st">"balance"</span>: <span class="nm">10000000000</span>,
+  <span class="st">"nonce"</span>: <span class="nm">0</span>,
+  <span class="st">"balance_tdag"</span>: <span class="nm">100.0</span>
+}
 
-    <h3>Example: Send Transaction</h3>
-<pre><span class="kw">curl</span> -X POST https://ultradag-node-1.fly.dev/tx \
-  -H <span class="str">"Content-Type: application/json"</span> \
-  -d '{
-    <span class="str">"from_secret"</span>: <span class="str">"your_secret_key_hex"</span>,
-    <span class="str">"to"</span>: <span class="str">"recipient_address_hex"</span>,
-    <span class="str">"amount"</span>: 1000000000,
-    <span class="str">"fee"</span>: 100000
-  }'</pre>
+<span class="cm"># Send a transaction</span>
+<span class="fn">curl</span> -X POST https://ultradag-node-1.fly.dev/tx \
+  -H <span class="st">"Content-Type: application/json"</span> \
+  -d <span class="st">'{
+    "from_secret": "your_secret_key_hex",
+    "to": "recipient_hex",
+    "amount": 1000000000,
+    "fee": 100000
+  }'</span></pre>
+        </div>
+        <div class="code-content" id="tab-python" style="display:none">
+<pre><span class="kw">from</span> ultradag <span class="kw">import</span> UltraDagClient, Keypair
 
-    <h3>Units</h3>
-    <p>All monetary values in the API are in <strong>sats</strong> (1 UDAG = 100,000,000 sats). Convert with:</p>
-    <ul>
-      <li>UDAG to sats: multiply by 100,000,000</li>
-      <li>Sats to UDAG: divide by 100,000,000</li>
-    </ul>
+client <span class="op">=</span> <span class="fn">UltraDagClient</span>(<span class="st">"https://ultradag-node-1.fly.dev"</span>)
+kp <span class="op">=</span> Keypair.<span class="fn">generate</span>()
+<span class="fn">print</span>(<span class="st">f"Address: </span>{kp.address}<span class="st">"</span>)
+
+<span class="cm"># Check balance</span>
+bal <span class="op">=</span> client.<span class="fn">get_balance</span>(kp.address)
+<span class="fn">print</span>(<span class="st">f"Balance: </span>{bal.balance}<span class="st"> sats"</span>)
+
+<span class="cm"># Faucet (testnet only)</span>
+client.<span class="fn">faucet</span>(kp.address, <span class="nm">100</span> <span class="op">*</span> <span class="nm">100_000_000</span>)</pre>
+        </div>
+        <div class="code-content" id="tab-js" style="display:none">
+<pre><span class="kw">import</span> { UltraDagClient, Keypair } <span class="kw">from</span> <span class="st">'ultradag'</span>
+
+<span class="kw">const</span> client <span class="op">=</span> <span class="kw">new</span> <span class="ty">UltraDagClient</span>({
+  baseUrl: <span class="st">'https://ultradag-node-1.fly.dev'</span>
+})
+<span class="kw">const</span> kp <span class="op">=</span> <span class="kw">await</span> Keypair.<span class="fn">generate</span>()
+
+<span class="kw">const</span> bal <span class="op">=</span> <span class="kw">await</span> client.<span class="fn">getBalance</span>(kp.address)
+console.<span class="fn">log</span>(<span class="st">`Balance: </span>${bal.balance}<span class="st"> sats`</span>)
+
+<span class="kw">const</span> status <span class="op">=</span> <span class="kw">await</span> client.<span class="fn">getStatus</span>()
+console.<span class="fn">log</span>(<span class="st">`DAG round: </span>${status.dag_round}<span class="st">`</span>)</pre>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="doc-section" id="sdks">
-    <h2>SDK Quickstart</h2>
-    <p>Official SDKs for Python, JavaScript/TypeScript, Rust, and Go. Each provides local Ed25519 key generation + HTTP RPC client.</p>
+  <!-- ── Section: SDK ────────────────────────────────────────────────── -->
+  <div class="doc-section" id="sdk">
+    <div class="prose">
+      <div class="section-tag">SDK Quickstart</div>
+      <h2>SDK <em>Quickstart</em></h2>
+      <p>Official SDKs for Python, JavaScript/TypeScript, Rust, and Go. Each provides local Ed25519 key generation and an HTTP RPC client. No external signing dependencies — keys never leave your machine.</p>
 
-    <h3>Python</h3>
-<pre><span class="kw">pip install</span> ultradag
+      <div class="sdk-tabs">
+        <div class="sdk-tab active" onclick="switchSdk(this,'py')">Python</div>
+        <div class="sdk-tab" onclick="switchSdk(this,'ts')">JavaScript / TS</div>
+        <div class="sdk-tab" onclick="switchSdk(this,'rs')">Rust</div>
+        <div class="sdk-tab" onclick="switchSdk(this,'go')">Go</div>
+      </div>
 
-<span class="kw">from</span> ultradag <span class="kw">import</span> UltraDagClient, Keypair
+      <div class="sdk-pane active" id="sdk-py">
+        <div class="code-inline">
+          <div class="code-inline-header">
+            <div class="code-inline-dots"><span style="background:#ff5f56"></span><span style="background:#ffbd2e"></span><span style="background:#27c93f"></span></div>
+            <span class="code-inline-lang">shell</span>
+            <button class="code-copy" onclick="copyCode(this)">copy</button>
+          </div>
+          <pre>pip install ultradag</pre>
+        </div>
+        <div class="code-inline">
+          <div class="code-inline-header">
+            <div class="code-inline-dots"><span style="background:#ff5f56"></span><span style="background:#ffbd2e"></span><span style="background:#27c93f"></span></div>
+            <span class="code-inline-lang">python</span>
+            <button class="code-copy" onclick="copyCode(this)">copy</button>
+          </div>
+<pre><span class="kw">from</span> ultradag <span class="kw">import</span> UltraDagClient, Keypair
 
-client = UltraDagClient(<span class="str">"https://ultradag-node-1.fly.dev"</span>)
-kp = Keypair.generate()
-print(f<span class="str">"Address: {kp.address}"</span>)
+client <span class="op">=</span> <span class="fn">UltraDagClient</span>(<span class="st">"https://ultradag-node-1.fly.dev"</span>)
+kp <span class="op">=</span> Keypair.<span class="fn">generate</span>()
 
-<span class="comment"># Check balance</span>
-bal = client.get_balance(kp.address)
-print(f<span class="str">"Balance: {bal.balance} sats"</span>)
+<span class="cm"># Get testnet tokens</span>
+client.<span class="fn">faucet</span>(kp.address, <span class="nm">100</span> <span class="op">*</span> <span class="nm">100_000_000</span>)
 
-<span class="comment"># Get testnet tokens</span>
-client.faucet(kp.address, 100 * 100_000_000)</pre>
+<span class="cm"># Send a transaction</span>
+tx <span class="op">=</span> client.<span class="fn">send</span>(
+    from_keypair<span class="op">=</span>kp,
+    to<span class="op">=</span><span class="st">"recipient_address"</span>,
+    amount<span class="op">=</span><span class="nm">50</span> <span class="op">*</span> <span class="nm">100_000_000</span>,
+    fee<span class="op">=</span><span class="nm">100_000</span>
+)
+<span class="fn">print</span>(<span class="st">f"tx hash: </span>{tx.hash}<span class="st">"</span>)</pre>
+        </div>
+      </div>
 
-    <h3>JavaScript / TypeScript</h3>
-<pre><span class="kw">npm install</span> ultradag
+      <div class="sdk-pane" id="sdk-ts">
+        <div class="code-inline">
+          <div class="code-inline-header">
+            <div class="code-inline-dots"><span style="background:#ff5f56"></span><span style="background:#ffbd2e"></span><span style="background:#27c93f"></span></div>
+            <span class="code-inline-lang">shell</span>
+            <button class="code-copy" onclick="copyCode(this)">copy</button>
+          </div>
+          <pre>npm install ultradag</pre>
+        </div>
+        <div class="code-inline">
+          <div class="code-inline-header">
+            <div class="code-inline-dots"><span style="background:#ff5f56"></span><span style="background:#ffbd2e"></span><span style="background:#27c93f"></span></div>
+            <span class="code-inline-lang">typescript</span>
+            <button class="code-copy" onclick="copyCode(this)">copy</button>
+          </div>
+<pre><span class="kw">import</span> { UltraDagClient, Keypair } <span class="kw">from</span> <span class="st">'ultradag'</span>
 
-<span class="kw">import</span> { UltraDagClient, Keypair } <span class="kw">from</span> <span class="str">'ultradag'</span>;
+<span class="kw">const</span> client <span class="op">=</span> <span class="kw">new</span> <span class="ty">UltraDagClient</span>({
+  baseUrl: <span class="st">'https://ultradag-node-1.fly.dev'</span>
+})
+<span class="kw">const</span> kp <span class="op">=</span> <span class="kw">await</span> Keypair.<span class="fn">generate</span>()
 
-<span class="kw">const</span> client = <span class="kw">new</span> UltraDagClient({ baseUrl: <span class="str">'https://ultradag-node-1.fly.dev'</span> });
-<span class="kw">const</span> kp = <span class="kw">await</span> Keypair.generate();
+<span class="kw">const</span> status <span class="op">=</span> <span class="kw">await</span> client.<span class="fn">getStatus</span>()
+console.<span class="fn">log</span>(<span class="st">`Round: </span>${status.dag_round}<span class="st">`</span>)
 
-<span class="kw">const</span> status = <span class="kw">await</span> client.getStatus();
-console.log(<span class="str">`DAG round: ${status.dag_round}`</span>);</pre>
+<span class="kw">const</span> tx <span class="op">=</span> <span class="kw">await</span> client.<span class="fn">send</span>({
+  from: kp, to: <span class="st">'recipient'</span>,
+  amount: <span class="nm">50</span> <span class="op">*</span> <span class="nm">1e8</span>, fee: <span class="nm">1e5</span>
+})</pre>
+        </div>
+      </div>
 
-    <h3>Rust</h3>
-<pre><span class="comment"># Cargo.toml</span>
+      <div class="sdk-pane" id="sdk-rs">
+        <div class="code-inline">
+          <div class="code-inline-header">
+            <div class="code-inline-dots"><span style="background:#ff5f56"></span><span style="background:#ffbd2e"></span><span style="background:#27c93f"></span></div>
+            <span class="code-inline-lang">toml</span>
+            <button class="code-copy" onclick="copyCode(this)">copy</button>
+          </div>
+          <pre><span class="cm"># Cargo.toml</span>
 [dependencies]
-ultradag-sdk = { path = <span class="str">"sdk/rust"</span> }
+ultradag-sdk = <span class="st">"0.1"</span></pre>
+        </div>
+        <div class="code-inline">
+          <div class="code-inline-header">
+            <div class="code-inline-dots"><span style="background:#ff5f56"></span><span style="background:#ffbd2e"></span><span style="background:#27c93f"></span></div>
+            <span class="code-inline-lang">rust</span>
+            <button class="code-copy" onclick="copyCode(this)">copy</button>
+          </div>
+<pre><span class="kw">use</span> ultradag_sdk::{UltraDagClient, Keypair};
 
-<span class="kw">use</span> ultradag_sdk::{UltraDagClient, Keypair};
+<span class="kw">let</span> client <span class="op">=</span> <span class="ty">UltraDagClient</span>::<span class="fn">new</span>(<span class="st">"https://ultradag-node-1.fly.dev"</span>);
+<span class="kw">let</span> kp <span class="op">=</span> <span class="ty">Keypair</span>::<span class="fn">generate</span>();
+<span class="kw">let</span> bal <span class="op">=</span> client.<span class="fn">balance</span>(<span class="op">&</span>kp.<span class="fn">address_hex</span>())<span class="op">?</span>;
+<span class="fn">println!</span>(<span class="st">"Balance: {} sats"</span>, bal.balance);</pre>
+        </div>
+      </div>
 
-<span class="kw">let</span> client = UltraDagClient::new(<span class="str">"https://ultradag-node-1.fly.dev"</span>);
-<span class="kw">let</span> kp = Keypair::generate();
-<span class="kw">let</span> bal = client.balance(&kp.address_hex())?;
-println!(<span class="str">"Balance: {} sats"</span>, bal.balance);</pre>
+      <div class="sdk-pane" id="sdk-go">
+        <div class="code-inline">
+          <div class="code-inline-header">
+            <div class="code-inline-dots"><span style="background:#ff5f56"></span><span style="background:#ffbd2e"></span><span style="background:#27c93f"></span></div>
+            <span class="code-inline-lang">go</span>
+            <button class="code-copy" onclick="copyCode(this)">copy</button>
+          </div>
+<pre><span class="kw">import</span> <span class="st">"github.com/ultradag/sdk-go/ultradag"</span>
 
-    <h3>Go</h3>
-<pre><span class="kw">import</span> <span class="str">"github.com/ultradag/sdk-go/ultradag"</span>
+client <span class="op">:=</span> ultradag.<span class="fn">NewClient</span>(<span class="st">"https://ultradag-node-1.fly.dev"</span>)
+kp, _ <span class="op">:=</span> ultradag.<span class="fn">GenerateKeypair</span>()
 
-client := ultradag.NewClient(<span class="str">"https://ultradag-node-1.fly.dev"</span>)
-kp, _ := ultradag.GenerateKeypair()
+status, _ <span class="op">:=</span> client.<span class="fn">Status</span>()
+fmt.<span class="fn">Printf</span>(<span class="st">"DAG round: %d\n"</span>, status.DagRound)</pre>
+        </div>
+      </div>
 
-status, _ := client.Status()
-fmt.Printf(<span class="str">"DAG round: %d\n"</span>, status.DagRound)</pre>
-
-    <p>Full SDK source and tests: <a href="https://github.com/UltraDAGcom/core/tree/main/sdk" target="_blank">github.com/UltraDAGcom/core/tree/main/sdk</a></p>
+      <p style="margin-top:16px">Full SDK source and tests: <a href="#">github.com/UltraDAGcom/core/tree/main/sdk</a></p>
+    </div>
+    <div class="code-col"><!-- no sticky panel for SDK section --></div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- ── Section: Running a Node ────────────────────────────────────── -->
   <div class="doc-section" id="node">
-    <h2>Running a Node</h2>
+    <div class="prose">
+      <div class="section-tag">Infrastructure</div>
+      <h2>Running <em>a Node</em></h2>
+      <p>UltraDAG nodes are distributed as a single self-contained binary (~2 MB). No runtime dependencies, no Docker required. Download, run, join the network.</p>
 
-    <h3>Quick Start</h3>
-<pre><span class="comment"># Download and run (Linux x86_64)</span>
-<span class="kw">curl</span> -L https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-linux-x86_64.tar.gz | <span class="kw">tar</span> xz
-./ultradag-node --port 9333 --validate
+      <div class="callout callout-info">
+        <div class="callout-icon">ℹ</div>
+        <p>The binary is built deterministically via GitHub Actions and published to GitHub Releases on every push to <code>main</code>.</p>
+      </div>
 
-<span class="comment"># Or build from source</span>
-<span class="kw">git clone</span> https://github.com/UltraDAGcom/core
-<span class="kw">cd</span> core && <span class="kw">cargo build</span> --release
-./target/release/ultradag-node --port 9333 --validate</pre>
+      <h3>Quick Start</h3>
+      <div class="code-inline">
+        <div class="code-inline-header">
+          <div class="code-inline-dots"><span style="background:#ff5f56"></span><span style="background:#ffbd2e"></span><span style="background:#27c93f"></span></div>
+          <span class="code-inline-lang">shell</span>
+          <button class="code-copy" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><span class="cm"># Download pre-built binary (Linux x86_64)</span>
+curl -L https://github.com/UltraDAGcom/core/releases/latest/download/<span class="st">ultradag-node-linux-x86_64.tar.gz</span> | tar xz
+./ultradag-node --port <span class="nm">9333</span> --validate
 
-    <h3>CLI Arguments</h3>
-    <table class="api-table">
-      <thead>
-        <tr><th>Flag</th><th>Default</th><th>Description</th></tr>
-      </thead>
-      <tbody>
-        <tr><td><code>--port</code></td><td>9333</td><td>P2P listen port</td></tr>
-        <tr><td><code>--rpc-port</code></td><td>P2P + 1000</td><td>HTTP RPC port</td></tr>
-        <tr><td><code>--seed</code></td><td>&mdash;</td><td>Seed peer address (host:port), can specify multiple</td></tr>
-        <tr><td><code>--validator</code></td><td>auto-generated</td><td>Validator address (hex)</td></tr>
-        <tr><td><code>--validate</code></td><td>true</td><td>Enable block production</td></tr>
-        <tr><td><code>--round-ms</code></td><td>5000</td><td>Round duration in milliseconds</td></tr>
-        <tr><td><code>--validators</code></td><td>&mdash;</td><td>Expected validator count (fixes quorum threshold)</td></tr>
-        <tr><td><code>--validator-key</code></td><td>&mdash;</td><td>Permissioned validator allowlist file</td></tr>
-        <tr><td><code>--data-dir</code></td><td>~/.ultradag/node</td><td>Data directory for persistence</td></tr>
-        <tr><td><code>--no-bootstrap</code></td><td>false</td><td>Disable automatic testnet bootstrap connection</td></tr>
-        <tr><td><code>--pruning-depth</code></td><td>1000</td><td>Rounds to keep before pruning</td></tr>
-        <tr><td><code>--archive</code></td><td>false</td><td>Disable pruning, keep full history</td></tr>
-      </tbody>
-    </table>
+<span class="cm"># Build from source</span>
+git <span class="fn">clone</span> https://github.com/UltraDAGcom/core
+<span class="fn">cd</span> core <span class="op">&&</span> cargo <span class="fn">build</span> --release
+./target/release/ultradag-node --port <span class="nm">9333</span> --validate</pre>
+      </div>
 
-    <h3>Multi-Node Local Testnet</h3>
-<pre><span class="comment"># Node 1 (bootstrap)</span>
-./ultradag-node --port 9333 --validate --validators 3
+      <h3>CLI Flags</h3>
+      <ul class="flag-list">
+        <li><span class="flag-name">--port</span><span><span class="flag-desc">P2P listen port</span><div class="flag-default">default: 9333</div></span></li>
+        <li><span class="flag-name">--rpc-port</span><span><span class="flag-desc">HTTP RPC port</span><div class="flag-default">default: P2P + 1000</div></span></li>
+        <li><span class="flag-name">--seed</span><span><span class="flag-desc">Seed peer address (host:port). Can specify multiple.</span></span></li>
+        <li><span class="flag-name">--validate</span><span><span class="flag-desc">Enable block production</span></span></li>
+        <li><span class="flag-name">--round-ms</span><span><span class="flag-desc">Round duration in milliseconds</span><div class="flag-default">default: 5000</div></span></li>
+        <li><span class="flag-name">--validators</span><span><span class="flag-desc">Expected validator count (fixes quorum threshold)</span></span></li>
+        <li><span class="flag-name">--data-dir</span><span><span class="flag-desc">Data directory for persistence</span><div class="flag-default">default: ~/.ultradag/node</div></span></li>
+        <li><span class="flag-name">--pruning-depth</span><span><span class="flag-desc">Rounds to keep before pruning</span><div class="flag-default">default: 1000</div></span></li>
+        <li><span class="flag-name">--archive</span><span><span class="flag-desc">Disable pruning, keep full history</span></span></li>
+      </ul>
 
-<span class="comment"># Node 2</span>
-./ultradag-node --port 9334 --seed 127.0.0.1:9333 --validate --validators 3
+      <h3>Local Multi-Node Testnet</h3>
+      <div class="code-inline">
+        <div class="code-inline-header">
+          <div class="code-inline-dots"><span style="background:#ff5f56"></span><span style="background:#ffbd2e"></span><span style="background:#27c93f"></span></div>
+          <span class="code-inline-lang">shell</span>
+          <button class="code-copy" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><span class="cm"># Node 1 (bootstrap)</span>
+./ultradag-node --port <span class="nm">9333</span> --validate --validators <span class="nm">3</span>
 
-<span class="comment"># Node 3</span>
-./ultradag-node --port 9335 --seed 127.0.0.1:9333 --validate --validators 3</pre>
+<span class="cm"># Node 2</span>
+./ultradag-node --port <span class="nm">9334</span> --seed 127.0.0.1:<span class="nm">9333</span> --validate --validators <span class="nm">3</span>
 
-    <h3>State Persistence</h3>
-    <p>The node persists its state to <code>--data-dir</code> (default <code>~/.ultradag/node</code>):</p>
-    <ul>
-      <li><code>dag.json</code> &mdash; DAG vertices, tips, rounds, equivocation evidence</li>
-      <li><code>finality.json</code> &mdash; Finalized vertex hashes, validator set</li>
-      <li><code>state.json</code> &mdash; Account balances, nonces, stake accounts</li>
-      <li><code>mempool.json</code> &mdash; Pending transactions</li>
-      <li><code>checkpoints/</code> &mdash; Accepted checkpoints (every 100 finalized rounds)</li>
-      <li><code>wal.jsonl</code> &mdash; Write-ahead log for crash recovery (finalized vertex batches)</li>
-      <li><code>wal_header.json</code> &mdash; WAL metadata (snapshot round, sequence counter)</li>
-    </ul>
-    <p>State is saved every 10 rounds and on graceful shutdown (SIGTERM/SIGINT). Writes are crash-safe via atomic rename.</p>
+<span class="cm"># Node 3</span>
+./ultradag-node --port <span class="nm">9335</span> --seed 127.0.0.1:<span class="nm">9333</span> --validate --validators <span class="nm">3</span></pre>
+      </div>
 
-    <h3>Write-Ahead Log (WAL)</h3>
-    <p>Between full snapshots, every finalized vertex batch is appended to <code>wal.jsonl</code> with an fsync for durability. On startup, any WAL entries since the last snapshot are replayed to recover state lost by a crash. The WAL is truncated after each successful full snapshot (every 10 rounds). This closes the consistency gap between the 4 independent JSON files &mdash; even if a crash occurs mid-snapshot, the WAL ensures no finalized transactions are lost.</p>
+      <h3>State Persistence</h3>
+      <p>State is saved to <code>--data-dir</code> every 10 rounds and on graceful shutdown. Writes use atomic rename for crash safety. The write-ahead log (WAL) closes the gap between snapshots — finalized vertex batches are fsynced to <code>wal.jsonl</code> and replayed on restart.</p>
+      <table class="endpoint-table">
+        <thead><tr><th>File</th><th>Contents</th></tr></thead>
+        <tbody>
+          <tr><td>dag.json</td><td>DAG vertices, tips, rounds, equivocation evidence</td></tr>
+          <tr><td>finality.json</td><td>Finalized vertex hashes, validator set</td></tr>
+          <tr><td>state.json</td><td>Account balances, nonces, stake accounts</td></tr>
+          <tr><td>wal.jsonl</td><td>Write-ahead log for crash recovery</td></tr>
+          <tr><td>checkpoints/</td><td>Accepted checkpoints (every 100 finalized rounds)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="code-col"><!-- no second panel needed --></div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- ── Section: Staking ───────────────────────────────────────────── -->
   <div class="doc-section" id="staking">
-    <h2>Staking &amp; Validation</h2>
+    <div class="prose">
+      <div class="section-tag">Validation</div>
+      <h2>Staking <em>&amp; Validation</em></h2>
+      <p>The top 21 stakers by amount become active validators at each epoch boundary. Validators produce DAG vertices, earn block rewards, and are slashed for equivocation.</p>
 
-    <h3>Becoming a Validator</h3>
-    <ol>
-      <li>Run a node with <code>--validate</code></li>
-      <li>Fund your address with at least 10,000 UDAG (minimum stake)</li>
-      <li>Stake via the API: <code>POST /stake</code> with your secret key and amount</li>
-      <li>Top 21 stakers by amount become active validators at each epoch boundary</li>
-    </ol>
+      <h3>Becoming a Validator</h3>
+      <p>Run a node with <code>--validate</code>, fund your address with at least 10,000 UDAG, then stake via the API. The validator set updates every 210,000 rounds (~1 year).</p>
 
-    <h3>Staking Parameters</h3>
-    <table class="api-table">
-      <thead>
-        <tr><th>Parameter</th><th>Value</th><th>Description</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>Minimum stake</td><td>10,000 UDAG</td><td>Minimum to be eligible for active validator set</td></tr>
-        <tr><td>Max validators</td><td>21</td><td>Top 21 stakers are active (odd for clean BFT quorum)</td></tr>
-        <tr><td>Unstake cooldown</td><td>2,016 rounds</td><td>~1 week at 5s rounds before funds unlock</td></tr>
-        <tr><td>Epoch length</td><td>210,000 rounds</td><td>Validator set recalculated at each epoch boundary</td></tr>
-        <tr><td>Observer reward</td><td>20%</td><td>Staked but not in active set earn 20% of normal reward</td></tr>
-        <tr><td>Slashing</td><td>50%</td><td>Stake burned on equivocation (deflationary)</td></tr>
-      </tbody>
-    </table>
+      <div class="code-inline">
+        <div class="code-inline-header">
+          <div class="code-inline-dots"><span style="background:#ff5f56"></span><span style="background:#ffbd2e"></span><span style="background:#27c93f"></span></div>
+          <span class="code-inline-lang">shell</span>
+          <button class="code-copy" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre>curl -X POST https://ultradag-node-1.fly.dev/stake \
+  -H <span class="st">"Content-Type: application/json"</span> \
+  -d <span class="st">'{
+    "secret_key": "your_secret_key_hex",
+    "amount": 1000000000000
+  }'</span></pre>
+      </div>
 
-    <h3>Reward Distribution</h3>
-    <p>Block rewards are distributed proportionally to stake. Each validator's reward = <code>block_reward &times; (own_stake / total_stake)</code>. Before any staking is active, each vertex gets the full block reward.</p>
+      <h3>Parameters</h3>
+      <div class="params-grid">
+        <div class="param-cell">
+          <div class="param-cell-label">Min stake</div>
+          <div class="param-cell-val">10,000 UDAG</div>
+          <div class="param-cell-desc">Minimum to enter active set</div>
+        </div>
+        <div class="param-cell">
+          <div class="param-cell-label">Max validators</div>
+          <div class="param-cell-val">21</div>
+          <div class="param-cell-desc">Odd count for clean BFT quorum</div>
+        </div>
+        <div class="param-cell">
+          <div class="param-cell-label">Unstake cooldown</div>
+          <div class="param-cell-val">2,016 rounds</div>
+          <div class="param-cell-desc">≈ 1 week at 5s rounds</div>
+        </div>
+        <div class="param-cell">
+          <div class="param-cell-label">Epoch length</div>
+          <div class="param-cell-val">210,000 rounds</div>
+          <div class="param-cell-desc">Validator set recalculated</div>
+        </div>
+        <div class="param-cell">
+          <div class="param-cell-label">Slashing</div>
+          <div class="param-cell-val">50% burned</div>
+          <div class="param-cell-desc">On equivocation</div>
+        </div>
+        <div class="param-cell">
+          <div class="param-cell-label">Observer reward</div>
+          <div class="param-cell-val">20%</div>
+          <div class="param-cell-desc">Staked-but-inactive nodes earn 20% of normal</div>
+        </div>
+      </div>
 
-    <h3>Emission Schedule</h3>
-    <ul>
-      <li>Max supply: 21,000,000 UDAG</li>
-      <li>Initial reward: 50 UDAG per vertex (each validator earns 50 UDAG per block produced)</li>
-      <li>Halving: every 210,000 rounds</li>
-      <li>Genesis allocations: 1M UDAG faucet (testnet) + 1.05M UDAG developer (5%)</li>
-    </ul>
+      <h3>Emission Schedule</h3>
+      <p>Max supply is 21,000,000 UDAG. Initial reward is 50 UDAG per vertex, halving every 210,000 rounds. Rewards are distributed proportionally to stake.</p>
+
+      <div class="callout callout-warn">
+        <div class="callout-icon">⚠</div>
+        <p>Equivocation results in an immediate 50% stake burn and permanent validator ban. Ensure your node has a reliable connection before staking.</p>
+      </div>
+    </div>
+    <div class="code-col"><!-- staking section --></div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════════════ -->
-  <div class="doc-section" id="architecture">
-    <h2>Architecture Overview</h2>
+  <!-- ── Section: Architecture ──────────────────────────────────────── -->
+  <div class="doc-section" id="arch">
+    <div class="prose">
+      <div class="section-tag">Architecture</div>
+      <h2>Architecture <em>Overview</em></h2>
+      <p>UltraDAG is structured as a three-crate Rust workspace. Each layer has a single responsibility and a clean boundary.</p>
 
-    <h3>Three-Crate Design</h3>
-    <table class="api-table">
-      <thead>
-        <tr><th>Layer</th><th>Crate</th><th>Purpose</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>0 &mdash; Coin</td><td><code>ultradag-coin</code></td><td>Ed25519 keys, DAG-BFT consensus, StateEngine, staking</td></tr>
-        <tr><td>1 &mdash; Network</td><td><code>ultradag-network</code></td><td>TCP P2P: peer discovery, DAG vertex relay, state sync</td></tr>
-        <tr><td>2 &mdash; Node</td><td><code>ultradag-node</code></td><td>Full node binary: validator loop + networking + HTTP RPC</td></tr>
-      </tbody>
-    </table>
+      <table class="arch-table">
+        <thead><tr><th>Layer</th><th>Crate</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="arch-layer">0</span></td>
+            <td><span class="crate-name">ultradag-coin</span></td>
+            <td>Ed25519 keys, DAG-BFT consensus, StateEngine, staking</td>
+          </tr>
+          <tr>
+            <td><span class="arch-layer">1</span></td>
+            <td><span class="crate-name">ultradag-network</span></td>
+            <td>TCP P2P: peer discovery, DAG vertex relay, state sync</td>
+          </tr>
+          <tr>
+            <td><span class="arch-layer">2</span></td>
+            <td><span class="crate-name">ultradag-node</span></td>
+            <td>Full node binary: validator loop + networking + HTTP RPC</td>
+          </tr>
+        </tbody>
+      </table>
 
-    <h3>DAG-BFT Consensus</h3>
-    <p>UltraDAG is a pure DAG-driven ledger. There is no separate blockchain &mdash; the DAG <em>is</em> the ledger. Key properties:</p>
-    <ul>
-      <li><strong>Leaderless</strong> &mdash; all validators produce vertices in parallel, no leader election</li>
-      <li><strong>BFT finality</strong> &mdash; a vertex finalizes when &gt;2/3 validators have descendants of it (O(1) check via incremental tracking)</li>
-      <li><strong>Optimistic responsiveness</strong> &mdash; validators produce immediately when 2f+1 previous-round vertices arrive</li>
-      <li><strong>Equivocation prevention</strong> &mdash; duplicate validator+round vertices are rejected; equivocators are permanently banned</li>
-      <li><strong>Deterministic ordering</strong> &mdash; finalized vertices ordered by (round, depth, hash) for state application</li>
-      <li><strong>Parent finality guarantee</strong> &mdash; vertices only finalize after all parents are finalized</li>
-    </ul>
+      <h3 id="arch-consensus">DAG-BFT Consensus</h3>
+      <p>UltraDAG is a pure DAG-driven ledger — there is no separate blockchain. The DAG <em>is</em> the ledger. Key properties:</p>
 
-    <h3>Cryptography</h3>
-    <ul>
-      <li><strong>Signatures</strong>: Ed25519 (ed25519-dalek)</li>
-      <li><strong>Addresses</strong>: blake3(ed25519_public_key) &mdash; 32 bytes, hex-encoded</li>
-      <li><strong>Domain separation</strong>: all signable bytes prefixed with <code>NETWORK_ID</code></li>
-    </ul>
+      <table class="endpoint-table">
+        <thead><tr><th>Property</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td>Leaderless</td><td>All validators produce vertices in parallel, no leader election</td></tr>
+          <tr><td>BFT finality</td><td>A vertex finalizes when &gt;⅔ validators have descendants (O(1) via incremental tracking)</td></tr>
+          <tr><td>Optimistic responsiveness</td><td>Validators produce immediately when 2f+1 previous-round vertices arrive</td></tr>
+          <tr><td>Equivocation prevention</td><td>Duplicate validator+round vertices are rejected; equivocators are permanently banned</td></tr>
+          <tr><td>Deterministic ordering</td><td>Finalized vertices ordered by (round, depth, hash) for state application</td></tr>
+        </tbody>
+      </table>
 
-    <p>For the full technical specification, see the <a href="whitepaper.html">Whitepaper</a> or the <a href="https://github.com/UltraDAGcom/core" target="_blank">source code on GitHub</a>.</p>
+      <h3 id="arch-crypto">Cryptography</h3>
+      <p>Signatures use <strong>Ed25519</strong> via <code>ed25519-dalek</code>. Addresses are <code>blake3(ed25519_public_key)</code> — 32 bytes, hex-encoded. All signable bytes are prefixed with <code>NETWORK_ID</code> for domain separation.</p>
+
+      <div class="callout callout-success">
+        <div class="callout-icon">✓</div>
+        <p>The consensus protocol has been formally verified using TLA+ across all 32.6 million possible executions of a 4-validator, 1-Byzantine network. <a href="/whitepaper">Read the whitepaper →</a></p>
+      </div>
+    </div>
+
+    <div class="code-col">
+      <div class="code-block">
+        <div class="code-tabs">
+          <div class="code-tab active">DAG vertex</div>
+        </div>
+        <div class="code-content">
+<pre><span class="cm">// Simplified vertex structure</span>
+<span class="kw">struct</span> <span class="ty">DagVertex</span> {
+  <span class="cm">// Identity</span>
+  hash:       <span class="op">[</span><span class="ty">u8</span>; <span class="nm">32</span><span class="op">]</span>,
+  validator:  <span class="ty">Address</span>,
+  round:      <span class="ty">u64</span>,
+  timestamp:  <span class="ty">i64</span>,
+
+  <span class="cm">// DAG links (up to 64 parents)</span>
+  parents:    <span class="ty">Vec</span><span class="op">&lt;[</span><span class="ty">u8</span>; <span class="nm">32</span><span class="op">]&gt;</span>,
+
+  <span class="cm">// Payload</span>
+  transactions: <span class="ty">Vec</span><span class="op">&lt;</span><span class="ty">Transaction</span><span class="op">&gt;</span>,
+  reward:       <span class="ty">u64</span>,
+
+  <span class="cm">// Authentication</span>
+  signature:  <span class="op">[</span><span class="ty">u8</span>; <span class="nm">64</span><span class="op">]</span>,
+}
+
+<span class="cm">// Finality: >2/3 validators with</span>
+<span class="cm">// descendants in same round</span>
+<span class="kw">fn</span> <span class="fn">is_finalized</span>(v: <span class="op">&</span><span class="ty">DagVertex</span>) <span class="op">-&gt;</span> <span class="ty">bool</span> {
+  <span class="kw">let</span> q <span class="op">=</span> (<span class="nm">2</span> <span class="op">*</span> N <span class="op">+</span> <span class="nm">2</span>) <span class="op">/</span> <span class="nm">3</span>;
+  v.descendant_count <span class="op">>=</span> q
+}</pre>
+        </div>
+      </div>
+    </div>
   </div>
 
-</div>
+  </div><!-- /content-wrap -->
+  </main>
+</div><!-- /shell -->
 
-<!-- FOOTER -->
-<footer>
-  <div class="footer-links">
-    <a href="index.html">Home</a>
-    <a href="dashboard.html">Dashboard</a>
-    <a href="whitepaper.html">Whitepaper</a>
-    <a href="testnet.html">Testnet</a>
-    <a href="consensus-viz.html">Consensus Demo</a>
-    <a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a>
-  </div>
-  <div class="footer-note">MIT / Apache-2.0</div>
-</footer>
 
 <script>
-const hamburger=document.getElementById('hamburger');
-const mobileMenu=document.getElementById('mobile-menu');
-hamburger.addEventListener('click',()=>{hamburger.classList.toggle('active');mobileMenu.classList.toggle('active')});
-mobileMenu.querySelectorAll('a').forEach(link=>{link.addEventListener('click',()=>{hamburger.classList.remove('active');mobileMenu.classList.remove('active')})});
+// ── Tab switcher (curl/python/js) ──────────────────────────────────────────
+function switchTab(el, id) {
+  const block = el.closest('.code-block');
+  block.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
+  block.querySelectorAll('.code-content').forEach(c => c.style.display = 'none');
+  el.classList.add('active');
+  document.getElementById('tab-' + id).style.display = 'block';
+}
+
+// ── SDK tab switcher ───────────────────────────────────────────────────────
+function switchSdk(el, id) {
+  const wrap = el.closest('.prose');
+  wrap.querySelectorAll('.sdk-tab').forEach(t => t.classList.remove('active'));
+  wrap.querySelectorAll('.sdk-pane').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('sdk-' + id).classList.add('active');
+}
+
+// ── Copy button ────────────────────────────────────────────────────────────
+function copyCode(btn) {
+  const pre = btn.closest('.code-inline').querySelector('pre');
+  navigator.clipboard.writeText(pre.innerText).then(() => {
+    btn.textContent = 'copied!';
+    setTimeout(() => btn.textContent = 'copy', 1800);
+  });
+}
+
+// ── Active sidebar item via IntersectionObserver ───────────────────────────
+const sections = document.querySelectorAll('.doc-section[id]');
+const navItems = document.querySelectorAll('.nav-item[href]');
+
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const id = e.target.id;
+      navItems.forEach(n => {
+        n.classList.toggle('active', n.getAttribute('href') === '#' + id);
+      });
+    }
+  });
+}, { rootMargin: '-20% 0px -60% 0px', threshold: 0 });
+
+sections.forEach(s => obs.observe(s));
 </script>
 <script src="js/docs-playground.js"></script>
-
 </body>
 </html>
