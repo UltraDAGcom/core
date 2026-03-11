@@ -375,6 +375,7 @@ impl NodeServer {
                             checkpoint_metrics.clone(),
                             wal.clone(),
                             sync_complete.clone(),
+                            peer_max_round.clone(),
                         ));
                     }
                 }
@@ -589,6 +590,7 @@ async fn try_connect_peer(
     checkpoint_metrics: Arc<crate::CheckpointMetrics>,
     wal: Arc<std::sync::Mutex<Option<FinalityWal>>>,
     sync_complete: Arc<std::sync::atomic::AtomicBool>,
+    peer_max_round: Arc<std::sync::atomic::AtomicU64>,
 ) {
     // Don't connect to ourselves — check loopback, wildcard, .internal hostname
     let loopback_addrs = [

@@ -479,8 +479,8 @@ function drawVignette(){
   ctx.fillStyle=gr;ctx.fillRect(0,0,W,H);
 
   const gl=ctx.createLinearGradient(0,0,W*.44,0);
-  gl.addColorStop(0,'rgba(7,11,20,.97)');
-  gl.addColorStop(.35,'rgba(7,11,20,.46)');
+  gl.addColorStop(0,'rgba(7,11,20,.75)');
+  gl.addColorStop(.35,'rgba(7,11,20,.25)');
   gl.addColorStop(1,'rgba(7,11,20,0)');
   ctx.fillStyle=gl;ctx.fillRect(0,0,W,H);
 }
