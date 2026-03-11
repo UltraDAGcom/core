@@ -23,6 +23,7 @@ fn make_signed_tx(
         nonce,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     transfer.signature = sk.sign(&transfer.signable_bytes());
     Transaction::Transfer(transfer)

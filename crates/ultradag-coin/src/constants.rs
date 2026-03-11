@@ -196,7 +196,7 @@ mod tests {
 
 /// Minimum stake required to submit a governance proposal.
 /// Prevents spam. Set low for testnet community building.
-pub const MIN_STAKE_TO_PROPOSE: u64 = 50 * COIN; // 50 UDAG (lowered for testnet)
+pub const MIN_STAKE_TO_PROPOSE: u64 = 10_000 * COIN; // 10,000 UDAG (same as MIN_STAKE_SATS)
 
 /// Voting period in rounds. At 2.5s/round ≈ 3.5 days.
 /// Long enough for community participation, short enough to ship.

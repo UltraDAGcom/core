@@ -12,6 +12,7 @@ fn test_transfer_tx_signable_bytes() {
         nonce: 0,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     
     let bytes = tx.signable_bytes();
@@ -30,6 +31,7 @@ fn test_transfer_tx_hash() {
         nonce: 0,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     tx.signature = sk.sign(&tx.signable_bytes());
     
@@ -49,6 +51,7 @@ fn test_transfer_tx_verify_valid() {
         nonce: 0,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     tx.signature = sk.sign(&tx.signable_bytes());
     
@@ -66,6 +69,7 @@ fn test_transfer_tx_verify_invalid() {
         nonce: 0,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     
     assert!(!tx.verify_signature());
@@ -82,6 +86,7 @@ fn test_transfer_tx_total_cost() {
         nonce: 0,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     
     assert_eq!(tx.total_cost(), 1100);
@@ -189,9 +194,10 @@ fn test_transaction_enum_hash() {
         nonce: 0,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     tx.signature = sk.sign(&tx.signable_bytes());
-    
+
     let transaction = Transaction::Transfer(tx);
     let hash1 = transaction.hash();
     let hash2 = transaction.hash();
@@ -243,9 +249,10 @@ fn test_transaction_different_types() {
         nonce: 0,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     transfer.signature = sk.sign(&transfer.signable_bytes());
-    
+
     let mut stake = StakeTx {
         from: sk.address(),
         amount: 10_000_000,

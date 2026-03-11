@@ -193,9 +193,10 @@ fn test_transaction_broadcast() {
         nonce: 0,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     tx.signature = sk.sign(&tx.signable_bytes());
-    
+
     let msg = Message::NewTx(Transaction::Transfer(tx));
     let serialized = serde_json::to_vec(&msg).unwrap();
     let deserialized: Message = serde_json::from_slice(&serialized).unwrap();
@@ -250,6 +251,7 @@ fn test_dag_vertex_with_transactions() {
         nonce: 0,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     tx.signature = sk.sign(&tx.signable_bytes());
     

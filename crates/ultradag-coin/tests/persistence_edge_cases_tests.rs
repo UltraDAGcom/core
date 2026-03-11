@@ -161,6 +161,7 @@ fn test_mempool_persistence() {
         nonce: 0,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     tx.signature = sk.sign(&tx.signable_bytes());
 

@@ -143,6 +143,7 @@ fn make_signed_tx(
         nonce,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     t.signature = sk.sign(&t.signable_bytes());
     Transaction::Transfer(t)

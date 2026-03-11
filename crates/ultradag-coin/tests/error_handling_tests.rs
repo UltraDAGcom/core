@@ -54,8 +54,9 @@ fn test_mempool_rejects_invalid_transaction() {
         nonce: 0,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
-    
+
     let result = mempool.insert(Transaction::Transfer(tx));
     assert!(!result);
 }
@@ -154,6 +155,7 @@ fn test_mempool_best_returns_sorted() {
         nonce: 0,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     tx1.signature = sk.sign(&tx1.signable_bytes());
     
@@ -165,6 +167,7 @@ fn test_mempool_best_returns_sorted() {
         nonce: 1,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     tx2.signature = sk.sign(&tx2.signable_bytes());
     

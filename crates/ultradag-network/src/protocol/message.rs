@@ -164,6 +164,7 @@ mod tests {
             nonce: 0,
             pub_key: [0u8; 32],
             signature: Signature([0u8; 64]),
+            memo: None,
         })
     }
 

@@ -601,8 +601,8 @@ fn test_changed_params_persist_across_snapshot() {
 
 #[test]
 fn test_changed_voting_period_affects_new_proposals() {
-    // Change voting_period_rounds from default to 200 (minimum is 100)
-    let (mut state, voting_ends) = setup_passing_proposal("voting_period_rounds", "200");
+    // Change voting_period_rounds from default to 2000 (minimum is 1000)
+    let (mut state, voting_ends) = setup_passing_proposal("voting_period_rounds", "2000");
 
     // Execute the proposal
     state.tick_governance(voting_ends + 1);
@@ -611,7 +611,7 @@ fn test_changed_voting_period_affects_new_proposals() {
         _ => panic!("Expected PassedPending"),
     };
     state.tick_governance(execute_at);
-    assert_eq!(state.governance_params().voting_period_rounds, 200);
+    assert_eq!(state.governance_params().voting_period_rounds, 2000);
 
     // Create a new proposal — it should use the NEW voting_period_rounds
     let proposer2 = SecretKey::generate();
@@ -634,7 +634,7 @@ fn test_changed_voting_period_affects_new_proposals() {
     state.apply_create_proposal(&p2_tx, creation_round).unwrap();
 
     let p2 = state.proposal(1).unwrap();
-    assert_eq!(p2.voting_ends, creation_round + 200, "New proposal should use updated voting_period_rounds");
+    assert_eq!(p2.voting_ends, creation_round + 2000, "New proposal should use updated voting_period_rounds");
 }
 
 #[test]

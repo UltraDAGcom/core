@@ -31,6 +31,7 @@ fn make_signed_tx(sk: &SecretKey, to: Address, amount: u64, fee: u64, nonce: u64
         nonce,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     tx.signature = sk.sign(&tx.signable_bytes());
     Transaction::Transfer(tx)

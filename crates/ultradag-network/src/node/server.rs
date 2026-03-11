@@ -1246,10 +1246,10 @@ async fn handle_peer(
                 // This creates a pull-based sync loop until we catch up or get an empty batch.
                 if !new_validators.is_empty() {
                     let our_round = dag.read().await.current_round();
-                    // Mark sync complete once we've progressed past genesis
-                    if our_round > 10 {
-                        sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
-                    }
+                    // Don't set sync_complete here — let the fast-sync task in main.rs
+                    // handle it after comparing our round against peers' heights.
+                    // Setting it too early (e.g. our_round > 10) causes the validator
+                    // to start producing while still hundreds of rounds behind.
                     let _ = peers.send_to(&peer_addr, &Message::GetDagVertices {
                         from_round: our_round + 1,
                         max_count: 100,

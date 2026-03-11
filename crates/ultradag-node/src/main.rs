@@ -580,53 +580,94 @@ async fn main() {
     if !args.skip_fast_sync {
         let server_clone = server.clone();
         tokio::spawn(async move {
-            // Wait for peer connections to establish
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            // Wait for peer connections to establish and initial DAG sync to start
+            tokio::time::sleep(Duration::from_secs(10)).await;
 
-            for attempt in 1..=3 {
+            for attempt in 1..=5 {
                 let our_round = server_clone.dag.read().await.current_round();
                 let peer_count = server_clone.peers.connected_count().await;
 
                 if peer_count == 0 {
-                    info!("Fast-sync attempt {}/3: no peers connected yet, retrying in 10s", attempt);
+                    info!("Sync attempt {}/5: no peers connected yet, retrying in 10s", attempt);
                     tokio::time::sleep(Duration::from_secs(10)).await;
                     continue;
                 }
 
-                // Check finality state — if we have no finalized rounds, we might need sync
+                // Check finality state
                 let our_finalized = {
                     let fin = server_clone.finality.read().await;
                     fin.last_finalized_round()
                 };
 
-                // If we're at a reasonable state already, skip fast-sync
-                if our_finalized > 0 && our_round > 10 {
-                    info!("Fast-sync: already at round {} (finalized {}), no sync needed", our_round, our_finalized);
-                    server_clone.sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
-                    break;
-                }
+                // Query a peer's height to know if we're caught up.
+                // Use the DAG's current_round as a proxy for the highest round
+                // we've seen from any peer (it updates when we receive vertices).
+                // If we've been syncing for multiple attempts and our round
+                // is advancing but not fast enough, try checkpoint sync.
+                let dag_round = server_clone.dag.read().await.current_round();
 
-                info!(
-                    "Fast-sync attempt {}/3: our round={}, finalized={}, peers={} — requesting checkpoint",
-                    attempt, our_round, our_finalized, peer_count
-                );
-                server_clone.request_fast_sync().await;
+                // If finality is advancing and we're past round 10, check if
+                // the incremental sync is making enough progress
+                if our_finalized > 0 && dag_round > 10 {
+                    // Wait one more cycle to see if DAG sync is still pulling
+                    tokio::time::sleep(Duration::from_secs(10)).await;
+                    let round_after_wait = server_clone.dag.read().await.current_round();
+                    let fin_after_wait = server_clone.finality.read().await.last_finalized_round();
 
-                // Wait for response to be processed
-                tokio::time::sleep(Duration::from_secs(10)).await;
+                    if round_after_wait > dag_round + 2 {
+                        // DAG sync is actively progressing — let it continue
+                        info!("Sync attempt {}/5: DAG sync progressing (round {} → {}), continuing...",
+                            attempt, dag_round, round_after_wait);
+                        continue;
+                    }
 
-                // Check if sync succeeded
-                let new_round = server_clone.dag.read().await.current_round();
-                let new_finalized = server_clone.finality.read().await.last_finalized_round();
-                if new_finalized > our_finalized || new_round > our_round + 10 {
-                    info!("Fast-sync succeeded: now at round {} (finalized {})", new_round, new_finalized);
-                    server_clone.sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
-                    break;
+                    // DAG sync stalled — we're probably caught up or need checkpoint
+                    // Check: did we actually reach the network's frontier?
+                    // If finality is recent (advancing), we're likely caught up.
+                    if fin_after_wait > our_finalized {
+                        info!("Sync complete: round {} finalized {} — DAG sync caught up", round_after_wait, fin_after_wait);
+                        server_clone.sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
+                        break;
+                    }
+
+                    // Finality not advancing + DAG sync stalled = we're stuck
+                    // Try checkpoint sync as fallback
+                    info!("Sync attempt {}/5: DAG sync stalled at round {} (finalized {}), trying checkpoint...",
+                        attempt, round_after_wait, fin_after_wait);
+                    server_clone.request_fast_sync().await;
+                    tokio::time::sleep(Duration::from_secs(10)).await;
+
+                    let post_sync_round = server_clone.dag.read().await.current_round();
+                    let post_sync_fin = server_clone.finality.read().await.last_finalized_round();
+                    if post_sync_fin > fin_after_wait || post_sync_round > round_after_wait + 50 {
+                        info!("Fast-sync succeeded: round {} finalized {}", post_sync_round, post_sync_fin);
+                        server_clone.sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
+                        break;
+                    }
+                } else {
+                    // Not synced at all yet — try checkpoint first
+                    info!(
+                        "Sync attempt {}/5: round={}, finalized={}, peers={} — requesting checkpoint",
+                        attempt, our_round, our_finalized, peer_count
+                    );
+                    server_clone.request_fast_sync().await;
+                    tokio::time::sleep(Duration::from_secs(10)).await;
+
+                    let new_round = server_clone.dag.read().await.current_round();
+                    let new_finalized = server_clone.finality.read().await.last_finalized_round();
+                    if new_finalized > our_finalized || new_round > our_round + 50 {
+                        info!("Fast-sync succeeded: round {} finalized {}", new_round, new_finalized);
+                        server_clone.sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
+                        break;
+                    }
                 }
             }
             // Always enable production after sync attempts are exhausted,
             // so the node doesn't get permanently stuck waiting.
-            server_clone.sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
+            if !server_clone.sync_complete.load(std::sync::atomic::Ordering::Relaxed) {
+                info!("Sync attempts exhausted — enabling validator production");
+                server_clone.sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
         });
     } else {
         info!("Fast-sync disabled (--skip-fast-sync)");

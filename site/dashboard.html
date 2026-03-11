@@ -2398,9 +2398,9 @@ async function connectNode() {
     document.getElementById('dag-content').style.display = '';
     toast('Connected to ' + nodeUrl.replace(/^https?:\/\//,''), 'ok');
     if (pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(pollStatus, 10000);
+    pollTimer = setInterval(pollStatus, 30000);
     if (dagPollTimer) clearInterval(dagPollTimer);
-    dagPollTimer = setInterval(pollDag, 2000);
+    dagPollTimer = setInterval(pollDag, 5000);
     if (keystore) { refreshPortfolio(); updateSendInfo(); checkValidatorStatus(); }
     loadMempool();
     loadFinalizedRounds();

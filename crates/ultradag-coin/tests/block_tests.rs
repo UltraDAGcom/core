@@ -44,6 +44,7 @@ fn test_block_with_transactions() {
         nonce: 0,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     tx.signature = sk.sign(&tx.signable_bytes());
     
@@ -185,6 +186,7 @@ fn test_block_with_multiple_transactions() {
         nonce: 0,
         pub_key: sk1.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     tx1.signature = sk1.sign(&tx1.signable_bytes());
     
@@ -196,6 +198,7 @@ fn test_block_with_multiple_transactions() {
         nonce: 0,
         pub_key: sk2.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     tx2.signature = sk2.sign(&tx2.signable_bytes());
     

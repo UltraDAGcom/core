@@ -28,6 +28,7 @@ fn make_real_tx(sk: &SecretKey) -> Transaction {
         nonce: 0,
         pub_key: sk.verifying_key().to_bytes(),
         signature: Signature([0u8; 64]),
+        memo: None,
     };
     transfer.signature = sk.sign(&transfer.signable_bytes());
     Transaction::Transfer(transfer)
