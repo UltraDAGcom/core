@@ -141,6 +141,43 @@ h1 em{font-style:italic;color:var(--accent)}
   .live-metric:last-child{display:none}
 }
 
+/* INTERACTIVE PLAYGROUND */
+#playground{position:relative;z-index:1;background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.playground-inner{max-width:1200px;margin:0 auto;padding:100px 48px}
+.playground-header{text-align:center;margin-bottom:60px}
+.playground-tag{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+.playground-title{font-family:'Cormorant',serif;font-size:clamp(36px,5vw,52px);font-weight:300;line-height:1.05;color:var(--white);margin-bottom:16px}
+.playground-title em{font-style:italic;color:var(--accent)}
+.playground-subtitle{font-family:'Cormorant',serif;font-size:19px;font-weight:300;color:var(--subtle);max-width:520px;margin:0 auto}
+.playground-container{display:grid;grid-template-columns:1fr 1fr;gap:24px;background:var(--bg);border:1px solid var(--border);border-radius:4px;overflow:hidden}
+.playground-editor{display:flex;flex-direction:column;border-right:1px solid var(--border)}
+.playground-output{display:flex;flex-direction:column;background:var(--bg2)}
+.playground-panel-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg3)}
+.playground-panel-title{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.example-select{font-family:'DM Mono',monospace;font-size:11px;background:var(--bg);color:var(--body);border:1px solid var(--border);padding:6px 12px;border-radius:2px;cursor:pointer;transition:border-color .2s}
+.example-select:hover{border-color:var(--border2)}
+.example-select:focus{outline:none;border-color:var(--accent)}
+.code-editor{font-family:'DM Mono',monospace;font-size:13px;line-height:1.6;background:var(--bg);color:var(--bright);padding:20px;border:none;resize:none;min-height:400px;flex:1}
+.code-editor:focus{outline:none}
+.playground-controls{padding:16px 20px;border-top:1px solid var(--border);display:flex;gap:12px;background:var(--bg3)}
+.run-btn{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;background:var(--accent);color:var(--bg);border:none;padding:10px 24px;border-radius:2px;cursor:pointer;transition:background .2s,transform .15s;font-weight:500}
+.run-btn:hover:not(:disabled){background:#5aaef0;transform:translateY(-1px)}
+.run-btn:disabled{opacity:.5;cursor:not-allowed}
+.output-content{padding:20px;font-family:'DM Mono',monospace;font-size:12px;line-height:1.6;flex:1;overflow-y:auto;max-height:400px}
+.log-line{margin-bottom:8px;padding:4px 0}
+.log-info{color:var(--accent)}
+.log-log{color:var(--body)}
+.log-success{color:var(--success)}
+.log-error{color:var(--danger)}
+.result-header{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+.result-data{background:var(--bg);border:1px solid var(--border);padding:16px;border-radius:2px;color:var(--bright);overflow-x:auto;white-space:pre-wrap;word-break:break-all}
+@media(max-width:900px){
+  .playground-container{grid-template-columns:1fr;gap:0}
+  .playground-editor{border-right:none;border-bottom:1px solid var(--border)}
+  .code-editor{min-height:300px}
+  .output-content{max-height:300px}
+}
+
 /* SECTIONS */
 section{position:relative;z-index:1}
 .section-inner{max-width:1200px;margin:0 auto;padding:140px 48px}
@@ -441,6 +478,42 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     </div>
   </div>
 </div>
+
+<!-- INTERACTIVE PLAYGROUND -->
+<section id="playground">
+  <div class="playground-inner">
+    <div class="playground-header">
+      <p class="playground-tag">Try It Live</p>
+      <h2 class="playground-title">Run code against <em>testnet</em></h2>
+      <p class="playground-subtitle">Execute real transactions in your browser. No installation, no wallet, no signup required.</p>
+    </div>
+
+    <div class="playground-container">
+      <div class="playground-editor">
+        <div class="playground-panel-header">
+          <span class="playground-panel-title">Code Editor</span>
+          <select id="example-select" class="example-select">
+            <option value="">Select an example...</option>
+          </select>
+        </div>
+        <textarea id="code-editor" class="code-editor" spellcheck="false"></textarea>
+        <div class="playground-controls">
+          <button id="run-code" class="run-btn">Run Code</button>
+        </div>
+      </div>
+
+      <div class="playground-output">
+        <div class="playground-panel-header">
+          <span class="playground-panel-title">Output</span>
+        </div>
+        <div class="output-content">
+          <div id="output"></div>
+          <div id="result"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <!-- CONSENSUS -->
 <section id="consensus">
@@ -1025,6 +1098,7 @@ reveals.forEach(el => observer.observe(el));
 // Hero grid animation loaded from external file
 </script>
 <script src="js/hero.js"></script>
+<script src="js/playground.js"></script>
 
 </body>
 </html>
