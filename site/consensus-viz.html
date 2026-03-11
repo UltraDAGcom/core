@@ -8,18 +8,18 @@
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;600;700;800&display=swap');
 
   :root {
-    --bg: #080b0f;
-    --bg2: #0d1118;
-    --bg3: #111820;
-    --surface: #0d1118;
-    --border: #1e2a38;
-    --border2: #253040;
-    --dim: #2e4055;
-    --muted: #4a6480;
-    --subtle: #6b8aaa;
-    --body: #8fafc8;
-    --bright: #c4daf0;
-    --white: #e8f2fa;
+    --bg: #0a0e1a;
+    --bg2: #0e1322;
+    --bg3: #131a2b;
+    --surface: #0e1322;
+    --border: #1a2540;
+    --border2: #223050;
+    --dim: #2e4060;
+    --muted: #4a6488;
+    --subtle: #7090b8;
+    --body: #94b8d8;
+    --bright: #c8e0f4;
+    --white: #edf4fb;
     --accent: #3d9be9;
     --accent2: #1a6fb5;
     --v0: #00d4ff;
@@ -28,7 +28,9 @@
     --v3: #fb923c;
     --finalized: #fbbf24;
     --pending: #374151;
-    --text: #e8f2fa;
+    --success: #34d399;
+    --glow: rgba(61,155,233,0.15);
+    --glow2: rgba(61,155,233,0.06);
     --edge: #1e3a5f;
     --edge-active: #2563eb;
   }
@@ -43,9 +45,13 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 40px 24px;
+    padding: 120px 24px 40px;
     overflow-x: hidden;
+    cursor: default;
   }
+
+  /* GRID BG */
+  .grid-bg{position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.5625;pointer-events:none;z-index:0;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,black 30%,transparent 100%)}
 
   body::before {
     content: '';
@@ -60,20 +66,7 @@
   .header {
     text-align: center;
     margin-bottom: 48px;
-  }
-
-  .header h1 {
-    font-family: 'Cormorant', serif;
-    font-weight: 300;
-    font-size: clamp(2.5rem, 5vw, 4rem);
-    letter-spacing: -0.02em;
-    color: var(--white);
-    margin-bottom: 8px;
-  }
-
-  .header h1 em {
-    font-style: italic;
-    color: var(--accent);
+    max-width: 900px;
   }
 
   .header p {
@@ -82,17 +75,18 @@
     font-weight: 300;
     font-style: italic;
     color: var(--subtle);
-    line-height: 1.4;
+    line-height: 1.5;
   }
 
   .viz-container {
     width: 100%;
-    max-width: 900px;
+    max-width: 1100px;
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 8px;
     overflow: hidden;
     position: relative;
+    z-index: 1;
   }
 
   .toolbar {
@@ -391,7 +385,7 @@
   }
 
   /* NAV */
-  nav { position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(8,11,15,.9);backdrop-filter:blur(12px) }
+  nav { position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(10,14,26,.92);backdrop-filter:blur(16px) }
   .nav-logo { font-family:'Cormorant',serif;font-size:22px;font-weight:300;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px }
   .nav-logo-mark { width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative }
   .nav-logo-mark::after { content:'';width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent) }
@@ -409,7 +403,7 @@
   .hamburger.active span:nth-child(1){transform:rotate(45deg) translate(7px,7px)}
   .hamburger.active span:nth-child(2){opacity:0}
   .hamburger.active span:nth-child(3){transform:rotate(-45deg) translate(7px,-7px)}
-  .mobile-menu{position:fixed;top:64px;left:0;right:0;background:rgba(8,11,15,.98);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 24px;z-index:99;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease}
+  .mobile-menu{position:fixed;top:64px;left:0;right:0;background:rgba(10,14,26,.98);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 24px;z-index:99;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease}
   .mobile-menu.active{max-height:500px;padding:24px}
   .mobile-menu ul{list-style:none;display:flex;flex-direction:column;gap:20px}
   .mobile-menu a{font-family:'DM Mono',monospace;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;display:block;padding:8px 0}
@@ -432,30 +426,43 @@
     .nav-links { display: none; }
     .hamburger{display:flex}
     .mobile-menu{display:block;top:56px}
-    .page { padding: 80px 24px 60px; }
-    .page-title { font-size: 40px; }
-    .page-sub { font-size: 18px; }
+    body { padding: 80px 16px 40px; }
+    .header p { font-size: 1rem; }
+    .viz-container { max-width: 100%; }
     .canvas-wrap { height: 400px; }
-    .controls { width: 100%; justify-content: center; flex-wrap: wrap; gap: 8px; }
-    button { font-size: 0.7rem; padding: 6px 12px; }
-    .info-panel { padding: 20px 24px; }
-    .info-title { font-size: 11px; }
-    .info-item { font-size: 13px; }
-    .footer-inner { flex-direction: column; gap: 24px; text-align: center; padding: 32px 24px; }
+    .toolbar { padding: 12px 16px; }
+    .status-row { font-size: 0.65rem; gap: 12px; }
+    .controls { width: 100%; justify-content: flex-start; }
+    button { font-size: 0.65rem; padding: 7px 12px; }
+    select { font-size: 0.65rem; padding: 7px 10px; }
+    .control-group label { font-size: 0.6rem; }
+    .legend { padding: 12px 16px; gap: 12px; }
+    .legend-item { font-size: 0.65rem; }
+    .info-row { padding: 12px 16px; font-size: 0.9rem; min-height: 48px; }
+    .description { padding: 0 16px; margin-top: 32px; }
+    .description h2 { font-size: 2rem; }
+    .description p, .description li { font-size: 1rem; }
     .footer-links { flex-wrap: wrap; justify-content: center; gap: 16px; }
   }
   @media(max-width: 600px) {
     nav { padding: 0 16px; }
-    .page { padding: 72px 16px 48px; }
-    .page-title { font-size: 32px; }
-    .page-sub { font-size: 16px; }
+    body { padding: 72px 12px 32px; }
+    .header p { font-size: 0.95rem; }
     .canvas-wrap { height: 320px; }
-    .controls { gap: 6px; }
-    button { font-size: 0.65rem; padding: 5px 10px; }
-    .info-panel { padding: 16px 20px; }
-    .info-title { font-size: 10px; }
-    .info-item { font-size: 12px; }
-    .footer-inner { padding: 24px 16px; }
+    .toolbar { flex-direction: column; align-items: flex-start; }
+    .status-row { flex-wrap: wrap; font-size: 0.6rem; gap: 8px; }
+    .controls { gap: 6px; flex-direction: column; align-items: stretch; }
+    .control-group { width: 100%; justify-content: space-between; }
+    button { font-size: 0.6rem; padding: 8px 12px; width: 100%; }
+    select { font-size: 0.6rem; padding: 8px 10px; width: 100%; }
+    .legend { padding: 10px 12px; gap: 8px; }
+    .legend-item { font-size: 0.6rem; }
+    .swatch { width: 8px; height: 8px; }
+    .info-row { padding: 10px 12px; font-size: 0.85rem; min-height: 40px; }
+    .description { padding: 0 12px; margin-top: 24px; }
+    .description h2 { font-size: 1.75rem; }
+    .description p, .description li { font-size: 0.95rem; }
+    .algo-note { padding: 10px 12px; font-size: 0.68rem; }
     .footer-links { flex-direction: column; gap: 12px; }
   }
 </style>
@@ -501,9 +508,9 @@
 </div>
 
 <div class="nav-spacer"></div>
+<div class="grid-bg"></div>
 
 <div class="header">
-  <h1>Ultra<em>DAG</em> Consensus</h1>
   <p>Accurate simulation of UltraDAG's DAG-BFT protocol — incremental descendant tracking, 2f+1 gate, optimistic responsiveness.</p>
 </div>
 
