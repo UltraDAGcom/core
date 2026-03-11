@@ -26,7 +26,7 @@ a:hover{color:var(--white)}
 body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.4}
 
 /* GRID BG */
-.grid-bg{position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.15;pointer-events:none;z-index:0;mask-image:radial-gradient(ellipse 80% 40% at 50% 0%,black 20%,transparent 100%)}
+.grid-bg{position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.5625;pointer-events:none;z-index:0;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,black 30%,transparent 100%)}
 
 /* NAV */
 nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid transparent;transition:border-color .3s,background .3s}
@@ -145,11 +145,6 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 
 <!-- BLOG CONTAINER -->
 <div class="blog-container">
-  <div class="blog-header">
-    <h1 class="blog-title">Engineering Blog</h1>
-    <p class="blog-subtitle">Deep dives into consensus, cryptography, and distributed systems from the UltraDAG team.</p>
-  </div>
-
   <!-- POST CARDS -->
   <a href="2026-03-jepsen-chaos-testing.html" class="post-card">
     <div class="post-meta">
