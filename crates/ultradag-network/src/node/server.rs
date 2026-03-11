@@ -286,9 +286,10 @@ impl NodeServer {
             let checkpoint_metrics = self.checkpoint_metrics.clone();
             let wal = self.wal.clone();
             let sync_complete = self.sync_complete.clone();
+            let peer_max_round = self.peer_max_round.clone();
             tokio::spawn(async move {
                 // handle_peer may rename peer_addr via Hello; remove both keys on disconnect
-                if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers, &checkpoint_metrics, &wal, &sync_complete).await {
+                if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers, &checkpoint_metrics, &wal, &sync_complete, &peer_max_round).await {
                     warn!("Peer {} disconnected: {}", addr_str, e);
                 }
                 // Remove by original ephemeral addr and any possible listen addr
@@ -319,6 +320,7 @@ impl NodeServer {
         let checkpoint_metrics = self.checkpoint_metrics.clone();
         let wal = self.wal.clone();
         let sync_complete = self.sync_complete.clone();
+        let peer_max_round = self.peer_max_round.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30));
             // Consume first tick (fires immediately) — let seed connections establish first
@@ -435,9 +437,10 @@ impl NodeServer {
         let checkpoint_metrics = self.checkpoint_metrics.clone();
         let wal = self.wal.clone();
         let sync_complete = self.sync_complete.clone();
+        let peer_max_round = self.peer_max_round.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers, &checkpoint_metrics, &wal, &sync_complete).await {
+            if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers, &checkpoint_metrics, &wal, &sync_complete, &peer_max_round).await {
                 warn!("Peer {} disconnected: {}", addr_str, e);
             }
             peers.remove_peer(&addr_str).await;
@@ -707,6 +710,7 @@ async fn try_connect_peer(
                     &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify,
                     &pending_checkpoints, &data_dir, validator_sk.as_ref(),
                     &banned_peers, &checkpoint_metrics, &wal, &sync_complete,
+                    &peer_max_round,
                 ));
                 if let Err(e) = fut.await {
                     warn!("Peer {} disconnected: {}", addr_clone, e);
@@ -744,6 +748,7 @@ async fn handle_peer(
     checkpoint_metrics: &Arc<crate::CheckpointMetrics>,
     wal: &Arc<std::sync::Mutex<Option<FinalityWal>>>,
     sync_complete: &Arc<std::sync::atomic::AtomicBool>,
+    peer_max_round: &Arc<std::sync::atomic::AtomicU64>,
 ) -> std::io::Result<()> {
     let peer_addr = reader.addr.clone();
     let mut allowlist_rejections: u32 = 0;
@@ -770,6 +775,9 @@ async fn handle_peer(
                         height: our_round,
                     })
                     .await?;
+
+                // Track highest known peer round for sync progress detection
+                peer_max_round.fetch_max(height, std::sync::atomic::Ordering::Relaxed);
 
                 // If peer is ahead, sync from them
                 if height > our_round {
@@ -822,6 +830,9 @@ async fn handle_peer(
                         peer_addr, version, PROTOCOL_VERSION);
                     return Ok(());
                 }
+                // Track highest known peer round for sync progress detection
+                peer_max_round.fetch_max(height, std::sync::atomic::Ordering::Relaxed);
+
                 let our_round = dag.read().await.current_round();
                 if height > our_round {
                     let gap = height - our_round;
