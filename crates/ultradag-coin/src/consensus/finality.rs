@@ -128,6 +128,11 @@ impl FinalityTracker {
                     let parents_ok = vertex.parent_hashes.is_empty()
                         || vertex.parent_hashes.iter()
                             .all(|p| *p == genesis || self.finalized.contains(p) || dag.get(p).is_none());
+                    
+                    if !parents_ok {
+                        continue;
+                    }
+
                     // Late-arriving vertices in already-finalized rounds: auto-finalize.
                     // These vertices were recovered via reconciliation after finality
                     // advanced past their round. They have no descendants (subsequent
@@ -136,7 +141,7 @@ impl FinalityTracker {
                     // settled and they passed signature + equivocation checks at insertion,
                     // they are safe to finalize.
                     let in_settled_round = round < self.last_finalized_round;
-                    if parents_ok && (in_settled_round || dag.descendant_validator_count(hash) >= threshold) {
+                    if in_settled_round || dag.descendant_validator_count(hash) >= threshold {
                         ready.insert(*hash);
                     }
                 }
