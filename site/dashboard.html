@@ -909,6 +909,11 @@ body::before {
                   <div class="help">100,000 = 0.001 UDAG</div>
                 </div>
               </div>
+              <div class="field">
+                <label class="label">Memo (optional)</label>
+                <textarea class="textarea" id="send-memo" placeholder="Data payload (max 256 bytes) - e.g. temp:22.4C hum:61% pres:1013hPa" maxlength="256" rows="2"></textarea>
+                <div class="help" id="memo-help">0 / 256 bytes</div>
+              </div>
               <div style="background:var(--bg3);border:1px solid var(--border);padding:14px 16px;margin-bottom:16px">
                 <div class="drow"><span class="dk">Available</span><span class="dv green" id="send-balance">--</span></div>
                 <div class="drow"><span class="dk">Nonce</span><span class="dv" id="send-nonce">--</span></div>
@@ -1669,16 +1674,19 @@ async function sendTransaction() {
   const to = document.getElementById('send-to').value.trim();
   const amountUdag = parseFloat(document.getElementById('send-amount').value);
   const fee = parseInt(document.getElementById('send-fee').value) || 100000;
+  const memo = document.getElementById('send-memo').value.trim();
   if (!to || to.length !== 64 || !/^[0-9a-fA-F]+$/.test(to)) { toast('Recipient must be 64 hex characters', 'err'); return; }
   if (isNaN(amountUdag) || amountUdag <= 0) { toast('Enter a valid amount', 'err'); return; }
   const amountSats = Math.round(amountUdag * 100000000);
   const btn = document.getElementById('send-btn');
   btn.disabled = true; btn.textContent = 'BROADCASTING...';
   try {
-    const res = await fetch(nodeUrl + '/tx', {
+    const payload = { secret_key: w.secret_key, to, amount: amountSats, fee };
+    if (memo) payload.memo = memo;
+    const res = await fetch(nodeUrl + '/send', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ from_secret: w.secret_key, to, amount: amountSats, fee })
+      body:JSON.stringify(payload)
     });
     const data = await res.json();
     if (data.error) { toast('Rejected: ' + data.error, 'err'); }
@@ -1686,10 +1694,30 @@ async function sendTransaction() {
       toast('TX broadcast: ' + data.hash.slice(0,16) + '...', 'ok');
       document.getElementById('send-to').value = '';
       document.getElementById('send-amount').value = '';
+      document.getElementById('send-memo').value = '';
+      updateMemoByteCount();
       updateSendInfo();
     }
   } catch (e) { toast('Send failed: ' + e.message, 'err'); }
   finally { btn.disabled = false; btn.textContent = 'SEND TRANSACTION'; }
+}
+
+// Helper to decode memo for display
+function decodeMemo(memo) {
+  if (!memo) return '';
+  try {
+    // Try UTF-8 decode first
+    const decoded = decodeURIComponent(escape(atob(memo)));
+    // Check if it's printable ASCII/UTF-8
+    if (/^[\x20-\x7E\u00A0-\uFFFF]*$/.test(decoded)) {
+      return decoded.length > 64 ? decoded.slice(0,64) + '...' : decoded;
+    }
+    // Fall back to hex display
+    return '0x' + memo.slice(0, 32) + (memo.length > 32 ? '...' : '');
+  } catch (e) {
+    // If base64 decode fails, assume it's already a string or show hex
+    return memo.length > 64 ? memo.slice(0,64) + '...' : memo;
+  }
 }
 
 // ========================================
@@ -1786,13 +1814,14 @@ async function loadMempool() {
     }
     el.innerHTML = txs.map(tx => `
       <div class="tx-row">
-        <div>
+        <div style="flex:1">
           <div class="tx-flow">
             <span class="tx-addr" title="${tx.from}">${tx.from.slice(0,8)}...</span>
             <span class="tx-arrow">→</span>
             <span class="tx-addr" title="${tx.to}">${tx.to.slice(0,8)}...</span>
           </div>
           <div class="tx-hash-sm" title="${tx.hash}">${tx.hash}</div>
+          ${tx.memo ? `<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);margin-top:4px;padding:4px 8px;background:var(--glow);border:1px solid var(--accent2);border-radius:2px;max-width:fit-content">📝 ${decodeMemo(tx.memo)}</div>` : ''}
         </div>
         <div class="tx-amount">${formatUdag(tx.amount)} UDAG</div>
       </div>
@@ -2687,12 +2716,33 @@ document.getElementById('round-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') exploreRound(parseInt(e.target.value));
 });
 
+// Memo byte counter
+function updateMemoByteCount() {
+  const memo = document.getElementById('send-memo');
+  const help = document.getElementById('memo-help');
+  if (!memo || !help) return;
+  const bytes = new TextEncoder().encode(memo.value).length;
+  help.textContent = `${bytes} / 256 bytes`;
+  if (bytes > 256) {
+    help.style.color = 'var(--red)';
+  } else {
+    help.style.color = 'var(--dim)';
+  }
+}
+
 // Hamburger menu
 const hamburger=document.getElementById('hamburger');
 const mobileMenu=document.getElementById('mobile-menu');
 if(hamburger && mobileMenu){
   hamburger.addEventListener('click',()=>{hamburger.classList.toggle('active');mobileMenu.classList.toggle('active')});
   mobileMenu.querySelectorAll('a').forEach(link=>{link.addEventListener('click',()=>{hamburger.classList.remove('active');mobileMenu.classList.remove('active')})});
+}
+
+// Wire up memo byte counter
+const sendMemo = document.getElementById('send-memo');
+if (sendMemo) {
+  sendMemo.addEventListener('input', updateMemoByteCount);
+  updateMemoByteCount();
 }
 
 // ========================================
