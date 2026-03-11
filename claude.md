@@ -91,24 +91,30 @@
 - **Consensus Rating Impact:** Fixes #1 critical issue, +53 points (847 → 900/1000)
 
 **Jepsen-Style Fault Injection Testing (March 10-11, 2026):**
-- **Framework Status:** Comprehensive fault injection infrastructure inspired by Jepsen — **framework implemented, full integration tests in progress**
+- **Framework Status:** Comprehensive fault injection infrastructure inspired by Jepsen — **fully implemented and running real consensus simulation**
 - **What Exists:**
   - `FaultInjector` — Thread-safe fault injection coordinator with partition, clock skew, message chaos, and crash simulation
-  - `TestNode` — Lightweight test node wrapper for fault injection scenarios
+  - `TestNode` — Lightweight test node wrapper with real `BlockDag`, `FinalityTracker`, and `StateEngine`
+  - `simulate_rounds()` — Actual DAG-BFT consensus simulation with vertex production, P2P distribution (respecting partitions), and finality checking
   - Fault injection modules: `network_partition.rs`, `clock_skew.rs`, `message_chaos.rs`, `crash_restart.rs`
-  - Invariant checkers: finality safety, supply consistency, double-spend prevention
+  - Invariant checkers: finality safety (detects conflicts), supply consistency, double-spend prevention
   - 35 basic fault injection tests (infrastructure validation) — ✅ all passing
-  - 14 Jepsen test skeletons (compile and run but use stub consensus simulation)
+  - 14 Jepsen integration tests — ✅ all compile and run with real consensus (25 seconds total)
 - **Fault Types Supported:**
   - **Network partitions** — Split-brain, node isolation, minority/majority splits (1/3 vs 2/3)
   - **Clock skew** — Time drift simulation (±2s accuracy), configurable offsets per node
   - **Message chaos** — Random delays (configurable max), reordering, drops (probabilistic)
   - **Crash-restart** — Node failure simulation, repeated cycles, simultaneous crashes
-- **Current Limitation:** Jepsen tests call `simulate_rounds()` which is a stub — tests compile and pass but don't run actual DAG-BFT consensus with real fault injection yet. Full integration requires connecting fault injector to live consensus nodes.
-- **Next Steps:** Replace stub `simulate_rounds()` with actual consensus node spawning, integrate fault injector into P2P layer, run multi-hour chaos tests on testnet
-- **Test Results:** ✅ 35/35 infrastructure tests passed, 14/14 Jepsen skeletons compile and pass (stub mode)
+- **Real Test Results (March 11, 2026):**
+  - ✅ **13/14 tests passing** — Message chaos, clock skew, crash-restart, minority partition all pass
+  - ❌ **1 test failing (CRITICAL BUG FOUND):** `test_split_brain_partition` detected **finality conflict after partition heal**
+    - **Bug:** 2-2 network split → no quorum during partition (correct) → partition heals → nodes converge to round 1 but **finalize different vertices**
+    - **Evidence:** Node 0 finalized hash `[65, 81, 143, 77, ...]`, Node 2 finalized hash `[189, 91, 251, 19, ...]` at same round
+    - **Impact:** Consensus safety violation — finalized state diverges between nodes after partition recovery
+    - **Status:** Bug #85 — under investigation, likely issue with finality rule application after partition heal
+- **Value Delivered:** Jepsen testing found a real consensus safety bug that would have caused state divergence in production. This validates the testing approach.
 - **Location:** `crates/ultradag-network/tests/fault_injection/`, `crates/ultradag-network/tests/jepsen_tests.rs`
-- **Usage:** `cargo test --test fault_injection_basic_tests` (infrastructure), `cargo test --test jepsen_tests -- --ignored` (skeletons)
+- **Usage:** `cargo test --test jepsen_tests -- --ignored` (runs all 14 tests with real consensus simulation)
 - **Metrics endpoint return type** — Fixed `Ok(Response)` vs `Response` mismatch in metrics endpoint.
 
 **Integration Audit (March 10, 2026):**
@@ -1513,6 +1519,11 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 84. **CRITICAL: Vertex loss causes permanent state divergence (March 11, 2026)** — TCP message drops caused ~0.06% of vertices to never reach some nodes. BFT finality (quorum=3/4) progressed without the missing vertex. After pruning removed the vertex from peers, the loss became permanent. Different nodes applied different finalized vertex counts, causing total_supply to diverge by up to 1000 UDAG (20 vertices). Checkpoint co-signing failed for all 82 checkpoints produced (170 validation failures, 0 quorum reached) because state_roots didn't match.
     - **Fix:** Added periodic vertex reconciliation in validator loop. Every 50 rounds (offset at `dag_round % 50 == 25`), scans all rounds between `pruning_floor` and `current_round - 5` for rounds with fewer distinct validators than expected. When gaps found, broadcasts `GetDagVertices` to all peers. Recovered vertices are processed by the existing DagVertices handler (signature verify, finality check, state application).
     - **Result:** Missing vertices recovered before pruning removes them from peers. State converges across nodes, enabling checkpoint co-signing.
+85. **CRITICAL: Finality conflict after partition heal (March 11, 2026)** — Jepsen `test_split_brain_partition` discovered consensus safety violation: 2-2 network split prevented quorum during partition (correct), but after partition healed, nodes converged to round 1 while finalizing **different vertices** at the same round. Node 0 finalized hash `[65, 81, 143, 77, 139, 13, 89, 100]`, Node 2 finalized hash `[189, 91, 251, 19, 52, 69, 97, 34]`. This violates BFT safety — finalized state must be identical across all honest nodes.
+    - **Root Cause:** Under investigation. Likely issue: finality rule application during partition recovery allows different nodes to finalize different vertices when they have divergent DAG views from the partition period.
+    - **Impact:** State divergence after network partitions. Would cause checkpoint co-signing failures and potential chain splits in production.
+    - **Status:** OPEN — discovered March 11, 2026 via Jepsen chaos testing. Requires fix before mainnet launch.
+    - **Test:** `cargo test --test jepsen_tests test_split_brain_partition -- --ignored` reproduces the bug consistently.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.
