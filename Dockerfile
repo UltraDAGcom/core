@@ -10,9 +10,8 @@ RUN curl -L "https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/ultr
     chmod +x /usr/local/bin/ultradag-node
 
 COPY tools/operations/utilities/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-COPY config/testnet-validators.txt /etc/ultradag/validators.txt
 
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /data /etc/ultradag
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /data
 
 EXPOSE 9333 10333
 ENTRYPOINT ["docker-entrypoint.sh"]
