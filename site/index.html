@@ -27,10 +27,10 @@ a:hover{color:var(--white)}
 body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.4}
 
 /* GRID BG */
-.grid-bg{position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.25;pointer-events:none;z-index:0;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,black 30%,transparent 100%)}
+.grid-bg{position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.5625;pointer-events:none;z-index:0;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,black 30%,transparent 100%)}
 
 /* GRID NODES CANVAS */
-.grid-nodes{position:absolute;top:0;left:0;width:100%;height:100vh;pointer-events:none;z-index:1;opacity:.6;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,black 20%,transparent 100%)}
+.grid-nodes{position:absolute;top:0;left:0;width:100%;height:100vh;pointer-events:none;z-index:1;opacity:.9;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,black 20%,transparent 100%)}
 
 /* NAV */
 nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid transparent;transition:border-color .3s,background .3s}
@@ -969,10 +969,22 @@ reveals.forEach(el => observer.observe(el));
   const canvas = document.getElementById('grid-nodes');
   const ctx = canvas.getContext('2d');
   const GRID_SIZE = 48; // matches CSS grid-bg
-  const NODE_COUNT = 6 + Math.floor(Math.random() * 5); // random between 6 and 10
+  const NODE_COUNT = 9 + Math.floor(Math.random() * 7); // random between 9 and 15 (50% more)
   
   let nodes = [];
+  let collisions = []; // track collision flash effects
+  let waypoints = []; // player-placed waypoints
+  let tooltips = []; // event tooltips
   let w, h, cols, rows;
+  
+  const eventMessages = [
+    'Block #1847 finalized',
+    'Validator joined',
+    'Transaction confirmed',
+    'Consensus achieved',
+    'Checkpoint created',
+    'DAG vertex added'
+  ];
   
   function resize() {
     w = canvas.width = window.innerWidth;
@@ -980,9 +992,10 @@ reveals.forEach(el => observer.observe(el));
     cols = Math.ceil(w / GRID_SIZE);
     rows = Math.ceil(h / GRID_SIZE);
     
-    // Initialize nodes if empty
+    // Initialize nodes if empty - distribute across entire grid
     if (nodes.length === 0) {
       for (let i = 0; i < NODE_COUNT; i++) {
+        // Initialize nodes exactly on integer grid coordinates
         nodes.push({
           x: Math.floor(Math.random() * cols),
           y: Math.floor(Math.random() * rows),
@@ -991,70 +1004,237 @@ reveals.forEach(el => observer.observe(el));
           progress: 0,
           speed: 0.008 + Math.random() * 0.012, // slow, organic movement
           brightness: 0.4 + Math.random() * 0.6,
-          size: 2 + Math.random() * 2
+          size: 2 + Math.random() * 2,
+          tooltip: null,
+          tooltipTime: 0
         });
       }
     }
   }
   
   function pickNewTarget(node) {
-    // Pick adjacent grid cell (up/down/left/right)
     const directions = [
       { dx: 1, dy: 0 },
       { dx: -1, dy: 0 },
       { dx: 0, dy: 1 },
       { dx: 0, dy: -1 }
     ];
-    const dir = directions[Math.floor(Math.random() * directions.length)];
-    node.targetX = Math.max(0, Math.min(cols - 1, node.x + dir.dx));
-    node.targetY = Math.max(0, Math.min(rows - 1, node.y + dir.dy));
+
+    // Shuffle directions
+    for (let i = directions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [directions[i], directions[j]] = [directions[j], directions[i]];
+    }
+
+    // Pick first valid direction that moves exactly 1 cell
+    for (const dir of directions) {
+      const nx = node.x + dir.dx;
+      const ny = node.y + dir.dy;
+      if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+        node.targetX = nx;  // always an integer, always exactly 1 away
+        node.targetY = ny;
+        node.progress = 0;
+        return;
+      }
+    }
+
+    // Edge case: totally stuck, stay put
+    node.targetX = node.x;
+    node.targetY = node.y;
     node.progress = 0;
   }
   
   function animate() {
     ctx.clearRect(0, 0, w, h);
     
-    nodes.forEach(node => {
-      // Pick new target if needed
-      if (node.targetX === null || node.progress >= 1) {
+    // Calculate offset to align canvas nodes with CSS grid background
+    const rect = canvas.getBoundingClientRect();
+    const offsetX = rect.left % GRID_SIZE;
+    const offsetY = rect.top % GRID_SIZE;
+    
+    nodes.forEach((node, i) => {
+      if (node.targetX === null) {
         pickNewTarget(node);
       }
-      
-      // Smooth interpolation
+
       node.progress = Math.min(1, node.progress + node.speed);
-      const eased = node.progress < 0.5
+
+      // Easing
+      const t = node.progress < 0.5
         ? 2 * node.progress * node.progress
-        : 1 - Math.pow(-2 * node.progress + 2, 2) / 2; // ease-in-out
+        : 1 - Math.pow(-2 * node.progress + 2, 2) / 2;
+
+      // ALWAYS interpolate from snapped integer grid coords
+      // This prevents sub-grid drift accumulation
+      const px = (node.x + (node.targetX - node.x) * t) * GRID_SIZE - offsetX;
+      const py = (node.y + (node.targetY - node.y) * t) * GRID_SIZE - offsetY;
       
-      const currentX = node.x + (node.targetX - node.x) * eased;
-      const currentY = node.y + (node.targetY - node.y) * eased;
-      
-      // Update position when done
+      // Update position when done and pick new target
       if (node.progress >= 1) {
         node.x = node.targetX;
         node.y = node.targetY;
+        
+        // Reset for next movement
+        node.targetX = null;
+        node.targetY = null;
+        node.progress = 0;
+        
+        // Randomly show tooltip (20% chance)
+        if (Math.random() < 0.20 && !node.tooltip) {
+          node.tooltip = eventMessages[Math.floor(Math.random() * eventMessages.length)];
+          node.tooltipTime = 120; // frames (~2 seconds)
+        }
+        
+        // Check for collisions with other nodes
+        nodes.forEach((other, j) => {
+          if (i !== j && node.x === other.x && node.y === other.y) {
+            // Collision detected - add flash effect (store with offset applied)
+            collisions.push({
+              x: node.x * GRID_SIZE - offsetX,
+              y: node.y * GRID_SIZE - offsetY,
+              intensity: 1.0,
+              decay: 0.05
+            });
+            // Show tooltip on collision
+            if (!node.tooltip) {
+              node.tooltip = eventMessages[Math.floor(Math.random() * eventMessages.length)];
+              node.tooltipTime = 120;
+            }
+          }
+        });
+      }
+      
+      // Update tooltip timer
+      if (node.tooltipTime > 0) {
+        node.tooltipTime--;
+        if (node.tooltipTime === 0) {
+          node.tooltip = null;
+        }
       }
       
       // Draw node - align exactly on grid intersections
-      const px = currentX * GRID_SIZE;
-      const py = currentY * GRID_SIZE;
-      
       // Glow
       const gradient = ctx.createRadialGradient(px, py, 0, px, py, 12);
-      gradient.addColorStop(0, `rgba(61, 155, 233, ${0.3 * node.brightness})`);
+      gradient.addColorStop(0, `rgba(61, 155, 233, ${0.45 * node.brightness})`);
       gradient.addColorStop(1, 'rgba(61, 155, 233, 0)');
       ctx.fillStyle = gradient;
       ctx.fillRect(px - 12, py - 12, 24, 24);
       
       // Core
-      ctx.fillStyle = `rgba(61, 155, 233, ${0.8 * node.brightness})`;
+      ctx.fillStyle = `rgba(61, 155, 233, ${1.0 * node.brightness})`;
       ctx.beginPath();
       ctx.arc(px, py, node.size, 0, Math.PI * 2);
       ctx.fill();
+      
+      // Draw tooltip if active
+      if (node.tooltip && node.tooltipTime > 0) {
+        const opacity = Math.min(1, node.tooltipTime / 30); // fade in/out
+        ctx.font = '10px "DM Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        
+        // Background
+        const textWidth = ctx.measureText(node.tooltip).width;
+        ctx.fillStyle = `rgba(14, 19, 34, ${0.9 * opacity})`;
+        ctx.fillRect(px - textWidth/2 - 6, py - 24, textWidth + 12, 16);
+        
+        // Border
+        ctx.strokeStyle = `rgba(61, 155, 233, ${0.4 * opacity})`;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(px - textWidth/2 - 6, py - 24, textWidth + 12, 16);
+        
+        // Text
+        ctx.fillStyle = `rgba(148, 184, 216, ${opacity})`;
+        ctx.fillText(node.tooltip, px, py - 12);
+      }
+    });
+    
+    // Draw waypoints with pulsing effect
+    const time = Date.now() / 1000;
+    waypoints.forEach((wp, idx) => {
+      const pulse = 0.7 + Math.sin(time * 2 + idx) * 0.3;
+      const wpX = wp.x * GRID_SIZE - offsetX;
+      const wpY = wp.y * GRID_SIZE - offsetY;
+      
+      // Outer pulse ring
+      const pulseGradient = ctx.createRadialGradient(wpX, wpY, 0, wpX, wpY, 16 * pulse);
+      pulseGradient.addColorStop(0, 'rgba(61, 155, 233, 0.2)');
+      pulseGradient.addColorStop(1, 'rgba(61, 155, 233, 0)');
+      ctx.fillStyle = pulseGradient;
+      ctx.fillRect(wpX - 16 * pulse, wpY - 16 * pulse, 32 * pulse, 32 * pulse);
+      
+      // Core waypoint
+      ctx.fillStyle = 'rgba(61, 155, 233, 0.6)';
+      ctx.beginPath();
+      ctx.arc(wpX, wpY, 3, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Ring
+      ctx.strokeStyle = 'rgba(61, 155, 233, 0.8)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(wpX, wpY, 6, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+    
+    // Draw collision flash effects
+    collisions = collisions.filter(collision => {
+      collision.intensity -= collision.decay;
+      
+      if (collision.intensity > 0) {
+        // Bright flash
+        const flashGradient = ctx.createRadialGradient(
+          collision.x, collision.y, 0,
+          collision.x, collision.y, 20 * collision.intensity
+        );
+        flashGradient.addColorStop(0, `rgba(200, 224, 244, ${0.8 * collision.intensity})`);
+        flashGradient.addColorStop(0.5, `rgba(61, 155, 233, ${0.4 * collision.intensity})`);
+        flashGradient.addColorStop(1, 'rgba(61, 155, 233, 0)');
+        ctx.fillStyle = flashGradient;
+        ctx.fillRect(
+          collision.x - 20 * collision.intensity,
+          collision.y - 20 * collision.intensity,
+          40 * collision.intensity,
+          40 * collision.intensity
+        );
+        return true; // keep in array
+      }
+      return false; // remove from array
     });
     
     requestAnimationFrame(animate);
   }
+  
+  // Click handler to place waypoints
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // Snap to nearest grid intersection
+    const gridX = Math.round(mouseX / GRID_SIZE);
+    const gridY = Math.round(mouseY / GRID_SIZE);
+    
+    // Check if waypoint already exists at this position
+    const existingIdx = waypoints.findIndex(wp => wp.x === gridX && wp.y === gridY);
+    
+    if (existingIdx >= 0) {
+      // Remove existing waypoint
+      waypoints.splice(existingIdx, 1);
+    } else {
+      // Add new waypoint (max 5 waypoints)
+      if (waypoints.length < 5) {
+        waypoints.push({ x: gridX, y: gridY });
+      } else {
+        // Remove oldest waypoint
+        waypoints.shift();
+        waypoints.push({ x: gridX, y: gridY });
+      }
+    }
+  });
+  
+  // Hover cursor change
+  canvas.style.cursor = 'crosshair';
   
   resize();
   window.addEventListener('resize', resize);
