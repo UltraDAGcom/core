@@ -575,29 +575,32 @@ async fn main() {
         });
     }
 
-    // Attempt fast-sync from checkpoint if we're behind.
-    // Uses peer_max_round (updated by Hello/HelloAck) to know the network's frontier.
-    // Only declares sync complete when our round is within 5 of peer_max_round.
+    // Sync task: wait until our round is within 5 of peer_max_round.
+    // Keeps retrying as long as progress is being made. Only gives up
+    // after 60s of zero progress (truly stuck).
     if !args.skip_fast_sync {
         let server_clone = server.clone();
         tokio::spawn(async move {
             // Wait for peer connections to establish
             tokio::time::sleep(Duration::from_secs(10)).await;
 
-            for attempt in 1..=10 {
+            let mut last_progress_round = 0u64;
+            let mut stall_count = 0u32;
+
+            loop {
                 let our_round = server_clone.dag.read().await.current_round();
                 let peer_count = server_clone.peers.connected_count().await;
                 let network_round = server_clone.peer_max_round.load(std::sync::atomic::Ordering::Relaxed);
 
                 if peer_count == 0 {
-                    info!("Sync attempt {}/10: no peers connected yet, retrying in 10s", attempt);
-                    tokio::time::sleep(Duration::from_secs(10)).await;
+                    info!("Sync: no peers connected yet, waiting...");
+                    tokio::time::sleep(Duration::from_secs(5)).await;
                     continue;
                 }
 
                 // If we don't know the network round yet, wait for Hello/HelloAck
                 if network_round == 0 {
-                    info!("Sync attempt {}/10: waiting for peer Hello (our_round={})", attempt, our_round);
+                    info!("Sync: waiting for peer Hello (our_round={})", our_round);
                     tokio::time::sleep(Duration::from_secs(5)).await;
                     continue;
                 }
@@ -610,38 +613,54 @@ async fn main() {
                 }
 
                 let gap = network_round - our_round;
-                info!("Sync attempt {}/10: our_round={} network_round={} gap={} peers={}",
-                    attempt, our_round, network_round, gap, peer_count);
 
-                // Request checkpoint sync for large gaps
-                if gap > 50 {
-                    info!("Requesting checkpoint sync (gap={})", gap);
-                    server_clone.request_fast_sync().await;
+                // Track progress — reset stall counter if we advanced
+                if our_round > last_progress_round {
+                    stall_count = 0;
+                    last_progress_round = our_round;
+                } else {
+                    stall_count += 1;
                 }
 
-                // Wait and check progress
-                tokio::time::sleep(Duration::from_secs(10)).await;
+                // If stalled for 60s (6 x 10s checks), try checkpoint then give up
+                if stall_count >= 6 {
+                    warn!("Sync stalled for 60s at round {} (network at {}), trying checkpoint...", our_round, network_round);
+                    server_clone.request_fast_sync().await;
+                    tokio::time::sleep(Duration::from_secs(15)).await;
 
-                let new_round = server_clone.dag.read().await.current_round();
-                let new_network = server_clone.peer_max_round.load(std::sync::atomic::Ordering::Relaxed);
+                    let post_round = server_clone.dag.read().await.current_round();
+                    if post_round > our_round + 10 {
+                        info!("Checkpoint sync helped: round {} → {}", our_round, post_round);
+                        stall_count = 0;
+                        last_progress_round = post_round;
+                        continue;
+                    }
 
-                if new_round + 5 >= new_network {
-                    info!("Sync complete: our_round={} network_round={} — caught up", new_round, new_network);
+                    // Truly stuck — enable production as last resort
+                    warn!("Sync truly stuck at round {} (network at {}) — enabling production", post_round, network_round);
                     server_clone.sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
                     break;
                 }
 
-                // Check if incremental sync is making progress
-                if new_round > our_round {
-                    info!("DAG sync progressing: round {} → {} (network at {})", our_round, new_round, new_network);
+                // Request more vertices if we're behind
+                if gap > 50 && stall_count == 0 {
+                    // Try checkpoint for large gaps
+                    info!("Sync: our_round={} network={} gap={} — requesting checkpoint", our_round, network_round, gap);
+                    server_clone.request_fast_sync().await;
+                } else if stall_count > 0 {
+                    // Re-request DagVertices if progress stalled
+                    info!("Sync: stalled at round {} (network at {}, stall_count={}), re-requesting vertices",
+                        our_round, network_round, stall_count);
+                    let from = our_round.saturating_add(1);
+                    server_clone.peers.broadcast(
+                        &ultradag_network::Message::GetDagVertices { from_round: from, max_count: 500 },
+                        "",
+                    ).await;
+                } else {
+                    info!("Sync: progressing round={} network={} gap={}", our_round, network_round, gap);
                 }
-            }
-            // Always enable production after sync attempts are exhausted
-            if !server_clone.sync_complete.load(std::sync::atomic::Ordering::Relaxed) {
-                let our = server_clone.dag.read().await.current_round();
-                let net = server_clone.peer_max_round.load(std::sync::atomic::Ordering::Relaxed);
-                warn!("Sync attempts exhausted (our_round={} network_round={}) — enabling validator production", our, net);
-                server_clone.sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
+
+                tokio::time::sleep(Duration::from_secs(10)).await;
             }
         });
     } else {

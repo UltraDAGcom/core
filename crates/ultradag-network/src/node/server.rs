@@ -785,18 +785,19 @@ async fn handle_peer(
                 if height > our_round {
                     let gap = height - our_round;
                     if gap > 100 {
-                        // Large gap — use checkpoint fast-sync instead of incremental DAG sync.
-                        // Incremental sync would request pruned rounds that return empty.
-                        info!("Large gap ({} rounds behind peer {}), requesting checkpoint sync", gap, peer_addr);
+                        // Large gap — try checkpoint AND incremental sync in parallel.
+                        // Checkpoint may fail (no quorum-accepted checkpoints), so
+                        // incremental sync provides fallback.
+                        info!("Large gap ({} rounds behind peer {}), requesting checkpoint + incremental sync", gap, peer_addr);
                         peers.send_to(&peer_addr, &Message::GetCheckpoint { min_round: our_round }).await?;
-                    } else {
-                        peers
-                            .send_to(&peer_addr, &Message::GetDagVertices {
-                                from_round: our_round + 1,
-                                max_count: 100,
-                            })
-                            .await?;
                     }
+                    // Always request incremental DAG vertices (works even when checkpoint fails)
+                    peers
+                        .send_to(&peer_addr, &Message::GetDagVertices {
+                            from_round: our_round + 1,
+                            max_count: 500,
+                        })
+                        .await?;
                 }
 
                 // Register peer's canonical listen address for discovery
@@ -839,16 +840,15 @@ async fn handle_peer(
                 if height > our_round {
                     let gap = height - our_round;
                     if gap > 100 {
-                        info!("Large gap ({} rounds behind peer {}), requesting checkpoint sync", gap, peer_addr);
+                        info!("Large gap ({} rounds behind peer {}), requesting checkpoint + incremental sync", gap, peer_addr);
                         peers.send_to(&peer_addr, &Message::GetCheckpoint { min_round: our_round }).await?;
-                    } else {
-                        peers
-                            .send_to(&peer_addr, &Message::GetDagVertices {
-                                from_round: our_round + 1,
-                                max_count: 100,
-                            })
-                            .await?;
                     }
+                    peers
+                        .send_to(&peer_addr, &Message::GetDagVertices {
+                            from_round: our_round + 1,
+                            max_count: 500,
+                        })
+                        .await?;
                 }
                 // Request peer list for mesh discovery
                 let _ = peers.send_to(&peer_addr, &Message::GetPeers).await;
