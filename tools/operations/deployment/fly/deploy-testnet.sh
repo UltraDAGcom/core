@@ -38,9 +38,10 @@ fi
 
 if ! $RESTART_ONLY; then
     echo "==> Building and deploying new code to all nodes..."
+    CACHEBUST=$(git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || date +%s)
     for i in 1 2 3 4 5; do
         echo "  Deploying node $i..."
-        fly deploy -a "ultradag-node-$i" -c "$TOML_DIR/fly-node-$i.toml" --remote-only 2>&1 | grep -E "succeeded|Visit|Error" || true
+        fly deploy -a "ultradag-node-$i" -c "$TOML_DIR/fly-node-$i.toml" --remote-only --build-arg "CACHEBUST=$CACHEBUST" 2>&1 | grep -E "succeeded|Visit|Error" || true
     done
     echo "    All nodes deployed."
 fi
