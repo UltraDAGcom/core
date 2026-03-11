@@ -281,9 +281,10 @@ impl NodeServer {
             let listen_port = self.port;
             let checkpoint_metrics = self.checkpoint_metrics.clone();
             let wal = self.wal.clone();
+            let sync_complete = self.sync_complete.clone();
             tokio::spawn(async move {
                 // handle_peer may rename peer_addr via Hello; remove both keys on disconnect
-                if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers, &checkpoint_metrics, &wal).await {
+                if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers, &checkpoint_metrics, &wal, &sync_complete).await {
                     warn!("Peer {} disconnected: {}", addr_str, e);
                 }
                 // Remove by original ephemeral addr and any possible listen addr
@@ -313,6 +314,7 @@ impl NodeServer {
         let banned_peers = self.banned_peers.clone();
         let checkpoint_metrics = self.checkpoint_metrics.clone();
         let wal = self.wal.clone();
+        let sync_complete = self.sync_complete.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30));
             // Consume first tick (fires immediately) — let seed connections establish first
@@ -366,6 +368,7 @@ impl NodeServer {
                             banned_peers.clone(),
                             checkpoint_metrics.clone(),
                             wal.clone(),
+                            sync_complete.clone(),
                         ));
                     }
                 }
@@ -427,9 +430,10 @@ impl NodeServer {
         let listen_port = self.port;
         let checkpoint_metrics = self.checkpoint_metrics.clone();
         let wal = self.wal.clone();
+        let sync_complete = self.sync_complete.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers, &checkpoint_metrics, &wal).await {
+            if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers, &checkpoint_metrics, &wal, &sync_complete).await {
                 warn!("Peer {} disconnected: {}", addr_str, e);
             }
             peers.remove_peer(&addr_str).await;
@@ -577,6 +581,7 @@ async fn try_connect_peer(
     banned_peers: Arc<Mutex<HashMap<String, Instant>>>,
     checkpoint_metrics: Arc<crate::CheckpointMetrics>,
     wal: Arc<std::sync::Mutex<Option<FinalityWal>>>,
+    sync_complete: Arc<std::sync::atomic::AtomicBool>,
 ) {
     // Don't connect to ourselves — check loopback, wildcard, .internal hostname
     let loopback_addrs = [
@@ -697,7 +702,7 @@ async fn try_connect_peer(
                     reader, &state, &mempool, &dag, &finality, &peers_clone,
                     &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify,
                     &pending_checkpoints, &data_dir, validator_sk.as_ref(),
-                    &banned_peers, &checkpoint_metrics, &wal,
+                    &banned_peers, &checkpoint_metrics, &wal, &sync_complete,
                 ));
                 if let Err(e) = fut.await {
                     warn!("Peer {} disconnected: {}", addr_clone, e);
@@ -712,10 +717,9 @@ async fn try_connect_peer(
     }
 }
 
-/// Maximum allowlist rejections before disconnecting and banning a peer.
+/// Maximum allowlist rejections before logging stops (to avoid log spam).
+#[allow(dead_code)]
 const MAX_ALLOWLIST_REJECTIONS: u32 = 10;
-/// Duration to ban a peer after exceeding the rejection threshold.
-const BAN_DURATION: Duration = Duration::from_secs(60);
 
 async fn handle_peer(
     mut reader: PeerReader,
@@ -735,6 +739,7 @@ async fn handle_peer(
     banned_peers: &Arc<Mutex<HashMap<String, Instant>>>,
     checkpoint_metrics: &Arc<crate::CheckpointMetrics>,
     wal: &Arc<std::sync::Mutex<Option<FinalityWal>>>,
+    sync_complete: &Arc<std::sync::atomic::AtomicBool>,
 ) -> std::io::Result<()> {
     let peer_addr = reader.addr.clone();
     let mut allowlist_rejections: u32 = 0;
@@ -762,14 +767,22 @@ async fn handle_peer(
                     })
                     .await?;
 
-                // If peer is ahead, request DAG vertices
+                // If peer is ahead, sync from them
                 if height > our_round {
-                    peers
-                        .send_to(&peer_addr, &Message::GetDagVertices {
-                            from_round: our_round + 1,
-                            max_count: 100,
-                        })
-                        .await?;
+                    let gap = height - our_round;
+                    if gap > 100 {
+                        // Large gap — use checkpoint fast-sync instead of incremental DAG sync.
+                        // Incremental sync would request pruned rounds that return empty.
+                        info!("Large gap ({} rounds behind peer {}), requesting checkpoint sync", gap, peer_addr);
+                        peers.send_to(&peer_addr, &Message::GetCheckpoint { min_round: our_round }).await?;
+                    } else {
+                        peers
+                            .send_to(&peer_addr, &Message::GetDagVertices {
+                                from_round: our_round + 1,
+                                max_count: 100,
+                            })
+                            .await?;
+                    }
                 }
 
                 // Register peer's canonical listen address for discovery
@@ -807,12 +820,18 @@ async fn handle_peer(
                 }
                 let our_round = dag.read().await.current_round();
                 if height > our_round {
-                    peers
-                        .send_to(&peer_addr, &Message::GetDagVertices {
-                            from_round: our_round + 1,
-                            max_count: 100,
-                        })
-                        .await?;
+                    let gap = height - our_round;
+                    if gap > 100 {
+                        info!("Large gap ({} rounds behind peer {}), requesting checkpoint sync", gap, peer_addr);
+                        peers.send_to(&peer_addr, &Message::GetCheckpoint { min_round: our_round }).await?;
+                    } else {
+                        peers
+                            .send_to(&peer_addr, &Message::GetDagVertices {
+                                from_round: our_round + 1,
+                                max_count: 100,
+                            })
+                            .await?;
+                    }
                 }
                 // Request peer list for mesh discovery
                 let _ = peers.send_to(&peer_addr, &Message::GetPeers).await;
@@ -860,25 +879,15 @@ async fn handle_peer(
                 let validator = vertex.validator;
                 let round = vertex.round;
 
-                // Reject vertices from validators not in our allowlist (if one is set)
+                // Reject vertices from validators not in our allowlist (if one is set).
+                // Don't disconnect or ban — the peer may be an observer or syncing node
+                // that also needs DAG sync over this same connection.
                 {
                     let fin_r = finality.read().await;
                     if !fin_r.validator_set().is_allowed(&validator) {
                         allowlist_rejections += 1;
-                        if allowlist_rejections >= MAX_ALLOWLIST_REJECTIONS {
-                            warn!("Disconnecting peer {} after {} allowlist rejections — banned for {}s",
-                                peer_addr, allowlist_rejections, BAN_DURATION.as_secs());
-                            // Extract IP for ban (handle both IPv4 "ip:port" and IPv6 "[ip]:port")
-                            let ip = if peer_addr.starts_with('[') {
-                                peer_addr.find(']').map(|i| peer_addr[1..i].to_string())
-                            } else {
-                                peer_addr.rsplit_once(':').map(|(ip, _)| ip.to_string())
-                            }.unwrap_or_else(|| peer_addr.clone());
-                            banned_peers.lock().await.insert(ip, Instant::now() + BAN_DURATION);
-                            return Ok(());
-                        }
                         if allowlist_rejections == 1 {
-                            warn!("Rejected vertex from non-allowlisted validator {}.. round={}", &validator.to_hex()[..8], round);
+                            warn!("Dropped vertex from non-allowlisted validator {}.. round={}", &validator.to_hex()[..8], round);
                         }
                         continue;
                     }
@@ -1046,11 +1055,14 @@ async fn handle_peer(
                     warn!("GetDagVertices: DAG lock contended, skipping for {}", peer_addr);
                     continue;
                 };
+                // Clamp from_round to pruning_floor — pruned rounds have no vertices.
+                let floor = dag_r.pruning_floor();
+                let effective_from = from_round.max(floor);
                 // Cap max_count to prevent CPU exhaustion from huge range iterations
                 let capped_count = (max_count as usize).min(500);
-                let end_round = from_round.saturating_add(capped_count as u64);
+                let end_round = effective_from.saturating_add(capped_count as u64);
                 let mut vertices = Vec::new();
-                for round in from_round..end_round {
+                for round in effective_from..end_round {
                     for v in dag_r.vertices_in_round(round) {
                         vertices.push(v.clone());
                     }
@@ -1228,6 +1240,20 @@ async fn handle_peer(
                         }
                     }
                     resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify, wal).await;
+                }
+
+                // Sync continuation: if we received new vertices, request the next batch.
+                // This creates a pull-based sync loop until we catch up or get an empty batch.
+                if !new_validators.is_empty() {
+                    let our_round = dag.read().await.current_round();
+                    // Mark sync complete once we've progressed past genesis
+                    if our_round > 10 {
+                        sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    let _ = peers.send_to(&peer_addr, &Message::GetDagVertices {
+                        from_round: our_round + 1,
+                        max_count: 100,
+                    }).await;
                 }
             }
 
@@ -1751,6 +1777,8 @@ async fn handle_peer(
                     sync_duration_ms,
                     bytes_downloaded
                 );
+                sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
+                info!("Sync complete — validator production enabled");
             }
         }
     }

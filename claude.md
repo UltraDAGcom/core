@@ -8,6 +8,24 @@
 
 ## Recent Updates (March 2026)
 
+**New Node Joining Fix — 6-Part Sync Protocol Overhaul (March 12, 2026):**
+- **Problem:** New nodes (round 0) connecting to a live network (round 1500+) got "Connection reset by peer" and built isolated chains instead of syncing. Multiple interacting root causes prevented new nodes from ever receiving DAG history.
+- **Root causes & fixes:**
+  1. **No sync gate in validator loop** — New nodes produced vertices at round 0 immediately, flooding peers with invalid DagProposals. Fix: validator loop now checks `sync_complete` flag before producing. Waits for initial sync to finish.
+  2. **`sync_complete` flag never set** — Flag existed on `NodeServer` but was initialized to `false` and never set to `true` anywhere (dead code). Fix: now set in 4 places: after fast-sync success, when already synced on startup, when fast-sync disabled, and as fallback after retry exhaustion. Also set in `CheckpointSync` and `DagVertices` handlers.
+  3. **Allowlist ban killed sync connections** — Non-allowlisted DagProposals counted toward a 10-rejection ban. After ban, existing node disconnected the peer (same TCP connection used for sync), causing "Connection reset by peer". Fix: non-allowlisted vertices now silently dropped without ban or disconnect.
+  4. **Hello/HelloAck: no fast-sync for large gaps** — When >100 rounds behind, node requested `GetDagVertices { from_round: 1 }` which returned empty (rounds pruned). Fix: gaps >100 now trigger `GetCheckpoint` (fast-sync) instead of incremental sync.
+  5. **GetDagVertices: empty response for pruned rounds** — Handler iterated pruned rounds returning nothing. Fix: `from_round` clamped to `dag.pruning_floor()` so response always contains available vertices.
+  6. **No sync continuation** — Only one `GetDagVertices` request sent per Hello/HelloAck. After receiving one batch, node stopped syncing. Fix: `DagVertices` handler now sends follow-up `GetDagVertices` when new vertices were inserted, creating a pull-based sync loop until caught up.
+- **Additional fixes in same commit:**
+  - Governance tx error handling: `CreateProposal`/`Vote` failures in finalized vertices now skip gracefully (charge fee, advance nonce) instead of rejecting entire vertex batch
+  - RPC `/proposal` endpoint: added stake sufficiency check and active proposal count validation before signing
+  - `MIN_STAKE_TO_PROPOSE` lowered from 50,000 to 50 UDAG for testnet
+  - Deploy script updated for 5-node testnet
+- **Location:** `crates/ultradag-network/src/node/server.rs`, `crates/ultradag-node/src/validator.rs`, `crates/ultradag-node/src/main.rs`
+- **Breaking change:** `handle_peer()` and `try_connect_peer()` signatures changed (added `sync_complete` parameter)
+- **Result:** New nodes can join a live network, fast-sync from checkpoint, and begin producing after catching up.
+
 **Vertex Reconciliation — Checkpoint Co-signing Fix (March 11, 2026):**
 - **Problem:** Checkpoint co-signing always failed (`validation_failures: 170`, `quorum_reached: 0`) because nodes had different `total_supply` values (up to 1000 UDAG divergence). Root cause: TCP message loss caused ~0.06% of vertices to be missed by some nodes. With BFT quorum=3/4, finality still progressed without the missing vertex. After pruning (1000 rounds), the vertex was permanently lost, creating irreversible state divergence.
 - **Fix:** Added periodic vertex reconciliation in validator loop (every 50 rounds, offset from pruning). Scans all rounds between `pruning_floor` and `current_round - 5` for rounds with fewer validators than expected. When gaps are found, broadcasts `GetDagVertices` to all peers to recover missing vertices. Recovered vertices are finalized and applied normally via the existing DagVertices handler, converging state over time.
@@ -1553,6 +1571,16 @@ UltraDAG is offering rewards for security researchers who discover and responsib
     - **Impact:** State divergence after network partitions prevented. Checkpoint co-signing now works after partition recovery.
     - **Status:** FIXED — March 11, 2026. Test now passes: `cargo test --test jepsen_tests test_split_brain_partition -- --ignored`
     - **Result:** 10/14 Jepsen tests passing (up from 0/14 before fix). Split-brain, partition heal, extreme chaos, crash recovery all pass.
+86. **New nodes can't join live network — 6-part sync protocol fix (March 12, 2026)** — New nodes at round 0 connecting to live network (round 1500+) got "Connection reset by peer" and built isolated chains. Multiple interacting root causes:
+    - **86a: No sync gate in validator loop** — Validator loop produced vertices immediately at round 0, flooding peers with DagProposals. Fix: check `sync_complete` flag before producing.
+    - **86b: `sync_complete` flag never set** — Initialized to `false`, never set to `true` (dead code). Fix: now set after fast-sync success, when already synced, when fast-sync disabled, fallback after retries, and in CheckpointSync/DagVertices handlers.
+    - **86c: Allowlist ban killed sync connections** — 10 rejected DagProposals → IP banned → connection closed → "Connection reset by peer". Fix: non-allowlisted vertices silently dropped, no ban or disconnect.
+    - **86d: Hello/HelloAck: no fast-sync for large gaps** — Requested `GetDagVertices { from_round: 1 }` for pruned rounds → empty response → sync stalled. Fix: gaps >100 rounds trigger `GetCheckpoint` instead.
+    - **86e: GetDagVertices: empty response for pruned rounds** — No clamping to `pruning_floor`. Fix: `from_round` clamped to `dag.pruning_floor()`.
+    - **86f: No sync continuation** — Only one `GetDagVertices` ever sent per Hello. Fix: `DagVertices` handler sends follow-up request when new vertices inserted (pull-based loop).
+    - **Result:** New nodes join live network via fast-sync, catch up, then begin producing.
+87. **Governance tx errors reject entire finalized batch (March 12, 2026)** — Invalid `CreateProposal`/`Vote` transactions in finalized vertices caused `apply_finalized_vertices()` to return error, rejecting the entire batch of finalized vertices. Fix: governance tx failures now skip gracefully (charge fee, advance nonce, log warning) instead of propagating error.
+88. **RPC `/proposal` missing stake and count validation (March 12, 2026)** — `/proposal` endpoint didn't check proposer's stake against `MIN_STAKE_TO_PROPOSE` or active proposal count against `MAX_ACTIVE_PROPOSALS`. Fix: added both checks before signing.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.

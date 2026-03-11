@@ -1193,6 +1193,24 @@ async fn handle_request(
                             total_needed, fee, pending_cost, balance)));
                 }
 
+                // Check proposer has sufficient stake
+                let proposer_stake = state.stake_of(&sender);
+                let min_stake = state.governance_params().min_stake_to_propose;
+                if proposer_stake < min_stake {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!("insufficient stake to propose: need {} UDAG staked, have {} UDAG staked",
+                            min_stake / 100_000_000, proposer_stake / 100_000_000)));
+                }
+
+                // Check active proposal count limit
+                let active_count = state.proposals().values()
+                    .filter(|p| matches!(p.status, ultradag_coin::governance::ProposalStatus::Active))
+                    .count() as u64;
+                if active_count >= state.governance_params().max_active_proposals {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        "too many active proposals, please wait for existing proposals to complete"));
+                }
+
                 let proposal_id = state.next_proposal_id();
 
                 let mut create_tx = CreateProposalTx {

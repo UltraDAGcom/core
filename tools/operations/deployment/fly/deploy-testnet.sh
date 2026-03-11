@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Deploy and restart all 4 testnet nodes simultaneously.
+# Deploy and restart all 5 testnet nodes simultaneously.
 #
 # Usage:
-#   ./tools/operations/deployment/fly/deploy-testnet.sh              # Build + deploy new code to all 4 nodes
+#   ./tools/operations/deployment/fly/deploy-testnet.sh              # Build + deploy new code to all 5 nodes
 #   ./tools/operations/deployment/fly/deploy-testnet.sh --clean      # Same but wipes state on all nodes
 #   ./tools/operations/deployment/fly/deploy-testnet.sh --restart    # Just restart (no rebuild)
 #
-# TOML files live in tools/operations/deployment/fly/fly-node-{1,2,3,4}.toml.
+# TOML files live in tools/operations/deployment/fly/fly-node-{1,2,3,4,5}.toml.
 # --clean temporarily sets CLEAN_STATE=true in the TOML env, deploys,
 # then reverts it. This is more reliable than fly secrets --stage.
 
@@ -16,7 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 TOML_DIR="$SCRIPT_DIR"
 
-NODES=(ultradag-node-1 ultradag-node-2 ultradag-node-3 ultradag-node-4)
+NODES=(ultradag-node-1 ultradag-node-2 ultradag-node-3 ultradag-node-4 ultradag-node-5)
 CLEAN=false
 RESTART_ONLY=false
 
@@ -31,14 +31,14 @@ done
 # --clean: uncomment CLEAN_STATE in all TOML files
 if $CLEAN; then
     echo "==> Enabling CLEAN_STATE in TOML files..."
-    for i in 1 2 3 4; do
+    for i in 1 2 3 4 5; do
         sed -i '' 's/^  # CLEAN_STATE = "true"/  CLEAN_STATE = "true"/' "$TOML_DIR/fly-node-$i.toml"
     done
 fi
 
 if ! $RESTART_ONLY; then
     echo "==> Building and deploying new code to all nodes..."
-    for i in 1 2 3 4; do
+    for i in 1 2 3 4 5; do
         echo "  Deploying node $i..."
         fly deploy -a "ultradag-node-$i" -c "$TOML_DIR/fly-node-$i.toml" --remote-only 2>&1 | grep -E "succeeded|Visit|Error" || true
     done
@@ -60,7 +60,7 @@ fi
 # --clean: revert CLEAN_STATE in TOML files so normal deploys don't wipe state
 if $CLEAN; then
     echo "==> Reverting CLEAN_STATE in TOML files..."
-    for i in 1 2 3 4; do
+    for i in 1 2 3 4 5; do
         sed -i '' 's/^  CLEAN_STATE = "true"/  # CLEAN_STATE = "true"/' "$TOML_DIR/fly-node-$i.toml"
     done
 fi
@@ -70,7 +70,7 @@ echo "==> Waiting 30s for nodes to connect and start producing..."
 sleep 30
 
 echo "==> Checking health..."
-for i in 1 2 3 4; do
+for i in 1 2 3 4 5; do
     STATUS=$(curl -s --max-time 5 "https://ultradag-node-$i.fly.dev/status" 2>/dev/null || echo '{}')
     ROUND=$(echo "$STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('dag_round', '?'))" 2>/dev/null || echo "?")
     FIN=$(echo "$STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('last_finalized_round', '?'))" 2>/dev/null || echo "?")

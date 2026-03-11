@@ -267,12 +267,22 @@ impl StateEngine {
                 }
                 crate::tx::Transaction::CreateProposal(proposal_tx) => {
                     if let Err(e) = snapshot.apply_create_proposal(proposal_tx, vertex.round) {
-                        return Err(e);
+                        // Governance-specific validation failed (e.g. insufficient stake,
+                        // proposal_id mismatch, too many active proposals). The fee was already
+                        // counted in the coinbase, so charge fee and advance nonce to keep
+                        // state consistent. The proposal itself is not created.
+                        tracing::warn!("Skipping invalid CreateProposal tx in finalized vertex: {}", e);
+                        snapshot.debit(&proposal_tx.from, proposal_tx.fee);
+                        snapshot.increment_nonce(&proposal_tx.from);
                     }
                 }
                 crate::tx::Transaction::Vote(vote_tx) => {
                     if let Err(e) = snapshot.apply_vote(vote_tx, vertex.round) {
-                        return Err(e);
+                        // Governance-specific validation failed (e.g. proposal not found,
+                        // voting closed, already voted). Charge fee and advance nonce.
+                        tracing::warn!("Skipping invalid Vote tx in finalized vertex: {}", e);
+                        snapshot.debit(&vote_tx.from, vote_tx.fee);
+                        snapshot.increment_nonce(&vote_tx.from);
                     }
                 }
             }

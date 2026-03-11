@@ -66,6 +66,20 @@ pub async fn validator_loop(
             return;
         }
 
+        // Sync gate: don't produce vertices until initial sync is complete.
+        // A new node at round 0 producing vertices while peers are at round 1500+
+        // creates orphans, triggers allowlist bans, and wastes bandwidth.
+        if !server.sync_complete.load(Ordering::Relaxed) {
+            if timer_fired && consecutive_skips % 6 == 0 {
+                let our_round = server.dag.read().await.current_round();
+                info!("Waiting for initial sync to complete (current round: {})", our_round);
+            }
+            if timer_fired {
+                consecutive_skips += 1;
+            }
+            continue;
+        }
+
         // Peer-count gate: if fewer than 2 peers connected, pause production.
         // A lone node (or near-lone) cannot achieve BFT finality and will race
         // ahead alone, creating a divergent chain that requires CLEAN_STATE to fix.

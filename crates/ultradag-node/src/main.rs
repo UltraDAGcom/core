@@ -602,6 +602,7 @@ async fn main() {
                 // If we're at a reasonable state already, skip fast-sync
                 if our_finalized > 0 && our_round > 10 {
                     info!("Fast-sync: already at round {} (finalized {}), no sync needed", our_round, our_finalized);
+                    server_clone.sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
                     break;
                 }
 
@@ -619,12 +620,17 @@ async fn main() {
                 let new_finalized = server_clone.finality.read().await.last_finalized_round();
                 if new_finalized > our_finalized || new_round > our_round + 10 {
                     info!("Fast-sync succeeded: now at round {} (finalized {})", new_round, new_finalized);
+                    server_clone.sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
                     break;
                 }
             }
+            // Always enable production after sync attempts are exhausted,
+            // so the node doesn't get permanently stuck waiting.
+            server_clone.sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
         });
     } else {
         info!("Fast-sync disabled (--skip-fast-sync)");
+        server.sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     // Auto-stake: submit a stake transaction after sync if requested
