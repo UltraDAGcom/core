@@ -1669,14 +1669,12 @@ async fn handle_peer(
                             info!("Checkpoint chain verification passed for round {}", checkpoint.round);
                         }
                         Err(e) => {
-                            warn!("Checkpoint chain verification FAILED: {} — rejecting CheckpointSync and disconnecting peer", e);
+                            warn!("Checkpoint chain verification failed: {} — ignoring checkpoint, will use incremental sync", e);
                             checkpoint_metrics.record_fast_sync_failure();
-                            // Disconnect the malicious peer
-                            peers.remove_peer(&peer_addr).await;
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
-                                format!("Checkpoint chain verification failed: {}", e)
-                            ));
+                            // Don't disconnect — the peer is likely honest but we can't
+                            // verify the chain (e.g. missing intermediate checkpoints).
+                            // Incremental DAG sync via GetDagVertices still works.
+                            continue;
                         }
                     }
                 }
