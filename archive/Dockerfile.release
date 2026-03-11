@@ -1,0 +1,22 @@
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y ca-certificates curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Download pre-built binary from GitHub releases
+ARG VERSION=latest
+RUN curl -L "https://github.com/UltraDAGcom/core/releases/download/${VERSION}/ultradag-node-linux-x86_64" \
+    -o /usr/local/bin/ultradag-node && \
+    chmod +x /usr/local/bin/ultradag-node
+
+# Copy configuration files
+COPY tools/operations/utilities/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY config/testnet-validators.txt /etc/ultradag/validators.txt
+
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && \
+    mkdir -p /data /etc/ultradag
+
+EXPOSE 9333 10333
+ENTRYPOINT ["docker-entrypoint.sh"]
