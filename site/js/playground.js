@@ -86,7 +86,8 @@ class UltraDAG {
 
     const response = await fetch(`${this.apiUrl}/balance/${addr}`);
     if (!response.ok) {
-      throw new Error(`Failed to get balance: ${response.statusText}`);
+      const error = await response.text();
+      throw new Error(`Failed to get balance: ${error}`);
     }
 
     const data = await response.json();
@@ -97,9 +98,19 @@ class UltraDAG {
   async getStatus() {
     const response = await fetch(`${this.apiUrl}/status`);
     if (!response.ok) {
-      throw new Error(`Failed to get status: ${response.statusText}`);
+      const error = await response.text();
+      throw new Error(`Failed to get status: ${error}`);
     }
-    return await response.json();
+    const data = await response.json();
+    
+    // Map API response to expected format
+    return {
+      round: data.dag_round,
+      finalized: data.last_finalized_round,
+      nodes: data.peer_count,
+      supply: data.total_supply,
+      finality_lag: data.dag_round - data.last_finalized_round
+    };
   }
 }
 
@@ -114,8 +125,9 @@ const examples = {
 const sdk = new UltraDAG();
 
 // Check any address balance (no faucet needed!)
+// Using hex address format (64 chars)
 const balance = await sdk.getBalance(
-  "udag1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5ce8xa"
+  "0000000000000000000000000000000000000000000000000000000000000000"
 );
 
 console.log('Balance:', balance, 'sats');
@@ -173,22 +185,25 @@ console.log('Fetching network data...');
 // Get network status
 const status = await sdk.getStatus();
 console.log('Network Round:', status.round);
+console.log('Finalized Round:', status.finalized);
 
-// Check multiple balances
-const addr1 = "udag1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5ce8xa";
+// Check balance (using hex address format)
+const addr1 = "0000000000000000000000000000000000000000000000000000000000000000";
 const balance1 = await sdk.getBalance(addr1);
-console.log('Balance 1:', (balance1 / 100_000_000).toFixed(2), 'UDAG');
+console.log('Balance:', (balance1 / 100_000_000).toFixed(2), 'UDAG');
 
 // Calculate network stats
 const supplyUDAG = status.supply / 100_000_000;
 const maxSupply = 21_000_000;
 const percentMinted = (supplyUDAG / maxSupply * 100).toFixed(2);
 
-console.log('Supply:', supplyUDAG.toFixed(2), 'UDAG');
+console.log('Total Supply:', supplyUDAG.toFixed(2), 'UDAG');
 console.log('Percent minted:', percentMinted + '%');
+console.log('Finality lag:', status.finality_lag, 'rounds');
 
 return {
   round: status.round,
+  finalized: status.finalized,
   supply_udag: supplyUDAG.toFixed(2),
   percent_minted: percentMinted + '%',
   finality_lag: status.finality_lag

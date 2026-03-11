@@ -83,7 +83,8 @@ class UltraDAG {
 
     const response = await fetch(`${this.apiUrl}/balance/${addr}`);
     if (!response.ok) {
-      throw new Error(`Failed to get balance: ${response.statusText}`);
+      const error = await response.text();
+      throw new Error(`Failed to get balance: ${error}`);
     }
 
     const data = await response.json();
@@ -93,9 +94,19 @@ class UltraDAG {
   async getStatus() {
     const response = await fetch(`${this.apiUrl}/status`);
     if (!response.ok) {
-      throw new Error(`Failed to get status: ${response.statusText}`);
+      const error = await response.text();
+      throw new Error(`Failed to get status: ${error}`);
     }
-    return await response.json();
+    const data = await response.json();
+    
+    // Map API response to expected format
+    return {
+      round: data.dag_round,
+      finalized: data.last_finalized_round,
+      nodes: data.peer_count,
+      supply: data.total_supply,
+      finality_lag: data.dag_round - data.last_finalized_round
+    };
   }
 }
 
@@ -106,8 +117,9 @@ const runnableExamples = {
   'check-balance': `// Check balance of any address (no faucet needed!)
 const sdk = new UltraDAG();
 
+// Using hex address format (64 chars)
 const balance = await sdk.getBalance(
-  "udag1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5ce8xa"
+  "0000000000000000000000000000000000000000000000000000000000000000"
 );
 
 console.log('Balance:', balance, 'sats');
