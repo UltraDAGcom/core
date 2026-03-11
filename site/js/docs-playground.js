@@ -20,6 +20,10 @@ class UltraDAG {
     });
     
     if (!response.ok) {
+      if (response.status === 429) {
+        const error = await response.json();
+        throw new Error(`Rate limit: ${error.error || 'Faucet limited to 1 request per 10 minutes'}. Try the "Check Balance" or "Network Status" examples instead - they work without the faucet!`);
+      }
       throw new Error(`Faucet request failed: ${response.statusText}`);
     }
     
@@ -99,7 +103,7 @@ window.UltraDAG = UltraDAG;
 
 // Runnable code examples for docs
 const runnableExamples = {
-  'check-balance': `// Check balance of any address
+  'check-balance': `// Check balance of any address (no faucet needed!)
 const sdk = new UltraDAG();
 
 const balance = await sdk.getBalance(
@@ -109,14 +113,16 @@ const balance = await sdk.getBalance(
 console.log('Balance:', balance, 'sats');
 console.log('In UDAG:', (balance / 100_000_000).toFixed(2));
 
-return { balance, udag: (balance / 100_000_000).toFixed(2) };`,
+return { balance_sats: balance, balance_udag: (balance / 100_000_000).toFixed(2) };`,
 
-  'send-transaction': `// Generate wallet and send transaction
+  'send-transaction': `// NOTE: Faucet is rate-limited to 1 request per 10 minutes
+// If you see a rate limit error, try the network-status or check-balance examples instead!
+
 const wallet = new UltraDAG();
 const account = await wallet.generateKeypair();
 
 console.log('Generated address:', account.address);
-console.log('Initial balance:', account.balance, 'sats');
+console.log('Initial balance:', (account.balance / 100_000_000).toFixed(2), 'UDAG');
 
 // Send transaction with memo
 const tx = await wallet.send({
@@ -130,24 +136,27 @@ console.log('Hash:', tx.hash);
 
 return tx;`,
 
-  'network-status': `// Get current network status
+  'network-status': `// Get current network status (no faucet needed!)
 const sdk = new UltraDAG();
 const status = await sdk.getStatus();
 
 console.log('Current Round:', status.round);
 console.log('Finalized Round:', status.finalized);
 console.log('Active Nodes:', status.nodes);
-console.log('Total Supply:', status.supply, 'sats');
+console.log('Total Supply:', (status.supply / 100_000_000).toFixed(2), 'UDAG');
 console.log('Finality Lag:', status.finality_lag, 'rounds');
 
 return status;`,
 
   'python-example': `// JavaScript equivalent of Python SDK example
+// NOTE: This uses the faucet which is rate-limited
+// Try network-status or check-balance examples if you hit rate limits
+
 const wallet = new UltraDAG();
 const kp = await wallet.generateKeypair();
 
 console.log('Address:', kp.address);
-console.log('Balance:', kp.balance);
+console.log('Balance:', (kp.balance / 100_000_000).toFixed(2), 'UDAG');
 
 // Send transaction
 const tx = await wallet.send({
@@ -160,13 +169,14 @@ console.log('TX Hash:', tx.hash);
 
 return { address: kp.address, txHash: tx.hash };`,
 
-  'js-sdk-example': `// Get network status
+  'js-sdk-example': `// Get network status (no faucet needed!)
 const sdk = new UltraDAG();
 const status = await sdk.getStatus();
 
 console.log('DAG Round:', status.round);
 console.log('Finalized:', status.finalized);
 console.log('Supply:', (status.supply / 100_000_000).toFixed(2), 'UDAG');
+console.log('Nodes:', status.nodes);
 
 return status;`
 };

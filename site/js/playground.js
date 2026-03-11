@@ -21,6 +21,10 @@ class UltraDAG {
     });
     
     if (!response.ok) {
+      if (response.status === 429) {
+        const error = await response.json();
+        throw new Error(`Rate limit: ${error.error || 'Faucet limited to 1 request per 10 minutes'}. Try the "Check Balance" or "Get Network Status" examples instead - they work without the faucet!`);
+      }
       throw new Error(`Faucet request failed: ${response.statusText}`);
     }
     
@@ -104,19 +108,52 @@ window.UltraDAG = UltraDAG;
 
 // Playground examples
 const examples = {
+  'check-balance': {
+    title: 'Check Balance',
+    code: `// Create SDK instance
+const sdk = new UltraDAG();
+
+// Check any address balance (no faucet needed!)
+const balance = await sdk.getBalance(
+  "udag1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5ce8xa"
+);
+
+console.log('Balance:', balance, 'sats');
+console.log('In UDAG:', (balance / 100_000_000).toFixed(2));
+
+return { balance_sats: balance, balance_udag: (balance / 100_000_000).toFixed(2) };`
+  },
+  'network-status': {
+    title: 'Get Network Status',
+    code: `// Create SDK instance
+const sdk = new UltraDAG();
+
+// Get current network status (no faucet needed!)
+const status = await sdk.getStatus();
+
+console.log('Current Round:', status.round);
+console.log('Finalized Round:', status.finalized);
+console.log('Active Nodes:', status.nodes);
+console.log('Total Supply:', (status.supply / 100_000_000).toFixed(2), 'UDAG');
+console.log('Finality Lag:', status.finality_lag, 'rounds');
+
+return status;`
+  },
   'send-transaction': {
     title: 'Send a Transaction',
-    code: `// Generate a new wallet with testnet tokens
+    code: `// NOTE: Faucet is rate-limited to 1 request per 10 minutes
+// If you get a rate limit error, try the other examples first!
+
 const wallet = new UltraDAG();
 const account = await wallet.generateKeypair();
 
-console.log('Address:', account.address);
-console.log('Balance:', account.balance, 'UDAG');
+console.log('Generated address:', account.address);
+console.log('Balance:', (account.balance / 100_000_000).toFixed(2), 'UDAG');
 
 // Send a transaction with a memo
 const tx = await wallet.send({
   to: "udag1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5ce8xa",
-  amount: 100,
+  amount: 100_000_000, // 1 UDAG
   memo: "Hello from the playground!"
 });
 
@@ -126,57 +163,36 @@ console.log('Memo:', tx.memo);
 
 return tx;`
   },
-  'check-balance': {
-    title: 'Check Balance',
-    code: `// Create SDK instance
+  'multiple-queries': {
+    title: 'Multiple API Queries',
+    code: `// Query multiple endpoints without needing faucet
 const sdk = new UltraDAG();
 
-// Check any address balance
-const balance = await sdk.getBalance(
-  "udag1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5ce8xa"
-);
+console.log('Fetching network data...');
 
-console.log('Balance:', balance, 'UDAG');
-
-return { balance };`
-  },
-  'network-status': {
-    title: 'Get Network Status',
-    code: `// Create SDK instance
-const sdk = new UltraDAG();
-
-// Get current network status
+// Get network status
 const status = await sdk.getStatus();
+console.log('Network Round:', status.round);
 
-console.log('Current Round:', status.round);
-console.log('Active Nodes:', status.nodes);
-console.log('Total Supply:', status.supply, 'UDAG');
-console.log('Finality Lag:', status.finality_lag, 'rounds');
+// Check multiple balances
+const addr1 = "udag1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5ce8xa";
+const balance1 = await sdk.getBalance(addr1);
+console.log('Balance 1:', (balance1 / 100_000_000).toFixed(2), 'UDAG');
 
-return status;`
-  },
-  'multiple-transactions': {
-    title: 'Send Multiple Transactions',
-    code: `// Generate wallet with testnet tokens
-const wallet = new UltraDAG();
-await wallet.generateKeypair();
+// Calculate network stats
+const supplyUDAG = status.supply / 100_000_000;
+const maxSupply = 21_000_000;
+const percentMinted = (supplyUDAG / maxSupply * 100).toFixed(2);
 
-console.log('Sending 3 transactions...');
+console.log('Supply:', supplyUDAG.toFixed(2), 'UDAG');
+console.log('Percent minted:', percentMinted + '%');
 
-// Send multiple transactions
-const txs = [];
-for (let i = 1; i <= 3; i++) {
-  const tx = await wallet.send({
-    to: "udag1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5ce8xa",
-    amount: 10 * i,
-    memo: \`Transaction #\${i}\`
-  });
-  console.log(\`TX \${i} sent:\`, tx.hash);
-  txs.push(tx);
-}
-
-console.log('All transactions sent!');
-return txs;`
+return {
+  round: status.round,
+  supply_udag: supplyUDAG.toFixed(2),
+  percent_minted: percentMinted + '%',
+  finality_lag: status.finality_lag
+};`
   }
 };
 
