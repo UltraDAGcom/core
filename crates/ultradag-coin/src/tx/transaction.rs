@@ -27,6 +27,10 @@ pub struct TransferTx {
     /// and must hash to the `from` address: `blake3(pub_key) == from`.
     pub pub_key: [u8; 32],
     pub signature: Signature,
+    /// Optional data payload (max 256 bytes). Used for IoT sensor data, receipts, etc.
+    /// Stored on-chain permanently. Keep small to prevent DAG bloat.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memo: Option<Vec<u8>>,
 }
 
 impl Transaction {
@@ -149,13 +153,18 @@ impl TransferTx {
         hasher.update(&self.amount.to_le_bytes());
         hasher.update(&self.fee.to_le_bytes());
         hasher.update(&self.nonce.to_le_bytes());
+        if let Some(ref memo) = self.memo {
+            hasher.update(&(memo.len() as u32).to_le_bytes());
+            hasher.update(memo);
+        }
         *hasher.finalize().as_bytes()
     }
 
     /// The data that gets signed (everything except the signature).
     /// Includes network identifier to prevent cross-network replay attacks.
     pub fn signable_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(108);
+        let memo_len = self.memo.as_ref().map(|m| m.len()).unwrap_or(0);
+        let mut buf = Vec::with_capacity(108 + memo_len + 4);
         buf.extend_from_slice(crate::constants::NETWORK_ID);
         buf.extend_from_slice(b"transfer");
         buf.extend_from_slice(&self.from.0);
@@ -163,6 +172,10 @@ impl TransferTx {
         buf.extend_from_slice(&self.amount.to_le_bytes());
         buf.extend_from_slice(&self.fee.to_le_bytes());
         buf.extend_from_slice(&self.nonce.to_le_bytes());
+        if let Some(ref memo) = self.memo {
+            buf.extend_from_slice(&(memo.len() as u32).to_le_bytes());
+            buf.extend_from_slice(memo);
+        }
         buf
     }
 
@@ -172,18 +185,25 @@ impl TransferTx {
 
     /// Verify that the Ed25519 signature is valid and the pub_key hashes to `from`.
     pub fn verify_signature(&self) -> bool {
-        // 1. Verify pub_key hashes to the from address
+        // 1. Validate memo size
+        if let Some(ref memo) = self.memo {
+            if memo.len() > crate::constants::MAX_MEMO_BYTES {
+                return false;
+            }
+        }
+
+        // 2. Verify pub_key hashes to the from address
         let expected_addr = Address(*blake3::hash(&self.pub_key).as_bytes());
         if expected_addr != self.from {
             return false;
         }
 
-        // 2. Parse the verifying key
+        // 3. Parse the verifying key
         let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(&self.pub_key) else {
             return false;
         };
 
-        // 3. Verify the signature over signable_bytes
+        // 4. Verify the signature over signable_bytes
         self.signature.verify(&vk, &self.signable_bytes())
     }
 }
@@ -219,6 +239,7 @@ mod tests {
             nonce,
             pub_key: sk.verifying_key().to_bytes(),
             signature: Signature([0u8; 64]),
+            memo: None,
         };
         transfer.signature = sk.sign(&transfer.signable_bytes());
         Transaction::Transfer(transfer)
@@ -333,5 +354,116 @@ mod tests {
             height: 0,
         };
         assert_eq!(cb.hash(), cb.hash());
+    }
+
+    #[test]
+    fn transaction_with_memo_hashes_correctly() {
+        let sk = crate::address::SecretKey::from_bytes([1u8; 32]);
+        let memo_data = b"temp:22.4C hum:61% pres:1013hPa".to_vec();
+        
+        let mut transfer = TransferTx {
+            from: sk.address(),
+            to: Address::ZERO,
+            amount: 100,
+            fee: 10,
+            nonce: 0,
+            pub_key: sk.verifying_key().to_bytes(),
+            signature: Signature([0u8; 64]),
+            memo: Some(memo_data.clone()),
+        };
+        transfer.signature = sk.sign(&transfer.signable_bytes());
+        let tx = Transaction::Transfer(transfer);
+        
+        // Hash should be deterministic
+        assert_eq!(tx.hash(), tx.hash());
+        
+        // Signature should verify
+        assert!(tx.verify_signature());
+        
+        // Hash should differ from same tx without memo
+        let mut transfer_no_memo = TransferTx {
+            from: sk.address(),
+            to: Address::ZERO,
+            amount: 100,
+            fee: 10,
+            nonce: 0,
+            pub_key: sk.verifying_key().to_bytes(),
+            signature: Signature([0u8; 64]),
+            memo: None,
+        };
+        transfer_no_memo.signature = sk.sign(&transfer_no_memo.signable_bytes());
+        let tx_no_memo = Transaction::Transfer(transfer_no_memo);
+        
+        assert_ne!(tx.hash(), tx_no_memo.hash());
+    }
+
+    #[test]
+    fn transaction_with_oversized_memo_rejected() {
+        let sk = crate::address::SecretKey::from_bytes([1u8; 32]);
+        // Create memo larger than MAX_MEMO_BYTES (256)
+        let oversized_memo = vec![0x42; crate::constants::MAX_MEMO_BYTES + 1];
+        
+        let mut transfer = TransferTx {
+            from: sk.address(),
+            to: Address::ZERO,
+            amount: 100,
+            fee: 10,
+            nonce: 0,
+            pub_key: sk.verifying_key().to_bytes(),
+            signature: Signature([0u8; 64]),
+            memo: Some(oversized_memo),
+        };
+        transfer.signature = sk.sign(&transfer.signable_bytes());
+        let tx = Transaction::Transfer(transfer);
+        
+        // Signature verification should fail due to oversized memo
+        assert!(!tx.verify_signature());
+    }
+
+    #[test]
+    fn transaction_without_memo_still_works() {
+        let sk = crate::address::SecretKey::from_bytes([1u8; 32]);
+        
+        let mut transfer = TransferTx {
+            from: sk.address(),
+            to: Address::ZERO,
+            amount: 100,
+            fee: 10,
+            nonce: 0,
+            pub_key: sk.verifying_key().to_bytes(),
+            signature: Signature([0u8; 64]),
+            memo: None,
+        };
+        transfer.signature = sk.sign(&transfer.signable_bytes());
+        let tx = Transaction::Transfer(transfer);
+        
+        // Hash should be deterministic
+        assert_eq!(tx.hash(), tx.hash());
+        
+        // Signature should verify
+        assert!(tx.verify_signature());
+    }
+
+    #[test]
+    fn memo_at_max_size_accepted() {
+        let sk = crate::address::SecretKey::from_bytes([1u8; 32]);
+        // Create memo exactly at MAX_MEMO_BYTES (256)
+        let max_memo = vec![0x42; crate::constants::MAX_MEMO_BYTES];
+        
+        let mut transfer = TransferTx {
+            from: sk.address(),
+            to: Address::ZERO,
+            amount: 100,
+            fee: 10,
+            nonce: 0,
+            pub_key: sk.verifying_key().to_bytes(),
+            signature: Signature([0u8; 64]),
+            memo: Some(max_memo),
+        };
+        transfer.signature = sk.sign(&transfer.signable_bytes());
+        let tx = Transaction::Transfer(transfer);
+        
+        // Signature should verify (exactly at limit is OK)
+        assert!(tx.verify_signature());
     }
 }

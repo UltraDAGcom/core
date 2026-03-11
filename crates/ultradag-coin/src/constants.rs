@@ -29,6 +29,11 @@ pub const MAX_TXS_PER_BLOCK: usize = 10_000;
 /// 10,000 sats = 0.0001 UDAG. Cost to fill 10K-tx mempool: 1 UDAG.
 pub const MIN_FEE_SATS: u64 = 10_000;
 
+/// Maximum memo size in bytes for transaction data payloads.
+/// 256 bytes is sufficient for IoT sensor data (temperature, humidity, pressure, GPS, timestamp)
+/// while preventing DAG bloat from oversized memos.
+pub const MAX_MEMO_BYTES: usize = 256;
+
 /// Coinbase maturity: coinbase outputs can't be spent for N rounds
 pub const COINBASE_MATURITY: u64 = 100;
 

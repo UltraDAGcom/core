@@ -297,6 +297,8 @@ struct SendTxRequest {
     to: String,
     amount: u64,
     fee: u64,
+    #[serde(default)]
+    memo: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -594,7 +596,7 @@ async fn handle_request(
                 ));
             }
             let Ok(send_req) = serde_json::from_slice::<SendTxRequest>(&body) else {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {secret_key, to, amount, fee}"));
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {secret_key, to, amount, fee, memo?}"));
             };
 
             // Parse secret key (64 hex chars = 32 bytes)
@@ -621,6 +623,37 @@ async fn handle_request(
             // Parse recipient
             let Some(to) = Address::from_hex(&send_req.to) else {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid to address hex"));
+            };
+
+            // Parse and validate memo (if provided)
+            let memo = if let Some(memo_str) = send_req.memo {
+                // Try to parse as hex first, fall back to UTF-8
+                let memo_bytes = if memo_str.starts_with("0x") {
+                    // Hex encoding: 0x[hex]
+                    let hex_str = &memo_str[2..];
+                    hex::decode(hex_str).map_err(|_| ()).ok()
+                } else if memo_str.chars().all(|c| c.is_ascii_hexdigit()) && memo_str.len() % 2 == 0 {
+                    // Raw hex (even length, all hex digits)
+                    hex::decode(&memo_str).map_err(|_| ()).ok()
+                } else {
+                    // UTF-8 string
+                    Some(memo_str.into_bytes())
+                };
+
+                let Some(bytes) = memo_bytes else {
+                    return Ok(error_response(StatusCode::BAD_REQUEST, "invalid memo: must be UTF-8 string or hex"));
+                };
+
+                if bytes.len() > ultradag_coin::constants::MAX_MEMO_BYTES {
+                    return Ok(error_response(
+                        StatusCode::BAD_REQUEST,
+                        &format!("memo too large: {} bytes (max {})", bytes.len(), ultradag_coin::constants::MAX_MEMO_BYTES),
+                    ));
+                }
+
+                Some(bytes)
+            } else {
+                None
             };
 
             // Validate minimum fee
@@ -676,6 +709,7 @@ async fn handle_request(
                     nonce,
                     pub_key: sk.verifying_key().to_bytes(),
                     signature: Signature([0u8; 64]),
+                    memo,
                 };
                 transfer.signature = sk.sign(&transfer.signable_bytes());
                 let tx = Transaction::Transfer(transfer);
@@ -828,6 +862,7 @@ async fn handle_request(
                     nonce,
                     pub_key: faucet_sk.verifying_key().to_bytes(),
                     signature: Signature([0u8; 64]),
+                    memo: None,
                 };
                 transfer.signature = faucet_sk.sign(&transfer.signable_bytes());
                 let tx = Transaction::Transfer(transfer);
