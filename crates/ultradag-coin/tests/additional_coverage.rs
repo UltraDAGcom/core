@@ -343,7 +343,8 @@ fn test_checkpoint_file_persisted_to_disk() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 2_050_000 * COIN,
-        signatures: vec![
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![
             ultradag_coin::consensus::CheckpointSignature {
                 validator: sk.address(),
                 pub_key: sk.verifying_key().to_bytes(),
@@ -371,6 +372,7 @@ fn test_latest_checkpoint_loaded_correctly_from_disk() {
             state_root: [(*round / 1000) as u8; 32],
             dag_tip: [0u8; 32],
             total_supply: 2_050_000 * COIN,
+            prev_checkpoint_hash: [0u8; 32],
             signatures: vec![],
         };
         ultradag_coin::persistence::save_checkpoint(&temp_dir, &checkpoint).unwrap();

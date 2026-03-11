@@ -9,7 +9,8 @@ fn test_checkpoint_signable_bytes() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     let bytes = checkpoint.signable_bytes();
@@ -24,7 +25,8 @@ fn test_checkpoint_hash() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     let hash1 = checkpoint.checkpoint_hash();
@@ -40,7 +42,8 @@ fn test_checkpoint_sign() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     checkpoint.sign(&sk);
@@ -58,7 +61,8 @@ fn test_checkpoint_valid_signers() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     checkpoint.sign(&sk1);
@@ -78,7 +82,8 @@ fn test_checkpoint_invalid_signature() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     checkpoint.sign(&sk);
@@ -100,7 +105,8 @@ fn test_checkpoint_is_accepted_with_quorum() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     checkpoint.sign(&sk1);
@@ -124,7 +130,8 @@ fn test_checkpoint_is_accepted_without_quorum() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     checkpoint.sign(&sk1);
@@ -146,7 +153,8 @@ fn test_checkpoint_non_validator_signature_ignored() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     checkpoint.sign(&sk1);
@@ -221,7 +229,8 @@ fn test_checkpoint_multiple_signatures_from_same_validator() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     checkpoint.sign(&sk);

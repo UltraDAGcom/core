@@ -250,10 +250,10 @@ async fn test_fault_injector_reset() {
 #[tokio::test]
 async fn test_test_node_creation() {
     let sk = SecretKey::generate();
-    let node = TestNode::new(0, sk.address());
-    
+    let node = TestNode::new_with_key(0, sk);
+
     assert_eq!(node.id, 0);
-    assert_eq!(node.validator_address, sk.address());
+    assert_eq!(node.validator_address, node.secret_key.address());
     
     // Verify initial state
     let round = node.finalized_round().await;

@@ -97,6 +97,7 @@ fn test_01_checkpoint_produced_at_interval() {
             state_root,
             dag_tip,
             total_supply: state.total_supply(),
+            prev_checkpoint_hash: [0u8; 32],
             signatures: vec![],
         };
         
@@ -120,7 +121,8 @@ fn test_02_checkpoint_reaches_quorum() {
         state_root,
         dag_tip: [0u8; 32],
         total_supply: state.total_supply(),
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     // Have 3 of 4 validators sign it
@@ -184,7 +186,8 @@ fn test_03_new_node_fast_syncs_from_checkpoint() {
         state_root,
         dag_tip: tips.first().copied().unwrap_or([0u8; 32]),
         total_supply: state.total_supply(),
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     // Sign with all validators

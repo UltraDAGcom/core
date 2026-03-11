@@ -9,7 +9,8 @@ fn test_01_checkpoint_signable_bytes_are_deterministic() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
 
     let checkpoint2 = Checkpoint {
@@ -17,7 +18,8 @@ fn test_01_checkpoint_signable_bytes_are_deterministic() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
 
     assert_eq!(checkpoint1.signable_bytes(), checkpoint2.signable_bytes());
@@ -32,7 +34,8 @@ fn test_02_checkpoint_signature_valid() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
 
     checkpoint.sign(&sk);
@@ -50,7 +53,8 @@ fn test_03_checkpoint_signature_wrong_key_rejected() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
 
     checkpoint.sign(&sk);
@@ -74,7 +78,8 @@ fn test_04_checkpoint_accepted_at_quorum() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
 
     for sk in &validators[0..3] {
@@ -89,7 +94,8 @@ fn test_04_checkpoint_accepted_at_quorum() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
 
     for sk in &validators[0..2] {
@@ -111,7 +117,8 @@ fn test_05_checkpoint_accepted_requires_active_validators() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
 
     // Sign with 2 active + 1 non-active
@@ -138,7 +145,8 @@ fn test_06_tampered_checkpoint_rejected() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
 
     checkpoint.sign(&sk);

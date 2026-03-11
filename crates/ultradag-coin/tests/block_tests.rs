@@ -225,11 +225,10 @@ fn test_block_with_multiple_transactions() {
 
 #[test]
 fn test_genesis_block() {
-    use ultradag_coin::block::genesis::create_genesis_block;
-    
-    let sk = SecretKey::generate();
-    let block = create_genesis_block(sk.address());
-    
+    use ultradag_coin::block::genesis::genesis_block;
+
+    let block = genesis_block();
+
     assert_eq!(block.header.height, 0);
     assert_eq!(block.header.version, 1);
     assert_eq!(block.transactions.len(), 0);

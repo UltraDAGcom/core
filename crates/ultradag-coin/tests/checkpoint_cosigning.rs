@@ -10,7 +10,8 @@ fn test_checkpoint_multiple_signatures() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     // All validators sign
@@ -35,7 +36,8 @@ fn test_checkpoint_cosigning_accumulation() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     checkpoint.sign(&validators[0]);
     
@@ -66,7 +68,8 @@ fn test_checkpoint_quorum_calculation() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     // 2 signatures - below quorum
@@ -92,7 +95,8 @@ fn test_checkpoint_rejects_invalid_signature() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     checkpoint.sign(&sk);
@@ -115,7 +119,8 @@ fn test_checkpoint_rejects_wrong_pubkey_address_mapping() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     // Create signature with sk1 but claim it's from sk2's address
@@ -139,7 +144,8 @@ fn test_checkpoint_different_state_roots_different_hashes() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     let checkpoint2 = Checkpoint {
@@ -147,7 +153,8 @@ fn test_checkpoint_different_state_roots_different_hashes() {
         state_root: [99u8; 32], // Different state root
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     assert_ne!(checkpoint1.checkpoint_hash(), checkpoint2.checkpoint_hash());
@@ -162,7 +169,8 @@ fn test_checkpoint_signature_covers_all_fields() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     checkpoint.sign(&sk);
@@ -202,7 +210,8 @@ fn test_checkpoint_duplicate_signatures_ignored() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     // Sign twice with same key
@@ -232,7 +241,8 @@ fn test_checkpoint_non_active_validator_signature_ignored() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     // Sign with 2 active + 1 non-active
@@ -256,7 +266,8 @@ fn test_checkpoint_signable_bytes_includes_network_id() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     let signable = checkpoint.signable_bytes();
@@ -280,7 +291,8 @@ fn test_checkpoint_empty_signatures_not_accepted() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![], // No signatures
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![], // No signatures
     };
     
     // Should not be accepted with any quorum
@@ -299,7 +311,8 @@ fn test_checkpoint_large_validator_set() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     // Quorum for 21: ceil(2*21/3) = 14

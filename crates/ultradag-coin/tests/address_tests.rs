@@ -115,7 +115,7 @@ fn test_signature_verification() {
     let signature = sk.sign(message);
     let vk = sk.verifying_key();
     
-    assert!(vk.verify(message, &signature).is_ok());
+    assert!(signature.verify(&vk, message));
 }
 
 #[test]
@@ -123,11 +123,11 @@ fn test_signature_verification_wrong_message() {
     let sk = SecretKey::generate();
     let message1 = b"test message";
     let message2 = b"different message";
-    
+
     let signature = sk.sign(message1);
     let vk = sk.verifying_key();
-    
-    assert!(vk.verify(message2, &signature).is_err());
+
+    assert!(!signature.verify(&vk, message2));
 }
 
 #[test]

@@ -58,18 +58,48 @@ pub async fn test_partition_scenario(
     duration: Duration,
 ) {
     let groups = scenario.generate_groups(nodes.len());
-    
     println!("🔪 Creating partition: {:?}", groups);
-    injector.partition(groups);
     
-    // Let the partition run
-    sleep(duration).await;
+    // Record state before partition
+    let before_rounds: Vec<u64> = futures::future::join_all(
+        nodes.iter().map(|n| n.finalized_round())
+    ).await;
     
+    // Apply partition
+    injector.partition(groups.clone());
+    
+    // Simulate rounds with partition active
+    simulate_rounds(nodes, injector, 10).await;
+    
+    // Check state during partition
+    let during_rounds: Vec<u64> = futures::future::join_all(
+        nodes.iter().map(|n| n.finalized_round())
+    ).await;
+    
+    println!("📊 During partition - rounds: {:?}", during_rounds);
+    
+    // Heal partition
     println!("🔧 Healing partition");
     injector.heal_partitions();
     
-    // Allow time for nodes to reconnect and sync
-    sleep(Duration::from_secs(5)).await;
+    // Simulate convergence rounds
+    simulate_rounds(nodes, injector, 10).await;
+    
+    // Check final state
+    let after_rounds: Vec<u64> = futures::future::join_all(
+        nodes.iter().map(|n| n.finalized_round())
+    ).await;
+    
+    println!("✅ After heal - rounds: {:?}", after_rounds);
+    
+    // Verify all nodes converged to same round
+    let max_round = *after_rounds.iter().max().unwrap();
+    let min_round = *after_rounds.iter().min().unwrap();
+    if max_round == min_round {
+        println!("✅ All nodes converged to round {}", max_round);
+    } else {
+        println!("⚠️  Convergence incomplete: rounds range from {} to {}", min_round, max_round);
+    }
 }
 
 /// Test that minority partition cannot make progress

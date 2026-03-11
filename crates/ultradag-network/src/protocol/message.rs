@@ -356,9 +356,10 @@ mod tests {
             state_root: [1u8; 32],
             dag_tip: [2u8; 32],
             total_supply: 1_000_000_000,
+            prev_checkpoint_hash: [0u8; 32],
             signatures: vec![],
         };
-        
+
         let msg = Message::CheckpointProposal(checkpoint);
         let encoded = roundtrip(&msg);
         let decoded = Message::decode(&encoded[4..]).unwrap();
@@ -424,9 +425,10 @@ mod tests {
             state_root: [1u8; 32],
             dag_tip: [2u8; 32],
             total_supply: 1_000_000_000,
+            prev_checkpoint_hash: [0u8; 32],
             signatures: vec![],
         };
-        
+
         let state = StateSnapshot {
             accounts: vec![],
             stake_accounts: vec![],

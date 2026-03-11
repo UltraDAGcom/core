@@ -48,6 +48,7 @@ pub async fn test_crash_during_consensus(
 
     // Record state before crash
     let before_round = nodes[crash_node_id].finalized_round().await;
+    println!("💥 Crashing node {} at round {}", crash_node_id, before_round);
 
     // Crash the node (keep it crashed while others continue)
     injector.crash_node(crash_node_id);
@@ -57,22 +58,32 @@ pub async fn test_crash_during_consensus(
     simulate_rounds(nodes, injector, 10).await;
 
     // Check that other nodes made progress
-    let mut others_progressed = false;
+    let mut max_round = before_round;
     for (i, node) in nodes.iter().enumerate() {
         if i == crash_node_id {
             continue;
         }
         let round = node.finalized_round().await;
-        if round > before_round {
-            others_progressed = true;
-            break;
+        if round > max_round {
+            max_round = round;
         }
     }
 
+    println!("🔄 Restarting node {} (network progressed to round {})", crash_node_id, max_round);
+    
     // Restart the crashed node
     injector.restart_node(crash_node_id);
 
-    if !others_progressed {
+    // Simulate recovery rounds
+    simulate_rounds(nodes, injector, 5).await;
+
+    let after_round = nodes[crash_node_id].finalized_round().await;
+    let recovery_rounds = after_round.saturating_sub(before_round);
+    
+    println!("✅ Node {} recovered: round {} → {} ({} rounds to recover)", 
+             crash_node_id, before_round, after_round, recovery_rounds);
+
+    if max_round <= before_round {
         return Err("Other nodes did not make progress during crash".to_string());
     }
 

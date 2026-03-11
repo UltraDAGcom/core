@@ -12,7 +12,8 @@ fn test_checkpoint_message_serialization() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     let msg = Message::CheckpointProposal(checkpoint.clone());
@@ -215,7 +216,8 @@ fn test_checkpoint_with_signatures() {
         state_root: [1u8; 32],
         dag_tip: [2u8; 32],
         total_supply: 1_000_000,
-        signatures: vec![],
+        prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
     };
     
     checkpoint.sign(&sk1);

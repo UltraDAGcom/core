@@ -48,7 +48,7 @@ Transaction ordering is deterministic: finalized vertices are sorted by (round, 
   - Pre-staking fallback: each validator receives full block reward
   - Post-staking: total round reward split proportionally by stake
 - **Minimum stake**: 10,000 UDAG to become validator
-- **Unstaking cooldown**: 2,016 rounds (~1 week)
+- **Unstaking cooldown**: 2,016 rounds (~2.8 hours at 5s testnet, ~16.8 hours at 30s design target)
 - **Slashing**: 50% stake burn on equivocation
 
 ## Running a Node
@@ -177,8 +177,8 @@ HTTP RPC runs on P2P port + 1000 (e.g., P2P 9333 → RPC 10333).
 - **Response:** Transaction hash and confirmation
 - **Note:** Stake becomes active at the next epoch boundary (every 210,000 rounds)
 
-**POST /unstake** — Begin unstake cooldown (~1 week)
-- **Cooldown:** 2,016 rounds before funds are returned
+**POST /unstake** — Begin unstake cooldown (~2.8 hours at 5s rounds)
+- **Cooldown:** 2,016 rounds before funds are returned (~2.8 hours at 5s testnet, ~16.8 hours at 30s design target)
 - **Request:**
 ```json
 {
@@ -226,10 +226,11 @@ HTTP RPC runs on P2P port + 1000 (e.g., P2P 9333 → RPC 10333).
 cargo test --workspace --release
 ```
 
-**480 tests passing** (all pass, none ignored)
+**757 tests passing** (all pass, 14 ignored jepsen long-running tests)
 
-- ultradag-coin: 116 unit + 241 integration tests
-- ultradag-network: 25 unit + 12 integration tests
+- ultradag-coin: 146 unit + 399 integration tests
+- ultradag-network: 25 unit + 12 integration tests + 49 fault injection tests
+- ultradag-sdk: 2 doc tests
 
 Test coverage includes: consensus safety, Byzantine fault tolerance, cryptographic correctness, double-spend prevention, staking lifecycle, supply invariants, state persistence, crash recovery, checkpoint production, fast-sync, equivocation evidence retention.
 

@@ -94,8 +94,10 @@ impl FinalityTracker {
     /// Find all newly finalizable vertices in the DAG.
     /// Returns them in ancestor-first order (suitable for committing).
     ///
-    /// Only scans vertices in rounds near the finality frontier (from
-    /// `last_finalized_round` to `current_round`), NOT all vertices.
+    /// Scans from `pruning_floor` to `current_round` to catch late-arriving
+    /// vertices recovered via reconciliation. Vertices in already-finalized
+    /// rounds are auto-finalized (they have no descendants but are safe since
+    /// they passed signature + equivocation checks at insertion).
     /// Then forward-propagates through children for cascading finality.
     pub fn find_newly_finalized(&mut self, dag: &BlockDag) -> Vec<[u8; 32]> {
         let threshold = self.finality_threshold();
@@ -105,10 +107,11 @@ impl FinalityTracker {
 
         let genesis: [u8; 32] = [0u8; 32];
 
-        // Scan from last_finalized_round (inclusive) since that round may contain
-        // unfinalized vertices (e.g., vertex B in round 5 when only A was finalized).
-        // The `finalized.contains` check at line 110 skips already-finalized vertices.
-        let scan_from = self.last_finalized_round;
+        // Scan from pruning_floor (not last_finalized_round) so that late-arriving
+        // vertices recovered via reconciliation are picked up. Most vertices between
+        // pruning_floor and last_finalized_round are already in the `finalized` HashSet,
+        // so the `continue` below makes this cheap (O(1) per already-finalized vertex).
+        let scan_from = dag.pruning_floor();
         let scan_to = dag.current_round();
 
         let mut ready: BTreeSet<[u8; 32]> = BTreeSet::new();
@@ -125,7 +128,15 @@ impl FinalityTracker {
                     let parents_ok = vertex.parent_hashes.is_empty()
                         || vertex.parent_hashes.iter()
                             .all(|p| *p == genesis || self.finalized.contains(p) || dag.get(p).is_none());
-                    if parents_ok && dag.descendant_validator_count(hash) >= threshold {
+                    // Late-arriving vertices in already-finalized rounds: auto-finalize.
+                    // These vertices were recovered via reconciliation after finality
+                    // advanced past their round. They have no descendants (subsequent
+                    // vertices were produced without them as parents), so they can never
+                    // reach the descendant threshold normally. Since their round is already
+                    // settled and they passed signature + equivocation checks at insertion,
+                    // they are safe to finalize.
+                    let in_settled_round = round < self.last_finalized_round;
+                    if parents_ok && (in_settled_round || dag.descendant_validator_count(hash) >= threshold) {
                         ready.insert(*hash);
                     }
                 }
