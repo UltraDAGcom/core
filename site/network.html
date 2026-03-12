@@ -628,24 +628,26 @@ function renderMap() {
   
   // Add markers for each validator
   networkData.validators.forEach(v => {
-    // Custom icon for validators
+    // Custom icon for validators with UltraDAG colors
+    const markerColor = v.status === 'online' ? '#3d9be9' : '#4a6488';
     const iconHtml = `
       <div style="
-        width: 16px;
-        height: 16px;
-        background: ${v.status === 'online' ? 'var(--success)' : 'var(--danger)'};
-        border: 3px solid var(--white);
+        width: 14px;
+        height: 14px;
+        background: ${markerColor};
+        border: 2px solid #edf4fb;
         border-radius: 50%;
-        box-shadow: 0 0 12px ${v.status === 'online' ? 'var(--success)' : 'var(--danger)'};
+        box-shadow: 0 0 16px ${markerColor}, 0 0 4px rgba(61,155,233,0.4);
         cursor: pointer;
+        transition: all 0.3s;
       "></div>
     `;
     
     const customIcon = L.divIcon({
       html: iconHtml,
       className: 'validator-marker-icon',
-      iconSize: [16, 16],
-      iconAnchor: [8, 8],
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
     });
     
     const marker = L.marker([v.lat, v.lon], { icon: customIcon }).addTo(validatorMap);
@@ -654,9 +656,9 @@ function renderMap() {
     const popupContent = `
       <div class="validator-popup-name">${v.name}</div>
       <div class="validator-popup-detail">📍 ${v.location}</div>
-      <div class="validator-popup-detail">🔄 Round: ${v.round.toLocaleString()}</div>
-      <div class="validator-popup-detail">💰 Stake: ${(v.stake / 1000).toFixed(0)}K UDAG</div>
-      <div class="validator-popup-detail">⏱ Uptime: ${v.uptime.toFixed(1)}%</div>
+      <div class="validator-popup-detail">Round: ${v.round.toLocaleString()}</div>
+      <div class="validator-popup-detail">Stake: ${(v.stake / 1000).toFixed(0)}K UDAG</div>
+      <div class="validator-popup-detail">Uptime: ${v.uptime.toFixed(1)}%</div>
       <div class="validator-popup-status ${v.status}">${v.status}</div>
     `;
     
