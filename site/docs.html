@@ -228,6 +228,7 @@ h4 { font-family: var(--serif); font-size: 20px; font-weight: 500; color: var(--
 p { font-family: 'Syne', sans-serif; font-size: 16px; line-height: 1.7; color: var(--body); margin-bottom: 14px; font-weight: 400; }
 p strong { color: var(--white); font-weight: 500; }
 p code { font-family: var(--mono); font-size: 12px; background: var(--bg3); border: 1px solid var(--bg4); padding: 2px 6px; border-radius: 3px; color: var(--accent); }
+.inline-code { font-family: var(--mono); font-size: 12px; background: var(--bg3); border: 1px solid var(--bg4); padding: 2px 6px; border-radius: 3px; color: var(--accent); }
 
 /* CODE BLOCKS — terminal style (matching index.html) */
 .terminal{background:#0c1018;border:1px solid var(--border);border-radius:6px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.4);margin:20px 0}
@@ -467,7 +468,7 @@ li strong { color: var(--white); font-weight: 500; }
       <!-- API -->
       <section class="doc-section" id="api">
         <div class="doc-section-header"><h2>HTTP RPC API</h2></div>
-        <p>The UltraDAG node exposes an HTTP RPC API on port <code>10333</code> (P2P port + 1000). All endpoints return JSON and support CORS for web applications.</p>
+        <p>The UltraDAG node exposes an HTTP RPC API on port <span class="inline-code">10333</span> (P2P port + 1000). All endpoints return JSON and support CORS for web applications.</p>
 
         <h3>GET /status</h3>
         <p>Returns current network status including DAG round, vertices, and account count.</p>
@@ -831,7 +832,7 @@ tx, _ := client.SendTx(keypair, recipient, <span class="num">50_000_000</span>, 
       <!-- Monitoring -->
       <section class="doc-section" id="monitoring">
         <div class="doc-section-header"><h2>Metrics & Monitoring</h2></div>
-        <p>The node exposes Prometheus metrics on <code>/metrics</code>:</p>
+        <p>The node exposes Prometheus metrics on <span class="inline-code">/metrics</span>:</p>
         <pre>ultradag_dag_round 182
 ultradag_dag_vertices 728
 ultradag_finalized_round 180
@@ -889,7 +890,7 @@ ultradag_mempool_size 5</pre>
         <p>Ensure at least ⌈2n/3⌉ validators are online and connected. Check network connectivity and firewall settings.</p>
         
         <h3>High memory usage</h3>
-        <p>Enable pruning with <code>--prune-interval 1000</code> to remove old DAG vertices. Consider increasing RAM or reducing data retention.</p>
+        <p>Enable pruning with <span class="inline-code">--prune-interval 1000</span> to remove old DAG vertices. Consider increasing RAM or reducing data retention.</p>
         
         <h3>Sync issues</h3>
         <p>Check bootstrap peer addresses and ensure P2P port (9000) is accessible. Try resyncing from a recent checkpoint.</p>
