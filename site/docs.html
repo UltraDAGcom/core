@@ -367,7 +367,7 @@ li strong { color: var(--fg); font-weight: 500; }
 
     <div class="toc-group">
       <span class="toc-group-label">Getting Started</span>
-      <a href="#api" class="toc-link active">HTTP RPC API</a>
+      <a href="#api" class="toc-link">HTTP RPC API</a>
       <a href="#sdk" class="toc-link">SDK Quickstart</a>
       <a href="#node" class="toc-link">Running a Node</a>
     </div>
@@ -910,6 +910,10 @@ curl http://localhost:8080/metrics
   }, { rootMargin: '-15% 0px -75% 0px' });
 
   sections.forEach(s => obs.observe(s));
+  
+  // Set initial active state
+  const firstLink = sidebar.querySelector('.toc-link');
+  if (firstLink) firstLink.classList.add('active');
 
   // Mobile FAB
   document.getElementById('toc-fab').addEventListener('click', () => sidebar.classList.toggle('is-open'));
