@@ -587,6 +587,8 @@ async fn main() {
             let mut last_progress_round = 0u64;
             let mut stall_count = 0u32;
             let mut hello_wait_count = 0u32;
+            let mut checkpoint_attempts = 0u32;
+            let sync_start = std::time::Instant::now();
 
             loop {
                 let our_round = server_clone.dag.read().await.current_round();
@@ -623,50 +625,43 @@ async fn main() {
 
                 let gap = network_round - our_round;
 
-                // Track progress — reset stall counter if we advanced
-                if our_round > last_progress_round {
-                    stall_count = 0;
-                    last_progress_round = our_round;
-                } else {
-                    stall_count += 1;
-                }
-
-                // If stalled for 60s (6 x 10s checks), try checkpoint then give up
-                if stall_count >= 6 {
-                    warn!("Sync stalled for 60s at round {} (network at {}), trying checkpoint...", our_round, network_round);
-                    server_clone.request_fast_sync().await;
-                    tokio::time::sleep(Duration::from_secs(15)).await;
-
-                    let post_round = server_clone.dag.read().await.current_round();
-                    if post_round > our_round + 10 {
-                        info!("Checkpoint sync helped: round {} → {}", our_round, post_round);
-                        stall_count = 0;
-                        last_progress_round = post_round;
-                        continue;
-                    }
-
-                    // Truly stuck — enable production as last resort
-                    warn!("Sync truly stuck at round {} (network at {}) — enabling production", post_round, network_round);
+                // Hard timeout: if syncing for > 120s total, give up and produce
+                if sync_start.elapsed() > Duration::from_secs(120) {
+                    warn!("Sync timeout (120s) at round {} (network at {}) — enabling production", our_round, network_round);
                     server_clone.sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
                     break;
                 }
 
-                // Request more vertices if we're behind
-                if gap > 50 && stall_count == 0 {
-                    // Try checkpoint for large gaps
-                    info!("Sync: our_round={} network={} gap={} — requesting checkpoint", our_round, network_round, gap);
+                // Track progress — only reset stall counter on meaningful progress (10+ rounds)
+                if our_round >= last_progress_round + 10 {
+                    stall_count = 0;
+                    last_progress_round = our_round;
+                } else if our_round <= last_progress_round {
+                    stall_count += 1;
+                }
+                // Small progress (1-9 rounds) doesn't reset stall counter
+
+                // If stalled for 40s (4 x 10s checks), give up and produce
+                if stall_count >= 4 {
+                    warn!("Sync stalled for 40s at round {} (network at {}) — enabling production", our_round, network_round);
+                    server_clone.sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
+                    break;
+                }
+
+                // Request vertices — try checkpoint first for large gaps (max 3 attempts)
+                if gap > 100 && checkpoint_attempts < 3 {
+                    checkpoint_attempts += 1;
+                    info!("Sync: our_round={} network={} gap={} — requesting checkpoint (attempt {})",
+                        our_round, network_round, gap, checkpoint_attempts);
                     server_clone.request_fast_sync().await;
-                } else if stall_count > 0 {
-                    // Re-request DagVertices if progress stalled
-                    info!("Sync: stalled at round {} (network at {}, stall_count={}), re-requesting vertices",
-                        our_round, network_round, stall_count);
+                } else {
+                    // Use incremental sync (always works if peers have the data)
+                    info!("Sync: requesting vertices round={} network={} gap={}", our_round, network_round, gap);
                     let from = our_round.saturating_add(1);
                     server_clone.peers.broadcast(
                         &ultradag_network::Message::GetDagVertices { from_round: from, max_count: 500 },
                         "",
                     ).await;
-                } else {
-                    info!("Sync: progressing round={} network={} gap={}", our_round, network_round, gap);
                 }
 
                 tokio::time::sleep(Duration::from_secs(10)).await;
