@@ -2,27 +2,17 @@
 set -e
 
 # Clean state on startup if requested (for fresh testnet resets).
-# Uses a marker file to prevent double-wipe on subsequent restarts
-# when CLEAN_STATE is still set in the deployed env.
-MARKER="${DATA_DIR:-/data}/.clean_state_done"
+# Always wipes when CLEAN_STATE is set — the deploy script handles
+# preventing accidental wipes by commenting out CLEAN_STATE after deploy.
 if [ "${CLEAN_STATE:-}" = "true" ] || [ "${CLEAN_STATE:-}" = "1" ]; then
-  if [ -f "$MARKER" ]; then
-    echo "CLEAN_STATE: already wiped this session (marker exists), skipping..."
-  else
-    echo "CLEAN_STATE: removing persisted state files..."
-    # Remove DAG/state data, checkpoints, and high-water mark, but keep validator.key
-    rm -f "${DATA_DIR:-/data}/dag.json" "${DATA_DIR:-/data}/finality.json" \
-          "${DATA_DIR:-/data}/state.json" "${DATA_DIR:-/data}/mempool.json" \
-          "${DATA_DIR:-/data}/high_water_mark.json" \
-          "${DATA_DIR:-/data}/wal.jsonl" "${DATA_DIR:-/data}/wal_header.json"
-    rm -rf "${DATA_DIR:-/data}/checkpoints"
-    rm -rf "${DATA_DIR:-/data}/checkpoint_states"
-    # Create marker so subsequent restarts don't wipe again
-    touch "$MARKER"
-  fi
-else
-  # CLEAN_STATE not set — remove marker if it exists (for future clean deploys)
-  rm -f "$MARKER"
+  echo "CLEAN_STATE: removing persisted state files..."
+  # Remove DAG/state data, checkpoints, and high-water mark, but keep validator.key
+  rm -f "${DATA_DIR:-/data}/dag.json" "${DATA_DIR:-/data}/finality.json" \
+        "${DATA_DIR:-/data}/state.json" "${DATA_DIR:-/data}/mempool.json" \
+        "${DATA_DIR:-/data}/high_water_mark.json" \
+        "${DATA_DIR:-/data}/wal.jsonl" "${DATA_DIR:-/data}/wal_header.json"
+  rm -rf "${DATA_DIR:-/data}/checkpoints"
+  rm -rf "${DATA_DIR:-/data}/checkpoint_states"
 fi
 
 ARGS="--port ${PORT:-9333} --rpc-port ${RPC_PORT:-10333} --data-dir ${DATA_DIR:-/data} --validate"

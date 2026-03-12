@@ -58,6 +58,21 @@ if ! $RESTART_ONLY; then
         fly deploy -a "ultradag-node-$i" -c "$TOML_DIR/fly-node-$i.toml" --remote-only --build-arg "CACHEBUST=$CACHEBUST" 2>&1 | grep -E "succeeded|Visit|Error" || true
     done
     echo "    All nodes deployed."
+
+    # fly deploy starts machines sequentially, causing staggered startup.
+    # Stop all machines after deploy so the restart step starts them simultaneously.
+    if $CLEAN; then
+        echo "==> Stopping all machines after deploy (prevent staggered state)..."
+        for node in "${NODES[@]}"; do
+            MACHINE_ID=$(fly machines list -a "$node" --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])" 2>/dev/null || echo "")
+            if [ -n "$MACHINE_ID" ]; then
+                fly machine stop "$MACHINE_ID" -a "$node" 2>/dev/null &
+            fi
+        done
+        wait
+        sleep 3
+        echo "    All machines stopped."
+    fi
 fi
 
 # --clean or --restart: restart all machines simultaneously
