@@ -9,23 +9,23 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #080c16;
-  --bg2: #0d1220;
-  --bg3: #0e1520;
-  --bg4: #162030;
-  --fg: #f0f6fc;
-  --fg2: #c8ddf0;
-  --fg3: #6888a8;
-  --accent: #ef4444;
+  --bg: #0a0e1a;
+  --bg2: #0e1322;
+  --bg3: #131a2b;
+  --bg4: #1a2540;
+  --fg: #edf4fb;
+  --fg2: #94b8d8;
+  --fg3: #7090b8;
+  --accent: #3d9be9;
   --green: #22d3a0;
   --red: #ef4444;
   --mono: 'JetBrains Mono', monospace;
   --radius: 6px;
   --sidebar-w: 240px;
   --content-max: 780px;
-  --accent-glow: rgba(239,68,68,0.12);
-  --accent-glow2: rgba(239,68,68,0.06);
-  --accent-border: rgba(239,68,68,0.22);
+  --accent-glow: rgba(61,155,233,0.12);
+  --accent-glow2: rgba(61,155,233,0.06);
+  --accent-border: rgba(61,155,233,0.22);
 }
 
 body { margin: 0; padding: 0; }
@@ -44,8 +44,8 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; padding: 0 48px;
 .nav-links a:hover { color: var(--fg); }
 .nav-links > li > a:hover::after { width: 100%; }
 .nav-links a.active { color: var(--accent); }
-.nav-cta { color: var(--fg)!important; background: rgba(239,68,68,0.08)!important; border: 1px solid rgba(239,68,68,0.25)!important; padding: 8px 16px!important; border-radius: 3px!important; transition: all 0.2s ease!important; font-weight: 500!important; box-shadow: 0 0 0 0 rgba(239,68,68,0); }
-.nav-cta:hover { background: rgba(239,68,68,0.15)!important; border-color: rgba(239,68,68,0.4)!important; box-shadow: 0 0 12px rgba(239,68,68,0.15); transform: translateY(-1px); }
+.nav-cta { color: var(--fg)!important; background: rgba(61,155,233,0.08)!important; border: 1px solid rgba(61,155,233,0.25)!important; padding: 8px 16px!important; border-radius: 3px!important; transition: all 0.2s ease!important; font-weight: 500!important; box-shadow: 0 0 0 0 rgba(61,155,233,0); }
+.nav-cta:hover { background: rgba(61,155,233,0.15)!important; border-color: rgba(61,155,233,0.4)!important; box-shadow: 0 0 12px rgba(61,155,233,0.15); transform: translateY(-1px); }
 .nav-cta::after { display: none!important; }
 .nav-links > li:has(.nav-cta) { margin-left: -16px; }
 .nav-links > li:has(.nav-cta) + li:has(.nav-cta) { margin-left: -20px; }
