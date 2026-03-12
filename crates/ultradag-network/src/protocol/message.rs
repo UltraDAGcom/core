@@ -94,6 +94,19 @@ pub enum Message {
         min_round: u64,
     },
 
+    /// Request vertex hashes for a range of rounds (efficient reconciliation).
+    /// Response is compact (~32 bytes per vertex vs ~2-5 KB for full vertex).
+    GetRoundHashes {
+        from_round: u64,
+        to_round: u64,
+    },
+
+    /// Response with vertex hashes grouped by round.
+    /// Receiver compares against local DAG and requests only missing vertices.
+    RoundHashes {
+        rounds: Vec<(u64, Vec<[u8; 32]>)>,
+    },
+
     /// Response to GetCheckpoint: the latest accepted checkpoint + suffix DAG + state.
     /// Used for fast-sync by new nodes.
     CheckpointSync {

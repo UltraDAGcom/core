@@ -1091,6 +1091,44 @@ async fn handle_peer(
                 peers.send_to(&peer_addr, &Message::DagVertices(vertices)).await?;
             }
 
+            Message::GetRoundHashes { from_round, to_round } => {
+                let Some(dag_r) = dag.try_read().ok() else {
+                    continue; // DAG locked, skip — will be retried next cycle
+                };
+                let floor = dag_r.pruning_floor();
+                let current = dag_r.current_round();
+                let effective_from = from_round.max(floor);
+                // Cap range to 1000 rounds to prevent abuse
+                let effective_to = to_round.min(current).min(effective_from.saturating_add(1000));
+                let mut rounds = Vec::new();
+                for round in effective_from..=effective_to {
+                    let hashes = dag_r.hashes_in_round(round);
+                    if !hashes.is_empty() {
+                        rounds.push((round, hashes.to_vec()));
+                    }
+                }
+                drop(dag_r);
+                peers.send_to(&peer_addr, &Message::RoundHashes { rounds }).await?;
+            }
+
+            Message::RoundHashes { rounds } => {
+                let missing_hashes: Vec<[u8; 32]> = {
+                    let dag_r = dag.read().await;
+                    rounds.iter()
+                        .flat_map(|(_, hashes)| hashes.iter())
+                        .filter(|h| dag_r.get(*h).is_none())
+                        .copied()
+                        .collect()
+                };
+                if !missing_hashes.is_empty() {
+                    info!("Hash gossip: {} missing vertices from {}, requesting", missing_hashes.len(), peer_addr);
+                    // Request in batches of 32 (matching GetParents cap)
+                    for chunk in missing_hashes.chunks(32) {
+                        let _ = peers.send_to(&peer_addr, &Message::GetParents { hashes: chunk.to_vec() }).await;
+                    }
+                }
+            }
+
             Message::DagVertices(vertices) => {
                 let mut new_validators = Vec::new();
                 let mut failed_vertices = Vec::new();

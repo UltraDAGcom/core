@@ -568,43 +568,31 @@ pub async fn validator_loop(
                 .await;
         }
 
-        // Vertex reconciliation: periodically scan for rounds with missing vertices.
-        // Without this, vertices lost in P2P transit are permanently gone after pruning,
-        // causing state divergence and checkpoint co-signing failure.
-        if dag_round % 50 == 25 {
-            // Offset from pruning (% 50 == 0) to spread work across rounds
+        // Vertex hash gossip reconciliation: exchange compact hash summaries with peers
+        // to detect and recover missing vertices. Much more efficient than requesting
+        // full vertex batches — hashes are 32 bytes vs ~2-5 KB per vertex.
+        //
+        // Every 10 rounds (~50s): scan last 200 rounds for missing vertices.
+        // Every 100 rounds (~500s): full-range scan of entire retained DAG (safety net).
+        if dag_round % 10 == 5 {
             let dag_r = server.dag.read().await;
-            let fin_r = server.finality.read().await;
-            let expected_validators = fin_r.validator_count();
             let floor = dag_r.pruning_floor();
             let current = dag_r.current_round();
-            drop(fin_r);
-
-            // Scan for rounds with fewer validators than expected.
-            // Only check settled rounds (not frontier which may still be filling).
-            let scan_end = current.saturating_sub(5);
-            let mut gap_rounds = 0u32;
-            let mut earliest_gap: Option<u64> = None;
-            for round in floor..=scan_end {
-                let count = dag_r.distinct_validators_in_round(round).len();
-                if count < expected_validators && count > 0 {
-                    gap_rounds += 1;
-                    if earliest_gap.is_none() {
-                        earliest_gap = Some(round);
-                    }
-                }
-            }
             drop(dag_r);
 
-            if let Some(from_round) = earliest_gap {
-                info!(
-                    "Vertex reconciliation: {} rounds with gaps (earliest: round {}), requesting catch-up",
-                    gap_rounds, from_round
-                );
+            let (from_round, to_round) = if dag_round % 100 == 75 {
+                // Full-range scan every 100 rounds
+                (floor, current.saturating_sub(2))
+            } else {
+                // Recent 200-round window every 10 rounds
+                (current.saturating_sub(200).max(floor), current.saturating_sub(2))
+            };
+
+            if from_round < to_round {
                 server
                     .peers
                     .broadcast(
-                        &Message::GetDagVertices { from_round, max_count: 500 },
+                        &Message::GetRoundHashes { from_round, to_round },
                         "",
                     )
                     .await;
