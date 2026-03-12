@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Network — UltraDAG Testnet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0e1a;--bg2:#0e1322;--bg3:#131a2b;
+  --border:#1a2540;--border2:#223050;
+  --dim:#2e4060;--muted:#4a6488;--subtle:#7090b8;
+  --body:#94b8d8;--bright:#c8e0f4;--white:#edf4fb;
+  --accent:#3d9be9;--accent2:#1a6fb5;
+  --glow:rgba(61,155,233,0.15);--glow2:rgba(61,155,233,0.06);
+  --success:#34d399;--warning:#fbbf24;--danger:#f87171;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--body);font-family:'Syne',sans-serif;font-size:16px;line-height:1.7;min-height:100vh;padding-top:64px}
+
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.4}
+
+.grid-bg{position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.5625;pointer-events:none;z-index:0;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,black 30%,transparent 100%)}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(10,14,26,.92);backdrop-filter:blur(16px)}
+.nav-logo{font-family:'Cormorant',serif;font-size:22px;font-weight:300;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px}
+.nav-logo:hover{color:var(--accent)}
+.nav-logo-mark{width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
+.nav-logo-mark::after{content:'';width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)}
+.nav-links{display:flex;align-items:center;gap:32px;list-style:none}
+.nav-links>li{position:relative}
+.nav-links a{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;display:block;padding-bottom:4px}
+.nav-links>li>a{padding:20px 0}
+.nav-links>li>a::after{content:'';position:absolute;bottom:0;left:0;width:0;height:1px;background:var(--accent);transition:width .3s ease}
+.nav-links a:hover{color:var(--white)}
+.nav-links>li>a:hover::after{width:100%}
+.nav-links a.active{color:var(--accent)}
+.nav-cta{color:var(--accent)!important;border:1px solid var(--accent2);padding:8px 18px!important;border-radius:2px;transition:background .2s!important}
+.nav-cta:hover{background:var(--glow)}
+.nav-cta::after{display:none!important}
+
+.mega-menu{position:absolute;top:64px;left:50%;transform:translateX(-50%);background:rgba(10,14,26,.98);backdrop-filter:blur(24px);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;padding:32px;min-width:720px;max-width:920px;opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;box-shadow:0 12px 40px rgba(0,0,0,.4)}
+.nav-links>li:hover .mega-menu{opacity:1;visibility:visible}
+.mega-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:32px}
+.mega-col h4{font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border2)}
+.mega-col ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+.mega-col a{font-family:'Syne',sans-serif;font-size:13px;color:var(--subtle);padding:6px 0;transition:color .2s,padding-left .2s;letter-spacing:0;text-transform:none}
+.mega-col a:hover{color:var(--white);padding-left:8px}
+.mega-col a::after{display:none!important}
+
+.hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;background:none;border:none;z-index:101}
+.hamburger span{width:24px;height:2px;background:var(--white);transition:all .3s;border-radius:2px}
+.hamburger.active span:nth-child(1){transform:rotate(45deg) translate(7px,7px)}
+.hamburger.active span:nth-child(2){opacity:0}
+.hamburger.active span:nth-child(3){transform:rotate(-45deg) translate(7px,-7px)}
+.mobile-menu{position:fixed;top:64px;left:0;right:0;background:rgba(10,14,26,.98);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 24px;z-index:99;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease}
+.mobile-menu.active{max-height:500px;padding:24px}
+.mobile-menu ul{list-style:none;display:flex;flex-direction:column;gap:20px}
+.mobile-menu a{font-family:'DM Mono',monospace;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;display:block;padding:8px 0}
+.mobile-menu a:hover{color:var(--white)}
+.mobile-menu .nav-cta{display:inline-block;margin-top:8px}
+@media(min-width:901px){.mobile-menu{display:none}}
+
+/* CONTAINER */
+.container{max-width:1400px;margin:0 auto;padding:48px 48px 80px;position:relative;z-index:1}
+
+/* HEADER */
+.header{text-align:center;margin-bottom:48px}
+.header h1{font-family:'Cormorant',serif;font-size:clamp(40px,5vw,56px);font-weight:300;line-height:1.1;color:var(--white);margin-bottom:12px;letter-spacing:-.01em}
+.header h1 em{font-style:italic;color:var(--accent)}
+.header p{font-family:'DM Mono',monospace;font-size:13px;color:var(--subtle);letter-spacing:.08em;text-transform:uppercase}
+.live-indicator{display:inline-flex;align-items:center;gap:8px;margin-top:16px;padding:8px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:4px}
+.live-dot{width:8px;height:8px;background:var(--success);border-radius:50%;box-shadow:0 0 8px var(--success);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.2)}}
+
+/* STATS GRID */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;margin-bottom:48px}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:24px;transition:border-color .3s,transform .3s}
+.stat-card:hover{border-color:var(--accent2);transform:translateY(-2px)}
+.stat-label{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.stat-value{font-size:36px;font-weight:700;color:var(--white);margin-bottom:4px;font-family:'DM Mono',monospace}
+.stat-sub{font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle)}
+.stat-trend{display:inline-flex;align-items:center;gap:4px;font-size:11px;margin-top:4px}
+.stat-trend.up{color:var(--success)}
+.stat-trend.down{color:var(--danger)}
+
+/* NETWORK MAP */
+.network-section{margin-bottom:48px}
+.section-title{font-size:24px;color:var(--white);margin-bottom:24px;font-weight:600;font-family:'Cormorant',serif}
+.map-container{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:32px;position:relative;min-height:500px}
+.map-canvas{width:100%;height:500px;background:var(--bg3);border-radius:4px;position:relative;overflow:hidden}
+.validator-marker{position:absolute;width:12px;height:12px;background:var(--accent);border:2px solid var(--white);border-radius:50%;cursor:pointer;transition:transform .2s,box-shadow .2s;z-index:2}
+.validator-marker:hover{transform:scale(1.5);box-shadow:0 0 16px var(--accent)}
+.validator-marker.active{background:var(--success);box-shadow:0 0 12px var(--success)}
+.validator-tooltip{position:absolute;background:rgba(10,14,26,.95);border:1px solid var(--border);border-radius:4px;padding:12px;font-size:12px;pointer-events:none;opacity:0;transition:opacity .2s;z-index:10;min-width:200px}
+.validator-tooltip.show{opacity:1}
+.validator-tooltip .name{font-weight:600;color:var(--white);margin-bottom:4px}
+.validator-tooltip .detail{color:var(--subtle);font-family:'DM Mono',monospace;font-size:11px;margin-bottom:2px}
+
+/* VALIDATORS LIST */
+.validators-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-bottom:48px}
+.validator-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px;transition:border-color .3s}
+.validator-card:hover{border-color:var(--accent2)}
+.validator-card.online{border-left:3px solid var(--success)}
+.validator-card.offline{border-left:3px solid var(--danger);opacity:.6}
+.validator-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.validator-name{font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--white)}
+.validator-status{font-family:'DM Mono',monospace;font-size:10px;padding:4px 8px;border-radius:3px;text-transform:uppercase;letter-spacing:.1em}
+.validator-status.online{background:rgba(52,211,153,.15);color:var(--success);border:1px solid rgba(52,211,153,.3)}
+.validator-status.offline{background:rgba(248,113,113,.15);color:var(--danger);border:1px solid rgba(248,113,113,.3)}
+.validator-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}
+.validator-metric{display:flex;flex-direction:column}
+.validator-metric-label{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
+.validator-metric-value{font-size:16px;font-weight:600;color:var(--bright);font-family:'DM Mono',monospace}
+
+/* LATENCY CHART */
+.chart-container{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:32px;margin-bottom:48px}
+.chart-title{font-size:18px;color:var(--white);margin-bottom:24px;font-weight:600}
+.chart-canvas{width:100%;height:300px;position:relative}
+.chart-bar{position:absolute;bottom:0;background:var(--accent);border-radius:4px 4px 0 0;transition:all .3s}
+.chart-bar:hover{background:var(--success)}
+.chart-labels{display:flex;justify-content:space-between;margin-top:12px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)}
+
+/* RESPONSIVE */
+@media(max-width:900px){
+  nav{padding:0 24px;height:56px}
+  .nav-logo{font-size:18px}
+  .nav-links{display:none}
+  .hamburger{display:flex}
+  .container{padding:32px 24px 60px}
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:16px}
+  .validators-grid{grid-template-columns:1fr}
+  .map-canvas{height:400px}
+}
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+
+<!-- NAV -->
+<nav id="nav">
+  <a href="index.html" class="nav-logo">
+    <div class="nav-logo-mark"></div>
+    UltraDAG
+  </a>
+  <ul class="nav-links">
+    <li><a href="index.html#consensus">Why UltraDAG</a></li>
+    <li>
+      <a href="whitepaper.html">Whitepaper</a>
+      <div class="mega-menu">
+        <div class="mega-cols">
+          <div class="mega-col">
+            <h4>Core Concepts</h4>
+            <ul>
+              <li><a href="whitepaper.html#introduction">Introduction</a></li>
+              <li><a href="whitepaper.html#dag-bft">DAG-BFT Consensus</a></li>
+              <li><a href="whitepaper.html#finality">BFT Finality</a></li>
+              <li><a href="whitepaper.html#state-engine">State Engine</a></li>
+            </ul>
+          </div>
+          <div class="mega-col">
+            <h4>Advanced Topics</h4>
+            <ul>
+              <li><a href="whitepaper.html#staking">Staking & Validation</a></li>
+              <li><a href="whitepaper.html#governance">Governance</a></li>
+              <li><a href="whitepaper.html#checkpoints">Checkpoints</a></li>
+              <li><a href="whitepaper.html#security">Security Model</a></li>
+            </ul>
+          </div>
+          <div class="mega-col">
+            <h4>Technical Details</h4>
+            <ul>
+              <li><a href="whitepaper.html#tokenomics">Tokenomics</a></li>
+              <li><a href="whitepaper.html#pruning">Pruning</a></li>
+              <li><a href="whitepaper.html#formal">Formal Verification</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </li>
+    <li>
+      <a href="docs.html">Docs</a>
+      <div class="mega-menu">
+        <div class="mega-cols">
+          <div class="mega-col">
+            <h4>Getting Started</h4>
+            <ul>
+              <li><a href="docs.html#api">HTTP RPC API</a></li>
+              <li><a href="docs.html#sdk">SDK Quickstart</a></li>
+              <li><a href="docs.html#node">Running a Node</a></li>
+            </ul>
+          </div>
+          <div class="mega-col">
+            <h4>Validators</h4>
+            <ul>
+              <li><a href="docs.html#staking">Staking & Validation</a></li>
+              <li><a href="docs.html#governance">Governance</a></li>
+              <li><a href="docs.html#monitoring">Metrics & Monitoring</a></li>
+            </ul>
+          </div>
+          <div class="mega-col">
+            <h4>Reference</h4>
+            <ul>
+              <li><a href="docs.html#arch">Architecture</a></li>
+              <li><a href="docs.html#transactions">Transaction Format</a></li>
+              <li><a href="docs.html#checkpoints">Checkpoints & Fast-Sync</a></li>
+              <li><a href="docs.html#troubleshooting">Troubleshooting</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </li>
+    <li><a href="testnet.html">Testnet</a></li>
+    <li><a href="network.html" class="active">Live Network</a></li>
+    <li><a href="blog/index.html">Blog</a></li>
+    <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+    <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
+  </ul>
+  <button class="hamburger" id="hamburger" aria-label="Menu">
+    <span></span>
+    <span></span>
+    <span></span>
+  </button>
+</nav>
+
+<div class="mobile-menu" id="mobile-menu">
+  <ul>
+    <li><a href="index.html">Home</a></li>
+    <li><a href="whitepaper.html">Whitepaper</a></li>
+    <li><a href="docs.html">Docs</a></li>
+    <li><a href="testnet.html">Testnet</a></li>
+    <li><a href="network.html" class="active">Live Network</a></li>
+    <li><a href="blog/index.html">Blog</a></li>
+    <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+    <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
+  </ul>
+</div>
+
+<!-- CONTENT -->
+<div class="container">
+  
+  <div class="header">
+    <h1>UltraDAG <em>Live Network</em></h1>
+    <p>Real-time Testnet Metrics</p>
+    <div class="live-indicator">
+      <div class="live-dot"></div>
+      <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--subtle);letter-spacing:.1em">NETWORK ACTIVE</span>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">Current Round</div>
+      <div class="stat-value" id="current-round">—</div>
+      <div class="stat-sub">DAG rounds finalized</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Active Validators</div>
+      <div class="stat-value" id="validator-count">—</div>
+      <div class="stat-sub">Nodes producing blocks</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Avg Finality</div>
+      <div class="stat-value" id="avg-finality">—</div>
+      <div class="stat-sub">Seconds to finalize</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Network TPS</div>
+      <div class="stat-value" id="network-tps">—</div>
+      <div class="stat-sub">Transactions per second</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Supply</div>
+      <div class="stat-value" id="total-supply">—</div>
+      <div class="stat-sub">UDAG in circulation</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Peer Count</div>
+      <div class="stat-value" id="peer-count">—</div>
+      <div class="stat-sub">Connected peers</div>
+    </div>
+  </div>
+
+  <!-- NETWORK MAP -->
+  <div class="network-section">
+    <h2 class="section-title">Global Validator Map</h2>
+    <div class="map-container">
+      <div class="map-canvas" id="map-canvas">
+        <!-- Validators will be plotted here -->
+      </div>
+      <div class="validator-tooltip" id="tooltip">
+        <div class="name"></div>
+        <div class="detail"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VALIDATORS LIST -->
+  <div class="network-section">
+    <h2 class="section-title">Active Validators</h2>
+    <div class="validators-grid" id="validators-grid">
+      <!-- Validator cards will be inserted here -->
+    </div>
+  </div>
+
+  <!-- FINALITY LATENCY CHART -->
+  <div class="network-section">
+    <h2 class="section-title">Finality Latency Distribution</h2>
+    <div class="chart-container">
+      <div class="chart-canvas" id="latency-chart">
+        <!-- Chart bars will be inserted here -->
+      </div>
+      <div class="chart-labels">
+        <span>&lt;1s</span>
+        <span>1-2s</span>
+        <span>2-3s</span>
+        <span>3-4s</span>
+        <span>4-5s</span>
+        <span>5-10s</span>
+        <span>&gt;10s</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Configuration
+const API_URL = 'https://ultradag-node-1.fly.dev';
+const REFRESH_INTERVAL = 5000; // 5 seconds
+
+// Mock validator locations (in production, this would come from API)
+const VALIDATOR_LOCATIONS = [
+  { name: 'ultradag-node-1', lat: 40.7128, lon: -74.0060, location: 'New York, US' },
+  { name: 'ultradag-node-2', lat: 51.5074, lon: -0.1278, location: 'London, UK' },
+  { name: 'ultradag-node-3', lat: 35.6762, lon: 139.6503, location: 'Tokyo, JP' },
+  { name: 'ultradag-node-4', lat: -33.8688, lon: 151.2093, location: 'Sydney, AU' },
+];
+
+// State
+let networkData = {
+  round: 0,
+  validators: [],
+  latencyDistribution: [0, 0, 0, 0, 0, 0, 0]
+};
+
+// Fetch network status
+async function fetchNetworkStatus() {
+  try {
+    const response = await fetch(`${API_URL}/status`);
+    const data = await response.json();
+    
+    networkData.round = data.dag_round || 0;
+    
+    // Update stats
+    document.getElementById('current-round').textContent = networkData.round.toLocaleString();
+    document.getElementById('validator-count').textContent = data.peer_count || 4;
+    document.getElementById('peer-count').textContent = data.peer_count || 0;
+    
+    const totalSupply = data.total_supply || 0;
+    document.getElementById('total-supply').textContent = (totalSupply / 100000000).toFixed(2) + 'M';
+    
+    // Calculate finality lag
+    const finalityLag = (data.dag_round || 0) - (data.last_finalized_round || 0);
+    const avgFinality = finalityLag * 5; // Approximate: 5 seconds per round
+    document.getElementById('avg-finality').textContent = avgFinality.toFixed(1) + 's';
+    
+    // Mock TPS (in production, calculate from recent blocks)
+    const tps = Math.floor(Math.random() * 50) + 10;
+    document.getElementById('network-tps').textContent = tps;
+    
+    // Update latency distribution (mock data)
+    updateLatencyChart();
+    
+  } catch (error) {
+    console.error('Failed to fetch network status:', error);
+  }
+}
+
+// Fetch validators
+async function fetchValidators() {
+  try {
+    // In production, this would fetch from a /validators endpoint
+    // For now, use mock data based on known nodes
+    const validators = VALIDATOR_LOCATIONS.map((loc, i) => ({
+      name: loc.name,
+      location: loc.location,
+      lat: loc.lat,
+      lon: loc.lon,
+      status: 'online',
+      round: networkData.round - Math.floor(Math.random() * 3),
+      stake: Math.floor(Math.random() * 50000) + 10000,
+      uptime: 95 + Math.random() * 5
+    }));
+    
+    networkData.validators = validators;
+    renderValidators();
+    renderMap();
+    
+  } catch (error) {
+    console.error('Failed to fetch validators:', error);
+  }
+}
+
+// Render validators grid
+function renderValidators() {
+  const grid = document.getElementById('validators-grid');
+  grid.innerHTML = networkData.validators.map(v => `
+    <div class="validator-card ${v.status}">
+      <div class="validator-header">
+        <div class="validator-name">${v.name}</div>
+        <div class="validator-status ${v.status}">${v.status}</div>
+      </div>
+      <div style="font-size:12px;color:var(--subtle);margin-bottom:12px">${v.location}</div>
+      <div class="validator-metrics">
+        <div class="validator-metric">
+          <div class="validator-metric-label">Round</div>
+          <div class="validator-metric-value">${v.round.toLocaleString()}</div>
+        </div>
+        <div class="validator-metric">
+          <div class="validator-metric-label">Stake</div>
+          <div class="validator-metric-value">${(v.stake / 1000).toFixed(0)}K</div>
+        </div>
+        <div class="validator-metric">
+          <div class="validator-metric-label">Uptime</div>
+          <div class="validator-metric-value">${v.uptime.toFixed(1)}%</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// Render map
+function renderMap() {
+  const canvas = document.getElementById('map-canvas');
+  const tooltip = document.getElementById('tooltip');
+  
+  // Clear existing markers
+  canvas.querySelectorAll('.validator-marker').forEach(m => m.remove());
+  
+  // Add markers
+  networkData.validators.forEach(v => {
+    const marker = document.createElement('div');
+    marker.className = `validator-marker ${v.status}`;
+    
+    // Convert lat/lon to canvas position (simplified projection)
+    const x = ((v.lon + 180) / 360) * 100;
+    const y = ((90 - v.lat) / 180) * 100;
+    
+    marker.style.left = `${x}%`;
+    marker.style.top = `${y}%`;
+    
+    // Tooltip on hover
+    marker.addEventListener('mouseenter', (e) => {
+      tooltip.querySelector('.name').textContent = v.name;
+      tooltip.querySelector('.detail').innerHTML = `
+        ${v.location}<br>
+        Round: ${v.round.toLocaleString()}<br>
+        Stake: ${(v.stake / 1000).toFixed(0)}K UDAG
+      `;
+      tooltip.classList.add('show');
+      
+      const rect = marker.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      tooltip.style.left = (rect.left - canvasRect.left + 20) + 'px';
+      tooltip.style.top = (rect.top - canvasRect.top - 60) + 'px';
+    });
+    
+    marker.addEventListener('mouseleave', () => {
+      tooltip.classList.remove('show');
+    });
+    
+    canvas.appendChild(marker);
+  });
+}
+
+// Update latency chart
+function updateLatencyChart() {
+  // Mock latency distribution (in production, calculate from actual finality times)
+  const distribution = [
+    Math.floor(Math.random() * 30) + 50,  // <1s
+    Math.floor(Math.random() * 40) + 30,  // 1-2s
+    Math.floor(Math.random() * 20) + 10,  // 2-3s
+    Math.floor(Math.random() * 10) + 5,   // 3-4s
+    Math.floor(Math.random() * 5) + 2,    // 4-5s
+    Math.floor(Math.random() * 3) + 1,    // 5-10s
+    Math.floor(Math.random() * 2)         // >10s
+  ];
+  
+  const chart = document.getElementById('latency-chart');
+  chart.innerHTML = '';
+  
+  const maxValue = Math.max(...distribution);
+  
+  distribution.forEach((value, i) => {
+    const bar = document.createElement('div');
+    bar.className = 'chart-bar';
+    const height = (value / maxValue) * 100;
+    bar.style.height = height + '%';
+    bar.style.width = (100 / distribution.length - 2) + '%';
+    bar.style.left = (i * (100 / distribution.length)) + '%';
+    bar.title = `${value} blocks`;
+    chart.appendChild(bar);
+  });
+}
+
+// Hamburger menu
+document.getElementById('hamburger').addEventListener('click', () => {
+  document.getElementById('hamburger').classList.toggle('active');
+  document.getElementById('mobile-menu').classList.toggle('active');
+});
+
+// Initialize
+async function init() {
+  await fetchNetworkStatus();
+  await fetchValidators();
+  
+  // Refresh periodically
+  setInterval(async () => {
+    await fetchNetworkStatus();
+    await fetchValidators();
+  }, REFRESH_INTERVAL);
+}
+
+init();
+</script>
+
+</body>
+</html>
