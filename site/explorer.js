@@ -235,9 +235,14 @@ window.changePage = function(page) {
 
 // View round details
 window.viewRound = async function(roundNumber) {
+  console.log('viewRound called with:', roundNumber);
   const detailView = document.getElementById('detail-view');
+  if (!detailView) {
+    console.error('detail-view element not found');
+    return;
+  }
   detailView.style.display = 'block';
-  detailView.innerHTML = '<div class="loading">Loading round details</div>';
+  detailView.innerHTML = '<div class="loading">Loading round details...</div>';
   
   // Scroll to detail view
   detailView.scrollIntoView({ behavior: 'smooth' });
@@ -610,7 +615,8 @@ window.toggleAutoRefresh = function() {
   const btn = document.getElementById('auto-refresh-btn');
   if (btn) {
     btn.textContent = autoRefreshEnabled ? '🔄 Auto-refresh ON' : '⏸️ Auto-refresh OFF';
-    btn.style.background = autoRefreshEnabled ? 'var(--success)' : 'var(--muted)';
+    btn.style.background = autoRefreshEnabled ? 'rgba(52,211,153,0.08)' : 'rgba(248,113,113,0.08)';
+    btn.style.borderColor = autoRefreshEnabled ? 'rgba(52,211,153,0.25)' : 'rgba(248,113,113,0.25)';
   }
   if (autoRefreshEnabled) {
     showNotification('Auto-refresh enabled');

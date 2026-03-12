@@ -270,9 +270,8 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 <div class="container">
   
   <div class="header">
-    <h1>UltraDAG <em>Explorer</em></h1>
     <p>Search rounds, transactions, and addresses</p>
-    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-top:16px">
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-top:24px">
       <div id="network-health"></div>
       <button id="auto-refresh-btn" onclick="toggleAutoRefresh()" style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.25);color:var(--white);padding:6px 14px;border-radius:3px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.06em;transition:all .2s ease;font-weight:500" onmouseover="this.style.background='rgba(52,211,153,0.15)';this.style.borderColor='rgba(52,211,153,0.4)';this.style.boxShadow='0 0 12px rgba(52,211,153,0.15)';this.style.transform='translateY(-1px)'" onmouseout="this.style.background='rgba(52,211,153,0.08)';this.style.borderColor='rgba(52,211,153,0.25)';this.style.boxShadow='none';this.style.transform='translateY(0)'">🔄 Auto-refresh ON</button>
       <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--dim)">Updated: <span id="last-update">—</span></span>
@@ -319,7 +318,6 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <div class="tabs">
     <button class="tab active" data-tab="rounds">Latest Rounds</button>
     <button class="tab" data-tab="validators">Validators</button>
-    <button class="tab" data-tab="transactions">Recent Transactions</button>
   </div>
 
   <!-- ROUNDS TAB -->
@@ -360,27 +358,6 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
         </thead>
         <tbody id="validators-tbody">
           <tr><td colspan="6" class="loading">Loading validators</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- TRANSACTIONS TAB -->
-  <div id="transactions-tab" class="tab-content" style="display:none">
-    <div class="table-container">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Hash</th>
-            <th>From</th>
-            <th>To</th>
-            <th>Amount</th>
-            <th>Fee</th>
-            <th>Round</th>
-          </tr>
-        </thead>
-        <tbody id="transactions-tbody">
-          <tr><td colspan="6" class="loading">Loading transactions</td></tr>
         </tbody>
       </table>
     </div>
