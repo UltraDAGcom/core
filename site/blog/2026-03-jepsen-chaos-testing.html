@@ -32,13 +32,25 @@ nav.scrolled{border-color:var(--border);background:rgba(10,14,26,.92);backdrop-f
 .nav-logo-mark{width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
 .nav-logo-mark::after{content:'';width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)}
 .nav-links{display:flex;align-items:center;gap:32px;list-style:none}
-.nav-links a{font-family:'DM Mono',monospace;font-size:12px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;position:relative;padding-bottom:4px}
+.nav-links>li{position:relative}
+.nav-links a{font-family:'DM Mono',monospace;font-size:12px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;position:relative;padding-bottom:4px;display:block}
+.nav-links>li>a{padding:20px 0}
 .nav-links a::after{content:'';position:absolute;bottom:0;left:0;width:0;height:1px;background:var(--accent);transition:width .3s ease}
 .nav-links a:hover{color:var(--white)}
-.nav-links a:hover::after{width:100%}
+.nav-links>li>a:hover::after{width:100%}
 .nav-links a.active{color:var(--accent)}
-.nav-cta{color:var(--accent)!important;border:1px solid var(--accent2);padding:8px 18px;border-radius:2px;transition:background .2s!important}
+.nav-cta{color:var(--accent)!important;border:1px solid var(--accent2);padding:8px 18px!important;border-radius:2px;transition:background .2s!important}
 .nav-cta:hover{background:var(--glow)}
+.nav-cta::after{display:none!important}
+
+.mega-menu{position:absolute;top:64px;left:50%;transform:translateX(-50%);background:rgba(10,14,26,.98);backdrop-filter:blur(24px);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;padding:32px;min-width:720px;max-width:920px;opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;box-shadow:0 12px 40px rgba(0,0,0,.4)}
+.nav-links>li:hover .mega-menu{opacity:1;visibility:visible}
+.mega-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:32px}
+.mega-col h4{font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border2)}
+.mega-col ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+.mega-col a{font-family:'Syne',sans-serif;font-size:13px;color:var(--subtle);padding:6px 0;transition:color .2s,padding-left .2s;letter-spacing:0;text-transform:none}
+.mega-col a:hover{color:var(--white);padding-left:8px}
+.mega-col a::after{display:none}
 
 .hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;background:none;border:none;z-index:101}
 .hamburger span{width:24px;height:2px;background:var(--white);transition:all .3s;border-radius:2px}
@@ -124,12 +136,74 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   </a>
   <ul class="nav-links">
     <li><a href="../index.html#consensus">Why UltraDAG</a></li>
-    <li><a href="../whitepaper.html">Whitepaper</a></li>
-    <li><a href="../docs.html">Docs</a></li>
+    <li>
+      <a href="../whitepaper.html">Whitepaper</a>
+      <div class="mega-menu">
+        <div class="mega-cols">
+          <div class="mega-col">
+            <h4>Core Concepts</h4>
+            <ul>
+              <li><a href="../whitepaper.html#introduction">Introduction</a></li>
+              <li><a href="../whitepaper.html#dag-bft">DAG-BFT Consensus</a></li>
+              <li><a href="../whitepaper.html#finality">BFT Finality</a></li>
+              <li><a href="../whitepaper.html#state-engine">State Engine</a></li>
+            </ul>
+          </div>
+          <div class="mega-col">
+            <h4>Advanced Topics</h4>
+            <ul>
+              <li><a href="../whitepaper.html#staking">Staking & Validation</a></li>
+              <li><a href="../whitepaper.html#governance">Governance</a></li>
+              <li><a href="../whitepaper.html#checkpoints">Checkpoints</a></li>
+              <li><a href="../whitepaper.html#security">Security Model</a></li>
+            </ul>
+          </div>
+          <div class="mega-col">
+            <h4>Technical Details</h4>
+            <ul>
+              <li><a href="../whitepaper.html#tokenomics">Tokenomics</a></li>
+              <li><a href="../whitepaper.html#pruning">Pruning</a></li>
+              <li><a href="../whitepaper.html#formal">Formal Verification</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </li>
+    <li>
+      <a href="../docs.html">Docs</a>
+      <div class="mega-menu">
+        <div class="mega-cols">
+          <div class="mega-col">
+            <h4>Getting Started</h4>
+            <ul>
+              <li><a href="../docs.html#api">HTTP RPC API</a></li>
+              <li><a href="../docs.html#sdk">SDK Quickstart</a></li>
+              <li><a href="../docs.html#node">Running a Node</a></li>
+            </ul>
+          </div>
+          <div class="mega-col">
+            <h4>Validators</h4>
+            <ul>
+              <li><a href="../docs.html#staking">Staking & Validation</a></li>
+              <li><a href="../docs.html#governance">Governance</a></li>
+              <li><a href="../docs.html#monitoring">Metrics & Monitoring</a></li>
+            </ul>
+          </div>
+          <div class="mega-col">
+            <h4>Reference</h4>
+            <ul>
+              <li><a href="../docs.html#arch">Architecture</a></li>
+              <li><a href="../docs.html#transactions">Transaction Format</a></li>
+              <li><a href="../docs.html#checkpoints">Checkpoints & Fast-Sync</a></li>
+              <li><a href="../docs.html#troubleshooting">Troubleshooting</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </li>
     <li><a href="../testnet.html">Testnet</a></li>
     <li><a href="../consensus-viz.html">Consensus Demo</a></li>
     <li><a href="index.html" class="active">Blog</a></li>
-    <li><a href="../index.html#sdks">SDKs</a></li>
     <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
     <li><a href="../dashboard.html" class="nav-cta">Dashboard</a></li>
   </ul>
