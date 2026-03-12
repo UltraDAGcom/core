@@ -21,6 +21,10 @@ pub async fn validator_loop(
     info!("Validator started for address {} (round={}ms)", validator, round_duration.as_millis());
 
     let mut interval = tokio::time::interval(round_duration);
+    // Prevent burst catch-up: if a tick is missed (lock contention, slow processing),
+    // skip it instead of firing rapidly to catch up. Without this, after a long lock
+    // hold, the interval fires N times immediately, causing rapid-fire production.
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     // First tick fires immediately — consume it so we wait a full round first
     interval.tick().await;
 
@@ -50,6 +54,11 @@ pub async fn validator_loop(
         tokio::select! {
             _ = interval.tick() => {
                 timer_fired = true;
+                // Enforce minimum cooldown even on timer ticks (safety net for Delay behavior)
+                let elapsed = last_production.elapsed();
+                if elapsed < min_production_interval / 2 {
+                    continue;
+                }
             }
             _ = server.round_notify.notified() => {
                 timer_fired = false;
