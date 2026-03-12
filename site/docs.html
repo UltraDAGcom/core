@@ -806,11 +806,17 @@ tx, _ := client.SendTx(keypair, recipient, <span class="num">50_000_000</span>, 
         <p>To become a validator, you must stake at least <strong>10,000 UDAG</strong>.</p>
         
         <h3>Stake Transaction</h3>
-        <pre>{
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">stake &mdash; transaction</span>
+          </div>
+          <pre>{
   "type": "stake",
   "amount": "10000.00000000",
   "validator_pubkey": "0x..."
 }</pre>
+        </div>
 
         <h3>Unstaking</h3>
         <p>Unstaking has a cooldown period of <strong>2,016 rounds</strong> (~1 week at 5s rounds).</p>
@@ -833,10 +839,16 @@ tx, _ := client.SendTx(keypair, recipient, <span class="num">50_000_000</span>, 
       <section class="doc-section" id="monitoring">
         <div class="doc-section-header"><h2>Metrics & Monitoring</h2></div>
         <p>The node exposes Prometheus metrics on <span class="inline-code">/metrics</span>:</p>
-        <pre>ultradag_dag_round 182
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">metrics &mdash; prometheus</span>
+          </div>
+          <pre>ultradag_dag_round 182
 ultradag_dag_vertices 728
 ultradag_finalized_round 180
 ultradag_mempool_size 5</pre>
+        </div>
       </section>
 
       <!-- Architecture -->
@@ -854,7 +866,12 @@ ultradag_mempool_size 5</pre>
       <section class="doc-section" id="transactions">
         <div class="doc-section-header"><h2>Transaction Format</h2></div>
         <p>All transactions are Ed25519-signed with the following structure:</p>
-        <pre>{
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">transaction &mdash; format</span>
+          </div>
+          <pre>{
   "from": "Blake3(pubkey)",
   "to": "recipient_address",
   "amount": "satoshis",
@@ -862,6 +879,7 @@ ultradag_mempool_size 5</pre>
   "nonce": "account_nonce",
   "signature": "Ed25519(NETWORK_ID || from || to || amount || fee || nonce)"
 }</pre>
+        </div>
       </section>
 
       <!-- Checkpoints -->
@@ -870,13 +888,19 @@ ultradag_mempool_size 5</pre>
         <p>Every 1,000 finalized rounds, validators produce a quorum-signed checkpoint.</p>
         
         <h3>Checkpoint Structure</h3>
-        <pre>{
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">checkpoint &mdash; structure</span>
+          </div>
+          <pre>{
   "round": 1000,
   "state_root": "0x...",
   "dag_tip": "0x...",
   "total_supply": "21000000.00000000",
   "signatures": ["0x...", "0x...", ...]
 }</pre>
+        </div>
       </section>
 
       <!-- Troubleshooting -->
@@ -969,7 +993,12 @@ ultradag_mempool_size 5</pre>
 
         <h3>Benchmarking</h3>
         <p>Run built-in benchmarks to test your setup:</p>
-        <pre># Transaction throughput benchmark
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">benchmark &mdash; cli</span>
+          </div>
+          <pre># Transaction throughput benchmark
 ./ultradag-node benchmark --tx-per-second 1000 --duration 300
 
 # Network latency test
@@ -977,10 +1006,16 @@ ultradag_mempool_size 5</pre>
 
 # Storage performance test
 ./ultradag-node benchmark --storage-test --data-dir ./test-data</pre>
+        </div>
 
         <h3>Monitoring</h3>
         <p>Key metrics to monitor for optimal performance:</p>
-        <pre># Prometheus metrics endpoint
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">monitoring &mdash; metrics</span>
+          </div>
+          <pre># Prometheus metrics endpoint
 curl http://localhost:8080/metrics
 
 # Key metrics:
@@ -990,6 +1025,7 @@ curl http://localhost:8080/metrics
 # ultradag_validator_uptime - Validator uptime percentage
 # ultradag_memory_usage - Node memory consumption
 # ultradag_network_peers - Active peer connections</pre>
+        </div>
       </section>
 
     </div><!-- /doc-content -->
