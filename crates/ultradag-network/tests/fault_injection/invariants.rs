@@ -98,7 +98,10 @@ impl InvariantChecker {
         Ok(())
     }
 
-    /// Check finality agreement: all nodes must agree on finalized vertices
+    /// Check finality agreement: all nodes must have the same SET of vertices per round.
+    /// In a DAG, multiple vertices per round from different validators are normal.
+    /// The safety property is: all nodes agree on WHICH vertices exist at each round
+    /// (i.e., same set of hashes, regardless of insertion order).
     pub async fn check_finality_agreement(
         &self,
         nodes: &[TestNode],
@@ -112,33 +115,37 @@ impl InvariantChecker {
 
         // Check that all nodes agree on vertices up to min_finalized
         for round in 0..=min_finalized {
-            let mut hashes_by_node: HashMap<usize, Vec<[u8; 32]>> = HashMap::new();
+            let mut sets_by_node: HashMap<usize, HashSet<[u8; 32]>> = HashMap::new();
 
             for node in nodes {
                 let dag = node.dag.read().await;
-                let hashes: Vec<[u8; 32]> = dag.hashes_in_round(round).to_vec();
+                let hashes: HashSet<[u8; 32]> = dag.hashes_in_round(round).iter().copied().collect();
                 if !hashes.is_empty() {
-                    hashes_by_node.insert(node.id, hashes);
+                    sets_by_node.insert(node.id, hashes);
                 }
             }
 
-            // All nodes should have the same set of hashes for this round
-            if hashes_by_node.len() > 1 {
-                let mut iter = hashes_by_node.iter();
-                let (first_node, first_hashes) = iter.next().unwrap();
+            // All nodes should have the same SET of hashes for this round
+            if sets_by_node.len() > 1 {
+                let mut iter = sets_by_node.iter();
+                let (first_node, first_set) = iter.next().unwrap();
 
-                for (other_node, other_hashes) in iter {
-                    if first_hashes != other_hashes {
-                        // Report first mismatch
-                        if let (Some(&hash_a), Some(&hash_b)) = (first_hashes.first(), other_hashes.first()) {
-                            return Err(InvariantViolation::FinalityConflict {
-                                round,
-                                node_a: *first_node,
-                                node_b: *other_node,
-                                hash_a,
-                                hash_b,
-                            });
-                        }
+                for (other_node, other_set) in iter {
+                    if first_set != other_set {
+                        // Report first hash that differs
+                        let hash_a = first_set.difference(other_set).next()
+                            .or_else(|| first_set.iter().next())
+                            .copied().unwrap_or([0u8; 32]);
+                        let hash_b = other_set.difference(first_set).next()
+                            .or_else(|| other_set.iter().next())
+                            .copied().unwrap_or([0u8; 32]);
+                        return Err(InvariantViolation::FinalityConflict {
+                            round,
+                            node_a: *first_node,
+                            node_b: *other_node,
+                            hash_a,
+                            hash_b,
+                        });
                     }
                 }
             }
