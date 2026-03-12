@@ -35,13 +35,13 @@ impl RateLimit {
 pub mod limits {
     use super::*;
 
-    pub const TX: RateLimit = RateLimit::new("tx", 10000, 60);         // 10000 tx/min (loadtest)
-    pub const FAUCET: RateLimit = RateLimit::new("faucet", 100, 60);   // 100 request/min (loadtest)
+    pub const TX: RateLimit = RateLimit::new("tx", 10, 60);            // 10 tx/min
+    pub const FAUCET: RateLimit = RateLimit::new("faucet", 1, 600);   // 1 request/10min
     pub const STAKE: RateLimit = RateLimit::new("stake", 5, 60);      // 5 stake/min
     pub const UNSTAKE: RateLimit = RateLimit::new("unstake", 5, 60);  // 5 unstake/min
     pub const PROPOSAL: RateLimit = RateLimit::new("proposal", 5, 60); // 5 proposal/min
     pub const VOTE: RateLimit = RateLimit::new("vote", 10, 60);       // 10 vote/min
-    pub const GLOBAL: RateLimit = RateLimit::new("global", 50000, 60); // 50000 total/min (loadtest)
+    pub const GLOBAL: RateLimit = RateLimit::new("global", 100, 60);  // 100 total/min
 
     pub const MAX_CONCURRENT_CONNECTIONS: u32 = 1000;
 }
