@@ -13,6 +13,8 @@ if [ "${CLEAN_STATE:-}" = "true" ] || [ "${CLEAN_STATE:-}" = "1" ]; then
         "${DATA_DIR:-/data}/wal.jsonl" "${DATA_DIR:-/data}/wal_header.json"
   rm -rf "${DATA_DIR:-/data}/checkpoints"
   rm -rf "${DATA_DIR:-/data}/checkpoint_states"
+  # Also remove flat checkpoint files (checkpoint_NNNNNNNNNN.json, checkpoint_state_NNNNNNNNNN.json)
+  rm -f "${DATA_DIR:-/data}"/checkpoint_*.json
 fi
 
 ARGS="--port ${PORT:-9333} --rpc-port ${RPC_PORT:-10333} --data-dir ${DATA_DIR:-/data} --validate"
