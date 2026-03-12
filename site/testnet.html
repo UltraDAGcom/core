@@ -15,17 +15,18 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0a0e1a;--bg2:#0e1322;--bg3:#131a2b;
+  --bg:#0a0e1a;--bg2:#0e1322;--bg3:#131a2b;--bg4:#1a2540;
   --border:#1a2540;--border2:#223050;
   --dim:#2e4060;--muted:#4a6488;--subtle:#7090b8;
   --body:#94b8d8;--bright:#c8e0f4;--white:#edf4fb;
   --accent:#3d9be9;--accent2:#1a6fb5;
   --glow:rgba(61,155,233,0.15);--glow2:rgba(61,155,233,0.06);
   --success:#34d399;--warning:#fbbf24;--danger:#f87171;
-  --green:#34d399;--red:#f87171;--yellow:#fbbf24;
 }
 html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--body);font-family:'Syne',sans-serif;font-size:16px;line-height:1.7;overflow-x:hidden;cursor:default}
+a{color:var(--accent);text-decoration:none;transition:color .2s}
+a:hover{color:var(--white)}
 
 /* NOISE OVERLAY */
 body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.4}
@@ -39,7 +40,7 @@ h1{font-family:'Cormorant',serif;font-size:clamp(44px,6vw,72px);font-weight:300;
 .subtitle{font-family:'DM Mono',monospace;font-size:14px;color:var(--subtle);letter-spacing:.1em}
 .live-indicator{display:inline-flex;align-items:center;gap:8px;margin-top:16px;padding:8px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:4px}
 .live-dot{width:8px;height:8px;background:var(--success);border-radius:50%;box-shadow:0 0 6px var(--success);animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.2)}}
+@keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
 
 .stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-bottom:48px}
 .stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:24px;transition:border-color .3s}
@@ -49,47 +50,64 @@ h1{font-family:'Cormorant',serif;font-size:clamp(44px,6vw,72px);font-weight:300;
 .stat-sub{font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle)}
 
 .nodes-section{margin-bottom:48px}
-.section-title{font-size:24px;color:var(--white);margin-bottom:24px;font-weight:600}
+.section-title{font-family:'Cormorant',serif;font-size:24px;color:var(--white);margin-bottom:24px;font-weight:600}
 .nodes-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px}
 .node-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px;position:relative}
 .node-card.online{border-color:var(--success)}
-.node-card.offline{border-color:var(--red);opacity:.6}
+.node-card.offline{border-color:var(--danger);opacity:.6}
 .node-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
 .node-name{font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--white)}
 .node-status{font-family:'DM Mono',monospace;font-size:11px;padding:4px 10px;border-radius:3px;text-transform:uppercase;letter-spacing:.1em}
 .node-status.online{background:rgba(52,211,153,.15);color:var(--success);border:1px solid rgba(52,211,153,.3)}
-.node-status.offline{background:rgba(248,113,113,.15);color:var(--red);border:1px solid rgba(248,113,113,.3)}
+.node-status.offline{background:rgba(248,113,113,.15);color:var(--danger);border:1px solid rgba(248,113,113,.3)}
 .node-metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 .node-metric{display:flex;flex-direction:column}
 .node-metric-label{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
 .node-metric-value{font-size:18px;font-weight:600;color:var(--bright)}
 .node-url{font-family:'DM Mono',monospace;font-size:11px;color:var(--subtle);margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
 
-.footer{text-align:center;padding:48px 24px;border-top:1px solid var(--border);margin-top:48px}
-.footer-links{display:flex;justify-content:center;gap:32px;margin-bottom:16px;flex-wrap:wrap}
-.footer-links a{font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle);text-decoration:none;transition:color .2s}
-.footer-links a:hover{color:var(--accent)}
-.footer-note{font-family:'DM Mono',monospace;font-size:11px;color:var(--dim)}
+footer{position:relative;z-index:1;border-top:1px solid var(--border);background:var(--bg);margin-top:120px}
+.footer-inner{max-width:1200px;margin:0 auto;padding:64px 48px 32px}
+.footer-top{display:grid;grid-template-columns:1.2fr 2fr;gap:80px;margin-bottom:48px}
+.footer-brand{max-width:320px}
+.footer-logo{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.footer-logo span{font-family:'Cormorant',serif;font-size:24px;font-weight:300;color:var(--white);letter-spacing:.06em}
+.footer-tagline{font-family:'Syne',sans-serif;font-size:14px;line-height:1.7;color:var(--subtle);margin-bottom:24px}
+.footer-social{display:flex;gap:16px}
+.footer-social a{width:40px;height:40px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:50%;color:var(--muted);transition:all .2s}
+.footer-social a:hover{border-color:var(--accent);color:var(--accent);background:var(--glow2)}
+.footer-links-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:40px}
+.footer-col h4{font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+.footer-col ul{list-style:none;display:flex;flex-direction:column;gap:12px}
+.footer-col a{font-family:'Syne',sans-serif;font-size:14px;color:var(--subtle);text-decoration:none;transition:color .2s}
+.footer-col a:hover{color:var(--white)}
+.footer-bottom{display:flex;justify-content:space-between;align-items:center;padding-top:32px;border-top:1px solid var(--border)}
+.footer-legal{display:flex;align-items:center;gap:12px;font-family:'DM Mono',monospace;font-size:11px;color:var(--dim)}
+.footer-separator{color:var(--border2)}
+.footer-status{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--subtle)}
+.footer-status-dot{width:8px;height:8px;border-radius:50%;background:var(--success);box-shadow:0 0 8px var(--success);animation:pulse 2s infinite}
 
-.error-message{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:var(--red);padding:16px;border-radius:6px;margin-bottom:24px;font-family:'DM Mono',monospace;font-size:13px}
+.error-message{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:var(--danger);padding:16px;border-radius:6px;margin-bottom:24px;font-family:'DM Mono',monospace;font-size:13px}
 
 /* NAV */
-nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(10,14,26,.92);backdrop-filter:blur(16px)}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid transparent;transition:border-color .3s,background .3s;background:rgba(10,14,26,.92);backdrop-filter:blur(16px)}
+nav.scrolled{border-color:var(--border)}
 .nav-logo{font-family:'Cormorant',serif;font-size:22px;font-weight:300;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px}
 .nav-logo:hover{color:var(--accent)}
 .nav-logo-mark{width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
 .nav-logo-mark::after{content:'';width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)}
 .nav-links{display:flex;align-items:center;gap:32px;list-style:none}
 .nav-links>li{position:relative}
-.nav-links a{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;display:block;padding-bottom:4px}
+.nav-links a{font-family:'DM Mono',monospace;font-size:12px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;position:relative;padding-bottom:4px;display:block}
 .nav-links>li>a{padding:20px 0}
 .nav-links>li>a::after{content:'';position:absolute;bottom:0;left:0;width:0;height:1px;background:var(--accent);transition:width .3s ease}
 .nav-links a:hover{color:var(--white)}
 .nav-links>li>a:hover::after{width:100%}
-.nav-links a.active{color:var(--white)}
-.nav-cta{color:var(--accent)!important;border:1px solid var(--accent2);padding:8px 18px!important;border-radius:2px;transition:background .2s!important}
-.nav-cta:hover{background:var(--glow)}
+.nav-cta{color:var(--white)!important;background:rgba(61,155,233,0.08)!important;border:1px solid rgba(61,155,233,0.25)!important;padding:8px 16px!important;border-radius:3px!important;transition:all .2s ease!important;font-weight:500!important;box-shadow:0 0 0 0 rgba(61,155,233,0)}
+.nav-cta:hover{background:rgba(61,155,233,0.15)!important;border-color:rgba(61,155,233,0.4)!important;box-shadow:0 0 12px rgba(61,155,233,0.15);transform:translateY(-1px)}
 .nav-cta::after{display:none!important}
+.nav-links>li:has(.nav-cta){margin-left:-16px}
+.nav-links>li:has(.nav-cta)+li:has(.nav-cta){margin-left:-20px}
 
 /* MEGA MENU */
 .mega-menu{position:absolute;top:64px;left:50%;transform:translateX(-50%);background:rgba(10,14,26,.98);backdrop-filter:blur(24px);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;padding:32px;min-width:720px;max-width:920px;opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;box-shadow:0 12px 40px rgba(0,0,0,.4)}
@@ -100,6 +118,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
 .mega-col a{font-family:'Syne',sans-serif;font-size:13px;color:var(--subtle);padding:6px 0;transition:color .2s,padding-left .2s;letter-spacing:0;text-transform:none}
 .mega-col a:hover{color:var(--white);padding-left:8px}
 .mega-col a::after{display:none!important}
+.mega-col p{font-size:12px;color:var(--muted);line-height:1.6;margin-top:8px}
 
 /* HAMBURGER MENU */
 .hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;background:none;border:none;z-index:101}
@@ -107,7 +126,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
 .hamburger.active span:nth-child(1){transform:rotate(45deg) translate(7px,7px)}
 .hamburger.active span:nth-child(2){opacity:0}
 .hamburger.active span:nth-child(3){transform:rotate(-45deg) translate(7px,-7px)}
-.mobile-menu{position:fixed;top:64px;left:0;right:0;background:rgba(8,11,15,.98);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 24px;z-index:99;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease}
+.mobile-menu{position:fixed;top:64px;left:0;right:0;background:rgba(10,14,26,.98);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 24px;z-index:99;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease}
 .mobile-menu.active{max-height:500px;padding:24px}
 .mobile-menu ul{list-style:none;display:flex;flex-direction:column;gap:20px}
 .mobile-menu a{font-family:'DM Mono',monospace;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;display:block;padding:8px 0}
@@ -135,8 +154,10 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
   .nodes-grid{grid-template-columns:1fr;gap:16px}
   .node-card{padding:16px}
   .section-title{font-size:20px;margin-bottom:20px}
-  .footer{padding:32px 16px}
-  .footer-links{gap:16px}
+  footer{margin-top:80px}
+  .footer-inner{padding:48px 24px 24px}
+  .footer-top{grid-template-columns:1fr;gap:48px}
+  .footer-links-grid{grid-template-columns:repeat(3,1fr)}
 }
 @media(max-width:600px){
   nav{padding:0 16px}
@@ -158,8 +179,11 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
   .node-metric-label{font-size:9px}
   .node-metric-value{font-size:16px}
   .node-url{font-size:10px}
-  .footer{padding:24px 12px}
-  .footer-links{flex-direction:column;gap:12px}
+  footer{margin-top:60px}
+  .footer-inner{padding:32px 16px 20px}
+  .footer-top{grid-template-columns:1fr;gap:32px}
+  .footer-links-grid{grid-template-columns:1fr 1fr;gap:24px}
+  .footer-bottom{flex-direction:column;gap:16px;align-items:flex-start}
 }
 </style>
 </head>
@@ -169,13 +193,13 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
 
 <!-- NAV -->
 <nav id="nav">
-  <a href="index.html" class="nav-logo">
+  <a href="/" class="nav-logo">
     <div class="nav-logo-mark"></div>
     UltraDAG
   </a>
   <ul class="nav-links">
     <li><a href="index.html#consensus">Why UltraDAG</a></li>
-    
+
     <li>
       <a href="whitepaper.html">Whitepaper</a>
       <div class="mega-menu">
@@ -209,7 +233,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
         </div>
       </div>
     </li>
-    
+
     <li>
       <a href="docs.html">Docs</a>
       <div class="mega-menu">
@@ -242,13 +266,12 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
         </div>
       </div>
     </li>
-    
-    <li><a href="testnet.html" class="active">Testnet</a></li>
-    <li><a href="consensus-viz.html">Consensus Demo</a></li>
+
+    <li><a href="explorer.html">Explorer</a></li>
     <li><a href="blog/index.html">Blog</a></li>
     <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
-    <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
     <li><a href="network.html" class="nav-cta">Live Network</a></li>
+    <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
   </ul>
   <button class="hamburger" id="hamburger" aria-label="Menu">
     <span></span>
@@ -262,12 +285,11 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
     <li><a href="index.html">Home</a></li>
     <li><a href="whitepaper.html">Whitepaper</a></li>
     <li><a href="docs.html">Docs</a></li>
-    <li><a href="testnet.html" class="active">Testnet</a></li>
-    <li><a href="consensus-viz.html">Consensus Demo</a></li>
+    <li><a href="explorer.html">Explorer</a></li>
     <li><a href="blog/index.html">Blog</a></li>
     <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
-    <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
     <li><a href="network.html" class="nav-cta">Live Network</a></li>
+    <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
   </ul>
 </div>
 
@@ -323,23 +345,79 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
     </div>
   </div>
 
-  <div class="footer">
-    <div class="footer-links">
-      <a href="index.html">Home</a>
-      <a href="dashboard.html">Dashboard</a>
-      <a href="whitepaper.html">Whitepaper</a>
-      <a href="docs.html">Docs</a>
-      <a href="consensus-viz.html">Consensus Demo</a>
-      <a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a>
-      <a href="network.html">Live Network</a>
-    </div>
-    <div class="footer-note">
-      UltraDAG Testnet • Data refreshes every 5 seconds
-    </div>
-  </div>
 </div>
 
+<footer>
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <div class="footer-logo">
+          <div class="nav-logo-mark"></div>
+          <span>UltraDAG</span>
+        </div>
+        <p class="footer-tagline">The simplest production-ready DAG chain.<br>Fast BFT finality for machine-to-machine micropayments.</p>
+        <div class="footer-social">
+          <a href="https://github.com/UltraDAGcom/core" target="_blank" aria-label="GitHub">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+          </a>
+          <a href="https://twitter.com/ultradag" target="_blank" aria-label="Twitter">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path></svg>
+          </a>
+        </div>
+      </div>
+      <div class="footer-links-grid">
+        <div class="footer-col">
+          <h4>Product</h4>
+          <ul>
+            <li><a href="network.html">Live Network</a></li>
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li><a href="consensus-viz.html">Consensus Demo</a></li>
+            <li><a href="whitepaper.html">Whitepaper</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Developers</h4>
+          <ul>
+            <li><a href="docs.html">Documentation</a></li>
+            <li><a href="docs.html#api">API Reference</a></li>
+            <li><a href="docs.html#sdk">SDK Quickstart</a></li>
+            <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Resources</h4>
+          <ul>
+            <li><a href="blog/index.html">Blog</a></li>
+            <li><a href="docs.html#node">Run a Node</a></li>
+            <li><a href="docs.html#staking">Staking Guide</a></li>
+            <li><a href="docs.html#troubleshooting">Support</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="footer-legal">
+        <span>&copy; 2026 UltraDAG</span>
+        <span class="footer-separator">&bull;</span>
+        <span>Licensed under BUSL-1.1</span>
+        <span class="footer-separator">&bull;</span>
+        <span>Converts to MIT March 2030</span>
+      </div>
+      <div class="footer-status">
+        <div class="footer-status-dot"></div>
+        <span>All systems operational</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
 <script>
+// Nav scroll
+const nav = document.getElementById('nav');
+window.addEventListener('scroll', () => {
+  nav.classList.toggle('scrolled', window.scrollY > 40);
+});
+
 const hamburger=document.getElementById('hamburger');
 const mobileMenu=document.getElementById('mobile-menu');
 hamburger.addEventListener('click',()=>{hamburger.classList.toggle('active');mobileMenu.classList.toggle('active')});
@@ -409,8 +487,8 @@ async function updateAllNodes() {
 function lagColor(lag) {
   if (lag == null) return 'var(--muted)';
   if (lag <= 3) return 'var(--success)';
-  if (lag <= 10) return 'var(--yellow)';
-  return 'var(--red)';
+  if (lag <= 10) return 'var(--warning)';
+  return 'var(--danger)';
 }
 
 function renderNodes() {
@@ -481,10 +559,10 @@ function updateGlobalStats() {
     healthEl.style.color = 'var(--success)';
     healthSub.textContent = 'All nodes operational';
   } else if (online.length > 0) {
-    healthEl.style.color = 'var(--yellow)';
+    healthEl.style.color = 'var(--warning)';
     healthSub.textContent = (total - online.length) + ' node(s) unreachable';
   } else {
-    healthEl.style.color = 'var(--red)';
+    healthEl.style.color = 'var(--danger)';
     healthSub.textContent = 'Network offline';
     showError('All nodes are currently unreachable. Retrying...');
     return;

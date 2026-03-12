@@ -11,13 +11,13 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%233d9be9' stroke-width='2'/%3E%3Ccircle cx='50' cy='50' r='15' fill='%233d9be9'/%3E%3C/svg%3E">
 <title>Live Network — UltraDAG Testnet</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0a0e1a;--bg2:#0e1322;--bg3:#131a2b;
+  --bg:#0a0e1a;--bg2:#0e1322;--bg3:#131a2b;--bg4:#1a2540;
   --border:#1a2540;--border2:#223050;
   --dim:#2e4060;--muted:#4a6488;--subtle:#7090b8;
   --body:#94b8d8;--bright:#c8e0f4;--white:#edf4fb;
@@ -26,26 +26,28 @@
   --success:#34d399;--warning:#fbbf24;--danger:#f87171;
 }
 html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--body);font-family:'Syne',sans-serif;font-size:16px;line-height:1.7;min-height:100vh;padding-top:64px}
+body{background:var(--bg);color:var(--body);font-family:'Syne',sans-serif;font-size:16px;line-height:1.7;overflow-x:hidden;cursor:default}
+a{color:var(--accent);text-decoration:none;transition:color .2s}
+a:hover{color:var(--white)}
 
 body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.4}
 
 .grid-bg{position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.5625;pointer-events:none;z-index:0;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,black 30%,transparent 100%)}
 
 /* NAV */
-nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(10,14,26,.92);backdrop-filter:blur(16px)}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid transparent;transition:border-color .3s,background .3s;background:rgba(10,14,26,.92);backdrop-filter:blur(16px)}
+nav.scrolled{border-color:var(--border)}
 .nav-logo{font-family:'Cormorant',serif;font-size:22px;font-weight:300;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px}
 .nav-logo:hover{color:var(--accent)}
 .nav-logo-mark{width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
 .nav-logo-mark::after{content:'';width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)}
 .nav-links{display:flex;align-items:center;gap:32px;list-style:none}
 .nav-links>li{position:relative}
-.nav-links a{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;display:block;padding-bottom:4px}
+.nav-links a{font-family:'DM Mono',monospace;font-size:12px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;position:relative;padding-bottom:4px;display:block}
 .nav-links>li>a{padding:20px 0}
 .nav-links>li>a::after{content:'';position:absolute;bottom:0;left:0;width:0;height:1px;background:var(--accent);transition:width .3s ease}
 .nav-links a:hover{color:var(--white)}
 .nav-links>li>a:hover::after{width:100%}
-.nav-links a.active{color:var(--accent)}
 .nav-cta{color:var(--white)!important;background:rgba(61,155,233,0.08)!important;border:1px solid rgba(61,155,233,0.25)!important;padding:8px 16px!important;border-radius:3px!important;transition:all .2s ease!important;font-weight:500!important;box-shadow:0 0 0 0 rgba(61,155,233,0)}
 .nav-cta:hover{background:rgba(61,155,233,0.15)!important;border-color:rgba(61,155,233,0.4)!important;box-shadow:0 0 12px rgba(61,155,233,0.15);transform:translateY(-1px)}
 .nav-cta::after{display:none!important}
@@ -60,6 +62,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
 .mega-col a{font-family:'Syne',sans-serif;font-size:13px;color:var(--subtle);padding:6px 0;transition:color .2s,padding-left .2s;letter-spacing:0;text-transform:none}
 .mega-col a:hover{color:var(--white);padding-left:8px}
 .mega-col a::after{display:none!important}
+.mega-col p{font-size:12px;color:var(--muted);line-height:1.6;margin-top:8px}
 
 .hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;background:none;border:none;z-index:101}
 .hamburger span{width:24px;height:2px;background:var(--white);transition:all .3s;border-radius:2px}
@@ -84,7 +87,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
 .header p{font-family:'DM Mono',monospace;font-size:13px;color:var(--subtle);letter-spacing:.08em;text-transform:uppercase}
 .live-indicator{display:inline-flex;align-items:center;gap:8px;margin-top:16px;padding:8px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:4px}
 .live-dot{width:8px;height:8px;background:var(--success);border-radius:50%;box-shadow:0 0 8px var(--success);animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.2)}}
+@keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
 
 /* STATS GRID */
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;margin-bottom:48px}
@@ -223,8 +226,11 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
 @media(max-width:900px){
   nav{padding:0 24px;height:56px}
   .nav-logo{font-size:18px}
+  .nav-logo-mark{width:24px;height:24px}
+  .nav-logo-mark::after{width:6px;height:6px}
   .nav-links{display:none}
   .hamburger{display:flex}
+  .mobile-menu{display:block;top:56px}
   .container{padding:32px 24px 60px}
   .stats-grid{grid-template-columns:repeat(2,1fr);gap:16px}
   .validators-grid{grid-template-columns:1fr}
@@ -233,6 +239,16 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
   .network-globe{height:350px}
   .globe-legend{flex-direction:column;gap:16px}
   .legend-hint{margin-left:0;padding-left:0;border-left:none;margin-top:8px}
+  footer{margin-top:80px}
+}
+@media(max-width:600px){
+  nav{padding:0 16px}
+  .container{padding:32px 16px 40px}
+  footer{margin-top:60px}
+  .footer-inner{padding:32px 16px 20px}
+  .footer-top{grid-template-columns:1fr;gap:32px}
+  .footer-links-grid{grid-template-columns:1fr 1fr;gap:24px}
+  .footer-bottom{flex-direction:column;gap:16px;align-items:flex-start}
 }
 
 /* FOOTER */
@@ -255,14 +271,12 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 .footer-legal{display:flex;align-items:center;gap:12px;font-family:'DM Mono',monospace;font-size:11px;color:var(--dim)}
 .footer-separator{color:var(--border2)}
 .footer-status{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--subtle)}
-.footer-status-dot{width:8px;height:8px;border-radius:50%;background:#22d3a0;box-shadow:0 0 8px #22d3a0;animation:pulse 2s infinite}
+.footer-status-dot{width:8px;height:8px;border-radius:50%;background:var(--success);box-shadow:0 0 8px var(--success);animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
 @media(max-width:900px){
   .footer-inner{padding:48px 24px 24px}
   .footer-top{grid-template-columns:1fr;gap:48px}
-  .footer-brand{max-width:100%}
-  .footer-links-grid{grid-template-columns:repeat(2,1fr);gap:32px}
-  .footer-bottom{flex-direction:column;gap:20px;text-align:center}
+  .footer-links-grid{grid-template-columns:repeat(3,1fr)}
 }
 </style>
 </head>
@@ -272,12 +286,13 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 
 <!-- NAV -->
 <nav id="nav">
-  <a href="index.html" class="nav-logo">
+  <a href="/" class="nav-logo">
     <div class="nav-logo-mark"></div>
     UltraDAG
   </a>
   <ul class="nav-links">
-    <li><a href="index.html">Home</a></li>
+    <li><a href="index.html#consensus">Why UltraDAG</a></li>
+
     <li>
       <a href="whitepaper.html">Whitepaper</a>
       <div class="mega-menu">
@@ -311,6 +326,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
         </div>
       </div>
     </li>
+
     <li>
       <a href="docs.html">Docs</a>
       <div class="mega-menu">
@@ -343,10 +359,11 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
         </div>
       </div>
     </li>
+
     <li><a href="explorer.html">Explorer</a></li>
     <li><a href="blog/index.html">Blog</a></li>
     <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
-    <li><a href="network.html" class="nav-cta active">Live Network</a></li>
+    <li><a href="network.html" class="nav-cta">Live Network</a></li>
     <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
   </ul>
   <button class="hamburger" id="hamburger" aria-label="Menu">
@@ -361,9 +378,10 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <li><a href="index.html">Home</a></li>
     <li><a href="whitepaper.html">Whitepaper</a></li>
     <li><a href="docs.html">Docs</a></li>
-    <li><a href="network.html" class="active">Live Network</a></li>
+    <li><a href="explorer.html">Explorer</a></li>
     <li><a href="blog/index.html">Blog</a></li>
     <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+    <li><a href="network.html" class="nav-cta">Live Network</a></li>
     <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
   </ul>
 </div>
@@ -540,6 +558,12 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 </div>
 
 <script>
+// Nav scroll
+const nav = document.getElementById('nav');
+window.addEventListener('scroll', () => {
+  nav.classList.toggle('scrolled', window.scrollY > 40);
+});
+
 // Configuration
 const API_URL = 'https://ultradag-node-1.fly.dev';
 const REFRESH_INTERVAL = 5000; // 5 seconds
@@ -969,7 +993,7 @@ init();
           <ul>
             <li><a href="network.html">Live Network</a></li>
             <li><a href="dashboard.html">Dashboard</a></li>
-            <li><a href="explorer.html">Explorer</a></li>
+            <li><a href="consensus-viz.html">Consensus Demo</a></li>
             <li><a href="whitepaper.html">Whitepaper</a></li>
           </ul>
         </div>
@@ -999,10 +1023,10 @@ init();
     
     <div class="footer-bottom">
       <div class="footer-legal">
-        <span>© 2026 UltraDAG</span>
-        <span class="footer-separator">•</span>
+        <span>&copy; 2026 UltraDAG</span>
+        <span class="footer-separator">&bull;</span>
         <span>Licensed under BUSL-1.1</span>
-        <span class="footer-separator">•</span>
+        <span class="footer-separator">&bull;</span>
         <span>Converts to MIT March 2030</span>
       </div>
       <div class="footer-status">
