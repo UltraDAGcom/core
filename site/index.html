@@ -111,8 +111,8 @@ h1 em{font-style:italic;color:var(--accent)}
 .step-txt.done{color:#22d3a0}
 
 /* FINALIZED OVERLAY */
-#fin{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .45s ease;background:rgba(7,11,20,.35);backdrop-filter:blur(2px)}
-#fin.show{opacity:1;pointer-events:all}
+#fin{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .45s ease;background:rgba(7,11,20,.35);backdrop-filter:blur(2px)}
+#fin.show{display:flex;opacity:1;pointer-events:all}
 .fin-card{background:rgba(6,10,18,.96);border:1px solid rgba(34,211,160,.25);border-radius:3px;padding:44px 60px 38px;text-align:center;transform:translateY(14px) scale(.98);transition:transform .55s cubic-bezier(.16,1,.3,1);box-shadow:0 32px 80px rgba(0,0,0,.6),0 0 0 1px rgba(34,211,160,.08);max-width:440px;width:90%}
 #fin.show .fin-card{transform:translateY(0) scale(1)}
 .fin-eyebrow{font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:#22d3a0;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:10px}
@@ -471,7 +471,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <h1>Blockchain finality<br>in <em>10 seconds.</em><br>Built for <em>machines.</em></h1>
   <p class="hero-subtitle">DAG-BFT consensus for IoT, sensors, and autonomous agents. Live on testnet.</p>
   <div class="hero-actions">
-    <a href="testnet.html" class="btn-primary">Watch it live &rarr;</a>
+    <a href="network.html" class="btn-primary">Watch it live &rarr;</a>
     <a href="#run" class="btn-secondary">Run a Node &rarr;</a>
   </div>
 </div>
