@@ -274,7 +274,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <p>Search rounds, transactions, and addresses</p>
     <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-top:16px">
       <div id="network-health"></div>
-      <button id="auto-refresh-btn" onclick="toggleAutoRefresh()" style="background:var(--success);border:1px solid var(--success);color:var(--white);padding:6px 14px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.06em;transition:all .2s">🔄 Auto-refresh ON</button>
+      <button id="auto-refresh-btn" onclick="toggleAutoRefresh()" style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.25);color:var(--white);padding:6px 14px;border-radius:3px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.06em;transition:all .2s ease;font-weight:500" onmouseover="this.style.background='rgba(52,211,153,0.15)';this.style.borderColor='rgba(52,211,153,0.4)';this.style.boxShadow='0 0 12px rgba(52,211,153,0.15)';this.style.transform='translateY(-1px)'" onmouseout="this.style.background='rgba(52,211,153,0.08)';this.style.borderColor='rgba(52,211,153,0.25)';this.style.boxShadow='none';this.style.transform='translateY(0)'">🔄 Auto-refresh ON</button>
       <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--dim)">Updated: <span id="last-update">—</span></span>
     </div>
   </div>
@@ -287,7 +287,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     </div>
     <div class="search-hint">
       <span>Try: Round 1 • Address (64 hex) • Press <kbd style="background:var(--bg3);padding:2px 6px;border-radius:2px;font-size:10px;border:1px solid var(--border)">Ctrl+K</kbd> to focus search</span>
-      <button onclick="showShortcuts()" style="background:none;border:1px solid var(--border);color:var(--subtle);padding:4px 10px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;margin-left:12px;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--subtle)'">⌨️ Shortcuts</button>
+      <button onclick="showShortcuts()" style="background:rgba(61,155,233,0.08);border:1px solid rgba(61,155,233,0.25);color:var(--white);padding:4px 10px;border-radius:3px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;margin-left:12px;transition:all .2s ease;font-weight:500" onmouseover="this.style.background='rgba(61,155,233,0.15)';this.style.borderColor='rgba(61,155,233,0.4)';this.style.boxShadow='0 0 12px rgba(61,155,233,0.15)';this.style.transform='translateY(-1px)'" onmouseout="this.style.background='rgba(61,155,233,0.08)';this.style.borderColor='rgba(61,155,233,0.25)';this.style.boxShadow='none';this.style.transform='translateY(0)'">⌨️ Shortcuts</button>
     </div>
   </div>
 

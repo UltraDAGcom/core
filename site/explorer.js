@@ -180,7 +180,7 @@ async function loadRounds() {
     
     return `
       <tr onclick="viewRound(${round})" style="cursor:pointer">
-        <td><a href="#round-${round}" onclick="event.stopPropagation()">${round}</a></td>
+        <td><strong style="color:var(--accent)">${round}</strong></td>
         <td>${vertexCount}</td>
         <td>${txCount}</td>
         <td>${validators}</td>
