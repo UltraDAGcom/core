@@ -300,7 +300,12 @@ pub async fn validator_loop(
             match dag.try_insert(vertex.clone()) {
                 Ok(true) => {} // Inserted successfully
                 Ok(false) => {
-                    warn!("Vertex rejected by DAG (duplicate or Byzantine) — skipping broadcast");
+                    let is_byz = dag.is_byzantine(&validator);
+                    let has_existing = dag.has_vertex_from_validator_in_round(&validator, dag_round);
+                    warn!(
+                        "Vertex rejected: is_byzantine={} has_existing_in_round={} round={} current_round={} — skipping",
+                        is_byz, has_existing, dag_round, dag.current_round()
+                    );
                     continue;
                 }
                 Err(e) => {

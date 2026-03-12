@@ -4,11 +4,13 @@ set -e
 # Clean state on startup if requested (for fresh testnet resets)
 if [ "${CLEAN_STATE:-}" = "true" ] || [ "${CLEAN_STATE:-}" = "1" ]; then
   echo "CLEAN_STATE: removing persisted state files..."
-  # Remove DAG/state data and high-water mark, but keep validator.key
+  # Remove DAG/state data, checkpoints, and high-water mark, but keep validator.key
   rm -f "${DATA_DIR:-/data}/dag.json" "${DATA_DIR:-/data}/finality.json" \
         "${DATA_DIR:-/data}/state.json" "${DATA_DIR:-/data}/mempool.json" \
         "${DATA_DIR:-/data}/high_water_mark.json" \
         "${DATA_DIR:-/data}/wal.jsonl" "${DATA_DIR:-/data}/wal_header.json"
+  rm -rf "${DATA_DIR:-/data}/checkpoints"
+  rm -rf "${DATA_DIR:-/data}/checkpoint_states"
 fi
 
 ARGS="--port ${PORT:-9333} --rpc-port ${RPC_PORT:-10333} --data-dir ${DATA_DIR:-/data} --validate"
