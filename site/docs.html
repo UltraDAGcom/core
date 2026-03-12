@@ -893,6 +893,267 @@ curl http://localhost:8080/metrics
   });
 </script>
 
+<!-- Playground Script -->
+<script src="js/docs-playground.js"></script>
+
+<!-- Playground CSS -->
+<style>
+/* Playground Modal Styles */
+.code-example-container {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.code-example-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+}
+
+.try-it-btn {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.try-it-btn:hover {
+  background: var(--accent-glow);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(61,155,233,0.3);
+}
+
+.playground-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+}
+
+.playground-modal.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.playground-modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+}
+
+.playground-modal-content {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--bg4);
+  border-radius: 8px;
+  max-width: 900px;
+  width: 90%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  transform: scale(0.9);
+  transition: transform 0.3s ease;
+}
+
+.playground-modal.show .playground-modal-content {
+  transform: scale(1);
+}
+
+.playground-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--bg4);
+}
+
+.playground-modal-header h3 {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--fg);
+  margin: 0;
+}
+
+.playground-modal-close {
+  background: none;
+  border: none;
+  color: var(--fg3);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 4px;
+  transition: color 0.2s;
+}
+
+.playground-modal-close:hover {
+  color: var(--fg);
+}
+
+.playground-modal-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 20px 24px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.playground-editor-section,
+.playground-output-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.playground-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.playground-code-editor {
+  flex: 1;
+  background: var(--bg2);
+  border: 1px solid var(--bg4);
+  border-radius: 4px;
+  padding: 16px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--fg);
+  resize: none;
+  outline: none;
+}
+
+.playground-code-editor:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.playground-output {
+  flex: 1;
+  background: var(--bg2);
+  border: 1px solid var(--bg4);
+  border-radius: 4px;
+  padding: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg2);
+  overflow-y: auto;
+  max-height: 200px;
+}
+
+.playground-result {
+  margin-top: 8px;
+}
+
+.result-header {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.result-data {
+  background: var(--bg3);
+  border: 1px solid var(--bg4);
+  border-radius: 4px;
+  padding: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg);
+  margin: 0;
+  overflow-x: auto;
+}
+
+.log-line {
+  margin-bottom: 4px;
+  padding: 2px 0;
+}
+
+.log-info { color: var(--fg3); }
+.log-log { color: var(--fg2); }
+.log-success { color: var(--green); }
+.log-error { color: var(--red); }
+
+.playground-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--bg4);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.playground-run-btn {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  padding: 10px 24px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.playground-run-btn:hover:not(:disabled) {
+  background: var(--accent-glow);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(61,155,233,0.3);
+}
+
+.playground-run-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .playground-modal-body {
+    grid-template-columns: 1fr;
+    max-height: 60vh;
+  }
+  
+  .playground-modal-content {
+    width: 95%;
+    max-height: 90vh;
+  }
+}
+</style>
+
 <!-- FOOTER -->
 <footer>
   <div class="footer-inner">
