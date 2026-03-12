@@ -181,6 +181,52 @@ console.log('TX Hash:', tx.hash);
 
 return { address: kp.address, txHash: tx.hash };`,
 
+  'weather-sensor': `// Weather sensor (Node A) sells data to drone (Node B)
+const sdk = new UltraDAG();
+
+// Node A: Weather station creates data package
+const weatherData = {
+  sensor_id: "weather_station_001",
+  temperature: 23.5,
+  humidity: 65,
+  timestamp: Date.now(),
+  location: { lat: 37.7749, lng: -122.4194 }
+};
+
+console.log('🌡️  Weather Station Data:');
+console.log('Temperature:', weatherData.temperature, '°C');
+console.log('Humidity:', weatherData.humidity, '%');
+console.log('Location:', weatherData.location);
+
+// Node B: Drone purchases weather data
+const droneWallet = new UltraDAG();
+const droneAccount = await droneWallet.generateKeypair();
+
+console.log('🚁 Drone Wallet:', droneAccount.address);
+console.log('Balance:', (droneAccount.balance / 100_000_000).toFixed(6), 'UDAG');
+
+// Simulate data purchase transaction
+const dataPrice = 1_000_000; // 0.01 UDAG in satoshis
+const purchaseTx = await droneWallet.send({
+  to: "udag1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5ce8xa", // Weather station
+  amount: dataPrice,
+  memo: `Purchase weather data: ${weatherData.sensor_id}`
+});
+
+console.log('💰 Data Purchase Transaction:');
+console.log('Price:', (dataPrice / 100_000_000).toFixed(6), 'UDAG');
+console.log('TX Hash:', purchaseTx.hash);
+console.log('Data ID:', weatherData.sensor_id);
+
+return {
+  weatherData,
+  purchase: {
+    price: (dataPrice / 100_000_000).toFixed(6),
+    txHash: purchaseTx.hash,
+    sensorId: weatherData.sensor_id
+  }
+};`,
+
   'js-sdk-example': `// Get network status (no faucet needed!)
 const sdk = new UltraDAG();
 const status = await sdk.getStatus();
@@ -195,14 +241,14 @@ return status;`
 
 // Initialize docs playground
 function initDocsPlayground() {
-  // Add "Try it" buttons to specific code examples
+  // Add "Try it" buttons to ALL code examples
   const codeBlocks = document.querySelectorAll('pre');
   
   codeBlocks.forEach((pre, index) => {
     const text = pre.textContent;
     
-    // Determine if this code block should have a "Try it" button
-    let exampleKey = null;
+    // Determine appropriate example based on content
+    let exampleKey = 'weather-sensor'; // default
     
     if (text.includes('/balance/') && text.includes('curl')) {
       exampleKey = 'check-balance';
@@ -214,30 +260,37 @@ function initDocsPlayground() {
       exampleKey = 'send-transaction';
     } else if (text.includes('/status')) {
       exampleKey = 'network-status';
+    } else if (text.includes('curl') && text.includes('submit_tx')) {
+      exampleKey = 'send-transaction';
+    } else if (text.includes('curl') && text.includes('stake')) {
+      exampleKey = 'send-transaction';
+    } else if (text.includes('npm install')) {
+      exampleKey = 'js-sdk-example';
+    } else if (text.includes('import') || text.includes('const')) {
+      exampleKey = 'js-sdk-example';
     }
     
-    if (exampleKey && runnableExamples[exampleKey]) {
-      // Wrap pre in container
-      const container = document.createElement('div');
-      container.className = 'code-example-container';
-      pre.parentNode.insertBefore(container, pre);
-      container.appendChild(pre);
-      
-      // Add "Try it" button
-      const btnContainer = document.createElement('div');
-      btnContainer.className = 'code-example-actions';
-      
-      const tryBtn = document.createElement('button');
-      tryBtn.className = 'try-it-btn';
-      tryBtn.innerHTML = '▶ Try it live';
-      tryBtn.dataset.example = exampleKey;
-      
-      btnContainer.appendChild(tryBtn);
-      container.appendChild(btnContainer);
-      
-      // Add click handler
-      tryBtn.addEventListener('click', () => openPlaygroundModal(exampleKey));
-    }
+    // Always add the playground to every code block
+    // Wrap pre in container
+    const container = document.createElement('div');
+    container.className = 'code-example-container';
+    pre.parentNode.insertBefore(container, pre);
+    container.appendChild(pre);
+    
+    // Add "Try it" button
+    const btnContainer = document.createElement('div');
+    btnContainer.className = 'code-example-actions';
+    
+    const tryBtn = document.createElement('button');
+    tryBtn.className = 'try-it-btn';
+    tryBtn.innerHTML = '▶ Try it live';
+    tryBtn.dataset.example = exampleKey;
+    
+    btnContainer.appendChild(tryBtn);
+    container.appendChild(btnContainer);
+    
+    // Add click handler
+    tryBtn.addEventListener('click', () => openPlaygroundModal(exampleKey));
   });
 }
 

@@ -912,23 +912,48 @@ curl http://localhost:8080/metrics
 }
 
 .try-it-btn {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), #5aaef0);
   color: var(--bg);
   border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
+  padding: 8px 16px;
+  border-radius: 6px;
   font-family: var(--mono);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(61,155,233,0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.try-it-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  transition: left 0.5s ease;
 }
 
 .try-it-btn:hover {
-  background: var(--accent-glow);
+  background: linear-gradient(135deg, #5aaef0, var(--accent));
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(61,155,233,0.4);
+}
+
+.try-it-btn:hover::before {
+  left: 100%;
+}
+
+.try-it-btn:active {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(61,155,233,0.3);
 }
@@ -965,21 +990,22 @@ curl http://localhost:8080/metrics
 
 .playground-modal-content {
   position: relative;
-  background: var(--bg);
+  background: linear-gradient(135deg, var(--bg), var(--bg2));
   border: 1px solid var(--bg4);
-  border-radius: 8px;
-  max-width: 900px;
+  border-radius: 12px;
+  max-width: 1000px;
   width: 90%;
-  max-height: 80vh;
+  max-height: 85vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-  transform: scale(0.9);
-  transition: transform 0.3s ease;
+  box-shadow: 0 25px 80px rgba(0,0,0,0.6), 0 0 0 1px var(--accent-glow);
+  transform: scale(0.9) translateY(20px);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
 }
 
 .playground-modal.show .playground-modal-content {
-  transform: scale(1);
+  transform: scale(1) translateY(0);
 }
 
 .playground-modal-header {
@@ -1039,35 +1065,39 @@ curl http://localhost:8080/metrics
 
 .playground-code-editor {
   flex: 1;
-  background: var(--bg2);
+  background: linear-gradient(135deg, var(--bg2), var(--bg3));
   border: 1px solid var(--bg4);
-  border-radius: 4px;
-  padding: 16px;
+  border-radius: 8px;
+  padding: 20px;
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   color: var(--fg);
   resize: none;
   outline: none;
+  transition: all 0.3s ease;
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);
 }
 
 .playground-code-editor:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-glow);
+  box-shadow: 0 0 0 2px var(--accent-glow), inset 0 2px 8px rgba(0,0,0,0.1);
+  background: linear-gradient(135deg, var(--bg2), var(--bg));
 }
 
 .playground-output {
   flex: 1;
-  background: var(--bg2);
+  background: linear-gradient(135deg, var(--bg2), var(--bg3));
   border: 1px solid var(--bg4);
-  border-radius: 4px;
-  padding: 12px;
+  border-radius: 8px;
+  padding: 16px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
   color: var(--fg2);
   overflow-y: auto;
   max-height: 200px;
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);
 }
 
 .playground-result {
