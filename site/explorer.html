@@ -177,6 +177,8 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 .footer-status{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--subtle)}
 .footer-status-dot{width:8px;height:8px;border-radius:50%;background:#22d3a0;box-shadow:0 0 8px #22d3a0;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
+@keyframes slideIn{from{transform:translateX(400px);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes slideOut{from{transform:translateX(0);opacity:1}to{transform:translateX(400px);opacity:0}}
 @media(max-width:900px){
   .footer-inner{padding:48px 24px 24px}
   .footer-top{grid-template-columns:1fr;gap:48px}

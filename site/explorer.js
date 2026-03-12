@@ -23,6 +23,25 @@ function shortAddress(addr) {
   return addr.substring(0, 10) + '...' + addr.substring(addr.length - 8);
 }
 
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    showNotification('Copied to clipboard!');
+  }).catch(err => {
+    console.error('Failed to copy:', err);
+  });
+}
+
+function showNotification(message) {
+  const notification = document.createElement('div');
+  notification.textContent = message;
+  notification.style.cssText = 'position:fixed;top:80px;right:20px;background:var(--success);color:var(--white);padding:12px 20px;border-radius:4px;font-family:DM Mono,monospace;font-size:12px;z-index:1000;animation:slideIn 0.3s ease';
+  document.body.appendChild(notification);
+  setTimeout(() => {
+    notification.style.animation = 'slideOut 0.3s ease';
+    setTimeout(() => notification.remove(), 300);
+  }, 2000);
+}
+
 function timeAgo(timestamp) {
   const now = Math.floor(Date.now() / 1000);
   const diff = now - timestamp;
@@ -115,8 +134,8 @@ async function loadRounds() {
     const totalRewards = data.reduce((sum, v) => sum + v.reward, 0);
     
     return `
-      <tr onclick="viewRound(${round})">
-        <td><a href="#round-${round}">${round}</a></td>
+      <tr onclick="viewRound(${round})" style="cursor:pointer">
+        <td><a href="#round-${round}" onclick="event.stopPropagation()">${round}</a></td>
         <td>${vertexCount}</td>
         <td>${txCount}</td>
         <td>${validators}</td>
@@ -193,7 +212,7 @@ window.viewRound = async function(roundNumber) {
     <div class="detail-card">
       <div class="detail-header">
         <div class="detail-title">Round ${roundNumber}</div>
-        <button onclick="closeDetail()" style="background:var(--bg3);border:1px solid var(--border);color:var(--subtle);padding:8px 16px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px">Close</button>
+        <button onclick="closeDetail()" style="background:var(--bg3);border:1px solid var(--border);color:var(--subtle);padding:8px 16px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--subtle)'">Close</button>
       </div>
       
       <div class="detail-grid">
@@ -210,7 +229,7 @@ window.viewRound = async function(roundNumber) {
         <div class="detail-value">${validators.size}</div>
         
         <div class="detail-label">Total Rewards</div>
-        <div class="detail-value">${formatUdag(totalRewards)} UDAG</div>
+        <div class="detail-value">${formatUdag(totalRewards)} UDAG (${totalRewards.toLocaleString()} sats)</div>
         
         <div class="detail-label">Status</div>
         <div class="detail-value"><span class="badge badge-success">Finalized</span></div>
@@ -233,8 +252,13 @@ window.viewRound = async function(roundNumber) {
           <tbody>
             ${roundData.map(v => `
               <tr>
-                <td class="hash"><a href="#vertex-${v.hash}">${shortHash(v.hash)}</a></td>
-                <td class="hash"><a href="#address-${v.validator}" onclick="viewAddress('${v.validator}')">${shortAddress(v.validator)}</a></td>
+                <td class="hash">
+                  <span style="cursor:pointer" onclick="copyToClipboard('${v.hash}')" title="Click to copy full hash">${shortHash(v.hash)}</span>
+                </td>
+                <td class="hash">
+                  <a href="#address-${v.validator}" onclick="event.preventDefault();viewAddress('${v.validator}')" title="View address details">${shortAddress(v.validator)}</a>
+                  <span style="cursor:pointer;margin-left:8px;opacity:0.5;font-size:11px" onclick="copyToClipboard('${v.validator}')" title="Copy address">📋</span>
+                </td>
                 <td>${v.tx_count}</td>
                 <td>${v.parent_count}</td>
                 <td>${formatUdag(v.reward)} UDAG</td>
@@ -259,7 +283,15 @@ window.viewAddress = async function(address) {
   
   const addressData = await fetchAddress(address);
   if (!addressData) {
-    detailView.innerHTML = '<div class="error">Address not found or has no balance</div>';
+    detailView.innerHTML = `
+      <div class="detail-card">
+        <div class="detail-header">
+          <div class="detail-title">Address Not Found</div>
+          <button onclick="closeDetail()" style="background:var(--bg3);border:1px solid var(--border);color:var(--subtle);padding:8px 16px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--subtle)'">Close</button>
+        </div>
+        <div class="error">Address not found or has zero balance. Only addresses with balance are indexed.</div>
+      </div>
+    `;
     return;
   }
   
@@ -267,18 +299,21 @@ window.viewAddress = async function(address) {
     <div class="detail-card">
       <div class="detail-header">
         <div class="detail-title">Address Details</div>
-        <button onclick="closeDetail()" style="background:var(--bg3);border:1px solid var(--border);color:var(--subtle);padding:8px 16px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px">Close</button>
+        <button onclick="closeDetail()" style="background:var(--bg3);border:1px solid var(--border);color:var(--subtle);padding:8px 16px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--subtle)'">Close</button>
       </div>
       
       <div class="detail-grid">
         <div class="detail-label">Address</div>
-        <div class="detail-value">${addressData.address}</div>
+        <div class="detail-value" style="display:flex;align-items:center;gap:12px">
+          <span>${addressData.address}</span>
+          <button onclick="copyToClipboard('${addressData.address}')" style="background:var(--bg3);border:1px solid var(--border);color:var(--subtle);padding:4px 12px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--subtle)'">Copy</button>
+        </div>
         
         <div class="detail-label">Balance</div>
-        <div class="detail-value">${addressData.balance_udag} UDAG (${addressData.balance.toLocaleString()} sats)</div>
+        <div class="detail-value">${addressData.balance_udag.toFixed(8)} UDAG <span style="color:var(--muted);margin-left:8px">(${addressData.balance.toLocaleString()} sats)</span></div>
         
         <div class="detail-label">Nonce</div>
-        <div class="detail-value">${addressData.nonce}</div>
+        <div class="detail-value">${addressData.nonce} <span style="color:var(--muted);margin-left:8px">(transactions sent)</span></div>
       </div>
     </div>
   `;
