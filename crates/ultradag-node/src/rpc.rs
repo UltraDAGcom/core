@@ -334,6 +334,16 @@ async fn handle_request(
     let method = req.method();
     let path: Vec<&str> = req.uri().path().trim_matches('/').split('/').collect();
 
+    // Behind reverse proxies (e.g. Fly.io), peer_addr is the proxy IP, not the real client.
+    // Try to extract real client IP from proxy headers; fall back to TCP peer address.
+    let client_ip = req.headers()
+        .get("fly-client-ip")
+        .or_else(|| req.headers().get("x-forwarded-for"))
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next()) // X-Forwarded-For may be comma-separated
+        .and_then(|s| s.trim().parse::<std::net::IpAddr>().ok())
+        .unwrap_or(client_ip);
+
     // Check global rate limit
     if !rate_limiter.check_rate_limit(client_ip, limits::GLOBAL) {
         return Ok(error_response(
@@ -813,6 +823,11 @@ async fn handle_request(
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address hex"));
             };
 
+            // Reject zero amount
+            if faucet_req.amount == 0 {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "amount must be greater than 0"));
+            }
+
             // Cap faucet amount at 100 UDAG per request
             const MAX_FAUCET_SATS: u64 = 100 * 100_000_000; // 100 UDAG
             if faucet_req.amount > MAX_FAUCET_SATS {
@@ -1068,6 +1083,11 @@ async fn handle_request(
                 let state = read_lock_or_503!(server.state);
                 let mut mp = write_lock_or_503!(server.mempool);
 
+                // Check that address actually has stake
+                if state.stake_of(&sender) == 0 {
+                    return Ok(error_response(StatusCode::BAD_REQUEST, "not staked"));
+                }
+
                 let base_nonce = state.nonce(&sender);
                 let nonce = match mp.pending_nonce(&sender) {
                     Some(max_pending) => max_pending.saturating_add(1),
@@ -1310,6 +1330,11 @@ async fn handle_request(
             let (tx, tx_hash) = {
                 let state = read_lock_or_503!(server.state);
                 let mut mp = write_lock_or_503!(server.mempool);
+
+                // Check that proposal exists
+                if state.proposal(vote_req.proposal_id).is_none() {
+                    return Ok(error_response(StatusCode::BAD_REQUEST, "proposal not found"));
+                }
 
                 let base_nonce = state.nonce(&sender);
                 let nonce = match mp.pending_nonce(&sender) {
