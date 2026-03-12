@@ -34,6 +34,20 @@ if $CLEAN; then
     for i in 1 2 3 4 5; do
         sed -i '' 's/^  # CLEAN_STATE = "true"/  CLEAN_STATE = "true"/' "$TOML_DIR/fly-node-$i.toml"
     done
+
+    # Stop all machines BEFORE deploying to prevent new nodes from syncing stale data
+    # from old instances that are still running during sequential deploy.
+    echo "==> Stopping all machines before clean deploy..."
+    for node in "${NODES[@]}"; do
+        MACHINE_ID=$(fly machines list -a "$node" --json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])" 2>/dev/null || echo "")
+        if [ -n "$MACHINE_ID" ]; then
+            echo "  Stopping $node ($MACHINE_ID)..."
+            fly machine stop "$MACHINE_ID" -a "$node" 2>/dev/null &
+        fi
+    done
+    wait
+    sleep 5
+    echo "    All machines stopped."
 fi
 
 if ! $RESTART_ONLY; then
