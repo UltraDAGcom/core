@@ -279,10 +279,13 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <!-- SEARCH -->
   <div class="search-section">
     <div class="search-box">
-      <input type="text" class="search-input" id="search-input" placeholder="Search by Round Number, Transaction Hash, or Address...">
+      <input type="text" class="search-input" id="search-input" placeholder="Search by Round Number or Address (64 hex chars)...">
       <button class="search-btn" id="search-btn">Search</button>
     </div>
-    <div class="search-hint">Try: Round 1 • Address • Transaction Hash</div>
+    <div class="search-hint">
+      <span>Try: Round 1 • Address (64 hex) • Press <kbd style="background:var(--bg3);padding:2px 6px;border-radius:2px;font-size:10px;border:1px solid var(--border)">Ctrl+K</kbd> to focus search</span>
+      <button onclick="showShortcuts()" style="background:none;border:1px solid var(--border);color:var(--subtle);padding:4px 10px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;margin-left:12px;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--subtle)'">⌨️ Shortcuts</button>
+    </div>
   </div>
 
   <!-- STATS -->
@@ -312,6 +315,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <!-- TABS -->
   <div class="tabs">
     <button class="tab active" data-tab="rounds">Latest Rounds</button>
+    <button class="tab" data-tab="validators">Validators</button>
     <button class="tab" data-tab="transactions">Recent Transactions</button>
   </div>
 
@@ -335,6 +339,27 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
       </table>
     </div>
     <div class="pagination" id="rounds-pagination"></div>
+  </div>
+
+  <!-- VALIDATORS TAB -->
+  <div id="validators-tab" class="tab-content" style="display:none">
+    <div class="table-container">
+      <table class="table">
+        <thead>
+          <tr>
+            <th class="sortable">Rank</th>
+            <th class="sortable">Validator</th>
+            <th class="sortable">Vertices Produced</th>
+            <th class="sortable">Rewards Earned</th>
+            <th class="sortable">Participation %</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="validators-tbody">
+          <tr><td colspan="6" class="loading">Loading validators</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <!-- TRANSACTIONS TAB -->

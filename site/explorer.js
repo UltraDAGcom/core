@@ -371,6 +371,60 @@ window.closeDetail = function() {
   document.getElementById('detail-view').style.display = 'none';
 };
 
+// Show keyboard shortcuts modal
+window.showShortcuts = function() {
+  const detailView = document.getElementById('detail-view');
+  detailView.style.display = 'block';
+  detailView.innerHTML = `
+    <div class="detail-card">
+      <div class="detail-header">
+        <div class="detail-title">⌨️ Keyboard Shortcuts</div>
+        <button onclick="closeDetail()" style="background:var(--bg3);border:1px solid var(--border);color:var(--subtle);padding:8px 16px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--subtle)'">Close</button>
+      </div>
+      
+      <div style="display:grid;grid-template-columns:200px 1fr;gap:16px;margin-top:24px">
+        <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--muted)">
+          <kbd style="background:var(--bg3);padding:4px 8px;border-radius:2px;border:1px solid var(--border);display:inline-block">Ctrl/Cmd + K</kbd>
+        </div>
+        <div style="color:var(--body)">Focus search bar</div>
+        
+        <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--muted)">
+          <kbd style="background:var(--bg3);padding:4px 8px;border-radius:2px;border:1px solid var(--border);display:inline-block">Escape</kbd>
+        </div>
+        <div style="color:var(--body)">Close detail view or modal</div>
+        
+        <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--muted)">
+          <kbd style="background:var(--bg3);padding:4px 8px;border-radius:2px;border:1px solid var(--border);display:inline-block">←</kbd>
+          <kbd style="background:var(--bg3);padding:4px 8px;border-radius:2px;border:1px solid var(--border);display:inline-block">→</kbd>
+        </div>
+        <div style="color:var(--body)">Navigate pagination (previous/next page)</div>
+        
+        <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--muted)">
+          <kbd style="background:var(--bg3);padding:4px 8px;border-radius:2px;border:1px solid var(--border);display:inline-block">R</kbd>
+        </div>
+        <div style="color:var(--body)">Refresh data manually</div>
+        
+        <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--muted)">
+          <kbd style="background:var(--bg3);padding:4px 8px;border-radius:2px;border:1px solid var(--border);display:inline-block">Enter</kbd>
+        </div>
+        <div style="color:var(--body)">Submit search (when in search box)</div>
+      </div>
+      
+      <div style="margin-top:32px;padding-top:24px;border-top:1px solid var(--border)">
+        <h4 style="font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:16px">Tips</h4>
+        <ul style="list-style:none;display:flex;flex-direction:column;gap:12px;color:var(--subtle);font-size:14px">
+          <li>• Click any hash or address to copy it to clipboard</li>
+          <li>• Click validator addresses to view their details</li>
+          <li>• Click round numbers to see full round details</li>
+          <li>• Auto-refresh updates data every 5 seconds</li>
+          <li>• Stats flash green when values increase</li>
+        </ul>
+      </div>
+    </div>
+  `;
+  detailView.scrollIntoView({ behavior: 'smooth' });
+};
+
 // Search functionality
 async function performSearch() {
   const query = document.getElementById('search-input').value.trim();
@@ -413,9 +467,81 @@ function switchTab(tabName) {
   // Load data for the tab
   if (tabName === 'rounds') {
     loadRounds();
+  } else if (tabName === 'validators') {
+    loadValidators();
   } else if (tabName === 'transactions') {
     loadTransactions();
   }
+}
+
+// Load validators leaderboard
+async function loadValidators() {
+  const tbody = document.getElementById('validators-tbody');
+  tbody.innerHTML = '<tr><td colspan="6" class="loading">Loading validators</td></tr>';
+  
+  if (currentRound === 0) {
+    await fetchStatus();
+  }
+  
+  // Aggregate validator stats from all rounds
+  const validatorStats = new Map();
+  
+  for (let round = 1; round <= currentRound; round++) {
+    const roundData = await fetchRound(round);
+    if (!roundData) continue;
+    
+    roundData.forEach(vertex => {
+      const addr = vertex.validator;
+      if (!validatorStats.has(addr)) {
+        validatorStats.set(addr, {
+          address: addr,
+          vertices: 0,
+          rewards: 0,
+          rounds: new Set()
+        });
+      }
+      
+      const stats = validatorStats.get(addr);
+      stats.vertices++;
+      stats.rewards += vertex.reward;
+      stats.rounds.add(round);
+    });
+  }
+  
+  // Convert to array and sort by vertices produced
+  const validators = Array.from(validatorStats.values())
+    .sort((a, b) => b.vertices - a.vertices);
+  
+  if (validators.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No validators found</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = validators.map((v, index) => {
+    const participation = ((v.rounds.size / currentRound) * 100).toFixed(1);
+    const isActive = v.rounds.has(currentRound);
+    
+    return `
+      <tr>
+        <td><strong style="color:var(--accent)">#${index + 1}</strong></td>
+        <td class="hash">
+          <a href="#address-${v.address}" onclick="event.preventDefault();viewAddress('${v.address}')" title="View validator details">${shortAddress(v.address)}</a>
+          <span style="cursor:pointer;margin-left:8px;opacity:0.5;font-size:11px" onclick="copyToClipboard('${v.address}')" title="Copy address">📋</span>
+        </td>
+        <td><strong>${v.vertices.toLocaleString()}</strong></td>
+        <td>${formatUdag(v.rewards)} UDAG</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;background:var(--bg3);height:6px;border-radius:3px;overflow:hidden">
+              <div style="width:${participation}%;height:100%;background:var(--accent);transition:width 0.3s"></div>
+            </div>
+            <span style="font-family:'DM Mono',monospace;font-size:12px">${participation}%</span>
+          </div>
+        </td>
+        <td><span class="badge ${isActive ? 'badge-success' : 'badge-warning'}">${isActive ? '✓ Active' : '○ Inactive'}</span></td>
+      </tr>
+    `;
+  }).join('');
 }
 
 // Load transactions (placeholder - would need tx history API)
@@ -423,6 +549,42 @@ async function loadTransactions() {
   const tbody = document.getElementById('transactions-tbody');
   tbody.innerHTML = '<tr><td colspan="6" class="empty">Transaction history requires additional API endpoint</td></tr>';
 }
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  // Ctrl/Cmd + K: Focus search
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    document.getElementById('search-input').focus();
+  }
+  
+  // Escape: Close detail view
+  if (e.key === 'Escape') {
+    const detailView = document.getElementById('detail-view');
+    if (detailView.style.display === 'block') {
+      closeDetail();
+    }
+  }
+  
+  // Arrow keys for pagination (when not in input)
+  if (document.activeElement.tagName !== 'INPUT') {
+    if (e.key === 'ArrowLeft' && currentPage > 1) {
+      changePage(currentPage - 1);
+    } else if (e.key === 'ArrowRight') {
+      const maxPages = Math.ceil(currentRound / ROUNDS_PER_PAGE);
+      if (currentPage < maxPages) {
+        changePage(currentPage + 1);
+      }
+    }
+  }
+  
+  // R: Refresh data
+  if (e.key === 'r' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT') {
+    fetchStatus();
+    loadRounds();
+    showNotification('Data refreshed');
+  }
+});
 
 // Mobile menu toggle
 document.getElementById('hamburger').addEventListener('click', () => {
