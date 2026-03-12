@@ -1264,7 +1264,8 @@ machine still has the env var until you do a second deploy without `--clean`.
 - Fly P2P seeds: `.internal` DNS (private WireGuard, not public IPv4 TCP proxy)
 
 ### Rate Limiting Features Active
-- **Per-IP rate limits:** `/tx` (10/min), `/faucet` (1/10min), `/stake` (5/min), `/unstake` (5/min), Global (100/min)
+- **Per-IP rate limits:** `/tx` (10/min), `/faucet` (1/10min), `/stake` (5/min), `/unstake` (5/min), `/proposal` (5/min), `/vote` (10/min), Global (100/min)
+- **Fly.io proxy awareness:** Real client IP extracted from `Fly-Client-IP` / `X-Forwarded-For` headers
 - **Connection limits:** Max 1,000 concurrent, 10 per IP
 - **Request size limits:** 1MB max body size
 - **Mempool limits:** 10,000 transactions with fee-based eviction
@@ -1581,6 +1582,17 @@ UltraDAG is offering rewards for security researchers who discover and responsib
     - **Result:** New nodes join live network via fast-sync, catch up, then begin producing.
 87. **Governance tx errors reject entire finalized batch (March 12, 2026)** — Invalid `CreateProposal`/`Vote` transactions in finalized vertices caused `apply_finalized_vertices()` to return error, rejecting the entire batch of finalized vertices. Fix: governance tx failures now skip gracefully (charge fee, advance nonce, log warning) instead of propagating error.
 88. **RPC `/proposal` missing stake and count validation (March 12, 2026)** — `/proposal` endpoint didn't check proposer's stake against `MIN_STAKE_TO_PROPOSE` or active proposal count against `MAX_ACTIVE_PROPOSALS`. Fix: added both checks before signing.
+89. **RPC validation gaps found during testnet testing (March 12, 2026):**
+    - **Faucet accepts amount=0** — `/faucet` accepted `amount: 0`, creating zero-value transactions. Fix: reject with "amount must be greater than 0".
+    - **Unstake without stake accepted** — `/unstake` accepted requests for addresses with no stake. Fix: check `stake_of(&sender) == 0` before processing.
+    - **Vote on nonexistent proposal accepted** — `/vote` accepted votes for proposal IDs that don't exist. Fix: check `state.proposal(id).is_none()`.
+    - **Rate limiter IP extraction behind Fly.io** — Rate limiter used TCP peer address (always Fly proxy IP). Fix: extract real client IP from `Fly-Client-IP` / `X-Forwarded-For` headers.
+90. **Rate limits still in loadtest mode (March 12, 2026)** — FAUCET was 100/min, TX was 10,000/min, GLOBAL was 50,000/min — all still at loadtest values from initial development. Comments said "(loadtest)" but were never restored to production values.
+    - **Fix:** FAUCET: 1/10min, TX: 10/min, GLOBAL: 100/min. Stake/unstake/proposal/vote unchanged (already production).
+    - **Result:** Faucet rate limiting verified working on live testnet.
+91. **Validator self-marked Byzantine causes permanent stall (March 12, 2026)** — If a validator's own address gets marked Byzantine in the local DAG (e.g., from stale state after failed deploy), the validator loop enters an infinite produce→reject cycle. `try_insert()` returns `Ok(false)` for Byzantine validators, and `has_vertex_from_validator_in_round()` doesn't check `equivocation_vertices`, so the round determination logic thinks the validator hasn't produced yet.
+    - **Fix:** Added defensive check at start of validator loop: if own address is Byzantine, clear the flag with warning log. Added diagnostic logging when `try_insert` returns `Ok(false)`.
+    - **Result:** Validators self-heal from incorrectly marked Byzantine state.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.
