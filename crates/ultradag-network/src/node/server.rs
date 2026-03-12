@@ -390,6 +390,18 @@ impl NodeServer {
             return Ok(());
         }
 
+        // Check if we already have a live connection to this listen address.
+        // Without this check, a racing reconnection overwrites the writer in
+        // PeerRegistry; when the OLD handle_peer exits, it removes the NEW
+        // writer, breaking the new connection. This was the #1 cause of
+        // cascading network stalls.
+        if self.peers.is_listen_addr_connected(addr).await {
+            return Ok(());
+        }
+        if self.peers.send_to(addr, &Message::Ping(0)).await.is_ok() {
+            return Ok(());
+        }
+
         let stream = tokio::net::TcpStream::connect(addr).await?;
         let addr_str = addr.to_string();
 

@@ -7,7 +7,10 @@ use std::time::Duration;
 use crate::protocol::{Message, MAX_MESSAGE_SIZE};
 
 /// Timeout for reading a complete message from a peer (prevents slowloris).
-const READ_TIMEOUT: Duration = Duration::from_secs(30);
+/// Must be significantly longer than the heartbeat interval (30s) to avoid
+/// cascading disconnections during temporary stalls. At 120s, the heartbeat
+/// has 4 opportunities to deliver a Ping before the connection is killed.
+const READ_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Read half of a peer connection.
 pub struct PeerReader {
