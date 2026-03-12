@@ -74,6 +74,17 @@ pub fn load_checkpoint_state(dir: &Path, round: u64) -> Option<crate::state::per
     }
 }
 
+/// Load a checkpoint for a specific round from disk.
+pub fn load_checkpoint_by_round(dir: &Path, round: u64) -> Option<crate::consensus::Checkpoint> {
+    let path = dir.join(format!("checkpoint_{:010}.json", round));
+    if path.exists() {
+        let bytes = std::fs::read(&path).ok()?;
+        serde_json::from_slice(&bytes).ok()
+    } else {
+        None
+    }
+}
+
 /// Load the latest checkpoint from disk, if any.
 pub fn load_latest_checkpoint(dir: &Path) -> Option<crate::consensus::Checkpoint> {
     let mut latest: Option<(u64, crate::consensus::Checkpoint)> = None;
