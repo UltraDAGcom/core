@@ -387,13 +387,14 @@
   /* NAV */
   nav { position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(10,14,26,.92);backdrop-filter:blur(16px) }
   .nav-logo { font-family:'Cormorant',serif;font-size:22px;font-weight:300;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px }
+  .nav-logo:hover { color:var(--accent) }
   .nav-logo-mark { width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative }
   .nav-logo-mark::after { content:'';width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent) }
   .nav-links { display:flex;align-items:center;gap:32px;list-style:none }
   .nav-links>li { position:relative }
   .nav-links a { font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;display:block;padding-bottom:4px }
   .nav-links>li>a { padding:20px 0 }
-  .nav-links a::after { content:'';position:absolute;bottom:0;left:0;width:0;height:1px;background:var(--accent);transition:width .3s ease }
+  .nav-links>li>a::after { content:'';position:absolute;bottom:0;left:0;width:0;height:1px;background:var(--accent);transition:width .3s ease }
   .nav-links a:hover { color:var(--white) }
   .nav-links>li>a:hover::after { width:100% }
   .nav-links a.active { color:var(--white) }
@@ -410,7 +411,7 @@
   .mega-col ul { list-style:none;display:flex;flex-direction:column;gap:8px }
   .mega-col a { font-family:'Syne',sans-serif;font-size:13px;color:var(--subtle);padding:6px 0;transition:color .2s,padding-left .2s;letter-spacing:0;text-transform:none }
   .mega-col a:hover { color:var(--white);padding-left:8px }
-  .mega-col a::after { display:none }
+  .mega-col a::after { display:none!important }
 
   /* HAMBURGER MENU */
   .hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;background:none;border:none;z-index:101}
