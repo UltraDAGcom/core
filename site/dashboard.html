@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="UltraDAG Dashboard - Monitor network status, manage your wallet, send transactions, and interact with the DAG chain in real-time.">
+<meta property="og:title" content="UltraDAG Dashboard">
+<meta property="og:description" content="Monitor network status, manage your wallet, and interact with the DAG chain.">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%233d9be9' stroke-width='2'/%3E%3Ccircle cx='50' cy='50' r='15' fill='%233d9be9'/%3E%3C/svg%3E">
 <title>UltraDAG — Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -698,6 +703,38 @@ body::before {
   white-space: nowrap; transition: all 0.15s;
 }
 .tab-mob.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* FOOTER */
+footer{position:relative;z-index:1;border-top:1px solid var(--border);background:var(--bg);margin-top:120px}
+.footer-inner{max-width:1200px;margin:0 auto;padding:64px 48px 32px}
+.footer-top{display:grid;grid-template-columns:1.2fr 2fr;gap:80px;margin-bottom:48px}
+.footer-brand{max-width:320px}
+.footer-logo{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.footer-logo span{font-family:'Cormorant',serif;font-size:24px;font-weight:300;color:var(--white);letter-spacing:.06em}
+.footer-tagline{font-family:'Syne',sans-serif;font-size:14px;line-height:1.7;color:var(--subtle);margin-bottom:24px}
+.footer-social{display:flex;gap:16px}
+.footer-social a{width:40px;height:40px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:50%;color:var(--muted);transition:all .2s}
+.footer-social a:hover{border-color:var(--accent);color:var(--accent);background:var(--glow2)}
+.footer-links-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:40px}
+.footer-col h4{font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+.footer-col ul{list-style:none;display:flex;flex-direction:column;gap:12px}
+.footer-col a{font-family:'Syne',sans-serif;font-size:14px;color:var(--subtle);text-decoration:none;transition:color .2s}
+.footer-col a:hover{color:var(--white)}
+.footer-bottom{display:flex;justify-content:space-between;align-items:center;padding-top:32px;border-top:1px solid var(--border)}
+.footer-legal{display:flex;align-items:center;gap:12px;font-family:'DM Mono',monospace;font-size:11px;color:var(--dim)}
+.footer-separator{color:var(--border2)}
+.footer-status{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--subtle)}
+.footer-status-dot{width:8px;height:8px;border-radius:50%;background:#22d3a0;box-shadow:0 0 8px #22d3a0;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
+.nav-logo-mark{width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
+.nav-logo-mark::after{content:'';width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)}
+@media(max-width:900px){
+  .footer-inner{padding:48px 24px 24px}
+  .footer-top{grid-template-columns:1fr;gap:48px}
+  .footer-brand{max-width:100%}
+  .footer-links-grid{grid-template-columns:repeat(2,1fr);gap:32px}
+  .footer-bottom{flex-direction:column;gap:20px;text-align:center}
+}
 </style>
 </head>
 <body>
@@ -2755,5 +2792,76 @@ if (sendMemo) {
   connectNode();
 })();
 </script>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <div class="footer-logo">
+          <div class="nav-logo-mark"></div>
+          <span>UltraDAG</span>
+        </div>
+        <p class="footer-tagline">The simplest production-ready DAG chain.<br>Fast BFT finality for machine-to-machine micropayments.</p>
+        <div class="footer-social">
+          <a href="https://github.com/UltraDAGcom/core" target="_blank" aria-label="GitHub">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+          </a>
+          <a href="https://twitter.com/ultradag" target="_blank" aria-label="Twitter">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path></svg>
+          </a>
+        </div>
+      </div>
+      
+      <div class="footer-links-grid">
+        <div class="footer-col">
+          <h4>Product</h4>
+          <ul>
+            <li><a href="network.html">Live Network</a></li>
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li><a href="consensus-viz.html">Consensus Demo</a></li>
+            <li><a href="whitepaper.html">Whitepaper</a></li>
+          </ul>
+        </div>
+        
+        <div class="footer-col">
+          <h4>Developers</h4>
+          <ul>
+            <li><a href="docs.html">Documentation</a></li>
+            <li><a href="docs.html#api">API Reference</a></li>
+            <li><a href="docs.html#sdk">SDK Quickstart</a></li>
+            <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+          </ul>
+        </div>
+        
+        <div class="footer-col">
+          <h4>Resources</h4>
+          <ul>
+            <li><a href="blog/index.html">Blog</a></li>
+            <li><a href="docs.html#node">Run a Node</a></li>
+            <li><a href="docs.html#staking">Staking Guide</a></li>
+            <li><a href="docs.html#troubleshooting">Support</a></li>
+          </ul>
+        </div>
+        
+      </div>
+    </div>
+    
+    <div class="footer-bottom">
+      <div class="footer-legal">
+        <span>© 2026 UltraDAG</span>
+        <span class="footer-separator">•</span>
+        <span>Licensed under BUSL-1.1</span>
+        <span class="footer-separator">•</span>
+        <span>Converts to MIT March 2030</span>
+      </div>
+      <div class="footer-status">
+        <div class="footer-status-dot"></div>
+        <span>All systems operational</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
 </body>
 </html>
