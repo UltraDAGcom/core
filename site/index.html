@@ -283,18 +283,6 @@ pre{padding:24px 28px;overflow-x:auto;font-family:'DM Mono',monospace;font-size:
 .copy-btn{background:var(--bg2);border:1px solid var(--border2);color:var(--muted);padding:6px 14px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;transition:all .2s}
 .copy-btn:hover{border-color:var(--accent);color:var(--accent)}
 
-/* 3D GLOBE SECTION */
-.globe-section{position:relative;z-index:1;padding:120px 0;background:linear-gradient(180deg,var(--bg) 0%,var(--bg2) 100%)}
-.globe-container{max-width:1200px;margin:0 auto;padding:0 48px}
-.globe-header{text-align:center;margin-bottom:60px}
-.globe-title{font-family:'Cormorant',serif;font-size:48px;font-weight:400;color:var(--white);margin-bottom:16px;letter-spacing:-0.02em}
-.globe-subtitle{font-family:'Syne',sans-serif;font-size:18px;color:var(--subtle);max-width:600px;margin:0 auto}
-.network-globe{width:100%;height:600px;border-radius:4px;background:radial-gradient(ellipse at center,rgba(61,155,233,0.03) 0%,transparent 70%);position:relative;overflow:hidden}
-.globe-legend{display:flex;align-items:center;justify-content:center;gap:32px;margin-top:32px;font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle)}
-.legend-item{display:flex;align-items:center;gap:8px}
-.legend-dot{width:10px;height:10px;border-radius:50%;box-shadow:0 0 8px currentColor}
-.legend-hint{color:var(--dim);font-size:11px;margin-left:16px;padding-left:16px;border-left:1px solid var(--border2)}
-
 /* FOOTER */
 footer{position:relative;z-index:1;border-top:1px solid var(--border);background:var(--bg);margin-top:120px}
 .footer-inner{max-width:1200px;margin:0 auto;padding:64px 48px 32px}
@@ -357,13 +345,6 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   .section-inner,.cta-inner{padding:80px 24px}
   h2{font-size:36px}
   .section-lead{font-size:18px}
-  .globe-section{padding:80px 0}
-  .globe-container{padding:0 24px}
-  .globe-title{font-size:36px}
-  .globe-subtitle{font-size:16px}
-  .network-globe{height:400px}
-  .globe-legend{flex-direction:column;gap:16px}
-  .legend-hint{margin-left:0;padding-left:0;border-left:none;margin-top:8px}
   .footer-inner{padding:48px 24px 24px}
   .footer-top{grid-template-columns:1fr;gap:48px}
   .footer-brand{max-width:100%}
@@ -576,28 +557,6 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     </div>
   </div>
 </div>
-
-<!-- 3D NETWORK GLOBE -->
-<section class="globe-section">
-  <div class="globe-container">
-    <div class="globe-header">
-      <h2 class="globe-title">Live Network Visualization</h2>
-      <p class="globe-subtitle">Watch validators and transactions flow across the global UltraDAG network in real-time</p>
-    </div>
-    <div id="network-globe" class="network-globe"></div>
-    <div class="globe-legend">
-      <div class="legend-item">
-        <div class="legend-dot" style="background:#3d9be9"></div>
-        <span>Validators</span>
-      </div>
-      <div class="legend-item">
-        <div class="legend-dot" style="background:#22d3a0"></div>
-        <span>Transactions</span>
-      </div>
-      <div class="legend-hint">Drag to rotate • Scroll to zoom</div>
-    </div>
-  </div>
-</section>
 
 <!-- STATS BAR -->
 <div class="stats-bar">
@@ -1178,19 +1137,6 @@ reveals.forEach(el => observer.observe(el));
 </script>
 <script src="js/hero.js"></script>
 <script src="js/playground.js"></script>
-
-<!-- Three.js for 3D Globe -->
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-<script src="globe.js"></script>
-<script>
-// Initialize 3D Network Globe
-document.addEventListener('DOMContentLoaded', () => {
-  const globeContainer = document.getElementById('network-globe');
-  if (globeContainer) {
-    const globe = new NetworkGlobe('network-globe');
-  }
-});
-</script>
 
 </body>
 </html>

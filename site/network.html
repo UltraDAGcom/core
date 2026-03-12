@@ -209,6 +209,14 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
 .two-col{display:grid;grid-template-columns:2fr 1fr;gap:24px;margin-bottom:48px}
 @media(max-width:1200px){.two-col{grid-template-columns:1fr}}
 
+/* 3D GLOBE */
+.globe-section{margin:48px 0;padding:40px;background:var(--bg2);border:1px solid var(--border);border-radius:4px}
+.network-globe{width:100%;height:500px;border-radius:4px;background:radial-gradient(ellipse at center,rgba(61,155,233,0.03) 0%,transparent 70%);position:relative;overflow:hidden}
+.globe-legend{display:flex;align-items:center;justify-content:center;gap:32px;margin-top:24px;font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle)}
+.legend-item{display:flex;align-items:center;gap:8px}
+.legend-dot{width:10px;height:10px;border-radius:50%;box-shadow:0 0 8px currentColor}
+.legend-hint{color:var(--dim);font-size:11px;margin-left:16px;padding-left:16px;border-left:1px solid var(--border2)}
+
 /* RESPONSIVE */
 @media(max-width:900px){
   nav{padding:0 24px;height:56px}
@@ -219,6 +227,10 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
   .stats-grid{grid-template-columns:repeat(2,1fr);gap:16px}
   .validators-grid{grid-template-columns:1fr}
   .map-canvas{height:400px}
+  .globe-section{padding:24px;margin:32px 0}
+  .network-globe{height:350px}
+  .globe-legend{flex-direction:column;gap:16px}
+  .legend-hint{margin-left:0;padding-left:0;border-left:none;margin-top:8px}
 }
 
 /* FOOTER */
@@ -362,6 +374,22 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <div class="live-indicator">
       <div class="live-dot"></div>
       <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--subtle);letter-spacing:.1em">NETWORK ACTIVE</span>
+    </div>
+  </div>
+
+  <!-- 3D NETWORK GLOBE -->
+  <div class="globe-section">
+    <div id="network-globe" class="network-globe"></div>
+    <div class="globe-legend">
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#3d9be9"></div>
+        <span>Bootstrap Nodes</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#22d3a0"></div>
+        <span>Transactions</span>
+      </div>
+      <div class="legend-hint">Drag to rotate • Scroll to zoom</div>
     </div>
   </div>
 
@@ -981,6 +1009,19 @@ init();
     </div>
   </div>
 </footer>
+
+<!-- Three.js for 3D Globe -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="globe.js"></script>
+<script>
+// Initialize 3D Network Globe
+document.addEventListener('DOMContentLoaded', () => {
+  const globeContainer = document.getElementById('network-globe');
+  if (globeContainer) {
+    const globe = new NetworkGlobe('network-globe');
+  }
+});
+</script>
 
 </body>
 </html>
