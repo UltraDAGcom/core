@@ -586,6 +586,7 @@ async fn main() {
 
             let mut last_progress_round = 0u64;
             let mut stall_count = 0u32;
+            let mut hello_wait_count = 0u32;
 
             loop {
                 let our_round = server_clone.dag.read().await.current_round();
@@ -598,8 +599,16 @@ async fn main() {
                     continue;
                 }
 
-                // If we don't know the network round yet, wait for Hello/HelloAck
+                // If we don't know the network round yet, wait for Hello/HelloAck.
+                // But if peers are connected and still reporting round 0 after 15s,
+                // this is a fresh network — nothing to sync.
                 if network_round == 0 {
+                    hello_wait_count += 1;
+                    if hello_wait_count >= 3 && peer_count >= 2 {
+                        info!("Sync complete: fresh network (all peers at round 0)");
+                        server_clone.sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
+                        break;
+                    }
                     info!("Sync: waiting for peer Hello (our_round={})", our_round);
                     tokio::time::sleep(Duration::from_secs(5)).await;
                     continue;
