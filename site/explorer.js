@@ -7,6 +7,9 @@ const API_URL = 'https://ultradag-node-1.fly.dev';
 let currentRound = 0;
 let currentPage = 1;
 const ROUNDS_PER_PAGE = 10;
+let statsHistory = [];
+let autoRefreshEnabled = true;
+let lastUpdateTime = 0;
 
 // Utility functions
 function formatUdag(sats) {
@@ -58,16 +61,58 @@ async function fetchStatus() {
     const data = await response.json();
     
     currentRound = data.dag_round;
+    lastUpdateTime = Date.now();
     
-    document.getElementById('latest-round').textContent = data.dag_round.toLocaleString();
-    document.getElementById('total-vertices').textContent = data.dag_vertices.toLocaleString();
+    // Track stats for history
+    trackStats(data);
+    
+    // Update stats with change indicators
+    updateStatWithChange('latest-round', data.dag_round);
+    updateStatWithChange('total-vertices', data.dag_vertices);
     document.getElementById('total-supply').textContent = formatUdag(data.total_supply);
     document.getElementById('account-count').textContent = data.account_count.toLocaleString();
+    
+    // Update network health indicator
+    updateNetworkHealth(data);
     
     return data;
   } catch (error) {
     console.error('Failed to fetch status:', error);
+    updateNetworkHealth(null);
   }
+}
+
+// Update stat with change indicator
+function updateStatWithChange(elementId, newValue) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  
+  const oldValue = parseInt(el.textContent.replace(/,/g, '')) || 0;
+  el.textContent = newValue.toLocaleString();
+  
+  if (newValue > oldValue) {
+    el.style.color = 'var(--success)';
+    setTimeout(() => { el.style.color = 'var(--white)'; }, 1000);
+  }
+}
+
+// Update network health indicator
+function updateNetworkHealth(data) {
+  const healthEl = document.getElementById('network-health');
+  if (!healthEl) return;
+  
+  if (!data) {
+    healthEl.innerHTML = '<span class="badge badge-warning">⚠️ Offline</span>';
+    return;
+  }
+  
+  // Check if network is healthy
+  const isHealthy = data.peer_count >= 3 && data.dag_round > 0;
+  const healthBadge = isHealthy 
+    ? '<span class="badge badge-success">🟢 Healthy</span>'
+    : '<span class="badge badge-warning">⚠️ Degraded</span>';
+  
+  healthEl.innerHTML = healthBadge;
 }
 
 // Fetch round data
@@ -397,11 +442,62 @@ document.querySelectorAll('.tab').forEach(tab => {
   });
 });
 
+// Auto-refresh toggle
+window.toggleAutoRefresh = function() {
+  autoRefreshEnabled = !autoRefreshEnabled;
+  const btn = document.getElementById('auto-refresh-btn');
+  if (btn) {
+    btn.textContent = autoRefreshEnabled ? '🔄 Auto-refresh ON' : '⏸️ Auto-refresh OFF';
+    btn.style.background = autoRefreshEnabled ? 'var(--success)' : 'var(--muted)';
+  }
+  if (autoRefreshEnabled) {
+    showNotification('Auto-refresh enabled');
+  } else {
+    showNotification('Auto-refresh paused');
+  }
+};
+
+// Update last refresh time display
+function updateRefreshTime() {
+  const timeEl = document.getElementById('last-update');
+  if (timeEl && lastUpdateTime) {
+    const secondsAgo = Math.floor((Date.now() - lastUpdateTime) / 1000);
+    timeEl.textContent = secondsAgo === 0 ? 'just now' : `${secondsAgo}s ago`;
+  }
+}
+
+// Track stats history for mini charts
+function trackStats(data) {
+  statsHistory.push({
+    timestamp: Date.now(),
+    round: data.dag_round,
+    vertices: data.dag_vertices,
+    supply: data.total_supply,
+    accounts: data.account_count
+  });
+  
+  // Keep only last 50 data points
+  if (statsHistory.length > 50) {
+    statsHistory.shift();
+  }
+}
+
 // Initialize
 (async function init() {
   await fetchStatus();
   await loadRounds();
   
   // Refresh status every 5 seconds
-  setInterval(fetchStatus, 5000);
+  setInterval(async () => {
+    if (autoRefreshEnabled) {
+      await fetchStatus();
+      // Auto-reload rounds if on first page
+      if (currentPage === 1) {
+        await loadRounds();
+      }
+    }
+  }, 5000);
+  
+  // Update "last updated" time every second
+  setInterval(updateRefreshTime, 1000);
 })();

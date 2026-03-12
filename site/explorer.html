@@ -103,7 +103,11 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
 .table-container{background:var(--bg2);border:1px solid var(--border);border-radius:4px;overflow:hidden;margin-bottom:32px}
 .table{width:100%;border-collapse:collapse}
 .table thead{background:var(--bg3);border-bottom:1px solid var(--border)}
-.table th{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:left;padding:16px 20px;font-weight:600}
+.table th{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:left;padding:16px 20px;font-weight:600;cursor:pointer;user-select:none;position:relative;transition:color .2s}
+.table th:hover{color:var(--accent)}
+.table th.sortable::after{content:'⇅';margin-left:8px;opacity:0.3}
+.table th.sorted-asc::after{content:'↑';opacity:1;color:var(--accent)}
+.table th.sorted-desc::after{content:'↓';opacity:1;color:var(--accent)}
 .table td{padding:16px 20px;border-top:1px solid var(--border);font-size:14px;color:var(--body)}
 .table tr:hover{background:var(--bg3)}
 .table a{color:var(--accent);text-decoration:none;font-family:'DM Mono',monospace}
@@ -265,6 +269,11 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <div class="header">
     <h1>UltraDAG <em>Explorer</em></h1>
     <p>Search rounds, transactions, and addresses</p>
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-top:16px">
+      <div id="network-health"></div>
+      <button id="auto-refresh-btn" onclick="toggleAutoRefresh()" style="background:var(--success);border:1px solid var(--success);color:var(--white);padding:6px 14px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.06em;transition:all .2s">🔄 Auto-refresh ON</button>
+      <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--dim)">Updated: <span id="last-update">—</span></span>
+    </div>
   </div>
 
   <!-- SEARCH -->
@@ -280,23 +289,23 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <div class="stats-grid">
     <div class="stat-card">
       <div class="stat-label">Latest Round</div>
-      <div class="stat-value" id="latest-round">—</div>
-      <div class="stat-sub">DAG rounds</div>
+      <div class="stat-value" id="latest-round" style="transition:color 0.3s">—</div>
+      <div class="stat-sub">DAG rounds finalized</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Total Vertices</div>
-      <div class="stat-value" id="total-vertices">—</div>
-      <div class="stat-sub">In DAG</div>
+      <div class="stat-value" id="total-vertices" style="transition:color 0.3s">—</div>
+      <div class="stat-sub">In DAG structure</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Total Supply</div>
       <div class="stat-value" id="total-supply">—</div>
-      <div class="stat-sub">UDAG</div>
+      <div class="stat-sub">UDAG circulating</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Accounts</div>
+      <div class="stat-label">Active Accounts</div>
       <div class="stat-value" id="account-count">—</div>
-      <div class="stat-sub">With balance</div>
+      <div class="stat-sub">With balance > 0</div>
     </div>
   </div>
 
