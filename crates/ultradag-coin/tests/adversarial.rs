@@ -328,11 +328,12 @@ fn b4_double_spend_deterministic_resolution() {
     // Apply first vertex — succeeds
     state.apply_vertex(&v1).unwrap();
 
-    // Apply second vertex — tx_b should fail (insufficient balance after tx_a)
+    // Apply second vertex — tx_b is skipped (insufficient balance after tx_a)
+    // In a DAG, finalized vertices are never rejected; invalid txs are skipped.
     let result = state.apply_vertex(&v2);
-    assert!(result.is_err(), "Second conflicting tx should fail");
+    assert!(result.is_ok(), "Vertex should apply; bad tx is skipped");
 
-    // Only recv_a should have funds
+    // Only recv_a should have funds (tx_b was skipped)
     assert_eq!(state.balance(&recv_a), 800_000 * COIN);
     assert_eq!(state.balance(&recv_b), 0);
 }
@@ -350,11 +351,13 @@ fn b5_nonce_replay_rejected() {
 
     assert_eq!(state.nonce(&sender_sk.address()), 1);
 
-    // Replay nonce=0
+    // Replay nonce=0 — tx is skipped in finalized vertex (not rejected)
     let tx_replay = make_signed_tx(&sender_sk, recv, 1000, 0, 0);
     let v1 = make_vertex(&prop.address(), 1, 1, vec![], vec![tx_replay], &prop);
     let result = state.apply_vertex(&v1);
-    assert!(result.is_err(), "Replayed nonce=0 should be rejected");
+    assert!(result.is_ok(), "Vertex applies; replayed tx is skipped");
+    // Nonce should still be 1 (replay was skipped, not applied)
+    assert_eq!(state.nonce(&sender_sk.address()), 1);
 }
 
 #[test]
@@ -365,6 +368,7 @@ fn b6_atomic_vertex_application() {
     let recv = SecretKey::from_bytes([30u8; 32]).address();
 
     // Good tx then bad tx (insufficient balance)
+    // In a DAG, the vertex applies — good tx succeeds, bad tx is skipped.
     let tx_good = make_signed_tx(&faucet_sk, recv, 1000, 0, 0);
     let bad_sk = SecretKey::from_bytes([99u8; 32]); // no balance
     let tx_bad = make_signed_tx(&bad_sk, recv, 999_999 * COIN, 0, 0);
@@ -372,14 +376,12 @@ fn b6_atomic_vertex_application() {
     let prop = SecretKey::from_bytes([1u8; 32]);
     let v = make_vertex(&prop.address(), 0, 0, vec![], vec![tx_good, tx_bad], &prop);
 
-    let supply_before = state.total_supply();
     let result = state.apply_vertex(&v);
-    assert!(result.is_err(), "Vertex with bad tx should fail");
+    assert!(result.is_ok(), "Vertex applies; bad tx is skipped");
 
-    // State should not have changed (atomic rollback)
-    assert_eq!(state.total_supply(), supply_before);
-    assert_eq!(state.balance(&recv), 0, "Receiver should have 0 after rollback");
-    assert_eq!(state.nonce(&faucet_sk.address()), 0, "Nonce should not advance after rollback");
+    // Good tx should have applied
+    assert_eq!(state.balance(&recv), 1000, "Receiver should have 1000 from good tx");
+    assert_eq!(state.nonce(&faucet_sk.address()), 1, "Nonce should advance for good tx");
 }
 
 // ════════════════════════════════════════════════════════════
@@ -412,7 +414,8 @@ fn c2_exceed_balance_by_one_satoshi() {
     let prop = SecretKey::from_bytes([1u8; 32]);
     let v = make_vertex(&prop.address(), 0, 0, vec![], vec![tx], &prop);
     let result = state.apply_vertex(&v);
-    assert!(result.is_err(), "Should reject tx exceeding balance by 1 sat");
+    assert!(result.is_ok(), "Vertex applies; bad tx is skipped");
+    assert_eq!(state.balance(&recv), 0, "Receiver should have 0 (tx was skipped)");
 }
 
 #[test]
@@ -421,12 +424,13 @@ fn c3_fee_counts_against_balance() {
     let faucet_sk = faucet_keypair();
     let recv = SecretKey::from_bytes([42u8; 32]).address();
 
-    // amount + fee > balance
+    // amount + fee > balance — tx is skipped in finalized vertex
     let tx = make_signed_tx(&faucet_sk, recv, FAUCET_PREFUND_SATS, 1, 0);
     let prop = SecretKey::from_bytes([1u8; 32]);
     let v = make_vertex(&prop.address(), 0, 0, vec![], vec![tx], &prop);
     let result = state.apply_vertex(&v);
-    assert!(result.is_err(), "Fee should count against balance");
+    assert!(result.is_ok(), "Vertex applies; bad tx is skipped");
+    assert_eq!(state.balance(&recv), 0, "Receiver should have 0 (tx was skipped)");
 }
 
 #[test]
@@ -455,12 +459,13 @@ fn c5_sequential_nonce_enforcement() {
     let faucet_sk = faucet_keypair();
     let recv = SecretKey::from_bytes([43u8; 32]).address();
 
-    // Skip nonce 0, try nonce 1 — should fail
+    // Skip nonce 0, try nonce 1 — tx is skipped in finalized vertex
     let tx = make_signed_tx(&faucet_sk, recv, 1000, 0, 1);
     let prop = SecretKey::from_bytes([1u8; 32]);
     let v = make_vertex(&prop.address(), 0, 0, vec![], vec![tx], &prop);
     let result = state.apply_vertex(&v);
-    assert!(result.is_err(), "Skipped nonce should be rejected");
+    assert!(result.is_ok(), "Vertex applies; bad nonce tx is skipped");
+    assert_eq!(state.balance(&recv), 0, "Receiver should have 0 (tx was skipped)");
 }
 
 #[test]

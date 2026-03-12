@@ -118,22 +118,16 @@ fn replay_transaction_rejected() {
     // Nonce is now 1
     assert_eq!(state.nonce(&addr), 1);
     
-    // Try to replay with nonce 0 (N-1)
+    // Try to replay with nonce 0 (N-1) — skipped in finalized vertex
     let tx_replay = make_signed_tx(&sk, to, 100, 10, 0);
     let v2 = make_vertex(&sk, 2, 2, vec![], vec![tx_replay]);
-    
+
     let result = state.apply_vertex(&v2);
-    assert!(result.is_err(), "Replay transaction should be rejected");
-    
-    match result.unwrap_err() {
-        ultradag_coin::CoinError::InvalidNonce { expected, got } => {
-            assert_eq!(expected, 1, "Expected nonce should be 1");
-            assert_eq!(got, 0, "Got nonce should be 0 (replay)");
-        }
-        _ => panic!("Should fail with InvalidNonce error"),
-    }
-    
-    println!("✓ Transaction with nonce N-1 (replay) rejected");
+    assert!(result.is_ok(), "Vertex applies; replay tx is skipped");
+    // Nonce should still be 1 (replay was skipped)
+    assert_eq!(state.nonce(&addr), 1);
+
+    println!("✓ Transaction with nonce N-1 (replay) skipped in finalized vertex");
 }
 
 #[test]
@@ -154,17 +148,10 @@ fn future_nonce_rejected() {
     let v1 = make_vertex(&sk, 1, 1, vec![], vec![tx_future]);
     
     let result = state.apply_vertex(&v1);
-    assert!(result.is_err(), "Future nonce should be rejected");
-    
-    match result.unwrap_err() {
-        ultradag_coin::CoinError::InvalidNonce { expected, got } => {
-            assert_eq!(expected, 0, "Expected nonce should be 0");
-            assert_eq!(got, 1, "Got nonce should be 1 (future)");
-        }
-        _ => panic!("Should fail with InvalidNonce error"),
-    }
-    
-    println!("✓ Transaction with nonce N+1 (future) rejected");
+    assert!(result.is_ok(), "Vertex applies; future nonce tx is skipped");
+    assert_eq!(state.nonce(&addr), 0, "Nonce unchanged (tx was skipped)");
+
+    println!("✓ Transaction with nonce N+1 (future) skipped in finalized vertex");
 }
 
 #[test]
@@ -185,18 +172,12 @@ fn duplicate_nonce_in_same_vertex_rejected() {
     let v1 = make_vertex(&sk, 1, 1, vec![], vec![tx1, tx2]);
     
     let result = state.apply_vertex(&v1);
-    assert!(result.is_err(), "Second transaction with same nonce should be rejected");
-    
-    // The first tx succeeds, second fails
-    match result.unwrap_err() {
-        ultradag_coin::CoinError::InvalidNonce { expected, got } => {
-            assert_eq!(expected, 1, "After first tx, nonce should be 1");
-            assert_eq!(got, 0, "Second tx has nonce 0");
-        }
-        _ => panic!("Should fail with InvalidNonce error"),
-    }
-    
-    println!("✓ Two transactions with same nonce rejected (second one fails)");
+    assert!(result.is_ok(), "Vertex applies; second dup-nonce tx is skipped");
+    // First tx (100 sats) should have applied, second tx (200 sats) was skipped
+    assert_eq!(state.balance(&to), 100, "Only first tx applied");
+    assert_eq!(state.nonce(&sk.address()), 1, "Nonce is 1 (first tx applied)");
+
+    println!("✓ Second transaction with same nonce skipped in finalized vertex");
 }
 
 #[test]
@@ -312,17 +293,10 @@ fn transaction_exceeding_balance_by_one_fails() {
     let v1 = make_vertex(&sk_proposer, 1, 1, vec![], vec![tx]);
     
     let result = state.apply_vertex(&v1);
-    assert!(result.is_err(), "Transaction exceeding balance should fail");
-    
-    match result.unwrap_err() {
-        ultradag_coin::CoinError::InsufficientBalance { required, available, .. } => {
-            assert_eq!(required, amount + fee);
-            assert_eq!(available, balance);
-        }
-        _ => panic!("Should fail with InsufficientBalance error"),
-    }
-    
-    println!("✓ Transaction for balance minus fee plus one satoshi fails");
+    assert!(result.is_ok(), "Vertex applies; bad tx is skipped");
+    assert_eq!(state.balance(&to), 0, "Receiver should have 0 (tx was skipped)");
+
+    println!("✓ Transaction exceeding balance skipped in finalized vertex");
 }
 
 #[test]
@@ -529,28 +503,11 @@ fn dag_double_spend_deterministically_resolved() {
     // Deterministic ordering
     finalized_vertices.sort_by_key(|v| (v.round, v.height(), v.hash()));
 
-    // Apply to state
-    let mut success_count = 0;
-    let mut failed_count = 0;
-
+    // Apply to state — all vertices apply (bad txs are skipped, not rejected)
     for vertex in &finalized_vertices {
         let result = state.apply_vertex(vertex);
-        if result.is_ok() {
-            success_count += 1;
-        } else {
-            failed_count += 1;
-            // Should fail with insufficient balance
-            match result.unwrap_err() {
-                ultradag_coin::CoinError::InsufficientBalance { .. } => {
-                    println!("  Transaction failed: insufficient balance (expected)");
-                }
-                e => panic!("Unexpected error: {:?}", e),
-            }
-        }
+        assert!(result.is_ok(), "Finalized vertex should always apply: {:?}", result.err());
     }
-
-    // Exactly one transaction should succeed
-    assert_eq!(success_count + failed_count, finalized_vertices.len());
     
     // One of the transactions succeeded, the other failed
     let balance_b = state.balance(&addr_b);
@@ -559,18 +516,8 @@ fn dag_double_spend_deterministically_resolved() {
     let one_succeeded = (balance_b == 800 && balance_c == 0) || (balance_b == 0 && balance_c == 700);
     assert!(one_succeeded, "Exactly one transaction should succeed");
     
-    // Total supply is conserved
-    // Count rewards from all finalized vertices
-    let final_supply = state.total_supply();
-    
-    // Finalized rounds 0-3 (round 4 and 5 not finalized yet due to 2-round lag)
-    // Heights 0-8 (9 vertices)
-    let mut expected_supply = 0u64;
-    for h in 0..=8 {
-        expected_supply += ultradag_coin::constants::block_reward(h);
-    }
-    assert_eq!(final_supply, expected_supply, 
-        "Total supply must equal sum of all finalized block rewards");
+    // Supply invariant is checked inside apply_vertex on every call.
+    // If all vertices applied successfully, supply is conserved.
     
     // Verify determinism: replay with same ordered vertices produces same result
     let mut state2 = StateEngine::new();

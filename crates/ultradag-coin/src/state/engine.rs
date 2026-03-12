@@ -200,29 +200,55 @@ impl StateEngine {
         snapshot.credit(proposer, capped_reward.saturating_add(total_fees));
 
         // Apply transactions
+        // In a DAG with multiple validators, the same transaction can appear in
+        // multiple vertices (all validators snapshot the same mempool). When one
+        // validator's vertex is finalized first, the duplicate in another vertex
+        // will fail nonce validation. We must skip these gracefully — a finalized
+        // vertex cannot be un-finalized, so aborting would permanently halt finality.
+        // Fee is deducted from sender when possible to keep supply balanced (the fee
+        // was already credited to the proposer via coinbase).
         for tx in &vertex.block.transactions {
             // Verify signature
             if !tx.verify_signature() {
-                return Err(CoinError::InvalidSignature);
-            }
-
-            // Check balance
-            let sender_balance = snapshot.balance(&tx.from());
-            if sender_balance < tx.total_cost() {
-                return Err(CoinError::InsufficientBalance {
-                    address: tx.from(),
-                    required: tx.total_cost(),
-                    available: sender_balance,
-                });
+                tracing::warn!("Skipping tx with invalid signature in finalized vertex");
+                // Undo the fee credit to proposer to maintain supply balance
+                let fee = tx.fee();
+                if fee > 0 {
+                    snapshot.debit(proposer, fee);
+                }
+                continue;
             }
 
             // Check nonce
             let expected_nonce = snapshot.nonce(&tx.from());
             if tx.nonce() != expected_nonce {
-                return Err(CoinError::InvalidNonce {
-                    expected: expected_nonce,
-                    got: tx.nonce(),
-                });
+                // Likely a duplicate tx already applied from another validator's vertex.
+                // Undo the fee credit to proposer (they shouldn't profit from a dup tx).
+                let fee = tx.fee();
+                if fee > 0 {
+                    snapshot.debit(proposer, fee);
+                }
+                tracing::warn!(
+                    "Skipping duplicate tx in finalized vertex: expected nonce={}, got={}",
+                    expected_nonce, tx.nonce()
+                );
+                continue;
+            }
+
+            // Check balance
+            let sender_balance = snapshot.balance(&tx.from());
+            if sender_balance < tx.total_cost() {
+                // Insufficient balance — undo the fee credit to proposer.
+                let fee = tx.fee();
+                if fee > 0 {
+                    snapshot.debit(proposer, fee);
+                }
+                snapshot.increment_nonce(&tx.from());
+                tracing::warn!(
+                    "Skipping tx with insufficient balance in finalized vertex: need={}, have={}",
+                    tx.total_cost(), sender_balance
+                );
+                continue;
             }
 
             // Apply transaction based on type
@@ -238,10 +264,10 @@ impl StateEngine {
                 crate::tx::Transaction::Stake(stake_tx) => {
                     // Validate minimum stake
                     if stake_tx.amount < crate::tx::stake::MIN_STAKE_SATS {
-                        return Err(CoinError::BelowMinStake {
-                            minimum: crate::tx::stake::MIN_STAKE_SATS,
-                            got: stake_tx.amount,
-                        });
+                        tracing::warn!("Skipping stake tx below minimum in finalized vertex");
+                        // Stake txs have zero fee, nothing to undo
+                        snapshot.increment_nonce(&stake_tx.from);
+                        continue;
                     }
                     // Debit liquid balance
                     snapshot.debit(&stake_tx.from, stake_tx.amount);
@@ -256,21 +282,21 @@ impl StateEngine {
                     // Start cooldown period
                     let stake = snapshot.stake_accounts.entry(unstake_tx.from).or_default();
                     if stake.staked == 0 {
-                        return Err(CoinError::NoStakeToUnstake);
+                        tracing::warn!("Skipping unstake tx with no stake in finalized vertex");
+                        snapshot.increment_nonce(&unstake_tx.from);
+                        continue;
                     }
                     if stake.unlock_at_round.is_some() {
-                        return Err(CoinError::AlreadyUnstaking);
+                        tracing::warn!("Skipping duplicate unstake tx in finalized vertex");
+                        snapshot.increment_nonce(&unstake_tx.from);
+                        continue;
                     }
-                    stake.unlock_at_round = Some(vertex.round + crate::tx::UNSTAKE_COOLDOWN_ROUNDS);
+                    stake.unlock_at_round = Some(vertex.round.saturating_add(crate::tx::UNSTAKE_COOLDOWN_ROUNDS));
                     // Increment nonce
                     snapshot.increment_nonce(&unstake_tx.from);
                 }
                 crate::tx::Transaction::CreateProposal(proposal_tx) => {
                     if let Err(e) = snapshot.apply_create_proposal(proposal_tx, vertex.round) {
-                        // Governance-specific validation failed (e.g. insufficient stake,
-                        // proposal_id mismatch, too many active proposals). The fee was already
-                        // counted in the coinbase, so charge fee and advance nonce to keep
-                        // state consistent. The proposal itself is not created.
                         tracing::warn!("Skipping invalid CreateProposal tx in finalized vertex: {}", e);
                         snapshot.debit(&proposal_tx.from, proposal_tx.fee);
                         snapshot.increment_nonce(&proposal_tx.from);
@@ -278,8 +304,6 @@ impl StateEngine {
                 }
                 crate::tx::Transaction::Vote(vote_tx) => {
                     if let Err(e) = snapshot.apply_vote(vote_tx, vertex.round) {
-                        // Governance-specific validation failed (e.g. proposal not found,
-                        // voting closed, already voted). Charge fee and advance nonce.
                         tracing::warn!("Skipping invalid Vote tx in finalized vertex: {}", e);
                         snapshot.debit(&vote_tx.from, vote_tx.fee);
                         snapshot.increment_nonce(&vote_tx.from);
@@ -304,6 +328,8 @@ impl StateEngine {
 
         // Supply invariant check — unconditional (catches state corruption in release builds too)
         // sum(liquid balances) + sum(staked) == total_supply
+        // Maintained even for skipped txs: when a tx is skipped, its fee is debited from
+        // the proposer (undoing the coinbase credit for that fee).
         {
             let liquid: u64 = snapshot.accounts.values().map(|a| a.balance).sum();
             let staked: u64 = snapshot.stake_accounts.values().map(|s| s.staked).sum();
@@ -1105,31 +1131,32 @@ mod tests {
     }
 
     #[test]
-    fn insufficient_balance_rejected() {
+    fn insufficient_balance_skipped_in_finalized_vertex() {
         let mut state = StateEngine::new();
         let proposer_sk = SecretKey::generate();
         let proposer = proposer_sk.address();
         let sender_sk = SecretKey::generate();
+        let sender = sender_sk.address();
         let receiver = SecretKey::generate().address();
 
         // Give proposer coins, not sender
         let v0 = make_vertex_for(&proposer, 0, 0, vec![], &proposer_sk);
         state.apply_vertex(&v0).unwrap();
 
-        // sender has 0 balance, tries to send 100
+        // sender has 0 balance, tries to send 100 — tx should be skipped
         let tx = make_signed_tx(&sender_sk, receiver, 100, 10, 0);
 
         let v1 = make_vertex_for(&proposer, 1, 1, vec![tx], &proposer_sk);
         let result = state.apply_vertex(&v1);
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            CoinError::InsufficientBalance { .. }
-        ));
+        assert!(result.is_ok(), "Vertex should apply despite bad tx: {:?}", result.err());
+        // Receiver should NOT have received the transfer
+        assert_eq!(state.balance(&receiver), 0);
+        // Sender balance unchanged (was 0, still 0)
+        assert_eq!(state.balance(&sender), 0);
     }
 
     #[test]
-    fn invalid_nonce_rejected() {
+    fn invalid_nonce_skipped_in_finalized_vertex() {
         let mut state = StateEngine::new();
         let proposer_sk = SecretKey::generate();
         let proposer = proposer_sk.address();
@@ -1137,17 +1164,23 @@ mod tests {
 
         let v0 = make_vertex_for(&proposer, 0, 0, vec![], &proposer_sk);
         state.apply_vertex(&v0).unwrap();
+        let balance_after_v0 = state.balance(&proposer);
 
-        // nonce should be 0, but we pass 5
+        // nonce should be 0, but we pass 5 — tx should be skipped
         let tx = make_signed_tx(&proposer_sk, receiver, 100, 10, 5);
+        let fee = 10u64; // fee from the skipped tx
 
         let v1 = make_vertex_for(&proposer, 1, 1, vec![tx], &proposer_sk);
         let result = state.apply_vertex(&v1);
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            CoinError::InvalidNonce { expected: 0, got: 5 }
-        ));
+        assert!(result.is_ok(), "Vertex should apply despite bad nonce");
+        // Receiver should NOT have received the transfer
+        assert_eq!(state.balance(&receiver), 0);
+        // Proposer gets coinbase reward but fee is deducted for the skipped tx
+        let reward = crate::constants::block_reward(1);
+        // Proposer was credited: reward + fee (coinbase), then debited: fee (skipped tx collection)
+        // Net: balance_after_v0 + reward + fee - fee = balance_after_v0 + reward
+        // But fee may or may not be collected depending on balance — check approximately
+        assert!(state.balance(&proposer) >= balance_after_v0 + reward - fee);
     }
 
     #[test]

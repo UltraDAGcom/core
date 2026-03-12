@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="UltraDAG is the simplest production-ready DAG chain built for machine-to-machine micropayments. Fast BFT finality, <2MB binary, bounded storage. Live on testnet.">
+<meta property="og:title" content="UltraDAG — Machine-to-Machine Micropayments">
+<meta property="og:description" content="The simplest production-ready DAG chain. Fast BFT finality, <2MB binary, bounded storage.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ultradag.com">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%233d9be9' stroke-width='2'/%3E%3Ccircle cx='50' cy='50' r='15' fill='%233d9be9'/%3E%3C/svg%3E">
 <title>UltraDAG — Machine-to-Machine Micropayments</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -433,6 +439,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <li><a href="blog/index.html">Blog</a></li>
     <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
     <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
+    <li><a href="network.html">Live Network</a></li>
   </ul>
   <button class="hamburger" id="hamburger" aria-label="Menu">
     <span></span>
@@ -453,6 +460,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <li><a href="#sdks">SDKs</a></li>
     <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
     <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
+    <li><a href="network.html">Live Network</a></li>
   </ul>
 </div>
 
@@ -902,144 +910,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
         <h3>Go SDK</h3>
         <p>Standard net/http + blake3. Zero external HTTP dependencies. Perfect for infrastructure tooling.</p>
         <div style="margin-top:16px">
-          <code style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:var(--bg);padding:4px 8px;border-radius:2px;border:1px solid var(--border)">go get github.com/ultradag/sdk-go</code>
-        </div>
-      </div>
-    </div>
-
-    <!-- Quick example -->
-    <div class="code-section reveal" style="margin-top:48px">
-      <div class="code-header">
-        <div class="code-dots"><div class="code-dot"></div><div class="code-dot"></div><div class="code-dot"></div></div>
-        <span class="code-label">Python Quick Start</span>
-      </div>
-      <pre><span class="kw">from</span> ultradag <span class="kw">import</span> UltraDagClient, Keypair
-
-<span class="cm"># Connect to testnet</span>
-client = UltraDagClient(<span class="str">"https://ultradag-node-1.fly.dev"</span>)
-
-<span class="cm"># Generate a keypair (offline, no RPC needed)</span>
-kp = Keypair.generate()
-<span class="fn">print</span>(<span class="str">f"Address: </span>{kp.address}<span class="str">"</span>)
-
-<span class="cm"># Get testnet tokens</span>
-client.faucet(kp.address, <span class="num">100_000_000</span>)  <span class="cm"># 1 UDAG</span>
-
-<span class="cm"># Check balance</span>
-bal = client.get_balance(kp.address)
-<span class="fn">print</span>(<span class="str">f"Balance: </span>{bal.balance_udag}<span class="str"> UDAG"</span>)
-
-<span class="cm"># Send transaction</span>
-client.send_tx(kp.secret_key_hex, recipient, <span class="num">50_000_000</span>, fee=<span class="num">10_000</span>)</pre>
-    </div>
-
-    <div style="text-align:center;margin-top:32px" class="reveal">
-      <a href="https://github.com/UltraDAGcom/core/tree/main/sdk" target="_blank" class="btn-secondary">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        View SDK Source on GitHub
-      </a>
-    </div>
-  </div>
-</section>
-
-<!-- COMMUNITY -->
-<section style="background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
-  <div class="section-inner">
-    <p class="section-tag reveal">Join the Network</p>
-    <h2 class="reveal">Community</h2>
-    <p class="section-lead reveal">UltraDAG is built by contributors like you. Run a validator, vote on proposals, or help improve the protocol.</p>
-    
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;margin-top:64px">
-      <!-- Testnet -->
-      <div class="reveal" style="background:var(--bg3);border:1px solid var(--border2);padding:32px;border-radius:2px;transition:border-color .3s">
-        <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin-bottom:16px">Live Network</div>
-        <h3 style="font-family:'Cormorant',serif;font-size:24px;font-weight:400;color:var(--white);margin-bottom:12px">Testnet Status</h3>
-        <p style="font-family:'Cormorant',serif;font-size:16px;color:var(--body);line-height:1.7;margin-bottom:24px">
-          Monitor the live testnet. Real-time consensus, finality metrics, and validator performance.
-        </p>
-        <a href="testnet.html" style="display:inline-flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);text-decoration:none;transition:color .2s">
-          View Status <span style="font-size:14px">→</span>
-        </a>
-      </div>
-
-      <!-- Dashboard -->
-      <div class="reveal" style="background:var(--bg3);border:1px solid var(--border2);padding:32px;border-radius:2px;transition:border-color .3s">
-        <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin-bottom:16px">Web Interface</div>
-        <h3 style="font-family:'Cormorant',serif;font-size:24px;font-weight:400;color:var(--white);margin-bottom:12px">Dashboard</h3>
-        <p style="font-family:'Cormorant',serif;font-size:16px;color:var(--body);line-height:1.7;margin-bottom:24px">
-          Browser wallet, DAG explorer, staking interface, and governance voting. No installation required.
-        </p>
-        <a href="dashboard.html" style="display:inline-flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);text-decoration:none;transition:color .2s">
-          Open Dashboard <span style="font-size:14px">→</span>
-        </a>
-      </div>
-
-      <!-- GitHub -->
-      <div class="reveal" style="background:var(--bg3);border:1px solid var(--border2);padding:32px;border-radius:2px;transition:border-color .3s">
-        <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin-bottom:16px">Open Source</div>
-        <h3 style="font-family:'Cormorant',serif;font-size:24px;font-weight:400;color:var(--white);margin-bottom:12px">GitHub</h3>
-        <p style="font-family:'Cormorant',serif;font-size:16px;color:var(--body);line-height:1.7;margin-bottom:24px">
-          Read the code, submit issues, contribute PRs. Clean Rust codebase with 490+ passing tests.
-        </p>
-        <a href="https://github.com/UltraDAGcom/core" target="_blank" style="display:inline-flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);text-decoration:none;transition:color .2s">
-          View Repository <span style="font-size:14px">→</span>
-        </a>
-      </div>
-
-      <!-- Telegram -->
-      <div class="reveal" style="background:var(--bg3);border:1px solid var(--border2);padding:32px;border-radius:2px;transition:border-color .3s">
-        <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin-bottom:16px">Discussion</div>
-        <h3 style="font-family:'Cormorant',serif;font-size:24px;font-weight:400;color:var(--white);margin-bottom:12px">Telegram</h3>
-        <p style="font-family:'Cormorant',serif;font-size:16px;color:var(--body);line-height:1.7;margin-bottom:24px">
-          Ask questions, discuss proposals, share validator results. Active community of builders.
-        </p>
-        <a href="https://t.me/ultra_dag" target="_blank" style="display:inline-flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);text-decoration:none;transition:color .2s">
-          Join Telegram <span style="font-size:14px">→</span>
-        </a>
-      </div>
-
-      <!-- Documentation -->
-      <div class="reveal" style="background:var(--bg3);border:1px solid var(--border2);padding:32px;border-radius:2px;transition:border-color .3s">
-        <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin-bottom:16px">Learn</div>
-        <h3 style="font-family:'Cormorant',serif;font-size:24px;font-weight:400;color:var(--white);margin-bottom:12px">Documentation</h3>
-        <p style="font-family:'Cormorant',serif;font-size:16px;color:var(--body);line-height:1.7;margin-bottom:24px">
-          Architecture deep-dive, validator guide, contributing guidelines. Everything you need to build.
-        </p>
-        <a href="docs.html" style="display:inline-flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);text-decoration:none;transition:color .2s">
-          Read Docs <span style="font-size:14px">→</span>
-        </a>
-      </div>
-
-      <!-- Whitepaper -->
-      <div class="reveal" style="background:var(--bg3);border:1px solid var(--border2);padding:32px;border-radius:2px;transition:border-color .3s">
-        <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--accent);margin-bottom:16px">Technical</div>
-        <h3 style="font-family:'Cormorant',serif;font-size:24px;font-weight:400;color:var(--white);margin-bottom:12px">Whitepaper</h3>
-        <p style="font-family:'Cormorant',serif;font-size:16px;color:var(--body);line-height:1.7;margin-bottom:24px">
-          DAG-BFT consensus, tokenomics, governance design. The complete technical specification.
-        </p>
-        <a href="whitepaper.html" style="display:inline-flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);text-decoration:none;transition:color .2s">
-          Read Whitepaper <span style="font-size:14px">→</span>
-        </a>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- FOOTER -->
-<footer>
-  <div class="footer-inner">
-    <div class="footer-logo">UltraDAG</div>
-    <ul class="footer-links">
-      <li><a href="dashboard.html">Dashboard</a></li>
-      <li><a href="whitepaper.html">Whitepaper</a></li>
-      <li><a href="docs.html">Docs</a></li>
-      <li><a href="blog/index.html">Blog</a></li>
-      <li><a href="testnet.html">Testnet</a></li>
-      <li><a href="consensus-viz.html">Consensus Demo</a></li>
-      <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
-    </ul>
-    <div class="footer-note">BUSL-1.1</div>
-  </div>
+          <code style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);background:var(--bg);padding:4px 8px;border-radius:2px;border:1px solid var(--border)">go get github.com/ultra
 </footer>
 
 <script>
