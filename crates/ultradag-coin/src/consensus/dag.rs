@@ -477,6 +477,12 @@ impl BlockDag {
         self.byzantine_validators.contains(validator)
     }
 
+    /// Clear the Byzantine flag for a validator.
+    /// Used defensively when the local validator detects it was incorrectly marked.
+    pub fn clear_byzantine(&mut self, validator: &Address) {
+        self.byzantine_validators.remove(validator);
+    }
+
     /// Store equivocation evidence (two vertices from same validator, same round).
     /// Returns true if this is new evidence.
     /// Evidence is stored both in the temporary map and the permanent evidence_store.

@@ -96,6 +96,17 @@ pub async fn validator_loop(
             }
         }
 
+        // Defensive: if our own validator is marked Byzantine in our local DAG,
+        // that's a bug (the equivocation check should prevent self-equivocation).
+        // Clear the flag and log a critical error so we can diagnose.
+        {
+            let mut dag = server.dag.write().await;
+            if dag.is_byzantine(&validator) {
+                warn!("CRITICAL: our own validator {} is marked Byzantine in local DAG — clearing flag (this is a bug)", validator);
+                dag.clear_byzantine(&validator);
+            }
+        }
+
         // Determine the round we're producing for.
         // Only advance to current_round + 1 when we see quorum in current_round.
         // This prevents validators from racing ahead independently.
