@@ -659,7 +659,7 @@ async fn main() {
                     info!("Sync: requesting vertices round={} network={} gap={}", our_round, network_round, gap);
                     let from = our_round.saturating_add(1);
                     server_clone.peers.broadcast(
-                        &ultradag_network::Message::GetDagVertices { from_round: from, max_count: 500 },
+                        &ultradag_network::Message::GetDagVertices { from_round: from, max_count: 50 },
                         "",
                     ).await;
                 }

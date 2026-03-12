@@ -807,7 +807,7 @@ async fn handle_peer(
                     peers
                         .send_to(&peer_addr, &Message::GetDagVertices {
                             from_round: our_round + 1,
-                            max_count: 500,
+                            max_count: 50,
                         })
                         .await?;
                 }
@@ -858,7 +858,7 @@ async fn handle_peer(
                     peers
                         .send_to(&peer_addr, &Message::GetDagVertices {
                             from_round: our_round + 1,
-                            max_count: 500,
+                            max_count: 50,
                         })
                         .await?;
                 }
@@ -1088,7 +1088,7 @@ async fn handle_peer(
                 let floor = dag_r.pruning_floor();
                 let effective_from = from_round.max(floor);
                 // Cap max_count to prevent CPU exhaustion from huge range iterations
-                let capped_count = (max_count as usize).min(500);
+                let capped_count = (max_count as usize).min(50);
                 let end_round = effective_from.saturating_add(capped_count as u64);
                 let mut vertices = Vec::new();
                 for round in effective_from..end_round {
