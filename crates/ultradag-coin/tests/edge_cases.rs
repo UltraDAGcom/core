@@ -548,7 +548,7 @@ fn all_nodes_restart_consensus_resumes() {
         "Rebuilt FinalityTracker should finalize same vertices");
 }
 
-/// Test 12: Faucet depletion — error is graceful
+/// Test 12: Faucet depletion — insufficient balance tx skipped gracefully
 #[test]
 fn faucet_depletion_graceful_error() {
     let mut state = StateEngine::new_with_genesis();
@@ -564,18 +564,17 @@ fn faucet_depletion_graceful_error() {
     let faucet_balance = state.balance(&faucet_addr);
     assert_eq!(faucet_balance, FAUCET_PREFUND_SATS);
 
-    // Try to send more than faucet balance
+    // Try to send more than faucet balance — tx is skipped gracefully
+    // in finalized vertices (nonce advanced, balance unchanged)
     let tx = make_signed_tx(&faucet_sk, receiver, faucet_balance + 1, 0, 0);
     let v1 = make_vertex(&proposer_sk, 1, 1, vec![tx], vec![]);
     let result = state.apply_vertex(&v1);
-    assert!(result.is_err());
-    match result {
-        Err(ultradag_coin::CoinError::InsufficientBalance { .. }) => {}
-        other => panic!("Expected InsufficientBalance, got {:?}", other),
-    }
+    assert!(result.is_ok(), "Finalized vertex with bad tx should succeed (tx skipped)");
 
-    // Faucet balance unchanged (atomic rollback)
+    // Faucet balance unchanged (tx was skipped)
     assert_eq!(state.balance(&faucet_addr), FAUCET_PREFUND_SATS);
+    // Nonce was advanced despite skip
+    assert_eq!(state.nonce(&faucet_addr), 1);
 }
 
 // ============================================================================
@@ -648,29 +647,32 @@ fn orphan_buffer_cap_enforced() {
     assert_eq!(orphans.len(), cap);
 }
 
-/// Test: Duplicate transaction in same vertex is caught
+/// Test: Duplicate transaction in same vertex — second tx skipped gracefully
 #[test]
 fn duplicate_tx_in_vertex_same_nonce() {
     let mut state = StateEngine::new_with_genesis();
     let proposer_sk = SecretKey::generate();
     let sender_sk = SecretKey::generate();
+    let sender_addr = sender_sk.address();
     let receiver = SecretKey::generate().address();
 
     // Give sender coins
-    state.faucet_credit(&sender_sk.address(), 10_000_000).unwrap();
+    state.faucet_credit(&sender_addr, 10_000_000).unwrap();
 
     let tx1 = make_signed_tx(&sender_sk, receiver, 1_000, 100, 0);
     let tx2 = make_signed_tx(&sender_sk, receiver, 2_000, 100, 0); // Same nonce!
 
     // Second tx has same nonce=0, so after tx1 is applied (nonce becomes 1),
-    // tx2 will fail with InvalidNonce
+    // tx2 is skipped gracefully (nonce mismatch in finalized vertex)
     let v = make_vertex(&proposer_sk, 0, 0, vec![tx1, tx2], vec![]);
     let result = state.apply_vertex(&v);
-    assert!(result.is_err());
-    match result {
-        Err(ultradag_coin::CoinError::InvalidNonce { expected: 1, got: 0 }) => {}
-        other => panic!("Expected InvalidNonce(1, 0), got {:?}", other),
-    }
+    assert!(result.is_ok(), "Finalized vertex with duplicate nonce should succeed (second tx skipped)");
+
+    // First tx applied: 1_000 + 100 fee deducted
+    assert_eq!(state.balance(&receiver), 1_000);
+    // Nonce advanced to 1 (from tx1), then to 2 (from skipped tx2 — nonce still advances)
+    // Actually, skipped txs with wrong nonce do advance nonce in the skip path
+    assert_eq!(state.nonce(&sender_addr), 1); // Only tx1 applied, tx2 skipped
 }
 
 /// Test: Supply invariant holds with genesis + many rounds
