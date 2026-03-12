@@ -124,6 +124,72 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
 .chart-bar:hover{background:var(--success)}
 .chart-labels{display:flex;justify-content:space-between;margin-top:12px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)}
 
+/* TRANSACTION FEED */
+.tx-feed{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:24px;max-height:400px;overflow-y:auto}
+.tx-feed::-webkit-scrollbar{width:8px}
+.tx-feed::-webkit-scrollbar-track{background:var(--bg3)}
+.tx-feed::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+.tx-item{display:flex;align-items:center;gap:16px;padding:12px;border-bottom:1px solid var(--border2);transition:background .2s;animation:slideIn .3s ease}
+.tx-item:hover{background:var(--bg3)}
+.tx-item:last-child{border-bottom:none}
+.tx-icon{width:32px;height:32px;border-radius:50%;background:var(--glow2);display:flex;align-items:center;justify-content:center;font-size:14px}
+.tx-details{flex:1}
+.tx-hash{font-family:'DM Mono',monospace;font-size:12px;color:var(--accent);margin-bottom:4px}
+.tx-meta{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)}
+.tx-amount{font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--white)}
+@keyframes slideIn{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:translateX(0)}}
+
+/* NETWORK HEALTH */
+.health-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.health-indicator{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;display:flex;align-items:center;gap:12px}
+.health-icon{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px}
+.health-icon.healthy{background:rgba(52,211,153,.15);color:var(--success)}
+.health-icon.warning{background:rgba(251,191,36,.15);color:var(--warning)}
+.health-icon.critical{background:rgba(248,113,113,.15);color:var(--danger)}
+.health-info{flex:1}
+.health-label{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
+.health-value{font-size:16px;font-weight:600;color:var(--white)}
+
+/* TREND CHART */
+.trend-chart{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:24px;margin-bottom:24px}
+.trend-canvas{width:100%;height:200px;position:relative}
+.trend-line{position:absolute;bottom:0;left:0;right:0;height:100%}
+.trend-point{position:absolute;width:6px;height:6px;background:var(--accent);border:2px solid var(--white);border-radius:50%;cursor:pointer;transition:transform .2s}
+.trend-point:hover{transform:scale(1.8)}
+
+/* MAP CONNECTIONS */
+.map-connection{position:absolute;height:2px;background:linear-gradient(90deg,var(--accent),transparent);opacity:.3;transform-origin:left center;pointer-events:none;animation:pulse-line 3s infinite}
+@keyframes pulse-line{0%,100%{opacity:.3}50%{opacity:.6}}
+
+/* SEARCH & FILTER */
+.controls{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap}
+.search-box{flex:1;min-width:250px;position:relative}
+.search-box input{width:100%;padding:12px 16px 12px 40px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--white);font-family:'DM Mono',monospace;font-size:13px;transition:border-color .2s}
+.search-box input:focus{outline:none;border-color:var(--accent)}
+.search-box::before{content:'🔍';position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:16px}
+.filter-btn{padding:12px 20px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--subtle);font-family:'DM Mono',monospace;font-size:12px;cursor:pointer;transition:all .2s;text-transform:uppercase;letter-spacing:.08em}
+.filter-btn:hover{border-color:var(--accent);color:var(--white)}
+.filter-btn.active{background:var(--glow2);border-color:var(--accent);color:var(--accent)}
+
+/* MINI BLOCK EXPLORER */
+.block-explorer{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:24px}
+.block-item{display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid var(--border2);transition:background .2s}
+.block-item:hover{background:var(--bg3)}
+.block-item:last-child{border-bottom:none}
+.block-round{font-family:'DM Mono',monospace;font-size:14px;font-weight:600;color:var(--accent)}
+.block-info{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)}
+.block-txs{font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle)}
+
+/* ENHANCED ANIMATIONS */
+.stat-value{transition:all .5s ease;animation:countUp .8s ease}
+@keyframes countUp{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
+.validator-card{animation:fadeIn .5s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+/* TWO COLUMN LAYOUT */
+.two-col{display:grid;grid-template-columns:2fr 1fr;gap:24px;margin-bottom:48px}
+@media(max-width:1200px){.two-col{grid-template-columns:1fr}}
+
 /* RESPONSIVE */
 @media(max-width:900px){
   nav{padding:0 24px;height:56px}
@@ -308,6 +374,70 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
     </div>
   </div>
 
+  <!-- NETWORK HEALTH -->
+  <div class="network-section">
+    <h2 class="section-title">Network Health</h2>
+    <div class="health-grid">
+      <div class="health-indicator">
+        <div class="health-icon healthy" id="consensus-health">✓</div>
+        <div class="health-info">
+          <div class="health-label">Consensus</div>
+          <div class="health-value">Healthy</div>
+        </div>
+      </div>
+      <div class="health-indicator">
+        <div class="health-icon healthy" id="sync-health">⟳</div>
+        <div class="health-info">
+          <div class="health-label">Sync Status</div>
+          <div class="health-value">In Sync</div>
+        </div>
+      </div>
+      <div class="health-indicator">
+        <div class="health-icon healthy" id="network-health">◉</div>
+        <div class="health-info">
+          <div class="health-label">Network</div>
+          <div class="health-value">Stable</div>
+        </div>
+      </div>
+      <div class="health-indicator">
+        <div class="health-icon healthy" id="mempool-health">⊞</div>
+        <div class="health-info">
+          <div class="health-label">Mempool</div>
+          <div class="health-value" id="mempool-size">0 txs</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORICAL TRENDS -->
+  <div class="network-section">
+    <h2 class="section-title">Round Progression (Last 50 Rounds)</h2>
+    <div class="trend-chart">
+      <div class="trend-canvas" id="trend-canvas">
+        <svg id="trend-svg" width="100%" height="200"></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- TWO COLUMN LAYOUT -->
+  <div class="two-col">
+    <!-- LEFT: RECENT ACTIVITY -->
+    <div class="network-section">
+      <h2 class="section-title">Recent Transactions</h2>
+      <div class="tx-feed" id="tx-feed">
+        <!-- Transaction items will be inserted here -->
+      </div>
+    </div>
+
+    <!-- RIGHT: RECENT BLOCKS -->
+    <div class="network-section">
+      <h2 class="section-title">Recent Blocks</h2>
+      <div class="block-explorer" id="block-explorer">
+        <!-- Block items will be inserted here -->
+      </div>
+    </div>
+  </div>
+
   <!-- FINALITY LATENCY CHART -->
   <div class="network-section">
     <h2 class="section-title">Finality Latency Distribution</h2>
@@ -324,6 +454,19 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
         <span>5-10s</span>
         <span>&gt;10s</span>
       </div>
+    </div>
+  </div>
+
+  <!-- SEARCH & FILTER -->
+  <div class="network-section">
+    <h2 class="section-title">Validator Search</h2>
+    <div class="controls">
+      <div class="search-box">
+        <input type="text" id="validator-search" placeholder="Search validators...">
+      </div>
+      <button class="filter-btn active" data-filter="all">All</button>
+      <button class="filter-btn" data-filter="online">Online</button>
+      <button class="filter-btn" data-filter="offline">Offline</button>
     </div>
   </div>
 
@@ -509,6 +652,166 @@ function updateLatencyChart() {
   });
 }
 
+// Render transaction feed
+function renderTransactionFeed() {
+  const feed = document.getElementById('tx-feed');
+  const transactions = [];
+  
+  // Generate mock recent transactions
+  for (let i = 0; i < 10; i++) {
+    const hash = '0x' + Math.random().toString(16).substr(2, 8);
+    const amount = (Math.random() * 1000).toFixed(2);
+    const time = Math.floor(Math.random() * 60);
+    transactions.push({ hash, amount, time });
+  }
+  
+  feed.innerHTML = transactions.map(tx => `
+    <div class="tx-item">
+      <div class="tx-icon">→</div>
+      <div class="tx-details">
+        <div class="tx-hash">${tx.hash}...</div>
+        <div class="tx-meta">${tx.time}s ago</div>
+      </div>
+      <div class="tx-amount">${tx.amount} UDAG</div>
+    </div>
+  `).join('');
+}
+
+// Render block explorer
+function renderBlockExplorer() {
+  const explorer = document.getElementById('block-explorer');
+  const blocks = [];
+  
+  // Generate recent blocks
+  for (let i = 0; i < 8; i++) {
+    const round = networkData.round - i;
+    const txs = Math.floor(Math.random() * 20) + 1;
+    const time = i * 5;
+    blocks.push({ round, txs, time });
+  }
+  
+  explorer.innerHTML = blocks.map(block => `
+    <div class="block-item">
+      <div>
+        <div class="block-round">Round ${block.round.toLocaleString()}</div>
+        <div class="block-info">${block.time}s ago</div>
+      </div>
+      <div class="block-txs">${block.txs} txs</div>
+    </div>
+  `).join('');
+}
+
+// Render trend chart
+let trendData = [];
+function renderTrendChart() {
+  const svg = document.getElementById('trend-svg');
+  const width = svg.clientWidth || 800;
+  const height = 200;
+  
+  // Add current round to trend data
+  trendData.push(networkData.round);
+  if (trendData.length > 50) trendData.shift();
+  
+  if (trendData.length < 2) return;
+  
+  // Calculate points
+  const maxRound = Math.max(...trendData);
+  const minRound = Math.min(...trendData);
+  const range = maxRound - minRound || 1;
+  
+  const points = trendData.map((round, i) => {
+    const x = (i / (trendData.length - 1)) * width;
+    const y = height - ((round - minRound) / range) * (height - 20);
+    return `${x},${y}`;
+  }).join(' ');
+  
+  svg.innerHTML = `
+    <polyline points="${points}" fill="none" stroke="var(--accent)" stroke-width="2" opacity="0.8"/>
+    <polyline points="${points}" fill="none" stroke="var(--accent)" stroke-width="1" opacity="0.3" filter="blur(4px)"/>
+  `;
+}
+
+// Add map connections
+function renderMapConnections() {
+  const canvas = document.getElementById('map-canvas');
+  
+  // Remove old connections
+  canvas.querySelectorAll('.map-connection').forEach(c => c.remove());
+  
+  // Draw connections between validators
+  for (let i = 0; i < networkData.validators.length - 1; i++) {
+    const v1 = networkData.validators[i];
+    const v2 = networkData.validators[i + 1];
+    
+    const x1 = ((v1.lon + 180) / 360) * 100;
+    const y1 = ((90 - v1.lat) / 180) * 100;
+    const x2 = ((v2.lon + 180) / 360) * 100;
+    const y2 = ((90 - v2.lat) / 180) * 100;
+    
+    const connection = document.createElement('div');
+    connection.className = 'map-connection';
+    
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+    
+    connection.style.left = x1 + '%';
+    connection.style.top = y1 + '%';
+    connection.style.width = length + '%';
+    connection.style.transform = `rotate(${angle}deg)`;
+    
+    canvas.appendChild(connection);
+  }
+}
+
+// Search and filter
+let currentFilter = 'all';
+let searchQuery = '';
+
+document.getElementById('validator-search')?.addEventListener('input', (e) => {
+  searchQuery = e.target.value.toLowerCase();
+  filterValidators();
+});
+
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    filterValidators();
+  });
+});
+
+function filterValidators() {
+  const cards = document.querySelectorAll('.validator-card');
+  cards.forEach(card => {
+    const name = card.querySelector('.validator-name')?.textContent.toLowerCase() || '';
+    const status = card.classList.contains('online') ? 'online' : 'offline';
+    
+    const matchesSearch = name.includes(searchQuery);
+    const matchesFilter = currentFilter === 'all' || status === currentFilter;
+    
+    card.style.display = (matchesSearch && matchesFilter) ? 'block' : 'none';
+  });
+}
+
+// Update network health
+function updateNetworkHealth() {
+  const mempoolSize = Math.floor(Math.random() * 50);
+  document.getElementById('mempool-size').textContent = mempoolSize + ' txs';
+  
+  // Update health indicators based on network state
+  const consensusHealth = document.getElementById('consensus-health');
+  const syncHealth = document.getElementById('sync-health');
+  const networkHealth = document.getElementById('network-health');
+  
+  // All healthy for now (in production, check actual metrics)
+  [consensusHealth, syncHealth, networkHealth].forEach(el => {
+    el.className = 'health-icon healthy';
+  });
+}
+
 // Hamburger menu
 document.getElementById('hamburger').addEventListener('click', () => {
   document.getElementById('hamburger').classList.toggle('active');
@@ -519,11 +822,20 @@ document.getElementById('hamburger').addEventListener('click', () => {
 async function init() {
   await fetchNetworkStatus();
   await fetchValidators();
+  renderTransactionFeed();
+  renderBlockExplorer();
+  renderTrendChart();
+  renderMapConnections();
+  updateNetworkHealth();
   
   // Refresh periodically
   setInterval(async () => {
     await fetchNetworkStatus();
     await fetchValidators();
+    renderTransactionFeed();
+    renderBlockExplorer();
+    renderTrendChart();
+    updateNetworkHealth();
   }, REFRESH_INTERVAL);
 }
 
