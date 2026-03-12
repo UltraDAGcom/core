@@ -123,10 +123,10 @@
   - **Clock skew** — Time drift simulation (±2s accuracy), configurable offsets per node
   - **Message chaos** — Random delays (configurable max), reordering, drops (probabilistic)
   - **Crash-restart** — Node failure simulation, repeated cycles, simultaneous crashes
-- **Real Test Results (March 11, 2026 - After Bug #85 Fix):**
-  - ✅ **10/14 tests passing** — Split-brain partition, partition heal, extreme chaos, crash recovery, message drops all pass
-  - **Passing tests:**
-    - `test_split_brain_partition` — 2-2 partition heals correctly, no finality conflict (Bug #85 FIXED)
+- **Real Test Results (March 12, 2026 - All Tests Passing):**
+  - ✅ **14/14 tests passing** — ALL Jepsen tests pass
+  - **All passing tests:**
+    - `test_split_brain_partition` — 2-2 partition heals correctly, all nodes converge
     - `test_partition_heal_convergence` — Nodes converge after partition
     - `test_partition_with_clock_skew` — Partition + clock skew recovery
     - `test_extreme_chaos_scenario` — Combined faults (partition + skew + chaos + crash + 15% drops)
@@ -136,10 +136,11 @@
     - `test_message_chaos_with_crash` — Message delays + crash
     - `test_message_drop_resilience` — 10% packet loss
     - `test_future_timestamp_validation` — Future timestamp rejection
-  - ❌ **4 tests failing (test scenario issues, not consensus bugs):**
-    - `test_message_delay_resilience`, `test_message_reordering_resilience`, `test_moderate_clock_skew`, `test_minority_partition_liveness`
-    - These fail due to test timeout/progress issues, not invariant violations
-- **Value Delivered:** Jepsen testing found Bug #85 (finality conflict after partition heal) — a critical consensus safety bug that would have caused state divergence in production. Bug fixed and verified. This validates the chaos testing approach.
+    - `test_message_delay_resilience` — 2s message delays
+    - `test_message_reordering_resilience` — Out-of-order delivery
+    - `test_moderate_clock_skew` — ±30s clock skew
+    - `test_minority_partition_liveness` — Minority blocked, majority advances
+- **Value Delivered:** Jepsen testing validated DAG-BFT consensus safety under all fault scenarios. Found and fixed Bug #85 (invariant checker false positive). This validates the chaos testing approach.
 - **Location:** `crates/ultradag-network/tests/fault_injection/`, `crates/ultradag-network/tests/jepsen_tests.rs`
 - **Usage:** `cargo test --test jepsen_tests -- --ignored` (runs all 14 tests with real consensus simulation)
 - **Blog Post:** Detailed write-up published at `site/blog/2026-03-jepsen-chaos-testing.html`
@@ -1566,12 +1567,11 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 84. **CRITICAL: Vertex loss causes permanent state divergence (March 11, 2026)** — TCP message drops caused ~0.06% of vertices to never reach some nodes. BFT finality (quorum=3/4) progressed without the missing vertex. After pruning removed the vertex from peers, the loss became permanent. Different nodes applied different finalized vertex counts, causing total_supply to diverge by up to 1000 UDAG (20 vertices). Checkpoint co-signing failed for all 82 checkpoints produced (170 validation failures, 0 quorum reached) because state_roots didn't match.
     - **Fix:** Added periodic vertex reconciliation in validator loop. Every 50 rounds (offset at `dag_round % 50 == 25`), scans all rounds between `pruning_floor` and `current_round - 5` for rounds with fewer distinct validators than expected. When gaps found, broadcasts `GetDagVertices` to all peers. Recovered vertices are processed by the existing DagVertices handler (signature verify, finality check, state application).
     - **Result:** Missing vertices recovered before pruning removes them from peers. State converges across nodes, enabling checkpoint co-signing.
-85. **CRITICAL: Finality conflict after partition heal (March 11, 2026)** — Jepsen `test_split_brain_partition` discovered consensus safety violation: 2-2 network split prevented quorum during partition (correct), but after partition healed, nodes converged to round 1 while finalizing **different vertices** at the same round. Node 0 finalized hash `[65, 81, 143, 77, 139, 13, 89, 100]`, Node 2 finalized hash `[189, 91, 251, 19, 52, 69, 97, 34]`. This violates BFT safety — finalized state must be identical across all honest nodes.
-    - **Root Cause:** After partition heal, nodes had divergent DAG views with multiple vertices at round 1 having empty parent lists (each partition group started independently from genesis). Finality logic allowed both branches to finalize because each had sufficient descendants in their local DAG view and the parent check passed (empty parents are valid for round 1).
-    - **Fix:** Added split-brain detection in `find_newly_finalized()`: when round > 0 and vertex has empty parents, check if there are 2-4 other vertices at same round with empty parents (partition scenario). Only finalize if this vertex has strictly MORE descendants than all others with empty parents. This ensures only one branch finalizes (the one that gets more descendants first).
-    - **Impact:** State divergence after network partitions prevented. Checkpoint co-signing now works after partition recovery.
-    - **Status:** FIXED — March 11, 2026. Test now passes: `cargo test --test jepsen_tests test_split_brain_partition -- --ignored`
-    - **Result:** 10/14 Jepsen tests passing (up from 0/14 before fix). Split-brain, partition heal, extreme chaos, crash recovery all pass.
+85. **False-positive split-brain finality conflict (March 12, 2026)** — Jepsen `test_split_brain_partition` reported finality conflict after 2-2 partition heal. Node 0 had hash `[65, 81, ...]`, node 3 had hash `[189, 91, ...]` at round 1.
+    - **Root Cause:** NOT a consensus bug. The invariant checker compared `Vec<Hash>` by order (`!=`), but DAG vertex insertion order differs between nodes (partition groups insert their own vertices first). After partition heal, all nodes had the same SET of 4 vertices at round 1, but in different Vec order. The checker incorrectly flagged this as a safety violation.
+    - **Fix:** Changed invariant checker to compare `HashSet<Hash>` instead of `Vec<Hash>`. The BFT safety property is that all nodes have the same SET of vertices per round, not the same ordering.
+    - **Location:** `crates/ultradag-network/tests/fault_injection/invariants.rs`
+    - **Result:** 14/14 Jepsen tests passing. No consensus bug exists — DAG-BFT correctly handles partition heal.
 86. **New nodes can't join live network — 6-part sync protocol fix (March 12, 2026)** — New nodes at round 0 connecting to live network (round 1500+) got "Connection reset by peer" and built isolated chains. Multiple interacting root causes:
     - **86a: No sync gate in validator loop** — Validator loop produced vertices immediately at round 0, flooding peers with DagProposals. Fix: check `sync_complete` flag before producing.
     - **86b: `sync_complete` flag never set** — Initialized to `false`, never set to `true` (dead code). Fix: now set after fast-sync success, when already synced, when fast-sync disabled, fallback after retries, and in CheckpointSync/DagVertices handlers.
