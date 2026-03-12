@@ -349,11 +349,6 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
       <div class="stat-sub">Seconds to finalize</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Network TPS</div>
-      <div class="stat-value" id="network-tps">—</div>
-      <div class="stat-sub">Transactions per second</div>
-    </div>
-    <div class="stat-card">
       <div class="stat-label">Total Supply</div>
       <div class="stat-value" id="total-supply">—</div>
       <div class="stat-sub">UDAG in circulation</div>
@@ -522,15 +517,6 @@ async function fetchNetworkStatus() {
     const avgFinality = finalityLag * 5; // Approximate: 5 seconds per round
     document.getElementById('avg-finality').textContent = avgFinality.toFixed(1) + 's';
     
-    // Calculate TPS from mempool if available
-    try {
-      const mempoolResp = await fetch(`${API_URL}/mempool`);
-      const mempool = await mempoolResp.json();
-      const txCount = mempool.transactions?.length || 0;
-      document.getElementById('network-tps').textContent = Math.floor(txCount / 5);
-    } catch {
-      document.getElementById('network-tps').textContent = '0';
-    }
     
     // Update latency distribution
     updateLatencyChart();
@@ -821,15 +807,22 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
 });
 
 function filterValidators() {
-  const cards = document.querySelectorAll('.validator-card');
+  const grid = document.getElementById('validators-grid');
+  if (!grid) return;
+  
+  const cards = grid.querySelectorAll('.validator-card');
   cards.forEach(card => {
     const name = card.querySelector('.validator-name')?.textContent.toLowerCase() || '';
     const status = card.classList.contains('online') ? 'online' : 'offline';
     
-    const matchesSearch = name.includes(searchQuery);
+    const matchesSearch = !searchQuery || name.includes(searchQuery);
     const matchesFilter = currentFilter === 'all' || status === currentFilter;
     
-    card.style.display = (matchesSearch && matchesFilter) ? 'block' : 'none';
+    if (matchesSearch && matchesFilter) {
+      card.style.display = '';
+    } else {
+      card.style.display = 'none';
+    }
   });
 }
 
