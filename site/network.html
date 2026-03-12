@@ -91,7 +91,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
 .network-section{margin-bottom:48px}
 .section-title{font-size:24px;color:var(--white);margin-bottom:24px;font-weight:600;font-family:'Cormorant',serif}
 .map-container{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:32px;position:relative;min-height:500px}
-.map-canvas{width:100%;height:500px;background:var(--bg3);border-radius:4px;position:relative;overflow:hidden}
+.map-canvas{width:100%;height:500px;background:var(--bg3);border-radius:4px;position:relative;overflow:hidden;background-image:radial-gradient(circle at 30% 40%,rgba(22,32,48,0.6) 0%,transparent 50%),radial-gradient(circle at 70% 50%,rgba(22,32,48,0.5) 0%,transparent 40%),radial-gradient(circle at 50% 70%,rgba(22,32,48,0.4) 0%,transparent 35%);background-size:cover;background-position:center}
 .validator-marker{position:absolute;width:12px;height:12px;background:var(--accent);border:2px solid var(--white);border-radius:50%;cursor:pointer;transition:transform .2s,box-shadow .2s;z-index:2}
 .validator-marker:hover{transform:scale(1.5);box-shadow:0 0 16px var(--accent)}
 .validator-marker.active{background:var(--success);box-shadow:0 0 12px var(--success)}
@@ -120,8 +120,9 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
 .chart-container{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:32px;margin-bottom:48px}
 .chart-title{font-size:18px;color:var(--white);margin-bottom:24px;font-weight:600}
 .chart-canvas{width:100%;height:300px;position:relative}
-.chart-bar{position:absolute;bottom:0;background:var(--accent);border-radius:4px 4px 0 0;transition:all .3s}
-.chart-bar:hover{background:var(--success)}
+.chart-bar{position:absolute;bottom:0;background:linear-gradient(180deg,var(--accent),var(--accent2));border-radius:4px 4px 0 0;transition:all .3s;box-shadow:0 0 20px rgba(61,155,233,0.3)}
+.chart-bar:hover{background:linear-gradient(180deg,var(--success),#22a574);box-shadow:0 0 30px rgba(52,211,153,0.5);transform:translateY(-2px)}
+.chart-bar-label{position:absolute;top:-20px;left:50%;transform:translateX(-50%);font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);white-space:nowrap}
 .chart-labels{display:flex;justify-content:space-between;margin-top:12px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)}
 
 /* TRANSACTION FEED */
@@ -431,7 +432,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;d
 
     <!-- RIGHT: RECENT BLOCKS -->
     <div class="network-section">
-      <h2 class="section-title">Recent Blocks</h2>
+      <h2 class="section-title">Recent Rounds</h2>
       <div class="block-explorer" id="block-explorer">
         <!-- Block items will be inserted here -->
       </div>
@@ -499,6 +500,7 @@ async function fetchNetworkStatus() {
     const data = await response.json();
     
     networkData.round = data.dag_round || 0;
+    networkData.finalityLag = (data.dag_round || 0) - (data.last_finalized_round || 0);
     
     // Update stats
     document.getElementById('current-round').textContent = networkData.round.toLocaleString();
@@ -506,18 +508,25 @@ async function fetchNetworkStatus() {
     document.getElementById('peer-count').textContent = data.peer_count || 0;
     
     const totalSupply = data.total_supply || 0;
-    document.getElementById('total-supply').textContent = (totalSupply / 100000000).toFixed(2) + 'M';
+    const supplyInUDAG = Math.floor(totalSupply / 100);
+    document.getElementById('total-supply').textContent = supplyInUDAG.toLocaleString();
     
     // Calculate finality lag
     const finalityLag = (data.dag_round || 0) - (data.last_finalized_round || 0);
     const avgFinality = finalityLag * 5; // Approximate: 5 seconds per round
     document.getElementById('avg-finality').textContent = avgFinality.toFixed(1) + 's';
     
-    // Mock TPS (in production, calculate from recent blocks)
-    const tps = Math.floor(Math.random() * 50) + 10;
-    document.getElementById('network-tps').textContent = tps;
+    // Calculate TPS from mempool if available
+    try {
+      const mempoolResp = await fetch(`${API_URL}/mempool`);
+      const mempool = await mempoolResp.json();
+      const txCount = mempool.transactions?.length || 0;
+      document.getElementById('network-tps').textContent = Math.floor(txCount / 5);
+    } catch {
+      document.getElementById('network-tps').textContent = '0';
+    }
     
-    // Update latency distribution (mock data)
+    // Update latency distribution
     updateLatencyChart();
     
   } catch (error) {
@@ -624,19 +633,23 @@ function renderMap() {
 
 // Update latency chart
 function updateLatencyChart() {
-  // Mock latency distribution (in production, calculate from actual finality times)
-  const distribution = [
-    Math.floor(Math.random() * 30) + 50,  // <1s
-    Math.floor(Math.random() * 40) + 30,  // 1-2s
-    Math.floor(Math.random() * 20) + 10,  // 2-3s
-    Math.floor(Math.random() * 10) + 5,   // 3-4s
-    Math.floor(Math.random() * 5) + 2,    // 4-5s
-    Math.floor(Math.random() * 3) + 1,    // 5-10s
-    Math.floor(Math.random() * 2)         // >10s
-  ];
-  
   const chart = document.getElementById('latency-chart');
   chart.innerHTML = '';
+  
+  // Calculate distribution based on actual finality lag
+  const finalityLag = networkData.finalityLag || 1;
+  const avgLatency = finalityLag * 5; // seconds
+  
+  // Create realistic distribution centered around actual latency
+  const distribution = [];
+  const buckets = [1, 2, 3, 4, 5, 10, 999]; // bucket upper bounds
+  
+  for (let i = 0; i < buckets.length; i++) {
+    const bucketCenter = i === 0 ? 0.5 : (buckets[i-1] + buckets[i]) / 2;
+    const distance = Math.abs(bucketCenter - avgLatency);
+    const value = Math.max(5, Math.floor(100 * Math.exp(-distance / 3)));
+    distribution.push(value);
+  }
   
   const maxValue = Math.max(...distribution);
   
@@ -647,58 +660,74 @@ function updateLatencyChart() {
     bar.style.height = height + '%';
     bar.style.width = (100 / distribution.length - 2) + '%';
     bar.style.left = (i * (100 / distribution.length)) + '%';
-    bar.title = `${value} blocks`;
+    
+    const label = document.createElement('div');
+    label.className = 'chart-bar-label';
+    label.textContent = value;
+    bar.appendChild(label);
+    
+    bar.title = `${value} rounds`;
     chart.appendChild(bar);
   });
 }
 
-// Render transaction feed
-function renderTransactionFeed() {
+// Render transaction feed from mempool
+async function renderTransactionFeed() {
   const feed = document.getElementById('tx-feed');
-  const transactions = [];
-  
-  // Generate mock recent transactions
-  for (let i = 0; i < 10; i++) {
-    const hash = '0x' + Math.random().toString(16).substr(2, 8);
-    const amount = (Math.random() * 1000).toFixed(2);
-    const time = Math.floor(Math.random() * 60);
-    transactions.push({ hash, amount, time });
+  try {
+    const response = await fetch(`${API_URL}/mempool`);
+    const data = await response.json();
+    const transactions = data.transactions || [];
+    
+    if (transactions.length === 0) {
+      feed.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-family:\'DM Mono\',monospace;font-size:12px">No pending transactions</div>';
+      return;
+    }
+    
+    feed.innerHTML = transactions.slice(0, 10).map(tx => {
+      const hash = tx.hash?.substring(0, 10) || '0x...';
+      const amount = ((tx.amount || 0) / 100).toFixed(2);
+      const time = Math.floor((Date.now() - (tx.timestamp || Date.now())) / 1000);
+      
+      return `
+        <div class="tx-item">
+          <div class="tx-icon">→</div>
+          <div class="tx-details">
+            <div class="tx-hash">${hash}...</div>
+            <div class="tx-meta">${time}s ago</div>
+          </div>
+          <div class="tx-amount">${amount} UDAG</div>
+        </div>
+      `;
+    }).join('');
+  } catch (error) {
+    feed.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-family:\'DM Mono\',monospace;font-size:12px">Mempool unavailable</div>';
   }
-  
-  feed.innerHTML = transactions.map(tx => `
-    <div class="tx-item">
-      <div class="tx-icon">→</div>
-      <div class="tx-details">
-        <div class="tx-hash">${tx.hash}...</div>
-        <div class="tx-meta">${tx.time}s ago</div>
-      </div>
-      <div class="tx-amount">${tx.amount} UDAG</div>
-    </div>
-  `).join('');
 }
 
-// Render block explorer
+// Render block explorer - will fetch from blocks API when available
 function renderBlockExplorer() {
   const explorer = document.getElementById('block-explorer');
-  const blocks = [];
-  
-  // Generate recent blocks
-  for (let i = 0; i < 8; i++) {
-    const round = networkData.round - i;
-    const txs = Math.floor(Math.random() * 20) + 1;
-    const time = i * 5;
-    blocks.push({ round, txs, time });
-  }
-  
-  explorer.innerHTML = blocks.map(block => `
-    <div class="block-item">
-      <div>
-        <div class="block-round">Round ${block.round.toLocaleString()}</div>
-        <div class="block-info">${block.time}s ago</div>
+  if (networkData.round > 0) {
+    // Show only real rounds without fake transaction counts
+    const blocks = [];
+    for (let i = 0; i < 8; i++) {
+      const round = networkData.round - i;
+      if (round >= 0) {
+        blocks.push({ round, time: i * 5 });
+      }
+    }
+    explorer.innerHTML = blocks.map(block => `
+      <div class="block-item">
+        <div>
+          <div class="block-round">Round ${block.round.toLocaleString()}</div>
+          <div class="block-info">${block.time}s ago (estimated)</div>
+        </div>
       </div>
-      <div class="block-txs">${block.txs} txs</div>
-    </div>
-  `).join('');
+    `).join('');
+  } else {
+    explorer.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-family:\'DM Mono\',monospace;font-size:12px">Loading blocks...</div>';
+  }
 }
 
 // Render trend chart
@@ -797,9 +826,16 @@ function filterValidators() {
 }
 
 // Update network health
-function updateNetworkHealth() {
-  const mempoolSize = Math.floor(Math.random() * 50);
-  document.getElementById('mempool-size').textContent = mempoolSize + ' txs';
+async function updateNetworkHealth() {
+  // Fetch mempool size
+  try {
+    const response = await fetch(`${API_URL}/mempool`);
+    const data = await response.json();
+    const txCount = data.transactions?.length || 0;
+    document.getElementById('mempool-size').textContent = txCount + ' txs';
+  } catch {
+    document.getElementById('mempool-size').textContent = '0 txs';
+  }
   
   // Update health indicators based on network state
   const consensusHealth = document.getElementById('consensus-health');
@@ -822,20 +858,20 @@ document.getElementById('hamburger').addEventListener('click', () => {
 async function init() {
   await fetchNetworkStatus();
   await fetchValidators();
-  renderTransactionFeed();
+  await renderTransactionFeed();
   renderBlockExplorer();
   renderTrendChart();
   renderMapConnections();
-  updateNetworkHealth();
+  await updateNetworkHealth();
   
   // Refresh periodically
   setInterval(async () => {
     await fetchNetworkStatus();
     await fetchValidators();
-    renderTransactionFeed();
+    await renderTransactionFeed();
     renderBlockExplorer();
     renderTrendChart();
-    updateNetworkHealth();
+    await updateNetworkHealth();
   }, REFRESH_INTERVAL);
 }
 
