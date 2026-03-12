@@ -177,6 +177,17 @@ footer { border-top: 1px solid var(--bg4); padding: 48px 40px; margin-top: 80px;
 }
 .doc-badge-accent { background: var(--accent-glow); color: var(--accent); border-color: var(--accent-border); }
 
+.doc-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-top: 32px; }
+.doc-stat { text-align: center; }
+.doc-stat-value {
+  font-family: var(--serif); font-size: 32px; font-weight: 600;
+  color: var(--accent); line-height: 1; margin-bottom: 4px;
+}
+.doc-stat-label {
+  font-family: var(--serif); font-size: 14px; font-weight: 300;
+  color: var(--fg2); line-height: 1.4;
+}
+
 /* ── CONTENT ── */
 .doc-content { max-width: var(--content-max); padding: 56px 72px 100px; }
 
@@ -383,7 +394,14 @@ li strong { color: var(--fg); font-weight: 500; }
           <a href="/docs/technical/ultradag-whitepaper.pdf" class="doc-badge" style="color:var(--accent);border-color:var(--accent-border);text-decoration:none;">↓ PDF</a>
         </div>
         <h1>UltraDAG <em style="color:var(--accent)">Documentation</em></h1>
-        <p class="doc-hero-sub">Complete API reference, SDK guides, and node setup instructions</p>
+        <p class="doc-hero-sub">Minimal correct consensus · 1,100 lines of Rust · Byzantine fault tolerant</p>
+
+        <div class="doc-stats">
+          <div class="doc-stat"><div class="doc-stat-value">1,100</div><div class="doc-stat-label">Lines of consensus code</div></div>
+          <div class="doc-stat"><div class="doc-stat-value">373</div><div class="doc-stat-label">Tests, all passing</div></div>
+          <div class="doc-stat"><div class="doc-stat-value">27×</div><div class="doc-stat-label">Smaller than Shoal++</div></div>
+          <div class="doc-stat"><div class="doc-stat-value">3</div><div class="doc-stat-label">Sentences to state the protocol</div></div>
+        </div>
       </div>
     </section>
 
@@ -1183,6 +1201,19 @@ curl http://localhost:8080/metrics
   .playground-modal-content {
     width: 95%;
     max-height: 90vh;
+  }
+  
+  .doc-stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  
+  .doc-stat-value {
+    font-size: 24px;
+  }
+  
+  .doc-stat-label {
+    font-size: 12px;
   }
 }
 </style>
