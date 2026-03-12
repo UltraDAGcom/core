@@ -1246,22 +1246,26 @@ machine still has the env var until you do a second deploy without `--clean`.
 
 ## Testnet Status
 
-4-node testnet on Fly.io Amsterdam. Permissioned validator set.
+5-node testnet on Fly.io Amsterdam. Permissioned validator set.
 
-**Current Status (March 9, 2026):** ✅ All 4 Fly nodes operational. Finality lag=2. Dense DAG.
+**Current Status (March 12, 2026):** ✅ All 5 Fly nodes operational. Finality lag=2. Dense DAG. All 13 comprehensive tests passing.
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| DAG round | advancing (all 4 nodes synced) | ✅ |
+| DAG round | advancing (all 5 nodes synced) | ✅ |
 | Finalized round | lag=2 | ✅ Excellent |
-| Vertex density | 4-5 validators per round | ✅ |
-| Parents per vertex | 4-5 (dense cross-links) | ✅ |
-| Peers per node | 3-4 | ✅ |
-| Validator count | 4/4 active | ✅ |
-| HTTP RPC | All 4 Fly nodes responsive | ✅ |
+| Vertex density | 5-6 validators per round | ✅ |
+| Parents per vertex | 5-6 (dense cross-links) | ✅ |
+| Peers per node | 5-8 | ✅ |
+| Validator count | 5/5 active | ✅ |
+| HTTP RPC | All 5 Fly nodes responsive | ✅ |
+| Supply consensus | Identical across all 5 nodes | ✅ |
+| Faucet | Working (100 UDAG delivered) | ✅ |
+| Transactions | Send + confirm working | ✅ |
+| Memory | ~29.5 MB per node (bounded) | ✅ |
 
 **Infrastructure:**
-- Fly.io nodes: ultradag-node-{1,2,3,4}.fly.dev (ams, dedicated IPv4)
+- Fly.io nodes: ultradag-node-{1,2,3,4,5}.fly.dev (ams, dedicated IPv4)
 - Fly P2P seeds: `.internal` DNS (private WireGuard, not public IPv4 TCP proxy)
 
 ### Rate Limiting Features Active
@@ -1593,6 +1597,9 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 91. **Validator self-marked Byzantine causes permanent stall (March 12, 2026)** — If a validator's own address gets marked Byzantine in the local DAG (e.g., from stale state after failed deploy), the validator loop enters an infinite produce→reject cycle. `try_insert()` returns `Ok(false)` for Byzantine validators, and `has_vertex_from_validator_in_round()` doesn't check `equivocation_vertices`, so the round determination logic thinks the validator hasn't produced yet.
     - **Fix:** Added defensive check at start of validator loop: if own address is Byzantine, clear the flag with warning log. Added diagnostic logging when `try_insert` returns `Ok(false)`.
     - **Result:** Validators self-heal from incorrectly marked Byzantine state.
+92. **CLEAN_STATE wipe misses flat checkpoint files (March 12, 2026)** — Docker entrypoint did `rm -rf /data/checkpoints` and `rm -rf /data/checkpoint_states`, but checkpoint files are stored as flat files in `/data/` (e.g., `checkpoint_0000007500.json`, `checkpoint_state_0000007500.json`), not in subdirectories. Old checkpoint files survived clean deploys, causing fast-sync to resurrect stale state.
+    - **Fix:** Added `rm -f "${DATA_DIR:-/data}"/checkpoint_*.json` to docker-entrypoint.sh CLEAN_STATE block.
+    - **Result:** Clean deploys now properly wipe all state including checkpoint files.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.

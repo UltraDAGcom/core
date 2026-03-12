@@ -78,7 +78,7 @@ nav.scrolled{border-color:var(--border)}
 @media(min-width:901px){.mobile-menu{display:none}}
 
 /* CONTAINER */
-.container{max-width:1400px;margin:0 auto;padding:48px 48px 80px;position:relative;z-index:1}
+.container{max-width:1400px;margin:0 auto;padding:120px 48px 80px;position:relative;z-index:1}
 
 /* HEADER */
 .header{text-align:center;margin-bottom:48px}
@@ -291,8 +291,8 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     UltraDAG
   </a>
   <ul class="nav-links">
-    <li><a href="index.html#consensus">Why UltraDAG</a></li>
-
+    <li><a href="index.html">Home</a></li>
+    
     <li>
       <a href="whitepaper.html">Whitepaper</a>
       <div class="mega-menu">
@@ -939,10 +939,10 @@ async function updateNetworkHealth() {
 }
 
 // Hamburger menu
-document.getElementById('hamburger').addEventListener('click', () => {
-  document.getElementById('hamburger').classList.toggle('active');
-  document.getElementById('mobile-menu').classList.toggle('active');
-});
+const hamburger=document.getElementById('hamburger');
+const mobileMenu=document.getElementById('mobile-menu');
+hamburger.addEventListener('click',()=>{hamburger.classList.toggle('active');mobileMenu.classList.toggle('active')});
+mobileMenu.querySelectorAll('a').forEach(link=>{link.addEventListener('click',()=>{hamburger.classList.remove('active');mobileMenu.classList.remove('active')})});
 
 // Initialize
 async function init() {

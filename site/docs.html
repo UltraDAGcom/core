@@ -229,12 +229,46 @@ p { font-family: 'Syne', sans-serif; font-size: 16px; line-height: 1.7; color: v
 p strong { color: var(--white); font-weight: 500; }
 p code { font-family: var(--mono); font-size: 12px; background: var(--bg3); border: 1px solid var(--bg4); padding: 2px 6px; border-radius: 3px; color: var(--accent); }
 
-/* CODE BLOCKS */
+/* CODE BLOCKS — terminal style (matching index.html) */
+.terminal{background:#0c1018;border:1px solid var(--border);border-radius:6px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.4);margin:20px 0}
+.terminal-header{display:flex;align-items:center;gap:8px;padding:12px 20px;background:linear-gradient(180deg,#161d2e,#111827);border-bottom:1px solid var(--border)}
+.terminal-dots{display:flex;gap:7px}
+.terminal-dot{width:11px;height:11px;border-radius:50%}
+.terminal-dot:nth-child(1){background:#ff5f57;box-shadow:inset 0 -1px 1px rgba(0,0,0,.2)}
+.terminal-dot:nth-child(2){background:#febc2e;box-shadow:inset 0 -1px 1px rgba(0,0,0,.2)}
+.terminal-dot:nth-child(3){background:#28c840;box-shadow:inset 0 -1px 1px rgba(0,0,0,.2)}
+.terminal-title{flex:1;text-align:center;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.04em}
+.terminal pre{padding:20px 24px;font-family:'DM Mono',monospace;font-size:12.5px;line-height:1.8;color:var(--body);background:transparent;margin:0;overflow-x:auto;border:none;border-radius:0;box-shadow:none}
+.terminal .prompt{color:var(--accent);user-select:none}
+.terminal .output{color:var(--subtle);font-style:italic}
+.terminal .flag{color:#fbbf24}
+.terminal .val{color:#86efac}
+.terminal .cm{color:var(--dim)}
+.terminal .kw{color:var(--accent)}
+.terminal .str{color:#86efac}
+.terminal .num{color:#fbbf24}
 pre {
   background: var(--bg2); border: 1px solid var(--bg4);
   border-radius: var(--radius); padding: 20px 24px;
   margin: 20px 0; overflow-x: auto;
   font-family: var(--mono); font-size: 12px; line-height: 1.7; color: var(--body);
+}
+/* Inline playground (matching index.html) */
+.doc-playground{background:var(--bg2);border:1px solid var(--border);border-radius:6px;overflow:hidden;margin:32px 0}
+.doc-playground-grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.doc-playground-editor{display:flex;flex-direction:column;border-right:1px solid var(--border)}
+.doc-playground-output{display:flex;flex-direction:column;background:var(--bg2)}
+.doc-playground .terminal-header{justify-content:space-between}
+.doc-playground textarea{font-family:'DM Mono',monospace;font-size:12.5px;line-height:1.7;background:#0c1018;color:var(--bright);padding:20px 24px;border:none;resize:none;min-height:280px;flex:1;outline:none}
+.doc-playground .playground-controls{padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:12px;background:var(--bg3)}
+.doc-playground .run-btn{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;background:var(--accent);color:var(--bg);border:none;padding:8px 20px;border-radius:2px;cursor:pointer;transition:background .2s,transform .15s;font-weight:500}
+.doc-playground .run-btn:hover:not(:disabled){background:#5aaef0;transform:translateY(-1px)}
+.doc-playground .run-btn:disabled{opacity:.5;cursor:not-allowed}
+.doc-playground .output-content{padding:20px 24px;font-family:'DM Mono',monospace;font-size:12px;line-height:1.6;flex:1;overflow-y:auto;max-height:320px;min-height:120px;background:#0c1018}
+.doc-playground .example-select{font-family:'DM Mono',monospace;font-size:11px;background:var(--bg);color:var(--body);border:1px solid var(--border);padding:4px 10px;border-radius:2px;cursor:pointer}
+@media(max-width:860px){
+  .doc-playground-grid{grid-template-columns:1fr}
+  .doc-playground-editor{border-right:none;border-bottom:1px solid var(--border)}
 }
 
 /* LISTS */
@@ -433,272 +467,336 @@ li strong { color: var(--white); font-weight: 500; }
       <!-- API -->
       <section class="doc-section" id="api">
         <div class="doc-section-header"><h2>HTTP RPC API</h2></div>
-        <p>The UltraDAG node exposes an HTTP RPC API on port <code>8080</code> by default. All endpoints return JSON and support CORS for web applications.</p>
-        
+        <p>The UltraDAG node exposes an HTTP RPC API on port <code>10333</code> (P2P port + 1000). All endpoints return JSON and support CORS for web applications.</p>
+
         <h3>GET /status</h3>
         <p>Returns current network status including DAG round, vertices, and account count.</p>
-        <pre>{
-  "dag_round": 182,
-  "dag_vertices": 728,
-  "account_count": 17,
-  "total_supply": "21000000.00000000",
-  "last_finalized_round": 180,
-  "network_id": "testnet",
-  "uptime_seconds": 86400
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">response &mdash; json</span>
+          </div>
+          <pre>{
+  <span class="str">"dag_round"</span>: <span class="num">14208</span>,
+  <span class="str">"dag_vertices"</span>: <span class="num">56832</span>,
+  <span class="str">"account_count"</span>: <span class="num">17</span>,
+  <span class="str">"total_supply"</span>: <span class="num">2845600000000000</span>,
+  <span class="str">"last_finalized_round"</span>: <span class="num">14206</span>,
+  <span class="str">"peer_count"</span>: <span class="num">4</span>,
+  <span class="str">"mempool_count"</span>: <span class="num">0</span>
 }</pre>
+        </div>
 
         <h3>GET /balance/:address</h3>
         <p>Query account balance and nonce for a given address.</p>
-        <pre>{
-  "address": "0x1234...",
-  "balance": "1000.50000000",
-  "nonce": 5,
-  "staked_amount": "0.00000000",
-  "rewards_earned": "12.34000000"
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">response &mdash; json</span>
+          </div>
+          <pre>{
+  <span class="str">"address"</span>: <span class="str">"a1b2c3..."</span>,
+  <span class="str">"balance_udag"</span>: <span class="str">"1000.50000000"</span>,
+  <span class="str">"balance_sats"</span>: <span class="num">100050000000</span>,
+  <span class="str">"nonce"</span>: <span class="num">5</span>
 }</pre>
+        </div>
 
         <h3>GET /round/:round</h3>
         <p>Get all vertices in a specific DAG round.</p>
-        <pre>{
-  "round": 182,
-  "vertices": [
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">response &mdash; json</span>
+          </div>
+          <pre>{
+  <span class="str">"round"</span>: <span class="num">14208</span>,
+  <span class="str">"vertices"</span>: [
     {
-      "hash": "0xabcd...",
-      "validator": "0x1234...",
-      "tx_count": 3,
-      "reward": "0.00001000",
-      "timestamp": "2026-03-12T17:00:00Z"
+      <span class="str">"hash"</span>: <span class="str">"a9f2c1..."</span>,
+      <span class="str">"validator"</span>: <span class="str">"b7f3a1..."</span>,
+      <span class="str">"tx_count"</span>: <span class="num">3</span>,
+      <span class="str">"reward"</span>: <span class="num">5000000000</span>,
+      <span class="str">"parent_count"</span>: <span class="num">4</span>
     }
-  ],
-  "is_finalized": true
+  ]
 }</pre>
+        </div>
 
         <h3>GET /validators</h3>
         <p>List all active validators in the network.</p>
-        <pre>{
-  "validators": [
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">response &mdash; json</span>
+          </div>
+          <pre>{
+  <span class="str">"validators"</span>: [
     {
-      "address": "0x1234...",
-      "stake": "10000.00000000",
-      "commission_rate": "0.05",
-      "uptime": 0.98,
-      "rounds_participated": 180
+      <span class="str">"address"</span>: <span class="str">"b7f3a1..."</span>,
+      <span class="str">"stake"</span>: <span class="num">1000000000000</span>,
+      <span class="str">"is_active"</span>: <span class="kw">true</span>
     }
   ],
-  "total_validators": 4,
-  "required_validators": 3
+  <span class="str">"total_validators"</span>: <span class="num">5</span>,
+  <span class="str">"total_staked"</span>: <span class="num">5000000000000</span>
 }</pre>
+        </div>
 
-        <h3>POST /submit_tx</h3>
-        <p>Submit a signed transaction to the mempool.</p>
-        <pre>{
-  "from": "0x1234...",
-  "to": "0x5678...",
-  "amount": "10.00000000",
-  "fee": "0.00001000",
-  "nonce": 5,
-  "signature": "0xabcd...",
-  "type": "transfer"
+        <h3>POST /tx</h3>
+        <p>Submit a signed transaction to the mempool. The node signs the transaction using the provided secret key.</p>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">request &mdash; json</span>
+          </div>
+          <pre>{
+  <span class="str">"from_secret"</span>: <span class="str">"a1b2c3d4..."</span>,
+  <span class="str">"to"</span>: <span class="str">"e5f6a7b8..."</span>,
+  <span class="str">"amount"</span>: <span class="num">1000000000</span>,
+  <span class="str">"fee"</span>: <span class="num">10000</span>
 }</pre>
+        </div>
 
         <h3>POST /stake</h3>
-        <p>Submit a staking transaction to become a validator.</p>
-        <pre>{
-  "validator_pubkey": "0xabc123...",
-  "amount": "10000.00000000",
-  "commission_rate": "0.05",
-  "signature": "0xdef456..."
+        <p>Submit a staking transaction to become a validator. Minimum stake: <strong>10,000 UDAG</strong>.</p>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">request &mdash; json</span>
+          </div>
+          <pre>{
+  <span class="str">"secret_key"</span>: <span class="str">"a1b2c3d4..."</span>,
+  <span class="str">"amount"</span>: <span class="num">1000000000000</span>
 }</pre>
+        </div>
 
         <h3>Error Responses</h3>
         <p>All endpoints may return error responses with appropriate HTTP status codes:</p>
-        <pre>{
-  "error": "Invalid address format",
-  "code": 400,
-  "details": "Address must be a valid hex string"
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">error &mdash; json</span>
+          </div>
+          <pre>{
+  <span class="str">"error"</span>: <span class="str">"Invalid address format"</span>
 }</pre>
+        </div>
       </section>
 
       <!-- SDK -->
       <section class="doc-section" id="sdk">
         <div class="doc-section-header"><h2>SDK Quickstart</h2></div>
-        <p>Install the UltraDAG SDK via npm:</p>
-        <pre>npm install ultradag-sdk</pre>
-        
-        <h3>Basic Usage</h3>
-        <pre>import { UltraDAG } from 'ultradag-sdk';
+        <p>Four official SDKs with local Ed25519 keygen, Blake3 address derivation, and typed responses.</p>
 
-const client = new UltraDAG('http://localhost:8080');
+        <h3>Installation</h3>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">install &mdash; bash</span>
+          </div>
+          <pre><span class="cm"># Python</span>
+<span class="kw">pip install</span> -e sdk/python/
 
-// Get network status
-const status = await client.getStatus();
-console.log('Current round:', status.dag_round);
+<span class="cm"># JavaScript / TypeScript</span>
+<span class="kw">cd</span> sdk/javascript && <span class="kw">npm install</span>
 
-// Check balance
-const balance = await client.getBalance(address);
-console.log('Balance:', balance.balance);
+<span class="cm"># Rust — add to Cargo.toml</span>
+<span class="kw">cargo add</span> ultradag-sdk
 
-// Send transaction
-const tx = await client.sendTransaction({
+<span class="cm"># Go</span>
+<span class="kw">go get</span> github.com/ultradag/sdk-go/ultradag</pre>
+        </div>
+
+        <h3>Python</h3>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">quickstart &mdash; python</span>
+          </div>
+          <pre><span class="kw">from</span> ultradag <span class="kw">import</span> UltraDagClient, Keypair
+
+client = UltraDagClient(<span class="str">"https://ultradag-node-1.fly.dev"</span>)
+keypair = Keypair.generate()
+
+<span class="cm"># Check network status</span>
+status = client.get_status()
+<span class="kw">print</span>(<span class="str">f"Round: <span class="val">{status.dag_round}</span>, Finalized: <span class="val">{status.last_finalized_round}</span>"</span>)
+
+<span class="cm"># Get faucet funds (testnet)</span>
+client.faucet(keypair.address, <span class="num">100_000_000</span>)  <span class="cm"># 1 UDAG</span>
+
+<span class="cm"># Send transaction</span>
+client.send_tx(keypair.secret_key_hex, recipient, <span class="num">50_000_000</span>, fee=<span class="num">10_000</span>)</pre>
+        </div>
+
+        <h3>JavaScript / TypeScript</h3>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">quickstart &mdash; javascript</span>
+          </div>
+          <pre><span class="kw">import</span> { UltraDagClient, Keypair } <span class="kw">from</span> <span class="str">'ultradag'</span>;
+
+<span class="kw">const</span> client = <span class="kw">new</span> UltraDagClient(<span class="str">'https://ultradag-node-1.fly.dev'</span>);
+<span class="kw">const</span> keypair = Keypair.generate();
+
+<span class="cm">// Check network status</span>
+<span class="kw">const</span> status = <span class="kw">await</span> client.getStatus();
+console.log(<span class="str">'Round:'</span>, status.dag_round);
+
+<span class="cm">// Check balance</span>
+<span class="kw">const</span> balance = <span class="kw">await</span> client.getBalance(keypair.address);
+console.log(<span class="str">'Balance:'</span>, balance);
+
+<span class="cm">// Send transaction</span>
+<span class="kw">const</span> tx = <span class="kw">await</span> client.sendTx({
+  secretKey: keypair.secretKeyHex,
   to: recipientAddress,
-  amount: '10.0',
-  privateKey: yourPrivateKey
-});
-console.log('Transaction submitted:', tx.hash);</pre>
-
-        <h3>Advanced Usage</h3>
-        <pre>// Create wallet from private key
-const wallet = client.createWallet(privateKey);
-console.log('Address:', wallet.address);
-
-// Stake tokens to become validator
-const stakeTx = await client.stake({
-  amount: '10000.0',
-  commissionRate: '0.05',
-  privateKey: privateKey
-});
-
-// Monitor transaction confirmation
-const confirmation = await client.waitForTransaction(tx.hash);
-console.log('Confirmed in round:', confirmation.round);
-
-// Get validator information
-const validators = await client.getValidators();
-const myValidator = validators.find(v => v.address === wallet.address);
-
-// Stream network events
-client.on('round', (round) => {
-  console.log('New round:', round.number);
-});
-
-client.on('transaction', (tx) => {
-  if (tx.to === wallet.address) {
-    console.log('Received transaction:', tx.amount);
-  }
+  amount: <span class="num">50_000_000</span>,
+  fee: <span class="num">10_000</span>
 });</pre>
+        </div>
 
-        <h3>Error Handling</h3>
-        <pre>try {
-  const tx = await client.sendTransaction({
-    to: recipientAddress,
-    amount: '10.0',
-    privateKey: privateKey
-  });
-} catch (error) {
-  if (error.code === 'INSUFFICIENT_BALANCE') {
-    console.log('Not enough funds for transaction');
-  } else if (error.code === 'INVALID_NONCE') {
-    console.log('Nonce mismatch, try refreshing account state');
-  } else {
-    console.error('Transaction failed:', error.message);
-  }
-}</pre>
+        <h3>Rust</h3>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">quickstart &mdash; rust</span>
+          </div>
+          <pre><span class="kw">use</span> ultradag_sdk::{Client, Keypair};
 
-        <h3>Configuration</h3>
-        <pre>const client = new UltraDAG('http://localhost:8080', {
-  timeout: 30000,        // Request timeout in ms
-  retryAttempts: 3,     // Number of retry attempts
-  retryDelay: 1000,      // Delay between retries
-  apiKey: 'your-api-key', // Optional API key
-  network: 'testnet'     // Network identifier
-});</pre>
+<span class="kw">let</span> client = Client::new(<span class="str">"https://ultradag-node-1.fly.dev"</span>);
+<span class="kw">let</span> keypair = Keypair::generate();
+
+<span class="cm">// Check status</span>
+<span class="kw">let</span> status = client.get_status().<span class="kw">await</span>?;
+println!(<span class="str">"Round: {}"</span>, status.dag_round);
+
+<span class="cm">// Send transaction</span>
+<span class="kw">let</span> tx = client.send_tx(&keypair, recipient, <span class="num">50_000_000</span>, <span class="num">10_000</span>).<span class="kw">await</span>?;</pre>
+        </div>
+
+        <h3>Go</h3>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">quickstart &mdash; go</span>
+          </div>
+          <pre><span class="kw">import</span> <span class="str">"github.com/ultradag/sdk-go/ultradag"</span>
+
+client := ultradag.NewClient(<span class="str">"https://ultradag-node-1.fly.dev"</span>)
+keypair := ultradag.GenerateKeypair()
+
+<span class="cm">// Check status</span>
+status, _ := client.GetStatus()
+fmt.Printf(<span class="str">"Round: %d\n"</span>, status.DagRound)
+
+<span class="cm">// Send transaction</span>
+tx, _ := client.SendTx(keypair, recipient, <span class="num">50_000_000</span>, <span class="num">10_000</span>)</pre>
+        </div>
       </section>
 
       <!-- Node -->
       <section class="doc-section" id="node">
         <div class="doc-section-header"><h2>Running a Node</h2></div>
-        
+
         <h3>System Requirements</h3>
         <ul>
-          <li><strong>CPU:</strong> 2+ cores (4+ recommended for validators)</li>
-          <li><strong>RAM:</strong> 4GB minimum (8GB+ recommended)</li>
-          <li><strong>Storage:</strong> 50GB SSD (grows with network activity)</li>
-          <li><strong>Network:</strong> Stable internet connection (1Mbps+)</li>
-          <li><strong>OS:</strong> Linux (Ubuntu 20.04+, CentOS 8+), macOS 10.15+, Windows 10+</li>
+          <li><strong>CPU:</strong> Any (runs on $5/mo cloud instances)</li>
+          <li><strong>RAM:</strong> 256MB minimum (bounded by pruning)</li>
+          <li><strong>Storage:</strong> ~100MB after sync (bounded, not growing)</li>
+          <li><strong>Binary:</strong> &lt;2 MB release build</li>
+          <li><strong>OS:</strong> Linux (x86_64), macOS (ARM64, x86_64)</li>
         </ul>
 
-        <h3>Installation</h3>
-        <h4>Binary Download (Recommended)</h4>
-        <pre># Download latest release
-curl -L https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-linux-x64.tar.gz | tar xz
+        <h3>Binary Download (Recommended)</h3>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">install &mdash; bash</span>
+          </div>
+          <pre><span class="cm"># Download and extract (Linux)</span>
+<span class="kw">curl</span> -L https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-linux-x86_64.tar.gz | <span class="kw">tar</span> xz
 
-# Run the node
-./ultradag-node --help</pre>
+<span class="cm"># Run node (auto-connects to testnet bootstrap nodes)</span>
+<span class="kw">./ultradag-node-linux-x86_64</span> <span class="flag">--validate</span>
 
-        <h4>Build from Source</h4>
-        <pre># Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+<span class="cm"># Check status (RPC defaults to P2P port + 1000 = 10333)</span>
+<span class="kw">curl</span> <span class="str">http://localhost:10333/status</span></pre>
+        </div>
 
-# Clone repository
-git clone https://github.com/UltraDAGcom/core.git
-cd core
+        <h3>Build from Source</h3>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">build &mdash; bash</span>
+          </div>
+          <pre><span class="cm"># Install Rust</span>
+<span class="kw">curl</span> --proto <span class="str">'=https'</span> --tlsv1.2 -sSf https://sh.rustup.rs | <span class="kw">sh</span>
 
-# Build and run
-cargo run --bin ultradag-node --release</pre>
+<span class="cm"># Clone and build</span>
+<span class="kw">git clone</span> https://github.com/UltraDAGcom/core.git
+<span class="kw">cd</span> core
+<span class="kw">cargo build</span> <span class="flag">--release</span>
 
-        <h3>Quick Start</h3>
-        <p>Start a testnet node with default settings:</p>
-        <pre>./ultradag-node --network testnet --data-dir ./ultradag-data</pre>
+<span class="cm"># Run validator</span>
+<span class="kw">cargo run</span> <span class="flag">--release</span> -p ultradag-node -- <span class="flag">--validate</span></pre>
+        </div>
 
-        <h3>Configuration Options</h3>
-        <pre>./ultradag-node [OPTIONS]
+        <h3>CLI Options</h3>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">options &mdash; cli</span>
+          </div>
+          <pre><span class="flag">--port</span> <span class="val">&lt;PORT&gt;</span>           <span class="cm"># P2P listen port [default: 9333]</span>
+<span class="flag">--rpc-port</span> <span class="val">&lt;PORT&gt;</span>       <span class="cm"># HTTP RPC port [default: P2P + 1000]</span>
+<span class="flag">--seed</span> <span class="val">&lt;ADDR&gt;</span>           <span class="cm"># Seed peer (host:port), can repeat</span>
+<span class="flag">--validate</span>              <span class="cm"># Enable block production</span>
+<span class="flag">--validators</span> <span class="val">&lt;N&gt;</span>       <span class="cm"># Expected validator count</span>
+<span class="flag">--round-ms</span> <span class="val">&lt;MS&gt;</span>        <span class="cm"># Round duration [default: 5000]</span>
+<span class="flag">--data-dir</span> <span class="val">&lt;PATH&gt;</span>      <span class="cm"># Data directory [default: ~/.ultradag/node]</span>
+<span class="flag">--pruning-depth</span> <span class="val">&lt;N&gt;</span>   <span class="cm"># Rounds to keep [default: 1000]</span>
+<span class="flag">--archive</span>               <span class="cm"># Disable pruning, keep full history</span>
+<span class="flag">--pkey</span> <span class="val">&lt;HEX&gt;</span>           <span class="cm"># Validator private key (64-char hex)</span>
+<span class="flag">--auto-stake</span> <span class="val">&lt;UDAG&gt;</span>   <span class="cm"># Auto-stake after startup+sync</span>
+<span class="flag">--no-bootstrap</span>          <span class="cm"># Disable auto bootstrap connection</span>
+<span class="flag">--skip-fast-sync</span>        <span class="cm"># Use local state only</span></pre>
+        </div>
 
-OPTIONS:
-    --network <NETWORK>        Network to join [testnet|mainnet] [default: testnet]
-    --data-dir <PATH>          Data directory for state and DAG storage
-    --port <PORT>              HTTP RPC port [default: 8080]
-    --p2p-port <PORT>          P2P network port [default: 9000]
-    --validators <N>           Number of validators in the network [default: 4]
-    --round-ms <MS>            Round duration in milliseconds [default: 5000]
-    --prune-interval <N>       Prune old DAG vertices every N rounds [default: 1000]
-    --log-level <LEVEL>       Log level [trace|debug|info|warn|error] [default: info]
-    --enable-metrics          Enable Prometheus metrics on /metrics
-    --bootstrap <ADDRS>        Comma-separated list of bootstrap peers
-    --private-key <KEY>       Private key for validator (hex string)
-    --help                    Print help information</pre>
+        <h3>Validator Onboarding</h3>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">validator &mdash; bash</span>
+          </div>
+          <pre><span class="cm"># Full validator setup: bring your own key + auto-stake</span>
+<span class="kw">./ultradag-node</span> <span class="flag">--validate</span> \
+  <span class="flag">--pkey</span> <span class="val">your_64char_hex_private_key</span> \
+  <span class="flag">--auto-stake</span> <span class="val">10000</span>
 
-        <h3>Configuration File</h3>
-        <p>Create a <code>config.toml</code> file for persistent configuration:</p>
-        <pre>[network]
-network = "testnet"
-data_dir = "./ultradag-data"
-port = 8080
-p2p_port = 9000
-bootstrap_peers = ["node1.ultradag.test:9000", "node2.ultradag.test:9000"]
+<span class="cm"># Check validator status</span>
+<span class="kw">curl</span> <span class="str">http://localhost:10333/validators</span>
+<span class="kw">curl</span> <span class="str">http://localhost:10333/stake/your_address</span></pre>
+        </div>
 
-[consensus]
-validators = 4
-round_ms = 5000
-prune_interval = 1000
-
-[logging]
-level = "info"
-enable_metrics = true
-
-[validator]
-private_key = "your_private_key_here"
-commission_rate = "0.05"</pre>
-
-        <h3>Docker Setup</h3>
-        <pre># Pull the image
-docker pull ultradag/node:latest
-
-# Run with default configuration
-docker run -d \
+        <h3>Docker</h3>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">docker &mdash; bash</span>
+          </div>
+          <pre><span class="cm"># Run with Docker</span>
+<span class="kw">docker run</span> -d \
   --name ultradag-node \
-  -p 8080:8080 \
-  -p 9000:9000 \
+  -p <span class="num">9333</span>:<span class="num">9333</span> \
+  -p <span class="num">10333</span>:<span class="num">10333</span> \
   -v ultradag-data:/data \
-  ultradag/node:latest
-
-# Run with custom config
-docker run -d \
-  --name ultradag-node \
-  -p 8080:8080 \
-  -p 9000:9000 \
-  -v $(pwd)/config.toml:/config.toml \
-  -v ultradag-data:/data \
-  ultradag/node:latest --config /config.toml</pre>
+  -e VALIDATORS=<span class="num">5</span> \
+  -e ROUND_MS=<span class="num">5000</span> \
+  ultradag/node:latest</pre>
+        </div>
       </section>
 
       <!-- Staking -->
