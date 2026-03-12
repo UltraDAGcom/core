@@ -1099,6 +1099,18 @@ curl http://localhost:8080/metrics
   z-index: 10;
 }
 
+/* Terminal container playground positioning */
+.terminal.code-example-container {
+  position: relative;
+}
+
+.terminal.code-example-container .code-example-actions {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 15;
+}
+
 .try-it-btn {
   background: linear-gradient(135deg, var(--accent), #5aaef0);
   color: var(--bg);

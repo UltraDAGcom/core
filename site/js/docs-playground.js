@@ -245,6 +245,8 @@ function initDocsPlayground() {
   const codeBlocks = document.querySelectorAll('pre');
   
   codeBlocks.forEach((pre, index) => {
+    // Skip if already processed
+    if (pre.closest('.code-example-container')) return;
     const text = pre.textContent;
     
     // Determine appropriate example based on content
@@ -271,11 +273,23 @@ function initDocsPlayground() {
     }
     
     // Always add the playground to every code block
-    // Wrap pre in container
-    const container = document.createElement('div');
-    container.className = 'code-example-container';
-    pre.parentNode.insertBefore(container, pre);
-    container.appendChild(pre);
+    // Check if pre is inside a terminal
+    const terminalParent = pre.closest('.terminal');
+    let container;
+    
+    if (terminalParent) {
+      // Wrap the entire terminal in container
+      container = document.createElement('div');
+      container.className = 'code-example-container terminal';
+      terminalParent.parentNode.insertBefore(container, terminalParent);
+      container.appendChild(terminalParent);
+    } else {
+      // Wrap pre in container
+      container = document.createElement('div');
+      container.className = 'code-example-container';
+      pre.parentNode.insertBefore(container, pre);
+      container.appendChild(pre);
+    }
     
     // Add "Try it" button
     const btnContainer = document.createElement('div');
