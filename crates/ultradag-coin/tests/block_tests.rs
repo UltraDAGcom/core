@@ -1,7 +1,7 @@
 use ultradag_coin::block::block::Block;
 use ultradag_coin::block::header::BlockHeader;
 use ultradag_coin::tx::CoinbaseTx;
-use ultradag_coin::{SecretKey, Transaction, TransferTx, Signature, Address};
+use ultradag_coin::{SecretKey, Transaction, TransferTx, Signature};
 
 #[test]
 fn test_block_hash_deterministic() {

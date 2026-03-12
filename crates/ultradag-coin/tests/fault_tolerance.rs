@@ -93,7 +93,7 @@ fn test_crashed_validator_network_continues() {
     
     // Round 3 should still finalize round 1 (3 >= threshold)
     let finalized = finality.find_newly_finalized(&dag);
-    assert!(finalized.len() > 0, "Round 1 should be finalized despite crashed validator");
+    assert!(!finalized.is_empty(), "Round 1 should be finalized despite crashed validator");
     
     // Round 4: Validators 0, 1, 2 continue
     let r3_tips = dag.tips();
@@ -104,7 +104,7 @@ fn test_crashed_validator_network_continues() {
     
     // Round 4 should finalize round 2
     let finalized = finality.find_newly_finalized(&dag);
-    assert!(finalized.len() > 0, "Round 2 should be finalized");
+    assert!(!finalized.is_empty(), "Round 2 should be finalized");
     
     // Round 5: Validators 0, 1, 2 continue
     let r4_tips = dag.tips();
@@ -115,7 +115,7 @@ fn test_crashed_validator_network_continues() {
     
     // Round 5 should finalize round 3
     let finalized = finality.find_newly_finalized(&dag);
-    assert!(finalized.len() > 0, "Round 3 should be finalized");
+    assert!(!finalized.is_empty(), "Round 3 should be finalized");
     
     assert_eq!(dag.current_round(), 5, "Network should progress to round 5");
     
@@ -208,7 +208,7 @@ fn test_byzantine_equivocator_detected_and_rejected() {
     
     // Finality should still work (3 honest validators >= threshold)
     let finalized = finality.find_newly_finalized(&dag);
-    assert!(finalized.len() > 0, "Finality should work despite Byzantine validator");
+    assert!(!finalized.is_empty(), "Finality should work despite Byzantine validator");
     
     println!("✓ Byzantine equivocation detected and rejected");
     println!("✓ Honest validators continued to finalize");
@@ -283,7 +283,7 @@ fn test_invalid_signature_attacker_rejected() {
     
     // Check finality - should work normally
     let finalized = finality.find_newly_finalized(&dag);
-    assert!(finalized.len() > 0, "Finality should work despite attacker vertices");
+    assert!(!finalized.is_empty(), "Finality should work despite attacker vertices");
     
     // NOTE: The DAG data structure itself doesn't filter by validator set.
     // In production, the validator loop checks validator set membership BEFORE
@@ -418,7 +418,7 @@ fn test_threshold_boundary_recovery() {
     
     // Should finalize round 1 now
     let finalized = finality.find_newly_finalized(&dag);
-    assert!(finalized.len() > 0, "Round 1 should be finalized after recovery");
+    assert!(!finalized.is_empty(), "Round 1 should be finalized after recovery");
     
     println!("✓ Network recovered when validator came back online");
     println!("✓ Finality resumed");

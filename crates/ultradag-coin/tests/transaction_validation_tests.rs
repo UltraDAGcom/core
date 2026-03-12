@@ -16,7 +16,7 @@ fn test_transfer_tx_signable_bytes() {
     };
     
     let bytes = tx.signable_bytes();
-    assert!(bytes.len() > 0);
+    assert!(!bytes.is_empty());
     assert!(bytes.starts_with(b"ultradag-testnet"));
 }
 
@@ -104,7 +104,7 @@ fn test_stake_tx_signable_bytes() {
     };
     
     let bytes = tx.signable_bytes();
-    assert!(bytes.len() > 0);
+    assert!(!bytes.is_empty());
 }
 
 #[test]
@@ -150,7 +150,7 @@ fn test_unstake_tx_signable_bytes() {
     };
     
     let bytes = tx.signable_bytes();
-    assert!(bytes.len() > 0);
+    assert!(!bytes.is_empty());
 }
 
 #[test]

@@ -63,7 +63,7 @@ async fn connected_listen_addrs_tracking() {
     assert!(addrs.contains(&"peer1:9333".to_string()));
     assert!(addrs.contains(&"peer2:9333".to_string()));
     
-    reg.remove_connected_listen_addr(&"peer1:9333".to_string()).await;
+    reg.remove_connected_listen_addr("peer1:9333").await;
     let addrs = reg.connected_listen_addrs().await;
     assert_eq!(addrs.len(), 1);
     assert!(addrs.contains(&"peer2:9333".to_string()));

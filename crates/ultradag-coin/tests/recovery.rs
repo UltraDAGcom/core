@@ -1,7 +1,6 @@
 //! Recovery and mathematical verification tests.
 
 use ultradag_coin::*;
-use ultradag_coin::constants::*;
 
 fn make_vertex(
     proposer_sk: &SecretKey,
@@ -132,11 +131,7 @@ fn test_12_coinbase_reward_sum_equals_21m() {
         MAX_SUPPLY_SATS, MAX_SUPPLY_SATS / COIN);
 
     // The raw schedule should sum to ~21M (within 1% due to halving rounding)
-    let diff = if total_reward > MAX_SUPPLY_SATS {
-        total_reward - MAX_SUPPLY_SATS
-    } else {
-        MAX_SUPPLY_SATS - total_reward
-    };
+    let diff = total_reward.abs_diff(MAX_SUPPLY_SATS);
 
     let max_allowed_diff = MAX_SUPPLY_SATS / 100; // 1% tolerance
     assert!(

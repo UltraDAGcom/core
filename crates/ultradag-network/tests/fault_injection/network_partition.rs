@@ -30,7 +30,7 @@ impl PartitionScenario {
                 ]
             }
             PartitionScenario::IsolateOne(node_id) => {
-                let mut others: Vec<usize> = (0..num_nodes).filter(|&n| n != *node_id).collect();
+                let others: Vec<usize> = (0..num_nodes).filter(|&n| n != *node_id).collect();
                 vec![
                     vec![*node_id],
                     others,
@@ -55,13 +55,13 @@ pub async fn test_partition_scenario(
     injector: &FaultInjector,
     nodes: &[TestNode],
     scenario: PartitionScenario,
-    duration: Duration,
+    _duration: Duration,
 ) {
     let groups = scenario.generate_groups(nodes.len());
     println!("🔪 Creating partition: {:?}", groups);
     
     // Record state before partition
-    let before_rounds: Vec<u64> = futures::future::join_all(
+    let _before_rounds: Vec<u64> = futures::future::join_all(
         nodes.iter().map(|n| n.finalized_round())
     ).await;
     

@@ -69,7 +69,7 @@ fn test_address_inequality() {
 fn test_address_clone() {
     let sk = SecretKey::generate();
     let addr1 = sk.address();
-    let addr2 = addr1.clone();
+    let addr2 = addr1;
     
     assert_eq!(addr1, addr2);
 }

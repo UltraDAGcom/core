@@ -49,7 +49,7 @@ async fn test_network_partition_basic() {
 
 #[tokio::test]
 async fn test_partition_scenarios() {
-    let injector = FaultInjector::new();
+    let _injector = FaultInjector::new();
     
     // Test split-brain
     let scenario = PartitionScenario::SplitBrain;
@@ -387,7 +387,7 @@ async fn test_message_drop_probability() {
         
         // Should be roughly 50% (allow 10% variance)
         let drop_percentage = (dropped as f64 / iterations as f64) * 100.0;
-        assert!(drop_percentage >= 40.0 && drop_percentage <= 60.0,
+        assert!((40.0..=60.0).contains(&drop_percentage),
             "Drop rate should be ~50%, got {}%", drop_percentage);
     }
 }

@@ -136,7 +136,7 @@ fn test_02_checkpoint_reaches_quorum() {
     }
     
     // Verify is_accepted returns true (3/4 >= ceil(2*4/3) = 3)
-    let quorum = (active.len() * 2 + 2) / 3;
+    let quorum = (active.len() * 2).div_ceil(3);
     assert!(checkpoint.is_accepted(&active, quorum), 
         "Checkpoint with 3/4 signatures should be accepted");
 }

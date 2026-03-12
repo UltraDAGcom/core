@@ -242,7 +242,7 @@ pub async fn test_extreme_chaos(
 /// Test that orphan resolution works with message reordering
 pub async fn test_orphan_resolution_with_reordering(
     injector: &FaultInjector,
-    nodes: &[TestNode],
+    _nodes: &[TestNode],
 ) -> Result<(), String> {
     // Enable reordering which may cause vertices to arrive before their parents
     injector.enable_message_reordering(true);
@@ -263,7 +263,7 @@ pub async fn test_orphan_resolution_with_reordering(
 /// Test asymmetric network conditions (different delays per direction)
 pub async fn test_asymmetric_delays(
     injector: &FaultInjector,
-    nodes: &[TestNode],
+    _nodes: &[TestNode],
 ) -> Result<(), String> {
     // This would test scenarios where:
     // - Node A -> B has high delay

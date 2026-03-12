@@ -1,5 +1,4 @@
-use ultradag_coin::{BlockDag, FinalityTracker, StateEngine, DagVertex, SecretKey, create_block, Mempool};
-use std::path::PathBuf;
+use ultradag_coin::{BlockDag, FinalityTracker, DagVertex, SecretKey, create_block, Mempool};
 
 fn make_vertex(sk: &SecretKey, round: u64, parents: Vec<[u8; 32]>) -> DagVertex {
     let validator = sk.address();

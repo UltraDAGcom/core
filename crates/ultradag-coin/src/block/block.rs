@@ -53,7 +53,7 @@ fn merkle_root(leaves: &[[u8; 32]]) -> [u8; 32] {
 
     let mut level = leaves.to_vec();
     while level.len() > 1 {
-        if level.len() % 2 != 0 {
+        if !level.len().is_multiple_of(2) {
             // SAFETY: level.len() > 1 guarantees last() exists
             let last = level.last().expect("level has at least 1 element");
             level.push(*last);

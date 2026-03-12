@@ -7,19 +7,12 @@ use crate::tx::stake::{StakeTx, UnstakeTx, MIN_STAKE_SATS, UNSTAKE_COOLDOWN_ROUN
 
 /// Account balance state.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Default)]
 pub struct AccountState {
     pub balance: u64,
     pub nonce: u64,
 }
 
-impl Default for AccountState {
-    fn default() -> Self {
-        Self {
-            balance: 0,
-            nonce: 0,
-        }
-    }
-}
 
 /// Staking account tracking locked funds and cooldown.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]

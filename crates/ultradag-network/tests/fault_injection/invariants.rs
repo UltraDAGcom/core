@@ -4,7 +4,7 @@
 /// under fault injection scenarios.
 
 use std::collections::{HashMap, HashSet};
-use ultradag_coin::{Address, DagVertex};
+use ultradag_coin::Address;
 use super::TestNode;
 
 /// Safety invariant violations
@@ -74,7 +74,7 @@ impl InvariantChecker {
         // Record supply history
         self.supply_history
             .entry(node.id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push((round, supply));
 
         // Check for finality revert (same node, same round, different hash)
@@ -209,7 +209,7 @@ impl InvariantChecker {
         address: &Address,
     ) -> Result<(), InvariantViolation> {
         let state = node.state.read().await;
-        let balance = state.balance(address);
+        let _balance = state.balance(address);
 
         // Balance should never be negative (u64 prevents this, but check for overflow)
         // In a real implementation, we'd track transaction history to detect double-spends

@@ -1,3 +1,4 @@
+#[allow(clippy::module_inception)]
 pub mod block;
 pub mod genesis;
 pub mod header;

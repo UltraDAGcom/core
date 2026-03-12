@@ -175,7 +175,7 @@ fn test_mempool_best_returns_sorted() {
     mempool.insert(Transaction::Transfer(tx2.clone()));
     
     let best = mempool.best(10);
-    if best.len() > 0 {
+    if !best.is_empty() {
         assert_eq!(best[0].hash(), Transaction::Transfer(tx2).hash());
     }
 }

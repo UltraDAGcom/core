@@ -1,8 +1,6 @@
 /// Staking tests: stake/unstake lifecycle, proportional rewards, slashing, and supply invariants.
 
 use ultradag_coin::*;
-use ultradag_coin::constants::*;
-use ultradag_coin::tx::stake::*;
 
 fn make_stake_tx(sk: &SecretKey, amount: u64, nonce: u64) -> StakeTx {
     let mut tx = StakeTx {

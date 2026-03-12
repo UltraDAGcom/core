@@ -235,8 +235,8 @@ mod tests {
         let root1 = [1u8; 32];
         let root2 = [2u8; 32];
 
-        wal.append(&[v1.clone()], 1, root1).unwrap();
-        wal.append(&[v2.clone()], 2, root2).unwrap();
+        wal.append(std::slice::from_ref(&v1), 1, root1).unwrap();
+        wal.append(std::slice::from_ref(&v2), 2, root2).unwrap();
         drop(wal);
 
         let (header, entries) = FinalityWal::replay(&dir).unwrap();

@@ -79,7 +79,7 @@ pub async fn validator_loop(
         // A new node at round 0 producing vertices while peers are at round 1500+
         // creates orphans, triggers allowlist bans, and wastes bandwidth.
         if !server.sync_complete.load(Ordering::Relaxed) {
-            if timer_fired && consecutive_skips % 6 == 0 {
+            if timer_fired && consecutive_skips.is_multiple_of(6) {
                 let our_round = server.dag.read().await.current_round();
                 info!("Waiting for initial sync to complete (current round: {})", our_round);
             }
@@ -97,7 +97,7 @@ pub async fn validator_loop(
             if peer_count < 2 {
                 if timer_fired {
                     consecutive_skips += 1;
-                    if consecutive_skips % 6 == 0 {
+                    if consecutive_skips.is_multiple_of(6) {
                         warn!("Waiting for peers ({} connected, need ≥2) — skip #{}", peer_count, consecutive_skips);
                     }
                 }
@@ -138,7 +138,7 @@ pub async fn validator_loop(
                 let prev = current.saturating_sub(1);
                 let validators_in_prev = dag.distinct_validators_in_round(prev).len();
                 let configured = server.finality.read().await.validator_set().configured_validators().unwrap_or(4);
-                let quorum = (2 * configured + 2) / 3;
+                let quorum = (2 * configured).div_ceil(3);
                 if validators_in_current >= quorum || (prev > 0 && validators_in_prev >= quorum) {
                     current + 1
                 } else {
@@ -168,7 +168,7 @@ pub async fn validator_loop(
             let prev = dag_round.saturating_sub(1);
             let validators_in_prev = dag.distinct_validators_in_round(prev).len();
             let configured = server.finality.read().await.validator_set().configured_validators().unwrap_or(4);
-            let quorum = (2 * configured + 2) / 3;
+            let quorum = (2 * configured).div_ceil(3);
             if validators_in_prev >= quorum {
                 info!("Quorum restored — exiting stall recovery mode");
                 in_recovery = false;
@@ -372,11 +372,11 @@ pub async fn validator_loop(
                             let desc_count = dag_r.descendant_validator_count(hash);
                             let missing_parents: Vec<String> = v.parent_hashes.iter()
                                 .filter(|p| **p != genesis && !fin.is_finalized(p))
-                                .map(|p| hex_short(p))
+                                .map(hex_short)
                                 .collect();
                             sample_info.push_str(&format!(
                                 " [v={} desc={}/{} parents_ok={} missing={}]",
-                                hex_short(&hash), desc_count, threshold, parents_ok,
+                                hex_short(hash), desc_count, threshold, parents_ok,
                                 if missing_parents.is_empty() { "none".to_string() } else { missing_parents.join(",") }
                             ));
                         }

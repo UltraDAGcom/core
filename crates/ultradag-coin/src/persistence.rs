@@ -58,7 +58,7 @@ pub fn save_checkpoint(dir: &Path, checkpoint: &crate::consensus::Checkpoint) ->
 pub fn save_checkpoint_state(dir: &Path, round: u64, snapshot: &crate::state::persistence::StateSnapshot) -> std::io::Result<()> {
     let path = dir.join(format!("checkpoint_state_{:010}.json", round));
     let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, serde_json::to_vec(snapshot).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?)?;
+    std::fs::write(&tmp, serde_json::to_vec(snapshot).map_err(std::io::Error::other)?)?;
     std::fs::rename(tmp, path)?;
     Ok(())
 }
@@ -95,7 +95,7 @@ pub fn load_latest_checkpoint(dir: &Path) -> Option<crate::consensus::Checkpoint
             if name.starts_with("checkpoint_") && name.ends_with(".json") {
                 if let Ok(bytes) = std::fs::read(entry.path()) {
                     if let Ok(cp) = serde_json::from_slice::<crate::consensus::Checkpoint>(&bytes) {
-                        if latest.as_ref().map_or(true, |(r, _)| cp.round > *r) {
+                        if latest.as_ref().is_none_or(|(r, _)| cp.round > *r) {
                             latest = Some((cp.round, cp));
                         }
                     }

@@ -133,7 +133,7 @@ fn test_4_validators_5_rounds_complete_progression() {
     
     // After round 2, round 1 should be finalized (all 4 round-2 vertices reference all round-1 vertices)
     let finalized = finality.find_newly_finalized(&dag);
-    assert!(finalized.len() > 0, "Round 1 should be finalized after round 2");
+    assert!(!finalized.is_empty(), "Round 1 should be finalized after round 2");
     
     // Verify all round 1 vertices are finalized
     for hash in &round_vertices[1] {
@@ -163,7 +163,7 @@ fn test_4_validators_5_rounds_complete_progression() {
     
     // After round 3, round 2 should be finalized
     let finalized = finality.find_newly_finalized(&dag);
-    assert!(finalized.len() > 0, "Round 2 should be finalized after round 3");
+    assert!(!finalized.is_empty(), "Round 2 should be finalized after round 3");
     
     // Verify all round 2 vertices are finalized
     for hash in &round_vertices[2] {
@@ -192,7 +192,7 @@ fn test_4_validators_5_rounds_complete_progression() {
     
     // After round 4, round 3 should be finalized
     let finalized = finality.find_newly_finalized(&dag);
-    assert!(finalized.len() > 0, "Round 3 should be finalized after round 4");
+    assert!(!finalized.is_empty(), "Round 3 should be finalized after round 4");
     
     println!("Round 3 finalized: {} vertices", finalized.len());
     
@@ -216,7 +216,7 @@ fn test_4_validators_5_rounds_complete_progression() {
     
     // After round 5, round 4 should be finalized (but not round 5 yet)
     let finalized = finality.find_newly_finalized(&dag);
-    assert!(finalized.len() > 0, "Round 4 should be finalized after round 5");
+    assert!(!finalized.is_empty(), "Round 4 should be finalized after round 5");
     
     println!("Round 4 finalized: {} vertices", finalized.len());
     

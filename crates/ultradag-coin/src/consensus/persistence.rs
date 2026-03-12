@@ -5,6 +5,9 @@ use crate::address::Address;
 use crate::consensus::vertex::DagVertex;
 use crate::persistence::{self, PersistenceError};
 
+/// Type alias for equivocation evidence to simplify complex types
+pub type EquivocationEvidenceTuple = ((Address, u64), [[u8; 32]; 2]);
+
 /// Serializable snapshot of BlockDag state
 /// Uses Vec of tuples instead of HashMaps to avoid JSON serialization issues
 #[derive(Serialize, Deserialize)]
@@ -15,7 +18,7 @@ pub struct DagSnapshot {
     pub rounds: Vec<(u64, Vec<[u8; 32]>)>,
     pub current_round: u64,
     pub byzantine_validators: Vec<Address>,
-    pub equivocation_evidence: Vec<((Address, u64), [[u8; 32]; 2])>,
+    pub equivocation_evidence: Vec<EquivocationEvidenceTuple>,
     #[serde(default)]
     pub pruning_floor: u64,
     /// Permanent equivocation evidence store (survives pruning).

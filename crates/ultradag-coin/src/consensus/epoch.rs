@@ -75,7 +75,7 @@ mod tests {
 
         assert_eq!(ft.validator_count(), 2);
         // sk3 should no longer be registered
-        assert_eq!(ft.validator_set().contains(&sk3.address()), false);
+        assert!(!ft.validator_set().contains(&sk3.address()));
     }
 
     #[test]

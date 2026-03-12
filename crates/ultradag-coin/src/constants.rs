@@ -117,7 +117,7 @@ pub fn epoch_of(round: u64) -> u64 {
 
 /// Check if a round is an epoch boundary (start of new epoch).
 pub fn is_epoch_boundary(round: u64) -> bool {
-    round % EPOCH_LENGTH_ROUNDS == 0
+    round.is_multiple_of(EPOCH_LENGTH_ROUNDS)
 }
 
 /// Deterministic seed for the testnet faucet keypair.
@@ -140,6 +140,43 @@ pub fn block_reward(height: u64) -> u64 {
     }
     INITIAL_REWARD_SATS >> halvings
 }
+
+// ========================================
+// GOVERNANCE CONSTANTS
+// ========================================
+
+/// Minimum stake required to submit a governance proposal.
+/// Prevents spam. Set low for testnet community building.
+pub const MIN_STAKE_TO_PROPOSE: u64 = 10_000 * COIN; // 10,000 UDAG (same as MIN_STAKE_SATS)
+
+/// Voting period in rounds. At 2.5s/round ≈ 3.5 days.
+/// Long enough for community participation, short enough to ship.
+pub const GOVERNANCE_VOTING_PERIOD_ROUNDS: u64 = 120_960;
+
+/// Quorum: minimum fraction of total staked supply that must vote.
+/// Numerator/denominator form to avoid floats.
+/// 10% quorum — achievable on a small network at launch.
+pub const GOVERNANCE_QUORUM_NUMERATOR: u64 = 10;
+pub const GOVERNANCE_QUORUM_DENOMINATOR: u64 = 100;
+
+/// Approval threshold: fraction of votes_for / (votes_for + votes_against).
+/// 66% supermajority required.
+pub const GOVERNANCE_APPROVAL_NUMERATOR: u64 = 66;
+pub const GOVERNANCE_APPROVAL_DENOMINATOR: u64 = 100;
+
+/// Execution delay after a proposal passes, in rounds.
+/// Safety buffer before parameter changes take effect.
+/// ~1.4 hours at 2.5s/round.
+pub const GOVERNANCE_EXECUTION_DELAY_ROUNDS: u64 = 2_016;
+
+/// Maximum proposals active simultaneously (prevents state bloat).
+pub const MAX_ACTIVE_PROPOSALS: usize = 20;
+
+/// Maximum title length in bytes.
+pub const PROPOSAL_TITLE_MAX_BYTES: usize = 128;
+
+/// Maximum description length in bytes.
+pub const PROPOSAL_DESCRIPTION_MAX_BYTES: usize = 4096;
 
 #[cfg(test)]
 mod tests {
@@ -186,43 +223,6 @@ mod tests {
     fn constants_sanity() {
         assert_eq!(COIN, 100_000_000);
         assert_eq!(MAX_SUPPLY_SATS, 21_000_000 * COIN);
-        assert!(MAX_TXS_PER_BLOCK > 0);
+        const { assert!(MAX_TXS_PER_BLOCK > 0) };
     }
 }
-
-// ========================================
-// GOVERNANCE CONSTANTS
-// ========================================
-
-/// Minimum stake required to submit a governance proposal.
-/// Prevents spam. Set low for testnet community building.
-pub const MIN_STAKE_TO_PROPOSE: u64 = 10_000 * COIN; // 10,000 UDAG (same as MIN_STAKE_SATS)
-
-/// Voting period in rounds. At 2.5s/round ≈ 3.5 days.
-/// Long enough for community participation, short enough to ship.
-pub const GOVERNANCE_VOTING_PERIOD_ROUNDS: u64 = 120_960;
-
-/// Quorum: minimum fraction of total staked supply that must vote.
-/// Numerator/denominator form to avoid floats.
-/// 10% quorum — achievable on a small network at launch.
-pub const GOVERNANCE_QUORUM_NUMERATOR: u64 = 10;
-pub const GOVERNANCE_QUORUM_DENOMINATOR: u64 = 100;
-
-/// Approval threshold: fraction of votes_for / (votes_for + votes_against).
-/// 66% supermajority required.
-pub const GOVERNANCE_APPROVAL_NUMERATOR: u64 = 66;
-pub const GOVERNANCE_APPROVAL_DENOMINATOR: u64 = 100;
-
-/// Execution delay after a proposal passes, in rounds.
-/// Safety buffer before parameter changes take effect.
-/// ~1.4 hours at 2.5s/round.
-pub const GOVERNANCE_EXECUTION_DELAY_ROUNDS: u64 = 2_016;
-
-/// Maximum proposals active simultaneously (prevents state bloat).
-pub const MAX_ACTIVE_PROPOSALS: usize = 20;
-
-/// Maximum title length in bytes.
-pub const PROPOSAL_TITLE_MAX_BYTES: usize = 128;
-
-/// Maximum description length in bytes.
-pub const PROPOSAL_DESCRIPTION_MAX_BYTES: usize = 4096;

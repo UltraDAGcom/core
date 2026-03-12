@@ -183,7 +183,7 @@ fn a2_byzantine_validator_permanently_banned() {
     // Future vertices from this validator must be rejected
     let v3 = make_vertex(&addr, 2, 2, vec![[0u8; 32]], vec![], &sk);
     let result = dag.try_insert(v3);
-    assert_eq!(result.unwrap(), false, "Byzantine validator should be permanently banned");
+    assert!(!result.unwrap(), "Byzantine validator should be permanently banned");
 }
 
 #[test]
@@ -312,7 +312,7 @@ fn b4_double_spend_deterministic_resolution() {
     // Two conflicting txs from same sender in different vertices of the same round
     let mut state = StateEngine::new_with_genesis();
     let sender_sk = faucet_keypair();
-    let sender = sender_sk.address();
+    let _sender = sender_sk.address();
     let recv_a = SecretKey::from_bytes([10u8; 32]).address();
     let recv_b = SecretKey::from_bytes([11u8; 32]).address();
 

@@ -206,7 +206,7 @@ pub struct TestNode {
 }
 
 impl TestNode {
-    pub fn new(id: usize, validator_address: Address) -> Self {
+    pub fn new(id: usize, _validator_address: Address) -> Self {
         // Generate a deterministic secret key from id
         let mut seed = [0u8; 32];
         seed[0] = id as u8 + 100;

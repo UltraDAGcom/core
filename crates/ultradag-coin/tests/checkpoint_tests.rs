@@ -14,7 +14,7 @@ fn test_checkpoint_signable_bytes() {
     };
     
     let bytes = checkpoint.signable_bytes();
-    assert!(bytes.len() > 0);
+    assert!(!bytes.is_empty());
     assert!(bytes.starts_with(b"ultradag-testnet"));
 }
 

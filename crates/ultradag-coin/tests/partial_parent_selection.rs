@@ -1,4 +1,4 @@
-use ultradag_coin::{Address, BlockDag, DagVertex, FinalityTracker, SecretKey, K_PARENTS};
+use ultradag_coin::{BlockDag, DagVertex, FinalityTracker, SecretKey, K_PARENTS};
 use ultradag_coin::block::{Block, BlockHeader};
 use ultradag_coin::tx::CoinbaseTx;
 use ultradag_coin::address::Signature;
@@ -184,7 +184,7 @@ fn dag_stays_connected_with_partial_parents() {
     
     let mut total_descendants = 0;
     for hash in &round0_hashes {
-        let desc_count = dag.descendant_validator_count(&hash);
+        let desc_count = dag.descendant_validator_count(hash);
         total_descendants += desc_count;
     }
     

@@ -750,7 +750,7 @@ async fn handle_peer(
     dag: &Arc<RwLock<BlockDag>>,
     finality: &Arc<RwLock<FinalityTracker>>,
     peers: &PeerRegistry,
-    vertex_tx: &broadcast::Sender<DagVertex>,
+    _vertex_tx: &broadcast::Sender<DagVertex>,
     tx_tx: &broadcast::Sender<Transaction>,
     orphans: &Arc<Mutex<HashMap<[u8; 32], DagVertex>>>,
     _listen_port: u16,
@@ -758,7 +758,7 @@ async fn handle_peer(
     pending_checkpoints: &Arc<RwLock<HashMap<u64, ultradag_coin::Checkpoint>>>,
     data_dir: &PathBuf,
     validator_sk: Option<&SecretKey>,
-    banned_peers: &Arc<Mutex<HashMap<String, Instant>>>,
+    _banned_peers: &Arc<Mutex<HashMap<String, Instant>>>,
     checkpoint_metrics: &Arc<crate::CheckpointMetrics>,
     wal: &Arc<std::sync::Mutex<Option<FinalityWal>>>,
     sync_complete: &Arc<std::sync::atomic::AtomicBool>,
@@ -1128,7 +1128,7 @@ async fn handle_peer(
                     let dag_r = dag.read().await;
                     rounds.iter()
                         .flat_map(|(_, hashes)| hashes.iter())
-                        .filter(|h| dag_r.get(*h).is_none())
+                        .filter(|h| dag_r.get(h).is_none())
                         .copied()
                         .collect()
                 };
@@ -1586,7 +1586,7 @@ async fn handle_peer(
                 let quorum = if active.is_empty() {
                     2 // Minimum for testing
                 } else {
-                    (active.len() * 2 + 2) / 3 // ceil(2n/3)
+                    (active.len() * 2).div_ceil(3) // ceil(2n/3)
                 };
                 
                 if checkpoint.is_accepted(&active, quorum) {
@@ -1744,7 +1744,7 @@ async fn handle_peer(
                     }
                     2 // Pre-staking: minimum BFT quorum
                 } else {
-                    (active.len() * 2 + 2) / 3
+                    (active.len() * 2).div_ceil(3)
                 };
 
                 if !active.is_empty() && !checkpoint.is_accepted(&active, quorum) {

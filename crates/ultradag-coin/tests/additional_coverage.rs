@@ -2,8 +2,6 @@
 // Uses correct API patterns from existing tests
 
 use ultradag_coin::*;
-use ultradag_coin::constants::*;
-use ultradag_coin::tx::stake::*;
 use std::collections::HashSet;
 
 // Helper functions matching existing test patterns

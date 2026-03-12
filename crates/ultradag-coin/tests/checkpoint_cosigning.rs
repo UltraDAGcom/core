@@ -174,7 +174,7 @@ fn test_checkpoint_signature_covers_all_fields() {
     };
     
     checkpoint.sign(&sk);
-    let original_sig = checkpoint.signatures[0].clone();
+    let _original_sig = checkpoint.signatures[0].clone();
     
     // Tamper with round
     checkpoint.round = 1001;

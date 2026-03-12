@@ -57,7 +57,7 @@ impl ClockSkewScenario {
 /// Test that nodes reject vertices with timestamps too far in the future
 pub async fn test_future_timestamp_rejection(
     injector: &FaultInjector,
-    nodes: &[TestNode],
+    _nodes: &[TestNode],
     future_offset_secs: i64,
 ) -> Result<(), String> {
     // Set one node's clock far into the future
@@ -123,7 +123,7 @@ pub async fn test_sync_with_moderate_skew(
 /// Test extreme clock skew (should cause issues)
 pub async fn test_extreme_clock_skew(
     injector: &FaultInjector,
-    nodes: &[TestNode],
+    _nodes: &[TestNode],
 ) -> Result<(), String> {
     // Set one node 1 hour in the future
     injector.set_clock_offset(0, 3600);
@@ -143,7 +143,7 @@ pub async fn test_extreme_clock_skew(
 /// Test clock skew during epoch boundary
 pub async fn test_skew_at_epoch_boundary(
     injector: &FaultInjector,
-    nodes: &[TestNode],
+    _nodes: &[TestNode],
 ) -> Result<(), String> {
     // This tests whether clock skew can cause epoch transition issues
     // where nodes disagree on when the epoch boundary occurs

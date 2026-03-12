@@ -6,9 +6,6 @@
 use super::{FaultInjector, TestNode, simulate_rounds};
 use std::time::Duration;
 use tokio::time::sleep;
-use ultradag_coin::{BlockDag, FinalityTracker, StateEngine};
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
 /// Crash and restart a node, simulating state recovery
 pub async fn crash_and_restart(

@@ -3,7 +3,6 @@
 
 use std::collections::HashSet;
 use ultradag_coin::*;
-use ultradag_coin::constants::*;
 
 // ============================================================================
 // Test helpers
@@ -102,7 +101,7 @@ fn coinbase_fees_after_supply_exhaustion() {
     let proposer = proposer_sk.address();
     let coinbase = ultradag_coin::CoinbaseTx {
         to: proposer,
-        amount: 0 + fee, // block_reward=0, but fees should still work
+        amount: fee, // block_reward=0, but fees should still work
         height: post_exhaustion_round,
     };
     let block = ultradag_coin::Block {
@@ -431,7 +430,7 @@ fn vertex_with_many_parents_accepted() {
     // Create 6 genesis vertices
     let mut hashes = Vec::new();
     for (i, sk) in sks.iter().enumerate() {
-        let v = make_vertex(sk, 0, 0 + i as u64, vec![], vec![]);
+        let v = make_vertex(sk, 0, (i as u64), vec![], vec![]);
         let h = v.hash();
         dag.insert(v);
         hashes.push(h);

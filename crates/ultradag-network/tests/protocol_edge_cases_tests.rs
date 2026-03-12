@@ -1,5 +1,5 @@
 use ultradag_network::protocol::Message;
-use ultradag_coin::{SecretKey, Signature, Address};
+use ultradag_coin::{SecretKey, Signature};
 use ultradag_coin::block::block::Block;
 use ultradag_coin::block::header::BlockHeader;
 use ultradag_coin::tx::CoinbaseTx;

@@ -75,7 +75,7 @@ impl GovernanceParams {
                 self.quorum_numerator = value;
             }
             "approval_numerator" => {
-                if value < 51 || value > 100 {
+                if !(51..=100).contains(&value) {
                     return Err("approval_numerator must be 51-100".to_string());
                 }
                 self.approval_numerator = value;

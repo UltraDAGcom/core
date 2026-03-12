@@ -105,6 +105,39 @@ impl DagVertex {
 }
 
 #[cfg(test)]
+fn make_signed_vertex_with_parents(round: u64, parents: Vec<[u8; 32]>, sk: &crate::address::SecretKey) -> DagVertex {
+    use crate::block::{Block, BlockHeader};
+    use crate::tx::CoinbaseTx;
+    
+    let validator = sk.address();
+    let block = Block {
+        header: BlockHeader {
+            version: 1,
+            height: round,
+            timestamp: 1_000_000 + round as i64,
+            prev_hash: parents.first().copied().unwrap_or([0u8; 32]),
+            merkle_root: [0u8; 32],
+        },
+        coinbase: CoinbaseTx {
+            to: validator,
+            amount: 5_000_000_000,
+            height: round,
+        },
+        transactions: vec![],
+    };
+    let mut v = DagVertex::new(
+        block,
+        parents,
+        round,
+        validator,
+        sk.verifying_key().to_bytes(),
+        Signature([0u8; 64]),
+    );
+    v.signature = sk.sign(&v.signable_bytes());
+    v
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::address::SecretKey;
@@ -260,37 +293,4 @@ mod tests {
         v.block.header.timestamp = current_time + crate::constants::MAX_FUTURE_TIMESTAMP + 1;
         assert!(!v.verify_timestamp(current_time), "Timestamp beyond boundary should be rejected");
     }
-}
-
-#[cfg(test)]
-fn make_signed_vertex_with_parents(round: u64, parents: Vec<[u8; 32]>, sk: &crate::address::SecretKey) -> DagVertex {
-    use crate::block::{Block, BlockHeader};
-    use crate::tx::CoinbaseTx;
-    
-    let validator = sk.address();
-    let block = Block {
-        header: BlockHeader {
-            version: 1,
-            height: round,
-            timestamp: 1_000_000 + round as i64,
-            prev_hash: parents.first().copied().unwrap_or([0u8; 32]),
-            merkle_root: [0u8; 32],
-        },
-        coinbase: CoinbaseTx {
-            to: validator,
-            amount: 5_000_000_000,
-            height: round,
-        },
-        transactions: vec![],
-    };
-    let mut v = DagVertex::new(
-        block,
-        parents,
-        round,
-        validator,
-        sk.verifying_key().to_bytes(),
-        Signature([0u8; 64]),
-    );
-    v.signature = sk.sign(&v.signable_bytes());
-    v
 }

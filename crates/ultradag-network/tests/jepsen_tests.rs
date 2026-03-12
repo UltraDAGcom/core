@@ -8,8 +8,8 @@ mod fault_injection;
 use fault_injection::*;
 use fault_injection::invariants::{InvariantChecker, InvariantViolation};
 use fault_injection::network_partition::{PartitionScenario, test_partition_scenario, test_minority_cannot_finalize, test_partition_convergence};
-use fault_injection::clock_skew::{ClockSkewScenario, test_future_timestamp_rejection, test_sync_with_moderate_skew};
-use fault_injection::message_chaos::{MessageChaosScenario, test_consensus_with_delays, test_consensus_with_reordering, test_consensus_with_drops, test_extreme_chaos};
+use fault_injection::clock_skew::{test_future_timestamp_rejection, test_sync_with_moderate_skew};
+use fault_injection::message_chaos::{test_consensus_with_delays, test_consensus_with_reordering, test_consensus_with_drops, test_extreme_chaos};
 use fault_injection::crash_restart::{crash_and_restart, test_crash_during_consensus, test_crash_restart_cycles, test_simultaneous_crashes};
 
 use std::time::Duration;

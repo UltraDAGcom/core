@@ -91,7 +91,7 @@ impl ValidatorSet {
         if effective_count < self.min_validators {
             return usize::MAX;
         }
-        (2 * effective_count + 2) / 3
+        (2 * effective_count).div_ceil(3)
     }
 
     pub fn has_quorum(&self, count: usize) -> bool {

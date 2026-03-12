@@ -136,7 +136,7 @@ fn get_memory_usage() -> Option<u64> {
     {
         use std::process::Command;
         Command::new("ps")
-            .args(&["-o", "rss=", "-p", &std::process::id().to_string()])
+            .args(["-o", "rss=", "-p", &std::process::id().to_string()])
             .output()
             .ok()
             .and_then(|output| {
@@ -176,7 +176,7 @@ fn get_uptime() -> Option<u64> {
     {
         use std::process::Command;
         Command::new("sysctl")
-            .args(&["-n", "kern.boottime"])
+            .args(["-n", "kern.boottime"])
             .output()
             .ok()
             .and_then(|output| {
@@ -638,9 +638,8 @@ async fn handle_request(
             // Parse and validate memo (if provided)
             let memo = if let Some(memo_str) = send_req.memo {
                 // Try to parse as hex first, fall back to UTF-8
-                let memo_bytes = if memo_str.starts_with("0x") {
+                let memo_bytes = if let Some(hex_str) = memo_str.strip_prefix("0x") {
                     // Hex encoding: 0x[hex]
-                    let hex_str = &memo_str[2..];
                     hex::decode(hex_str).map_err(|_| ()).ok()
                 } else if memo_str.chars().all(|c| c.is_ascii_hexdigit()) && memo_str.len() % 2 == 0 {
                     // Raw hex (even length, all hex digits)

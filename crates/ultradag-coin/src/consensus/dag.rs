@@ -315,9 +315,9 @@ impl BlockDag {
             .map(|tip| {
                 // Simple deterministic score: XOR first 8 bytes of proposer with tip
                 let mut score = 0u64;
-                for i in 0..8 {
+                for (i, &tip_byte) in tip.iter().enumerate().take(8) {
                     score ^= (proposer.0[i] as u64) << (i * 8);
-                    score ^= (tip[i] as u64) << (i * 8);
+                    score ^= (tip_byte as u64) << (i * 8);
                 }
                 (*tip, score)
             })
