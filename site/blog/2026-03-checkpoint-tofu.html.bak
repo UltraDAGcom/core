@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="UltraDAG blog: technical deep dives, network updates, and research on DAG-BFT consensus.">
-<meta property="og:title" content="Blog — UltraDAG">
-<meta property="og:description" content="Technical deep dives and network updates from the UltraDAG team.">
-<meta property="og:type" content="website">
+<meta name="description" content="How UltraDAG uses checkpoint TOFU (Trust On First Use) for fast-sync security without centralized checkpoints.">
+<meta property="og:title" content="Checkpoint TOFU — UltraDAG Blog">
+<meta property="og:description" content="Fast-sync security without centralized checkpoints using TOFU.">
+<meta property="og:type" content="article">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%233d9be9' stroke-width='2'/%3E%3Ccircle cx='50' cy='50' r='15' fill='%233d9be9'/%3E%3C/svg%3E">
-<title>Blog — UltraDAG</title>
+<title>Checkpoint TOFU — UltraDAG Blog</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../theme.css">
@@ -32,7 +32,7 @@ a:hover{color:var(--white)}
 body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.4}
 
 /* GRID BG */
-.grid-bg{position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.5625;pointer-events:none;z-index:0;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,black 30%,transparent 100%)}
+.grid-bg{position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.15;pointer-events:none;z-index:0;mask-image:radial-gradient(ellipse 80% 40% at 50% 0%,black 20%,transparent 100%)}
 
 /* NAV */
 nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid transparent;transition:border-color .3s,background .3s}
@@ -78,21 +78,34 @@ nav.scrolled{border-color:var(--border);background:rgba(10,14,26,.92);backdrop-f
 .mobile-menu .nav-cta{display:inline-block;margin-top:8px}
 @media(min-width:901px){.mobile-menu{display:none}}
 
-/* BLOG CONTAINER */
-.blog-container{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:120px 48px 80px}
+/* ARTICLE CONTAINER */
+.article-container{position:relative;z-index:1;max-width:800px;margin:0 auto;padding:120px 48px 80px}
 
-/* BLOG HEADER */
-.blog-header{margin-bottom:64px}
-.blog-title{font-family:'Cormorant',serif;font-size:clamp(40px,6vw,64px);font-weight:300;line-height:1.05;color:var(--white);margin-bottom:12px;letter-spacing:-.01em}
-.blog-subtitle{font-family:'Cormorant',serif;font-size:18px;font-weight:300;font-style:italic;color:var(--subtle);max-width:600px}
+/* ARTICLE HEADER */
+.article-header{margin-bottom:48px;padding-bottom:32px;border-bottom:1px solid var(--border)}
+.back-link{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:24px;display:inline-block}
+.back-link:hover{color:var(--accent)}
+.article-meta{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:16px;display:flex;gap:16px}
+.article-category{color:var(--accent)}
+.article-title{font-family:'Cormorant',serif;font-size:clamp(36px,5vw,52px);font-weight:300;line-height:1.1;color:var(--white);margin-bottom:0;letter-spacing:-.01em}
 
-/* BLOG POST CARD */
-.post-card{border:1px solid var(--border);background:var(--bg2);padding:32px;margin-bottom:24px;border-radius:2px;transition:border-color .2s,background .2s;text-decoration:none;display:block}
-.post-card:hover{border-color:var(--border2);background:var(--bg3)}
-.post-meta{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:12px;display:flex;gap:16px}
-.post-category{color:var(--accent)}
-.post-title{font-family:'Cormorant',serif;font-size:28px;font-weight:400;color:var(--white);margin-bottom:8px;line-height:1.2}
-.post-summary{font-size:15px;color:var(--subtle);line-height:1.6}
+/* ARTICLE CONTENT */
+.article-content{font-family:'Cormorant',serif;font-size:18px;line-height:1.75;color:var(--body)}
+.article-content h2{font-family:'Cormorant',serif;font-size:32px;font-weight:400;color:var(--white);margin:48px 0 20px;line-height:1.2}
+.article-content h3{font-family:'Syne',sans-serif;font-size:20px;font-weight:600;color:var(--bright);margin:36px 0 16px}
+.article-content p{margin-bottom:20px;font-weight:300}
+.article-content strong{color:var(--bright);font-weight:600}
+.article-content em{font-style:italic;color:var(--subtle)}
+.article-content code{font-family:'DM Mono',monospace;font-size:14px;color:var(--accent);background:var(--bg3);padding:2px 8px;border-radius:2px;border:1px solid var(--border)}
+.article-content pre{background:var(--bg3);border:1px solid var(--border);border-radius:2px;padding:20px 24px;overflow-x:auto;margin:24px 0}
+.article-content pre code{background:none;border:none;padding:0;font-size:13px;line-height:1.6;color:var(--body);display:block}
+.article-content ul,.article-content ol{margin:16px 0 24px;padding-left:28px}
+.article-content li{margin-bottom:8px;font-weight:300}
+
+/* CALLOUT */
+.callout{border-left:3px solid var(--accent2);padding:20px 24px;background:var(--bg2);margin:28px 0;border-radius:0 2px 2px 0}
+.callout p{margin-bottom:12px}
+.callout p:last-child{margin-bottom:0}
 
 /* FOOTER */
 footer{position:relative;z-index:1;border-top:1px solid var(--border);background:var(--bg);margin-top:80px}
@@ -112,10 +125,11 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   .nav-links{display:none}
   .hamburger{display:flex}
   .mobile-menu{display:block;top:56px}
-  .blog-container{padding:80px 24px 60px}
-  .blog-title{font-size:40px}
-  .post-card{padding:24px}
-  .post-title{font-size:24px}
+  .article-container{padding:80px 24px 60px}
+  .article-title{font-size:32px}
+  .article-content{font-size:17px}
+  .article-content h2{font-size:28px}
+  .article-content h3{font-size:18px}
   .footer-inner{flex-direction:column;text-align:center}
   .footer-links{justify-content:center}
 }
@@ -228,10 +242,10 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
         </div>
       </div>
     </li>
+    <li><a href="../network.html">Live Network</a></li>
     <li><a href="../explorer.html">Explorer</a></li>
     <li><a href="index.html" class="active">Blog</a></li>
     <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
-    <li><a href="../network.html" class="nav-cta">Live Network</a></li>
     <li><a href="../dashboard.html" class="nav-cta">Dashboard</a></li>
   </ul>
   <button id="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"></button>
@@ -256,28 +270,98 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   </ul>
 </div>
 
-<!-- BLOG CONTAINER -->
-<div class="blog-container">
-  <!-- POST CARDS -->
-  <a href="2026-03-jepsen-chaos-testing.html" class="post-card">
-    <div class="post-meta">
-      <span class="post-category">Testing</span>
-      <span>March 11, 2026</span>
-    </div>
-    <h2 class="post-title">Chaos Testing Found a Consensus Safety Bug</h2>
-    <p class="post-summary">How Jepsen-style chaos testing found a critical finality conflict bug in partition recovery before mainnet launch.</p>
-  </a>
-
-  <a href="2026-03-checkpoint-tofu.html" class="post-card">
-    <div class="post-meta">
-      <span class="post-category">Security</span>
+<!-- ARTICLE -->
+<article class="article-container">
+  <header class="article-header">
+    <a href="index.html" class="back-link">← Back to Blog</a>
+    <div class="article-meta">
+      <span class="article-category">Security</span>
       <span>March 2026</span>
     </div>
-    <h2 class="post-title">Fixing a Trust-On-First-Use Vulnerability in Checkpoint Sync</h2>
-    <p class="post-summary">How we discovered and fixed a critical vulnerability where new nodes blindly trusted checkpoint state from the first peer they connected to.</p>
-  </a>
+    <h1 class="article-title">Fixing a Trust-On-First-Use Vulnerability in Checkpoint Sync</h1>
+  </header>
 
-</div>
+  <div class="article-content">
+    <p>UltraDAG's checkpoint fast-sync mechanism allows new nodes to join the network without replaying the entire transaction history from genesis. Instead of processing thousands of rounds, a fresh node downloads a recent state snapshot—a checkpoint—verified by a quorum of validator co-signatures. This reduces sync time from hours to seconds.</p>
+
+    <p>But there was a problem. A critical one.</p>
+
+    <h2>The Vulnerability</h2>
+
+    <p>A fresh node with no prior knowledge of the network accepted checkpoint state from the first peer it connected to. That peer could supply an arbitrary validator set and state root. The node had no way to verify the checkpoint was legitimate because it had no anchor to compare against.</p>
+
+    <p>This is the classic <strong>Trust-On-First-Use (TOFU)</strong> problem. The first contact defines reality. If that first contact is malicious, the node builds its entire worldview on a lie.</p>
+
+    <p>In concrete terms: an attacker could spin up a node, connect to a fresh victim node before any honest peer did, and feed it a checkpoint with a forged validator set controlled entirely by the attacker. The victim would accept it, apply the state, and from that point forward operate on a completely fabricated chain. No amount of honest peers connecting later could fix this—the damage was done at first contact.</p>
+
+    <h2>How We Found It</h2>
+
+    <p>During a structured consensus review of the codebase, the reviewer flagged the checkpoint bootstrap path as a mainnet blocker. The question was simple: "What prevents a malicious peer from feeding false checkpoint data to a new node?"</p>
+
+    <p>The answer was: nothing.</p>
+
+    <p>The checkpoint had validator signatures, yes. But those signatures only proved that <em>some</em> set of validators signed it. A new node had no way to know if those validators were the legitimate ones or a fabricated set created by an attacker.</p>
+
+    <h2>The Fix</h2>
+
+    <p>We implemented a two-part solution that chains checkpoints back to genesis and anchors the entire history to a hardcoded constant.</p>
+
+    <h3>Part 1: Checkpoint Chain</h3>
+
+    <p>We added a <code>prev_checkpoint_hash</code> field to the <code>Checkpoint</code> struct. Each checkpoint now includes the blake3 hash of the previous checkpoint, forming an immutable chain back to genesis:</p>
+
+    <pre><code>pub struct Checkpoint {
+    pub round: u64,
+    pub state_root: [u8; 32],
+    pub validator_set_hash: [u8; 32],
+    pub prev_checkpoint_hash: [u8; 32],  // ← Added
+    pub signatures: Vec&lt;Signature&gt;,
+}</code></pre>
+
+    <p>This means you can't forge a single checkpoint in isolation. To create a fake checkpoint at round 10,000, you'd need to forge the entire chain of 100 checkpoints (assuming checkpoints every 100 rounds) back to genesis. Each hash depends on the previous, so breaking one link breaks the entire chain.</p>
+
+    <h3>Part 2: Genesis Anchor</h3>
+
+    <p>The checkpoint chain alone isn't enough. An attacker could still create a complete forged chain starting from a fake genesis. We need an anchor—a known-good starting point.</p>
+
+    <p>We added <code>GENESIS_CHECKPOINT_HASH</code>, a constant hardcoded into every binary. It's the blake3 hash of the genesis state, computed deterministically from the initial validator set and zero balances:</p>
+
+    <pre><code>pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
+    0x8f, 0x43, 0x7e, 0x9a, 0x2c, 0x15, 0xb8, 0x6d,
+    0x4a, 0x91, 0x3f, 0x72, 0xe5, 0xc8, 0x0b, 0x94,
+    0x1d, 0x6a, 0x47, 0x23, 0x8e, 0x5c, 0x9f, 0x31,
+    0x7b, 0xa4, 0x68, 0x2e, 0xd1, 0x95, 0x3a, 0xf6,
+];</code></pre>
+
+    <p>During fast-sync, the receiving node walks the checkpoint chain backward using <code>prev_checkpoint_hash</code> until it reaches the genesis checkpoint (round 0). It then verifies that the genesis checkpoint's hash matches <code>GENESIS_CHECKPOINT_HASH</code>.</p>
+
+    <p>If the hashes match, the entire chain is valid. If they don't match, the checkpoint is rejected, and the node tries a different peer.</p>
+
+    <div class="callout">
+      <p><strong>Key insight:</strong> A forged checkpoint must break the hash chain to succeed, which is cryptographically infeasible. The attacker would need to find a preimage for the genesis hash or break blake3—both considered computationally impossible.</p>
+    </div>
+
+    <h2>What This Means</h2>
+
+    <p>A new node joining the network now has the same trust guarantee as a node that has been running since genesis. The genesis hash is the anchor. No peer can feed a false history without breaking the chain, and breaking the chain requires breaking the hash function.</p>
+
+    <p>The TOFU problem is eliminated. First contact no longer defines reality—the hardcoded genesis hash does.</p>
+
+    <h2>Lesson Learned</h2>
+
+    <p>Checkpoint bootstrap paths deserve the same scrutiny as the consensus path itself. New nodes are uniquely vulnerable because they have no local state to compare against. Any system that accepts state from untrusted peers on first contact should have a hardcoded anchor.</p>
+
+    <p>In our case, that anchor is the genesis checkpoint hash. It's 32 bytes that prevent an entire class of attacks.</p>
+
+    <h2>Timeline</h2>
+
+    <p>The vulnerability was discovered and fixed in the same review session. No mainnet exposure—this was caught during testnet development. No real funds were at risk.</p>
+
+    <p>The fix has been deployed to testnet and will be part of the mainnet launch. Every node binary now ships with the genesis checkpoint hash baked in.</p>
+
+    <p>Fast-sync is now safe for production.</p>
+  </div>
+</article>
 
 <!-- FOOTER -->
 <footer>
@@ -369,6 +453,5 @@ window.addEventListener('scroll', () => {
 });
 </script>
 
-<script src="../theme-switcher.js"></script>
 </body>
 </html>

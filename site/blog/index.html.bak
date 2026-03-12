@@ -369,6 +369,5 @@ window.addEventListener('scroll', () => {
 });
 </script>
 
-<script src="../theme-switcher.js"></script>
 </body>
 </html>

@@ -11,6 +11,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%233d9be9' stroke-width='2'/%3E%3Ccircle cx='50' cy='50' r='15' fill='%233d9be9'/%3E%3C/svg%3E">
 <title>Documentation — UltraDAG</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="theme.css">
 <style>
 /* ── Reset & base ─────────────────────────────────────────────────────── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -583,6 +584,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <li><a href="network.html" class="nav-cta">Live Network</a></li>
     <li><a href="dashboard.html" class="nav-cta">Dashboard</a></li>
   </ul>
+  <button id="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"></button>
   <button class="hamburger" id="hamburger" aria-label="Menu">
     <span></span>
     <span></span>
@@ -1628,5 +1630,6 @@ if (hamburger && mobileMenu) {
 }
 </script>
 <script src="js/docs-playground.js"></script>
+<script src="theme-switcher.js"></script>
 </body>
 </html>

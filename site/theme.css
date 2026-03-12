@@ -1,0 +1,88 @@
+/* UltraDAG Theme System - Dark & Light Mode */
+
+/* Dark Mode (Default) */
+:root {
+  --bg: #0a0e1a;
+  --bg2: #0e1322;
+  --bg3: #131a2b;
+  --border: #1a2540;
+  --border2: #223050;
+  --dim: #2e4060;
+  --muted: #4a6488;
+  --subtle: #7090b8;
+  --body: #94b8d8;
+  --bright: #c8e0f4;
+  --white: #edf4fb;
+  --accent: #3d9be9;
+  --accent2: #1a6fb5;
+  --glow: rgba(61, 155, 233, 0.15);
+  --glow2: rgba(61, 155, 233, 0.06);
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --green: #34d399;
+  --red: #f87171;
+  --yellow: #fbbf24;
+}
+
+/* Light Mode */
+[data-theme='light'] {
+  --bg: #f8f9fc;
+  --bg2: #ffffff;
+  --bg3: #f0f2f7;
+  --border: #d4dae6;
+  --border2: #c1c9d9;
+  --dim: #8b95a8;
+  --muted: #6b7689;
+  --subtle: #4a5568;
+  --body: #2d3748;
+  --bright: #1a202c;
+  --white: #0f1419;
+  --accent: #2b7ec1;
+  --accent2: #1e5a8f;
+  --glow: rgba(43, 126, 193, 0.15);
+  --glow2: rgba(43, 126, 193, 0.06);
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --green: #10b981;
+  --red: #ef4444;
+  --yellow: #f59e0b;
+}
+
+/* Theme Toggle Button */
+#theme-toggle {
+  background: rgba(61, 155, 233, 0.08);
+  border: 1px solid rgba(61, 155, 233, 0.25);
+  color: var(--white);
+  padding: 8px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.2s ease;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 40px;
+}
+
+#theme-toggle:hover {
+  background: rgba(61, 155, 233, 0.15);
+  border-color: rgba(61, 155, 233, 0.4);
+  box-shadow: 0 0 12px rgba(61, 155, 233, 0.15);
+  transform: translateY(-1px);
+}
+
+/* Smooth transitions for theme changes */
+body,
+nav,
+.nav-links a,
+.stat-card,
+.table,
+.detail-card,
+.search-input,
+button {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}

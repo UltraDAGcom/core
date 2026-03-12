@@ -2866,6 +2866,5 @@ if (sendMemo) {
   </div>
 </footer>
 
-<script src="theme-switcher.js"></script>
 </body>
 </html>
