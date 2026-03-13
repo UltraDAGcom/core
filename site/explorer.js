@@ -63,10 +63,24 @@ function timeAgo(timestamp) {
 // Fetch network status
 async function fetchStatus() {
   try {
-    // Try all nodes in parallel like the homepage
+    // Fast path: try primary node first with short timeout
+    const primaryResult = await Promise.race([
+      fetch(NODES[0] + '/status', { signal: AbortSignal.timeout(1000) })
+        .then(r => r.json())
+        .then(data => ({ url: NODES[0], data }))
+        .catch(() => null),
+      new Promise(resolve => setTimeout(() => resolve(null), 1000))
+    ]);
+    
+    // If primary node responds quickly, show data immediately
+    if (primaryResult) {
+      updateUIWithData(primaryResult.data, primaryResult.url);
+    }
+    
+    // Then try all nodes to get the best data
     const results = await Promise.allSettled(
       NODES.map(url =>
-        fetch(url + '/status', { signal: AbortSignal.timeout(4000) })
+        fetch(url + '/status', { signal: AbortSignal.timeout(3000) })
           .then(r => r.json())
           .then(data => ({ url, data }))
       )
@@ -89,33 +103,37 @@ async function fetchStatus() {
     if (bestResult) {
       const { url, data } = bestResult;
       API_URL = url; // Update to use the best node
-      
-      currentRound = data.dag_round;
-      
-      // Update UI elements
-      document.getElementById('latest-round').textContent = data.dag_round.toLocaleString();
-      document.getElementById('dag-finalized').textContent = (data.last_finalized_round || 0).toLocaleString();
-      document.getElementById('total-vertices').textContent = data.dag_vertices?.toLocaleString() || '--';
-      document.getElementById('total-supply').textContent = formatUdag(data.total_supply || 0);
-      document.getElementById('active-accounts').textContent = data.active_accounts?.toLocaleString() || '--';
-      
-      updateNetworkHealth(data);
-      
+      updateUIWithData(data, url);
       return data;
-    } else if (!gotAny) {
-      console.error('All nodes unreachable');
-      // Show offline state
-      document.getElementById('latest-round').textContent = '--';
-      document.getElementById('dag-finalized').textContent = '--';
-      document.getElementById('total-vertices').textContent = '--';
-      document.getElementById('total-supply').textContent = '--';
-      document.getElementById('active-accounts').textContent = '--';
-      updateNetworkHealth(null);
+    } else if (!gotAny && !primaryResult) {
+      showLoadingError();
     }
   } catch (error) {
     console.error('Failed to fetch status:', error);
-    updateNetworkHealth(null);
+    showLoadingError();
   }
+}
+
+function showLoadingError() {
+  document.getElementById('latest-round').textContent = '--';
+  document.getElementById('dag-finalized').textContent = '--';
+  document.getElementById('total-vertices').textContent = '--';
+  document.getElementById('total-supply').textContent = '--';
+  document.getElementById('active-accounts').textContent = '--';
+  updateNetworkHealth(null);
+}
+
+function updateUIWithData(data, nodeUrl) {
+  currentRound = data.dag_round;
+  
+  // Update UI elements
+  document.getElementById('latest-round').textContent = data.dag_round.toLocaleString();
+  document.getElementById('dag-finalized').textContent = (data.last_finalized_round || 0).toLocaleString();
+  document.getElementById('total-vertices').textContent = data.dag_vertices?.toLocaleString() || '--';
+  document.getElementById('total-supply').textContent = formatUdag(data.total_supply || 0);
+  document.getElementById('active-accounts').textContent = data.active_accounts?.toLocaleString() || '--';
+  
+  updateNetworkHealth(data);
 }
 
 // Update stat with change indicator
