@@ -1,7 +1,13 @@
 // UltraDAG Block Explorer
 // Fetches and displays real network data
 
-const API_URL = 'https://ultradag-node-1.fly.dev';
+const NODES = [
+  'https://ultradag-node-1.fly.dev',
+  'https://ultradag-node-2.fly.dev',
+  'https://ultradag-node-3.fly.dev',
+  'https://ultradag-node-4.fly.dev'
+];
+let API_URL = NODES[0]; // Will be updated to best node
 
 // State
 let currentRound = 0;
@@ -57,25 +63,55 @@ function timeAgo(timestamp) {
 // Fetch network status
 async function fetchStatus() {
   try {
-    const response = await fetch(`${API_URL}/status`);
-    const data = await response.json();
+    // Try all nodes in parallel like the homepage
+    const results = await Promise.allSettled(
+      NODES.map(url =>
+        fetch(url + '/status', { signal: AbortSignal.timeout(4000) })
+          .then(r => r.json())
+          .then(data => ({ url, data }))
+      )
+    );
     
-    currentRound = data.dag_round;
-    lastUpdateTime = Date.now();
+    // Find the best successful response
+    let bestResult = null;
+    let gotAny = false;
     
-    // Track stats for history
-    trackStats(data);
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        gotAny = true;
+        const { url, data } = result.value;
+        if (!bestResult || data.dag_round > bestResult.data.dag_round) {
+          bestResult = result.value;
+        }
+      }
+    }
     
-    // Update stats with change indicators
-    updateStatWithChange('latest-round', data.dag_round);
-    updateStatWithChange('total-vertices', data.dag_vertices);
-    document.getElementById('total-supply').textContent = formatUdag(data.total_supply);
-    document.getElementById('account-count').textContent = data.account_count.toLocaleString();
-    
-    // Update network health indicator
-    updateNetworkHealth(data);
-    
-    return data;
+    if (bestResult) {
+      const { url, data } = bestResult;
+      API_URL = url; // Update to use the best node
+      
+      currentRound = data.dag_round;
+      
+      // Update UI elements
+      document.getElementById('latest-round').textContent = data.dag_round.toLocaleString();
+      document.getElementById('dag-finalized').textContent = (data.last_finalized_round || 0).toLocaleString();
+      document.getElementById('total-vertices').textContent = data.dag_vertices?.toLocaleString() || '--';
+      document.getElementById('total-supply').textContent = formatUdag(data.total_supply || 0);
+      document.getElementById('active-accounts').textContent = data.active_accounts?.toLocaleString() || '--';
+      
+      updateNetworkHealth(data);
+      
+      return data;
+    } else if (!gotAny) {
+      console.error('All nodes unreachable');
+      // Show offline state
+      document.getElementById('latest-round').textContent = '--';
+      document.getElementById('dag-finalized').textContent = '--';
+      document.getElementById('total-vertices').textContent = '--';
+      document.getElementById('total-supply').textContent = '--';
+      document.getElementById('active-accounts').textContent = '--';
+      updateNetworkHealth(null);
+    }
   } catch (error) {
     console.error('Failed to fetch status:', error);
     updateNetworkHealth(null);

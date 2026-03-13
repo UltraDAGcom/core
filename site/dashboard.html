@@ -828,6 +828,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
       <div class="status-chip" id="statusChip">
         <div class="status-dot" id="statusDot"></div>
         <span id="statusText">Offline</span>
+        <span id="backupIndicator" style="display:none; color: var(--warning); margin-left: 4px;" title="Connected to backup node">⚠️</span>
       </div>
       <button class="lock-btn" id="lockBtn" onclick="toggleLock()" style="display:none">Lock</button>
     </div>
@@ -2459,17 +2460,50 @@ function updateGovBadge(count) {
 // ========================================
 
 async function connectNode() {
-  nodeUrl = document.getElementById('nodeUrl').value.replace(/\/+$/,'');
-  try {
-    const res = await fetch(nodeUrl + '/status');
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    connected = true; lastStatus = data;
+  const primaryUrl = document.getElementById('nodeUrl').value.replace(/\/+$/,'');
+  const NODES = [
+    'https://ultradag-node-1.fly.dev',
+    'https://ultradag-node-2.fly.dev',
+    'https://ultradag-node-3.fly.dev',
+    'https://ultradag-node-4.fly.dev'
+  ];
+  
+  // Try all nodes in parallel like the homepage
+  const results = await Promise.allSettled(
+    NODES.map(url =>
+      fetch(url + '/status', { signal: AbortSignal.timeout(4000) })
+        .then(r => r.json())
+        .then(data => ({ url, data }))
+    )
+  );
+  
+  // Find the best successful response
+  let bestResult = null;
+  let gotAny = false;
+  
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      gotAny = true;
+      const { url, data } = result.value;
+      if (!bestResult || data.round > bestResult.data.round) {
+        bestResult = result.value;
+      }
+    }
+  }
+  
+  if (bestResult) {
+    const { url, data } = bestResult;
+    nodeUrl = url;
+    connected = true; 
+    lastStatus = data;
     updateConnectionUI(true);
     updateDagView(data);
     document.getElementById('dag-offline').style.display = 'none';
     document.getElementById('dag-content').style.display = '';
-    toast('Connected to ' + nodeUrl.replace(/^https?:\/\//,''), 'ok');
+    const displayName = url.replace(/^https?:\/\//,'');
+    const isBackup = url !== primaryUrl;
+    document.getElementById('backupIndicator').style.display = isBackup ? 'inline' : 'none';
+    toast('Connected to ' + displayName + (isBackup ? ' (backup)' : ''), 'ok');
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(pollStatus, 30000);
     if (dagPollTimer) clearInterval(dagPollTimer);
@@ -2480,20 +2514,63 @@ async function connectNode() {
     document.getElementById('gov-offline').style.display = 'none';
     document.getElementById('gov-content').style.display = '';
     loadGovernance();
-  } catch (e) {
+  } else {
     connected = false;
     updateConnectionUI(false);
-    toast('Connection failed: ' + e.message, 'err');
+    document.getElementById('backupIndicator').style.display = 'none';
+    toast(gotAny ? 'All nodes returned invalid data.' : 'All nodes unreachable. Please check your connection.', 'err');
   }
 }
 
 async function pollStatus() {
   if (!connected) return;
+  
+  // Try current node first
   try {
     const data = await (await fetch(nodeUrl + '/status')).json();
     lastStatus = data;
     if (keystore) { renderWalletList(); refreshPortfolio(); }
-  } catch { connected = false; updateConnectionUI(false); }
+  } catch { 
+    // Current node failed, try all nodes in parallel
+    const NODES = [
+      'https://ultradag-node-1.fly.dev',
+      'https://ultradag-node-2.fly.dev',
+      'https://ultradag-node-3.fly.dev',
+      'https://ultradag-node-4.fly.dev'
+    ];
+    
+    const results = await Promise.allSettled(
+      NODES.map(url =>
+        fetch(url + '/status', { signal: AbortSignal.timeout(4000) })
+          .then(r => r.json())
+          .then(data => ({ url, data }))
+      )
+    );
+    
+    let bestResult = null;
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        const { url, data } = result.value;
+        if (!bestResult || data.round > bestResult.data.round) {
+          bestResult = result.value;
+        }
+      }
+    }
+    
+    if (bestResult) {
+      const { url, data } = bestResult;
+      nodeUrl = url;
+      lastStatus = data;
+      updateDagView(data);
+      const isBackup = url !== document.getElementById('nodeUrl').value.replace(/\/+$/,'');
+      document.getElementById('backupIndicator').style.display = isBackup ? 'inline' : 'none';
+      if (keystore) { renderWalletList(); refreshPortfolio(); }
+    } else {
+      connected = false; 
+      updateConnectionUI(false);
+      document.getElementById('backupIndicator').style.display = 'none';
+    }
+  }
 }
 
 async function pollDag() {
@@ -2510,7 +2587,10 @@ async function pollDag() {
         loadFinalizedRounds();
       }
     }
-  } catch { connected = false; updateConnectionUI(false); }
+  } catch {
+    // Try to reconnect using the same logic as pollStatus
+    pollStatus();
+  }
 }
 
 function updateConnectionUI(ok) {
