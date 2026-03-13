@@ -599,25 +599,38 @@ let networkData = {
 
 // Fetch network status
 async function fetchNetworkStatus() {
+  console.log('Starting fetchNetworkStatus...');
   // Show loading state immediately
   showLoadingState();
   
   try {
     // Fast path: try primary node first with short timeout
+    console.log('Trying primary node:', NODES[0]);
     const primaryResult = await Promise.race([
       fetch(NODES[0] + '/status', { signal: AbortSignal.timeout(1000) })
-        .then(r => r.json())
-        .then(data => ({ url: NODES[0], data }))
-        .catch(() => null),
+        .then(r => {
+          console.log('Primary node responded:', r.status);
+          return r.json();
+        })
+        .then(data => {
+          console.log('Primary node data:', data);
+          return { url: NODES[0], data };
+        })
+        .catch(err => {
+          console.log('Primary node failed:', err);
+          return null;
+        }),
       new Promise(resolve => setTimeout(() => resolve(null), 1000))
     ]);
     
     // If primary node responds quickly, show data immediately
     if (primaryResult) {
+      console.log('Updating UI with primary data');
       updateUIWithData(primaryResult.data, primaryResult.url);
     }
     
     // Then try all nodes to get the best data
+    console.log('Trying all nodes...');
     const results = await Promise.allSettled(
       NODES.map(url =>
         fetch(url + '/status', { signal: AbortSignal.timeout(3000) })
@@ -625,6 +638,8 @@ async function fetchNetworkStatus() {
           .then(data => ({ url, data }))
       )
     );
+    
+    console.log('All nodes results:', results);
     
     // Find the best successful response
     let bestResult = null;
@@ -634,6 +649,7 @@ async function fetchNetworkStatus() {
       if (result.status === 'fulfilled') {
         gotAny = true;
         const { url, data } = result.value;
+        console.log(`Node ${url} responded with round ${data.dag_round}`);
         if (!bestResult || data.dag_round > bestResult.data.dag_round) {
           bestResult = result.value;
         }
@@ -642,11 +658,13 @@ async function fetchNetworkStatus() {
     
     if (bestResult) {
       const { url, data } = bestResult;
+      console.log('Best node:', url, 'round:', data.dag_round);
       API_URL = url; // Update to use the best node
       
       // Update UI with best data (might be same as initial data)
       updateUIWithData(data, url);
     } else if (!gotAny && !primaryResult) {
+      console.log('No nodes responded at all');
       showErrorState();
     }
     
@@ -658,13 +676,18 @@ async function fetchNetworkStatus() {
 
 // Helper functions for UI states
 function showLoadingState() {
-  document.getElementById('current-round').innerHTML = '<span style="opacity:0.5">Loading...</span>';
-  document.getElementById('dag-finalized').innerHTML = '<span style="opacity:0.5">Loading...</span>';
-  document.getElementById('active-validators').innerHTML = '<span style="opacity:0.5">Loading...</span>';
-  document.getElementById('nodes-producing').innerHTML = '<span style="opacity:0.5">Loading...</span>';
-  document.getElementById('avg-finality').innerHTML = '<span style="opacity:0.5">Loading...</span>';
-  document.getElementById('total-supply').innerHTML = '<span style="opacity:0.5">Loading...</span>';
-  document.getElementById('peer-count').innerHTML = '<span style="opacity:0.5">Loading...</span>';
+  // Only show loading if not already showing loading
+  const elements = [
+    'current-round', 'dag-finalized', 'active-validators', 
+    'nodes-producing', 'avg-finality', 'total-supply', 'peer-count'
+  ];
+  
+  elements.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && !el.textContent.includes('Loading...')) {
+      el.innerHTML = '<span style="opacity:0.5">Loading...</span>';
+    }
+  });
 }
 
 function showErrorState() {
@@ -678,12 +701,37 @@ function showErrorState() {
 }
 
 function updateUIWithData(data, nodeUrl) {
+  console.log('updateUIWithData called with:', data, 'from:', nodeUrl);
+  
   networkData.round = data.dag_round || 0;
   networkData.finalityLag = (data.dag_round || 0) - (data.last_finalized_round || 0);
   
   // Update stats
-  document.getElementById('current-round').textContent = networkData.round.toLocaleString();
-  document.getElementById('validator-count').textContent = data.peer_count || 4;
+  const currentRoundEl = document.getElementById('current-round');
+  if (currentRoundEl) {
+    currentRoundEl.textContent = networkData.round.toLocaleString();
+    console.log('Updated current-round to:', networkData.round.toLocaleString());
+  } else {
+    console.error('current-round element not found');
+  }
+  
+  const dagFinalizedEl = document.getElementById('dag-finalized');
+  if (dagFinalizedEl) {
+    dagFinalizedEl.textContent = (data.last_finalized_round || 0).toLocaleString();
+    console.log('Updated dag-finalized to:', (data.last_finalized_round || 0).toLocaleString());
+  } else {
+    console.error('dag-finalized element not found');
+  }
+  
+  const activeValidatorsEl = document.getElementById('active-validators');
+  if (activeValidatorsEl) {
+    activeValidatorsEl.textContent = data.validator_count || 4;
+    console.log('Updated active-validators to:', data.validator_count || 4);
+  } else {
+    console.error('active-validators element not found');
+  }
+  
+  document.getElementById('nodes-producing').textContent = data.validator_count || 4;
   document.getElementById('peer-count').textContent = data.peer_count || 0;
   
   const totalSupply = data.total_supply || 0;
@@ -697,6 +745,8 @@ function updateUIWithData(data, nodeUrl) {
   
   // Update latency distribution
   updateLatencyChart();
+  
+  console.log('UI update completed');
 }
 
 // Fetch validators
