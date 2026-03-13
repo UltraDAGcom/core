@@ -565,7 +565,13 @@ window.addEventListener('scroll', () => {
 });
 
 // Configuration
-const API_URL = 'https://ultradag-node-1.fly.dev';
+const NODES = [
+  'https://ultradag-node-1.fly.dev',
+  'https://ultradag-node-2.fly.dev',
+  'https://ultradag-node-3.fly.dev',
+  'https://ultradag-node-4.fly.dev'
+];
+let API_URL = NODES[0]; // Will be updated to best node
 const REFRESH_INTERVAL = 5000; // 5 seconds
 
 // Mock validator locations (in production, this would come from API)
@@ -586,29 +592,62 @@ let networkData = {
 // Fetch network status
 async function fetchNetworkStatus() {
   try {
-    const response = await fetch(`${API_URL}/status`);
-    const data = await response.json();
+    // Try all nodes in parallel like the homepage
+    const results = await Promise.allSettled(
+      NODES.map(url =>
+        fetch(url + '/status', { signal: AbortSignal.timeout(4000) })
+          .then(r => r.json())
+          .then(data => ({ url, data }))
+      )
+    );
     
-    networkData.round = data.dag_round || 0;
-    networkData.finalityLag = (data.dag_round || 0) - (data.last_finalized_round || 0);
+    // Find the best successful response
+    let bestResult = null;
+    let gotAny = false;
     
-    // Update stats
-    document.getElementById('current-round').textContent = networkData.round.toLocaleString();
-    document.getElementById('validator-count').textContent = data.peer_count || 4;
-    document.getElementById('peer-count').textContent = data.peer_count || 0;
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        gotAny = true;
+        const { url, data } = result.value;
+        if (!bestResult || data.dag_round > bestResult.data.dag_round) {
+          bestResult = result.value;
+        }
+      }
+    }
     
-    const totalSupply = data.total_supply || 0;
-    const supplyInUDAG = Math.floor(totalSupply / 100);
-    document.getElementById('total-supply').textContent = supplyInUDAG.toLocaleString();
-    
-    // Calculate finality lag
-    const finalityLag = (data.dag_round || 0) - (data.last_finalized_round || 0);
-    const avgFinality = finalityLag * 5; // Approximate: 5 seconds per round
-    document.getElementById('avg-finality').textContent = avgFinality.toFixed(1) + 's';
-    
-    
-    // Update latency distribution
-    updateLatencyChart();
+    if (bestResult) {
+      const { url, data } = bestResult;
+      API_URL = url; // Update to use the best node
+      
+      networkData.round = data.dag_round || 0;
+      networkData.finalityLag = (data.dag_round || 0) - (data.last_finalized_round || 0);
+      
+      // Update stats
+      document.getElementById('current-round').textContent = networkData.round.toLocaleString();
+      document.getElementById('validator-count').textContent = data.peer_count || 4;
+      document.getElementById('peer-count').textContent = data.peer_count || 0;
+      
+      const totalSupply = data.total_supply || 0;
+      const supplyInUDAG = Math.floor(totalSupply / 100);
+      document.getElementById('total-supply').textContent = supplyInUDAG.toLocaleString();
+      
+      // Calculate finality lag
+      const finalityLag = (data.dag_round || 0) - (data.last_finalized_round || 0);
+      const avgFinality = finalityLag * 5; // Approximate: 5 seconds per round
+      document.getElementById('avg-finality').textContent = avgFinality.toFixed(1) + 's';
+      
+      
+      // Update latency distribution
+      updateLatencyChart();
+    } else if (!gotAny) {
+      console.error('All nodes unreachable');
+      // Show offline state
+      document.getElementById('current-round').textContent = '--';
+      document.getElementById('validator-count').textContent = '--';
+      document.getElementById('peer-count').textContent = '--';
+      document.getElementById('avg-finality').textContent = '--';
+      document.getElementById('total-supply').textContent = '--';
+    }
     
   } catch (error) {
     console.error('Failed to fetch network status:', error);
