@@ -76,8 +76,10 @@ impl GovernanceParams {
                 self.voting_period_rounds = value;
             }
             "execution_delay_rounds" => {
-                if value < 100 {
-                    return Err("execution_delay_rounds must be >= 100".to_string());
+                // Hard floor matches UNSTAKE_COOLDOWN_ROUNDS (2,016 rounds / ~2.8 hours).
+                // Prevents coordinated attacks from executing before community notices.
+                if value < 2016 {
+                    return Err("execution_delay_rounds must be >= 2016".to_string());
                 }
                 self.execution_delay_rounds = value;
             }
