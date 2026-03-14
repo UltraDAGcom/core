@@ -286,44 +286,62 @@ fn test_block_reward_geometric_series_converges() {
 
 #[test]
 fn test_deterministic_tiebreaking_in_active_set_selection() {
+    use ultradag_coin::constants::COUNCIL_MIN_STAKE;
+    use ultradag_coin::tx::stake::MIN_STAKE_SATS;
     let mut state = StateEngine::new_with_genesis();
+
+    // Create 21 council members (maximum)
+    let council_members: Vec<SecretKey> = (0..21).map(|_| SecretKey::generate()).collect();
     
-    let validators: Vec<SecretKey> = (0..22).map(|_| SecretKey::generate()).collect();
-    
-    // Faucet has 1M UDAG, so credit 40K each to 22 validators = 880K total
-    for sk in &validators {
-        state.faucet_credit(&sk.address(), 40_000 * COIN).unwrap();
-        let stake_tx = make_stake_tx(sk, 10_000 * COIN, 0);
+    // Create 1 regular staker (to test open staking)
+    let regular_staker = SecretKey::generate();
+
+    // Add council members with high stake
+    for sk in &council_members {
+        state.credit(&sk.address(), COUNCIL_MIN_STAKE);
+        state.total_supply = state.total_supply.saturating_add(COUNCIL_MIN_STAKE);
+        let stake_tx = make_stake_tx(sk, COUNCIL_MIN_STAKE, 0);
         state.apply_stake_tx(&stake_tx).unwrap();
+        state.add_council_member(sk.address()).unwrap();
     }
-    
+
+    // Add regular staker with minimum stake
+    state.credit(&regular_staker.address(), MIN_STAKE_SATS);
+    state.total_supply = state.total_supply.saturating_add(MIN_STAKE_SATS);
+    let stake_tx = make_stake_tx(&regular_staker, MIN_STAKE_SATS, 0);
+    state.apply_stake_tx(&stake_tx).unwrap();
+    // Note: Not adding as council member - regular staker
+
     state.recalculate_active_set();
     let active1: Vec<_> = state.active_validators().to_vec();
 
     state.recalculate_active_set();
     let active2: Vec<_> = state.active_validators().to_vec();
 
-    assert_eq!(active1.len(), 21);
+    assert_eq!(active1.len(), 21); // Should have 21 validators (max)
     assert_eq!(active2.len(), 21);
     assert_eq!(active1, active2);
 }
 
 #[test]
 fn test_epoch_transition_with_exactly_21_stakers() {
+    use ultradag_coin::constants::COUNCIL_MIN_STAKE;
     let mut state = StateEngine::new_with_genesis();
-    
+
     let validators: Vec<SecretKey> = (0..21).map(|_| SecretKey::generate()).collect();
-    
-    // Faucet has 1M UDAG, so credit 40K each to 21 validators = 840K total
+
+    // Credit directly and add as council members
     for sk in &validators {
-        state.faucet_credit(&sk.address(), 40_000 * COIN).unwrap();
-        let stake_tx = make_stake_tx(sk, 10_000 * COIN, 0);
+        state.credit(&sk.address(), COUNCIL_MIN_STAKE);
+        state.total_supply = state.total_supply.saturating_add(COUNCIL_MIN_STAKE);
+        let stake_tx = make_stake_tx(sk, COUNCIL_MIN_STAKE, 0);
         state.apply_stake_tx(&stake_tx).unwrap();
+        state.add_council_member(sk.address()).unwrap();
     }
-    
+
     state.recalculate_active_set();
     let active = state.active_validators();
-    
+
     assert_eq!(active.len(), 21);
 }
 

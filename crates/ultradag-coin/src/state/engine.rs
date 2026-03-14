@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::address::Address;
 use crate::consensus::vertex::DagVertex;
@@ -45,7 +45,7 @@ pub struct StakeAccount {
 pub struct StateEngine {
     accounts: HashMap<Address, AccountState>,
     stake_accounts: HashMap<Address, StakeAccount>,
-    total_supply: u64,
+    pub total_supply: u64,
     /// Track the last finalized round we've applied
     pub last_finalized_round: Option<u64>,
     /// Epoch-frozen active validator set (top MAX_ACTIVE_VALIDATORS by stake).
@@ -602,19 +602,19 @@ impl StateEngine {
     }
 
     /// Recalculate the active validator set: top COUNCIL_MAX_MEMBERS by stake.
-    /// Only council members with >= COUNCIL_MIN_STAKE and not unstaking are eligible.
+    /// Anyone can stake and become a validator, but only council members can vote.
+    /// This enables community participation in staking rewards while keeping governance exclusive.
     /// 
-    /// COUNCIL OF 21: Restricts validator set to authorized council members only.
+    /// COUNCIL OF 21: Governance restricted to council, validation open to all stakers.
     /// WARNING: If the resulting set has fewer than MIN_ACTIVE_VALIDATORS,
     /// the system cannot guarantee BFT safety. This should be logged/monitored.
     pub fn recalculate_active_set(&mut self) {
         let mut eligible: Vec<(Address, u64)> = self.stake_accounts
             .iter()
             .filter(|(addr, s)| {
-                // Must be a council member
-                self.council_members.contains(addr) &&
-                // Must meet minimum stake requirement
-                s.staked >= crate::constants::COUNCIL_MIN_STAKE &&
+                // Anyone can be a validator (not just council members)
+                // Must meet minimum stake requirement (regular staking minimum)
+                s.staked >= crate::tx::stake::MIN_STAKE_SATS &&
                 // Must not be unstaking
                 s.unlock_at_round.is_none()
             })
@@ -623,14 +623,14 @@ impl StateEngine {
         
         // Sort by stake descending, then by address for determinism
         eligible.sort_by(|a, b| b.1.cmp(&a.1).then(a.0 .0.cmp(&b.0 .0)));
-        eligible.truncate(crate::constants::COUNCIL_MAX_MEMBERS);
+        eligible.truncate(crate::constants::MAX_ACTIVE_VALIDATORS);
         self.active_validator_set = eligible.into_iter().map(|(addr, _)| addr).collect();
         
         // Log warning if below minimum safe validator count
         if self.active_validator_set.len() < crate::constants::MIN_ACTIVE_VALIDATORS {
             // Using eprintln since tracing may not be available in this crate
             eprintln!(
-                "WARNING: Council validator count ({}) below minimum {} for BFT consensus",
+                "WARNING: Active validator count ({}) below minimum {} for BFT consensus",
                 self.active_validator_set.len(),
                 crate::constants::MIN_ACTIVE_VALIDATORS
             );
@@ -638,10 +638,11 @@ impl StateEngine {
     }
 
     /// Add a member to the Council of 21.
-    /// Only council members can validate and vote on governance.
+    /// Only council members can vote on governance proposals.
+    /// Council members have higher stake requirements (100K UDAG) for governance rights.
     pub fn add_council_member(&mut self, address: Address) -> Result<(), CoinError> {
         if self.council_members.len() >= crate::constants::COUNCIL_MAX_MEMBERS {
-            return Err(CoinError::InsufficientBalance("Council already at maximum capacity".to_string()));
+            return Err(CoinError::ValidationError("Council already at maximum capacity".to_string()));
         }
         self.council_members.insert(address);
         Ok(())
@@ -767,8 +768,8 @@ impl StateEngine {
             stake.staked = stake.staked.saturating_sub(slash_amount);
             // Slashed amount is burned (not credited anywhere)
             self.total_supply = self.total_supply.saturating_sub(slash_amount);
-            // Immediately remove from active set if below minimum stake
-            if stake.staked < MIN_STAKE_SATS {
+            // Immediately remove from active set if below council minimum stake
+            if stake.staked < crate::constants::COUNCIL_MIN_STAKE {
                 self.active_validator_set.retain(|a| a != addr);
             }
         }
@@ -802,7 +803,7 @@ impl StateEngine {
         Ok(())
     }
 
-    fn credit(&mut self, address: &Address, amount: u64) {
+    pub fn credit(&mut self, address: &Address, amount: u64) {
         let account = self.accounts.entry(*address).or_default();
         account.balance = account.balance.saturating_add(amount);
     }
@@ -968,7 +969,7 @@ impl StateEngine {
 
         // 7. COUNCIL OF 21: Only council members can vote
         if !self.is_council_member(&tx.from) {
-            return Err(CoinError::InsufficientBalance("Voting restricted to Council of 21 members".to_string()));
+            return Err(CoinError::ValidationError("Voting restricted to Council of 21 members".to_string()));
         }
 
         // 8. Vote weight = total staked amount.
@@ -1177,6 +1178,7 @@ impl StateEngine {
             next_proposal_id,
             governance_params,
             configured_validator_count,
+            council_members: HashSet::new(),
             tx_index: HashMap::new(),
             tx_index_order: VecDeque::new(),
         }
@@ -1223,6 +1225,7 @@ impl StateEngine {
             next_proposal_id: snapshot.next_proposal_id,
             governance_params: snapshot.governance_params,
             configured_validator_count: None,
+            council_members: HashSet::new(),
             tx_index: HashMap::new(),
             tx_index_order: VecDeque::new(),
         }
@@ -1654,12 +1657,13 @@ mod tests {
         let mut state = StateEngine::new();
         let sk = SecretKey::generate();
         let validator = sk.address();
-        
-        // Stake 1.5x MIN_STAKE_SATS so that after 50% slash (0.75x), it falls below minimum
-        let stake_amount = MIN_STAKE_SATS + MIN_STAKE_SATS / 2;
+
+        // Stake 1.5x COUNCIL_MIN_STAKE so that after 50% slash (0.75x), it falls below minimum
+        let council_min = crate::constants::COUNCIL_MIN_STAKE;
+        let stake_amount = council_min + council_min / 2;
         state.credit(&validator, stake_amount);
         state.total_supply = stake_amount; // Initialize total_supply
-        
+
         let stake_tx = StakeTx {
             from: validator,
             amount: stake_amount,
@@ -1670,8 +1674,9 @@ mod tests {
         let mut signed_stake = stake_tx.clone();
         signed_stake.signature = sk.sign(&stake_tx.signable_bytes());
         state.apply_stake_tx(&signed_stake).unwrap();
-        
-        // Add to active validator set
+
+        // Add as council member and recalculate active set
+        state.add_council_member(validator).unwrap();
         state.recalculate_active_set();
         assert!(state.is_active_validator(&validator), "Validator should be in active set before slash");
         
@@ -1680,7 +1685,7 @@ mod tests {
         
         // Verify removed from active set
         let stake_after = state.stake_of(&validator);
-        assert!(stake_after < MIN_STAKE_SATS, "Stake should fall below minimum after slash");
+        assert!(stake_after < crate::constants::COUNCIL_MIN_STAKE, "Stake should fall below minimum after slash");
         assert!(!state.is_active_validator(&validator), "Validator should be removed from active set after slash");
     }
 
@@ -1689,12 +1694,13 @@ mod tests {
         let mut state = StateEngine::new();
         let sk = SecretKey::generate();
         let validator = sk.address();
-        
-        // Stake 4x MIN_STAKE_SATS so that after 50% slash, it's still above minimum
-        let stake_amount = MIN_STAKE_SATS * 4;
+
+        // Stake 4x COUNCIL_MIN_STAKE so that after 50% slash, it's still above minimum
+        let council_min = crate::constants::COUNCIL_MIN_STAKE;
+        let stake_amount = council_min * 4;
         state.credit(&validator, stake_amount);
         state.total_supply = stake_amount; // Initialize total_supply
-        
+
         let stake_tx = StakeTx {
             from: validator,
             amount: stake_amount,
@@ -1705,18 +1711,19 @@ mod tests {
         let mut signed_stake = stake_tx.clone();
         signed_stake.signature = sk.sign(&stake_tx.signable_bytes());
         state.apply_stake_tx(&signed_stake).unwrap();
-        
-        // Add to active validator set
+
+        // Add as council member and recalculate active set
+        state.add_council_member(validator).unwrap();
         state.recalculate_active_set();
         assert!(state.is_active_validator(&validator), "Validator should be in active set before slash");
         
         // Execute slash
         state.slash(&validator);
         
-        // Verify still in active set (stake is 2x MIN_STAKE_SATS after 50% slash)
+        // Verify still in active set (stake is 2x COUNCIL_MIN_STAKE after 50% slash)
         let stake_after = state.stake_of(&validator);
-        assert_eq!(stake_after, MIN_STAKE_SATS * 2, "Stake should be 50% of original");
-        assert!(stake_after >= MIN_STAKE_SATS, "Stake should still be above minimum");
+        assert_eq!(stake_after, council_min * 2, "Stake should be 50% of original");
+        assert!(stake_after >= crate::constants::COUNCIL_MIN_STAKE, "Stake should still be above council minimum");
         // Note: is_active_validator might be false if active set wasn't recalculated,
         // but the important part is the validator wasn't explicitly removed by slash()
     }
