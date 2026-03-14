@@ -127,6 +127,12 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
         if let Some(cvc) = engine.configured_validator_count() {
             table.insert("configured_validator_count", cvc.to_le_bytes().as_slice())?;
         }
+
+        // Compute and store state root for integrity verification on reload.
+        // This catches silent corruption from disk errors, partial writes, or bugs.
+        let snapshot = engine.snapshot();
+        let state_root = crate::consensus::compute_state_root(&snapshot);
+        table.insert("state_root", state_root.as_slice())?;
     }
 
     txn.commit()?;
@@ -230,6 +236,36 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         governance_params,
         configured_validator_count,
     );
+
+    // Verify state integrity: recompute state root and compare against stored value.
+    // Catches silent corruption from disk errors, partial writes, or software bugs.
+    {
+        let stored_root: Option<[u8; 32]> = meta.get("state_root")?
+            .and_then(|v| {
+                let bytes = v.value();
+                if bytes.len() == 32 {
+                    let mut arr = [0u8; 32];
+                    arr.copy_from_slice(bytes);
+                    Some(arr)
+                } else {
+                    None
+                }
+            });
+
+        if let Some(expected) = stored_root {
+            let snapshot = engine.snapshot();
+            let computed = crate::consensus::compute_state_root(&snapshot);
+            if computed != expected {
+                return Err(PersistenceError::Serialization(format!(
+                    "State root mismatch after loading from redb: stored={:02x}{:02x}{:02x}{:02x}.. computed={:02x}{:02x}{:02x}{:02x}.. \
+                     Persisted state may be corrupted. Delete state.redb and restart with fast-sync.",
+                    expected[0], expected[1], expected[2], expected[3],
+                    computed[0], computed[1], computed[2], computed[3]
+                )));
+            }
+        }
+        // No stored root = legacy database from before this check was added; skip verification
+    }
 
     // Reconcile epoch after loading
     if let Some(round) = engine.last_finalized_round() {
