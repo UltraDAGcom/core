@@ -1,5 +1,5 @@
 #[test]
-fn print_genesis_hash() {
+fn genesis_hash_matches_constant() {
     let state = ultradag_coin::StateEngine::new_with_genesis();
     let snapshot = state.snapshot();
     let state_root = ultradag_coin::consensus::checkpoint::compute_state_root(&snapshot);
@@ -13,12 +13,21 @@ fn print_genesis_hash() {
         signatures: vec![],
     };
 
-    let hash = ultradag_coin::consensus::checkpoint::compute_checkpoint_hash(&genesis_checkpoint);
+    let computed = ultradag_coin::consensus::checkpoint::compute_checkpoint_hash(&genesis_checkpoint);
 
-    let hex: String = hash.iter().map(|b| format!("0x{:02x}", b)).collect::<Vec<_>>().join(", ");
-    println!("\nGENESIS_CHECKPOINT_HASH = [{}]", hex);
+    // Verify determinism
+    let computed2 = ultradag_coin::consensus::checkpoint::compute_checkpoint_hash(&genesis_checkpoint);
+    assert_eq!(computed, computed2, "Genesis hash must be deterministic");
 
-    // Verify consistency
-    let hash2 = ultradag_coin::consensus::checkpoint::compute_checkpoint_hash(&genesis_checkpoint);
-    assert_eq!(hash, hash2, "Genesis hash must be deterministic");
+    // Verify the hardcoded constant matches the computed value.
+    // If this fails, GENESIS_CHECKPOINT_HASH in constants.rs is stale —
+    // likely because genesis state changed (allocations, faucet amount, etc.).
+    // Update the constant with the printed value below.
+    let hex: String = computed.iter().map(|b| format!("0x{:02x}", b)).collect::<Vec<_>>().join(", ");
+    assert_eq!(
+        computed,
+        ultradag_coin::constants::GENESIS_CHECKPOINT_HASH,
+        "GENESIS_CHECKPOINT_HASH in constants.rs is stale! Computed: [{}]",
+        hex
+    );
 }

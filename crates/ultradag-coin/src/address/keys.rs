@@ -87,6 +87,10 @@ impl std::fmt::Display for Address {
 
 impl SecretKey {
     /// Generate a new random Ed25519 signing key.
+    ///
+    /// Uses `rand::thread_rng()` which delegates to the OS CSPRNG (getrandom).
+    /// This is suitable for testnet and tests. For mainnet key generation,
+    /// consider explicit CSPRNG sourcing with `OsRng` directly for auditability.
     pub fn generate() -> Self {
         let mut rng = rand::thread_rng();
         Self {

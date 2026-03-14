@@ -63,7 +63,8 @@ pub struct StateEngine {
     governance_params: crate::governance::GovernanceParams,
     /// Configured validator count for pre-staking reward splitting.
     /// When set, block reward is divided by this count in pre-staking mode.
-    /// Should match the --validators CLI flag.
+    /// Must match the --validators CLI flag AND `ValidatorSet::configured_validators`
+    /// (which uses `usize` for quorum math). Both are set together in main.rs.
     configured_validator_count: Option<u64>,
     /// Bounded index of finalized transaction hashes → their location in the DAG.
     /// Enables `/tx/{hash}` lookups without scanning the full DAG.
@@ -99,6 +100,55 @@ impl StateEngine {
 
     pub fn configured_validator_count(&self) -> Option<u64> {
         self.configured_validator_count
+    }
+
+    /// Compute the validator reward for a given proposer at a given round.
+    ///
+    /// This is the single source of truth for reward calculation, used by both
+    /// the validator loop (to produce correct coinbases) and apply_vertex_with_validators
+    /// (to validate them). Keeping reward logic in one place prevents drift between
+    /// production and validation — the most fragile coupling in the codebase.
+    ///
+    /// `active_validator_count` is the fallback divisor for pre-staking mode
+    /// (when no stake exists). It should come from the finality tracker's
+    /// configured_validators or the batch count.
+    pub fn compute_validator_reward(
+        &self,
+        proposer: &Address,
+        round: u64,
+        active_validator_count: u64,
+    ) -> u64 {
+        let total_round_reward = crate::constants::block_reward(round);
+        let total_stake = self.total_staked();
+        let own_stake = self.stake_of(proposer);
+
+        let base_reward = if total_stake > 0 && own_stake > 0 {
+            // Proportional to stake using u128 to avoid overflow
+            let proportional = ((total_round_reward as u128)
+                .saturating_mul(own_stake as u128)
+                / total_stake as u128) as u64;
+            // Observer penalty: staked but not in the active validator set
+            if !self.active_validator_set.is_empty()
+                && !self.active_validator_set.contains(proposer)
+            {
+                proportional * crate::constants::OBSERVER_REWARD_PERCENT / 100
+            } else {
+                proportional
+            }
+        } else {
+            // Pre-staking fallback: equal split among validators.
+            let n = self.configured_validator_count
+                .unwrap_or(active_validator_count.max(1));
+            total_round_reward / n.max(1)
+        };
+
+        // Supply cap enforcement
+        let max_supply = crate::constants::MAX_SUPPLY_SATS;
+        if self.total_supply.saturating_add(base_reward) > max_supply {
+            max_supply.saturating_sub(self.total_supply)
+        } else {
+            base_reward
+        }
     }
 
     /// Create a new StateEngine with genesis pre-funding.
@@ -190,50 +240,15 @@ impl StateEngine {
         let total_fees: u64 = vertex.block.transactions.iter()
             .map(|tx| tx.fee())
             .fold(0u64, |acc, x| acc.saturating_add(x));
-        // Use vertex.round as height for block_reward computation.
-        // This eliminates the TOCTOU between production time and application time:
-        // the validator computes reward from its local state, but state can advance
-        // between production and finalization. Using vertex.round is safe because:
-        // 1. Round is immutable once signed (can't be faked)
-        // 2. DAG rejects rounds outside [pruning_floor, current_round + 10]
-        // 3. Both producer and engine compute the same value deterministically
-        let expected_height = vertex.round;
-        let total_round_reward = crate::constants::block_reward(expected_height);
         let proposer = &vertex.block.coinbase.to;
-        let total_stake = self.total_staked();
-        let own_stake = self.stake_of(proposer);
 
-        let validator_reward = if total_stake > 0 && own_stake > 0 {
-            // Proportional to stake using u128 to avoid overflow
-            let base = ((total_round_reward as u128)
-                .saturating_mul(own_stake as u128)
-                / total_stake as u128) as u64;
-            // Observer penalty: staked but not in the active validator set
-            if !self.active_validator_set.is_empty()
-                && !self.active_validator_set.contains(proposer)
-            {
-                base * crate::constants::OBSERVER_REWARD_PERCENT / 100
-            } else {
-                base
-            }
-        } else {
-            // Pre-staking fallback: equal split among validators.
-            // Use configured_validator_count (from --validators N) when available,
-            // otherwise fall back to batch count. This ensures all nodes agree on
-            // the split regardless of finality batch size.
-            let n = self.configured_validator_count
-                .unwrap_or(active_validator_count.max(1));
-            total_round_reward / n.max(1)
-        };
-
-        // Supply cap enforcement: cap reward BEFORE coinbase validation
-        // so that the validator produces a coinbase matching the capped amount.
-        let max_supply = crate::constants::MAX_SUPPLY_SATS;
-        let capped_reward = if self.total_supply.saturating_add(validator_reward) > max_supply {
-            max_supply.saturating_sub(self.total_supply)
-        } else {
-            validator_reward
-        };
+        // Use the shared compute_validator_reward() — single source of truth for
+        // reward calculation, shared with validator.rs to prevent drift.
+        let capped_reward = self.compute_validator_reward(
+            proposer,
+            vertex.round,
+            active_validator_count,
+        );
 
         // Validate coinbase claims correct (capped) amount
         let expected_coinbase = capped_reward.saturating_add(total_fees);
@@ -262,13 +277,16 @@ impl StateEngine {
             // Verify signature
             if !tx.verify_signature() {
                 tracing::warn!("Skipping tx with invalid signature in finalized vertex");
-                // Undo the fee credit to proposer to maintain supply balance
+                // Undo the fee credit to proposer to maintain supply balance.
+                // Best-effort: proposer was just credited capped_reward + total_fees,
+                // so balance should always suffice. If it somehow doesn't (e.g. due to
+                // prior clawbacks exhausting the credit), log and continue rather than
+                // halting finality for the entire batch — finalized vertices can't be
+                // un-finalized, so a hard error here would deadlock state application.
                 let fee = tx.fee();
                 if fee > 0 {
                     if let Err(e) = self.debit(proposer, fee) {
-                        return Err(CoinError::ValidationError(format!(
-                            "Failed to debit proposer fee: {}", e
-                        )));
+                        tracing::error!("Fee clawback failed (invalid sig): {}. Supply may drift by {} sats.", e, fee);
                     }
                 }
                 continue;
@@ -282,9 +300,7 @@ impl StateEngine {
                 let fee = tx.fee();
                 if fee > 0 {
                     if let Err(e) = self.debit(proposer, fee) {
-                        return Err(CoinError::ValidationError(format!(
-                            "Failed to debit proposer fee for duplicate tx: {}", e
-                        )));
+                        tracing::error!("Fee clawback failed (bad nonce): {}. Supply may drift by {} sats.", e, fee);
                     }
                 }
                 tracing::warn!(
@@ -301,9 +317,7 @@ impl StateEngine {
                 let fee = tx.fee();
                 if fee > 0 {
                     if let Err(e) = self.debit(proposer, fee) {
-                        return Err(CoinError::ValidationError(format!(
-                            "Failed to debit proposer fee for insufficient balance: {}", e
-                        )));
+                        tracing::error!("Fee clawback failed (insufficient balance): {}. Supply may drift by {} sats.", e, fee);
                     }
                 }
                 self.increment_nonce(&tx.from());
@@ -370,9 +384,7 @@ impl StateEngine {
                     if let Err(e) = self.apply_create_proposal(proposal_tx, vertex.round) {
                         tracing::warn!("Skipping invalid CreateProposal tx in finalized vertex: {}", e);
                         if let Err(debit_err) = self.debit(&proposal_tx.from, proposal_tx.fee) {
-                            return Err(CoinError::ValidationError(format!(
-                                "Failed to debit proposal fee: {}", debit_err
-                            )));
+                            tracing::error!("Fee clawback failed (proposal): {}. Supply may drift by {} sats.", debit_err, proposal_tx.fee);
                         }
                         self.increment_nonce(&proposal_tx.from);
                     }
@@ -381,9 +393,7 @@ impl StateEngine {
                     if let Err(e) = self.apply_vote(vote_tx, vertex.round) {
                         tracing::warn!("Skipping invalid Vote tx in finalized vertex: {}", e);
                         if let Err(debit_err) = self.debit(&vote_tx.from, vote_tx.fee) {
-                            return Err(CoinError::ValidationError(format!(
-                                "Failed to debit vote fee: {}", debit_err
-                            )));
+                            tracing::error!("Fee clawback failed (vote): {}. Supply may drift by {} sats.", debit_err, vote_tx.fee);
                         }
                         self.increment_nonce(&vote_tx.from);
                     }

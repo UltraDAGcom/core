@@ -355,15 +355,17 @@ impl BlockDag {
         self.tips.iter().copied().collect()
     }
 
-    /// Select K parents from available tips using deterministic sampling.
-    /// If tips.len() <= K, returns all tips. Otherwise, selects K tips deterministically
-    /// based on the proposer's address (for reproducibility in tests/verification).
-    /// 
-    /// This enables unlimited validator scaling by keeping parent count bounded at K
-    /// regardless of the number of validators N. Follows Narwhal's approach.
-    /// Select up to `k` parent hashes from the given round using deterministic
-    /// blake3-based scoring. Uses `vertices_in_round(round)` — NOT `tips()` —
-    /// to create a dense DAG with cross-links for fast finality.
+    /// Select up to `k` parent hashes from `vertices_in_round(round)` using
+    /// deterministic blake3-based scoring. If fewer than `k` candidates exist,
+    /// returns all of them.
+    ///
+    /// Uses `vertices_in_round(round)` — NOT `tips()` — to reference ALL known
+    /// vertices from the previous round. This creates dense cross-links for fast
+    /// finality (Bug #5 fix: `tips()` returned only childless vertices, typically
+    /// just our own last vertex, creating parallel linear chains).
+    ///
+    /// Enables unlimited validator scaling by keeping parent count bounded at K
+    /// regardless of validator count N. Follows Narwhal's approach.
     pub fn select_parents(&self, proposer: &Address, round: u64, k: usize) -> Vec<[u8; 32]> {
         let candidates: Vec<[u8; 32]> = self.vertices_in_round(round)
             .iter()

@@ -10,6 +10,8 @@ pub struct ValidatorSet {
     /// Fixed expected validator count (testnet mode).
     /// When set, quorum threshold uses this instead of the dynamic count,
     /// preventing phantom registrations from inflating the threshold.
+    /// Must match `StateEngine::configured_validator_count` (which uses `u64`
+    /// for reward math). Both are set together from --validators N in main.rs.
     configured_validators: Option<usize>,
     /// Permissioned validator allowlist.
     /// When set, only addresses in this set can be registered as validators.

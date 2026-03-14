@@ -219,41 +219,14 @@ pub async fn validator_loop(
             dag_round, height, mempool_snap.len(), dag_tips.len(),
         );
 
-        // Compute per-validator reward for this round (capped at supply limit)
-        let total_round_reward = ultradag_coin::block_reward(height);
+        // Compute per-validator reward using the shared compute_validator_reward()
+        // in StateEngine — single source of truth, prevents drift between production
+        // and validation (the most fragile coupling in the codebase).
         let validator_reward = {
             let state = server.state.read().await;
-            let total_stake = state.total_staked();
-            let own_stake = state.stake_of(&validator);
-            let base_reward = if total_stake > 0 && own_stake > 0 {
-                // Proportional to stake
-                let proportional = ((total_round_reward as u128)
-                    .saturating_mul(own_stake as u128)
-                    / total_stake as u128) as u64;
-                // Observer penalty: staked but not in the active validator set
-                let active_set = state.active_validators();
-                if !active_set.is_empty() && !active_set.contains(&validator) {
-                    proportional * ultradag_coin::constants::OBSERVER_REWARD_PERCENT / 100
-                } else {
-                    proportional
-                }
-            } else {
-                // Pre-staking fallback: split block_reward equally among validators.
-                // Use configured_validators (--validators N) for deterministic agreement
-                // between all nodes.
-                let configured = server.finality.read().await
-                    .validator_set().configured_validators().unwrap_or(1) as u64;
-                let n = configured.max(1);
-                total_round_reward / n
-            };
-            // Cap at supply limit (must match StateEngine validation)
-            let max_supply = ultradag_coin::constants::MAX_SUPPLY_SATS;
-            let total_supply = state.total_supply();
-            if total_supply.saturating_add(base_reward) > max_supply {
-                max_supply.saturating_sub(total_supply)
-            } else {
-                base_reward
-            }
+            let configured = server.finality.read().await
+                .validator_set().configured_validators().unwrap_or(1) as u64;
+            state.compute_validator_reward(&validator, height, configured)
         };
 
         // Create block with transactions from mempool

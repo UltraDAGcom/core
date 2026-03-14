@@ -254,11 +254,11 @@ async fn test_rpc_rate_limiting() {
     let port = start_test_rpc().await;
     let client = http_client();
 
-    // The global rate limit is 100/min. Send 105 requests rapidly.
+    // The global rate limit is 1000/min (testnet). Send 1005 requests rapidly.
     let mut success_count = 0u32;
     let mut rate_limited_count = 0u32;
 
-    for _ in 0..105 {
+    for _ in 0..1005 {
         let resp = client
             .get(format!("http://127.0.0.1:{}/health", port))
             .send()
@@ -271,8 +271,8 @@ async fn test_rpc_rate_limiting() {
         }
     }
 
-    // Should have allowed exactly 100 and rate-limited some
-    assert!(success_count <= 100, "should not allow more than 100 requests in window");
+    // Should have allowed exactly 1000 and rate-limited some
+    assert!(success_count <= 1000, "should not allow more than 1000 requests in window");
     assert!(rate_limited_count >= 5, "should rate-limit excess requests, got {} limited", rate_limited_count);
 }
 

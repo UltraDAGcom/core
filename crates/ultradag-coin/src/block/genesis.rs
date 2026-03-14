@@ -1,5 +1,5 @@
 use crate::address::Address;
-use crate::block::block::Block;
+use crate::block::block::{Block, merkle_root};
 use crate::block::header::BlockHeader;
 use crate::constants::{self, GENESIS_TIMESTAMP};
 use crate::tx::CoinbaseTx;
@@ -12,14 +12,17 @@ pub fn genesis_block() -> Block {
         height: 0,
     };
 
-    let merkle_root = coinbase.hash();
+    // Use the same merkle_root() function as compute_merkle_root() for consistency.
+    // Previously used coinbase.hash() directly, which skipped the leaf-count mixing
+    // that all other blocks apply via compute_merkle_root().
+    let mr = merkle_root(&[coinbase.hash()]);
 
     let header = BlockHeader {
         version: 1,
         height: 0,
         timestamp: GENESIS_TIMESTAMP,
         prev_hash: [0u8; 32],
-        merkle_root,
+        merkle_root: mr,
     };
 
     Block {

@@ -93,17 +93,17 @@ fn test_connection_tracking() {
 
 #[test]
 fn test_predefined_limits() {
-    assert_eq!(limits::TX.requests_per_window, 10);
+    assert_eq!(limits::TX.requests_per_window, 100);
     assert_eq!(limits::TX.window_duration.as_secs(), 60);
-    
+
     assert_eq!(limits::FAUCET.requests_per_window, 1);
     assert_eq!(limits::FAUCET.window_duration.as_secs(), 5);
-    
+
     assert_eq!(limits::STAKE.requests_per_window, 5);
     assert_eq!(limits::UNSTAKE.requests_per_window, 5);
     assert_eq!(limits::PROPOSAL.requests_per_window, 5);
     assert_eq!(limits::VOTE.requests_per_window, 10);
-    assert_eq!(limits::GLOBAL.requests_per_window, 100);
+    assert_eq!(limits::GLOBAL.requests_per_window, 1000);
 }
 
 #[test]

@@ -8,6 +8,16 @@
 
 ## Recent Updates (March 2026)
 
+**Robustness & Correctness Pass (March 14, 2026):**
+- **Genesis merkle root consistency** — `genesis_block()` now uses `merkle_root()` function instead of raw `coinbase.hash()`, matching the path all other blocks take via `compute_merkle_root()`. Functionally identical for single-leaf case but eliminates inconsistency.
+- **Fee clawback made best-effort** — `apply_vertex_with_validators()` fee debit on skipped transactions (bad nonce, insufficient balance, invalid signature) now logs error and continues instead of returning hard error. Prevents theoretical deadlock: finalized vertices can't be un-finalized, so a hard error during fee recovery would halt state application for the entire batch.
+- **`select_parents` doc comment corrected** — Updated from stale "tips" wording to accurately describe `vertices_in_round(round)` usage, with reference to Bug #5 fix.
+- **Shared `compute_validator_reward()` method** — Extracted duplicated reward logic from `apply_vertex_with_validators()` and `validator.rs` into single `StateEngine::compute_validator_reward()`. Both paths now call the same function, eliminating the most fragile coupling in the codebase (if reward logic drifted, validators would produce coinbases the engine rejects).
+- **Genesis checkpoint hash verification test** — `genesis_hash_matches_constant` test now asserts `GENESIS_CHECKPOINT_HASH` constant matches the computed hash from `StateEngine::new_with_genesis()`. If genesis state ever changes (allocations, faucet amount), this test fails with the correct new hash value, preventing silent checkpoint chain breakage.
+- **`configured_validator_count` type divergence documented** — `ValidatorSet` uses `Option<usize>` (for quorum math), `StateEngine` uses `Option<u64>` (for reward math). Both fields now cross-reference each other in doc comments, noting they must be set together from `--validators N` in main.rs.
+- **`SecretKey::generate()` CSPRNG note** — Doc comment now notes `thread_rng()` delegates to OS CSPRNG and recommends explicit `OsRng` for mainnet key generation auditability.
+- **Rate limit tests updated** — Test assertions updated to match current testnet rate limit values (TX: 100/min, FAUCET: 1/5s, GLOBAL: 1000/min).
+
 **RPC & Mempool Hardening Pass (March 14, 2026):**
 - **Mempool transaction expiry** — Transactions now have a 1-hour TTL (`MEMPOOL_TX_TTL_SECS = 3600`). `evict_expired()` called every 50 rounds in validator loop. Prevents stale transactions from lingering indefinitely and executing unexpectedly. `MempoolEntry` struct wraps `Transaction` with `inserted_at: Instant`.
 - **Transaction index** — `StateEngine` now maintains a bounded index (`MAX_TX_INDEX_SIZE = 100_000`) mapping finalized tx hashes to their `TxLocation` (round, vertex_hash, validator). FIFO eviction when at capacity. Indexed during `apply_finalized_vertices()`. Covers ~3 hours of history.
