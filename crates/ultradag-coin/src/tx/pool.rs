@@ -52,23 +52,10 @@ impl Mempool {
         if self.txs.len() >= MAX_MEMPOOL_SIZE {
             // Find lowest-fee transaction (stake/unstake have 0 fee)
             if let Some((lowest_hash, lowest_fee)) = self.txs.iter()
-                .map(|(h, t)| {
-                    let fee = match t {
-                        Transaction::Transfer(tx) => tx.fee,
-                        Transaction::CreateProposal(tx) => tx.fee,
-                        Transaction::Vote(tx) => tx.fee,
-                        Transaction::Stake(_) | Transaction::Unstake(_) => 0,
-                    };
-                    (*h, fee)
-                })
+                .map(|(h, t)| (*h, t.fee()))
                 .min_by_key(|(_, fee)| *fee)
             {
-                let new_fee = match &tx {
-                    Transaction::Transfer(tx) => tx.fee,
-                    Transaction::CreateProposal(tx) => tx.fee,
-                    Transaction::Vote(tx) => tx.fee,
-                    Transaction::Stake(_) | Transaction::Unstake(_) => 0,
-                };
+                let new_fee = tx.fee();
                 // Only evict if new transaction has higher fee
                 if new_fee > lowest_fee {
                     if let Some(evicted) = self.txs.remove(&lowest_hash) {
@@ -112,21 +99,7 @@ impl Mempool {
     /// Transfers sorted by fee, stake/unstake transactions have priority 0.
     pub fn best(&self, max: usize) -> Vec<Transaction> {
         let mut txs: Vec<&Transaction> = self.txs.values().collect();
-        txs.sort_by(|a, b| {
-            let fee_a = match a {
-                Transaction::Transfer(tx) => tx.fee,
-                Transaction::CreateProposal(tx) => tx.fee,
-                Transaction::Vote(tx) => tx.fee,
-                Transaction::Stake(_) | Transaction::Unstake(_) => 0,
-            };
-            let fee_b = match b {
-                Transaction::Transfer(tx) => tx.fee,
-                Transaction::CreateProposal(tx) => tx.fee,
-                Transaction::Vote(tx) => tx.fee,
-                Transaction::Stake(_) | Transaction::Unstake(_) => 0,
-            };
-            fee_b.cmp(&fee_a)
-        });
+        txs.sort_by(|a, b| b.fee().cmp(&a.fee()));
         txs.into_iter().take(max).cloned().collect()
     }
 

@@ -7,7 +7,7 @@ use tracing::{error, info, warn};
 
 use ultradag_coin::{DagVertex, SecretKey, Signature, create_block, sync_epoch_validators};
 use ultradag_coin::safety::circuit_breaker::CircuitBreaker;
-use ultradag_network::{Message, NodeServer};
+use ultradag_network::{Message, NodeServer, hex_short};
 
 
 pub async fn validator_loop(
@@ -646,8 +646,4 @@ pub async fn validator_loop(
             info!("State persisted at round {}", dag_round);
         }
     }
-}
-
-fn hex_short(hash: &[u8; 32]) -> String {
-    hash[..4].iter().map(|b| format!("{b:02x}")).collect()
 }

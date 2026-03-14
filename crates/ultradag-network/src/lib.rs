@@ -5,7 +5,7 @@ pub mod protocol;
 pub mod metrics;
 
 pub use bootstrap::TESTNET_BOOTSTRAP_NODES;
-pub use node::NodeServer;
+pub use node::{NodeServer, hex_short};
 pub use peer::{PeerReader, PeerWriter, PeerRegistry, split_connection};
 pub use protocol::Message;
 pub use metrics::CheckpointMetrics;

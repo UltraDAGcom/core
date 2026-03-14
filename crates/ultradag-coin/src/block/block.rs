@@ -32,14 +32,9 @@ impl Block {
 
     /// Total fees collected in this block.
     pub fn total_fees(&self) -> u64 {
-        self.transactions.iter().map(|tx| {
-            match tx {
-                Transaction::Transfer(t) => t.fee,
-                Transaction::CreateProposal(t) => t.fee,
-                Transaction::Vote(t) => t.fee,
-                Transaction::Stake(_) | Transaction::Unstake(_) => 0,
-            }
-        }).fold(0u64, |acc, f| acc.saturating_add(f))
+        self.transactions.iter()
+            .map(|tx| tx.fee())
+            .fold(0u64, |acc, f| acc.saturating_add(f))
     }
 }
 

@@ -1828,6 +1828,7 @@ async fn handle_peer(
     }
 }
 
-fn hex_short(hash: &[u8; 32]) -> String {
+/// Format first 4 bytes of a 32-byte hash as 8-char hex string.
+pub fn hex_short(hash: &[u8; 32]) -> String {
     hash[..4].iter().map(|b| format!("{b:02x}")).collect()
 }

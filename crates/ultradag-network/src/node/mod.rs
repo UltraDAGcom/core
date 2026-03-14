@@ -1,3 +1,3 @@
 pub mod server;
 
-pub use server::NodeServer;
+pub use server::{NodeServer, hex_short};

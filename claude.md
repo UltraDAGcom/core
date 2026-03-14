@@ -8,6 +8,11 @@
 
 ## Recent Updates (March 2026)
 
+**Cross-Crate Code Quality Pass (March 14, 2026):**
+- **Fee extraction DRY violation** — 5 inline `match tx { Transfer(t) => t.fee, ... }` blocks in `pool.rs` (3), `block.rs` (1), and `engine.rs` (1) duplicated the logic in `Transaction::fee()`. All replaced with `tx.fee()` calls.
+- **`hex_short` deduplicated** — Identical `fn hex_short(hash: &[u8; 32]) -> String` in `server.rs` and `validator.rs`. Made pub in server.rs, re-exported via `ultradag_network::hex_short`, removed duplicate from validator.rs.
+- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+
 **Node Crate Quality Pass (March 14, 2026):**
 - **MEMORY_CACHE OnceLock bug** — `get_memory_usage()` used `OnceLock<(Option<u64>, Instant)>` which can only be set once. The "30 second refresh" logic was dead code — `OnceLock::set()` silently fails after first `get_or_init()`. Replaced with `tokio::sync::Mutex` for proper refresh. Uses `try_lock()` to avoid blocking RPC on contention.
 - **`get_uptime()` returned system uptime, not process uptime** — Read `/proc/uptime` (Linux) or `kern.boottime` (macOS), returning time since system boot. Replaced with `Instant::now()` captured in `OnceLock` at first call, returning process uptime. Old system uptime logic preserved as `get_system_uptime()`.
@@ -1764,6 +1769,11 @@ UltraDAG is offering rewards for security researchers who discover and responsib
     - **Fix:** Process uptime via `Instant::now()` in `OnceLock`.
 112. **Broken checkpoint chain produced silently (March 14, 2026)** — When previous checkpoint not found on disk, `prev_checkpoint_hash` set to `[0u8; 32]` and checkpoint produced anyway. This permanently broke the hash chain for new node fast-sync — `verify_checkpoint_chain()` would reject all subsequent checkpoints.
     - **Fix:** Skip checkpoint production (`continue`) instead of producing one with broken chain link. Other validators with the previous checkpoint will produce valid checkpoints.
+
+113. **Fee extraction duplicated in 5 locations (March 14, 2026)** — `pool.rs` had 3 inline match blocks extracting fee from Transaction variants, `block.rs` had 1, `engine.rs` had 1. All identical to the existing `Transaction::fee()` method.
+    - **Fix:** Replaced all with `tx.fee()` calls.
+114. **`hex_short` duplicated across crates (March 14, 2026)** — Identical function in `server.rs` and `validator.rs` for formatting hash prefixes as hex.
+    - **Fix:** Made pub in server.rs, re-exported via `ultradag_network::hex_short`, removed duplicate.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.

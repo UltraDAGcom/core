@@ -141,14 +141,9 @@ impl StateEngine {
         // Process any unstake completions for this round
         self.process_unstake_completions(vertex.round);
 
-        let total_fees: u64 = vertex.block.transactions.iter().map(|tx| {
-            match tx {
-                crate::tx::Transaction::Transfer(t) => t.fee,
-                crate::tx::Transaction::CreateProposal(t) => t.fee,
-                crate::tx::Transaction::Vote(t) => t.fee,
-                crate::tx::Transaction::Stake(_) | crate::tx::Transaction::Unstake(_) => 0,
-            }
-        }).fold(0u64, |acc, x| acc.saturating_add(x));
+        let total_fees: u64 = vertex.block.transactions.iter()
+            .map(|tx| tx.fee())
+            .fold(0u64, |acc, x| acc.saturating_add(x));
         // Use vertex.round as height for block_reward computation.
         // This eliminates the TOCTOU between production time and application time:
         // the validator computes reward from its local state, but state can advance
@@ -1144,12 +1139,9 @@ mod tests {
         txs: Vec<Transaction>,
         sk: &SecretKey,
     ) -> DagVertex {
-        let total_fees: u64 = txs.iter().map(|tx| {
-            match tx {
-                Transaction::Transfer(t) => t.fee,
-                _ => 0,
-            }
-        }).fold(0u64, |acc, x| acc.saturating_add(x));
+        let total_fees: u64 = txs.iter()
+            .map(|tx| tx.fee())
+            .fold(0u64, |acc, x| acc.saturating_add(x));
         let reward = crate::constants::block_reward(height);
         let coinbase = CoinbaseTx {
             to: *proposer,
