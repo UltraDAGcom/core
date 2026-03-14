@@ -8,6 +8,24 @@
 
 ## Recent Updates (March 2026)
 
+**Council of 21 Governance Model (March 14, 2026):**
+- **Council of 21** — Governance voting restricted to council members. Anyone can stake and become a validator (earn rewards), but only council members can vote on governance proposals. Council membership managed via `add_council_member()` / `remove_council_member()` on StateEngine.
+- **Council constants** — `COUNCIL_MIN_STAKE = 100,000 UDAG` (higher barrier for governance rights), `COUNCIL_MAX_MEMBERS = 21`, `COUNCIL_FOUNDATION_MEMBERSHIP_REQUIRED = true` (placeholder for future Panama Foundation integration).
+- **`council_members: HashSet<Address>`** field on StateEngine — tracks current council membership. Persisted across snapshots. Initialized empty; populated via explicit `add_council_member()` calls.
+- **Validator set unchanged** — `recalculate_active_set()` still uses `MIN_STAKE_SATS` (10,000 UDAG) and selects top stakers. Council membership only gates governance voting, not block production.
+- **Slash threshold unchanged** — `slash()` removes from active set if stake drops below `MIN_STAKE_SATS` (matching `recalculate_active_set` logic).
+- **Tests updated** — Epoch sync, slash, governance integration, and additional_coverage tests all updated for council membership. 789 tests pass, 14 ignored.
+
+**Mainnet Readiness — RPC Testnet Gating & Genesis Hash (March 14, 2026):**
+- **`--testnet` CLI flag** (default: `true`) — Controls whether secret-key-in-body RPC endpoints are available. When disabled (mainnet mode), 7 endpoints return HTTP 410 GONE: `/tx`, `/stake`, `/unstake`, `/faucet`, `/keygen`, `/proposal`, `/vote`. All responses direct users to `/tx/submit` for pre-signed transactions.
+- **`/tx/submit` is the mainnet transaction path** — Already existed, accepts JSON-serialized `Transaction` with Ed25519 signature. No secret keys transit the network. Client-side signing via SDKs.
+- **`server.testnet_mode: bool`** field on `NodeServer` — set from `--testnet` CLI arg. Checked in RPC handler before processing secret-key endpoints.
+- **Feature-gated genesis** — `#[cfg(feature = "mainnet")]` excludes faucet from `new_with_genesis()`. Mainnet genesis has only dev allocation (1,050,000 UDAG), no faucet prefund.
+- **Dual `GENESIS_CHECKPOINT_HASH`** — Testnet hash computed and hardcoded: `[0xd3, 0x5d, ...]`. Mainnet hash is placeholder `[0u8; 32]`. Runtime guard `verify_genesis_checkpoint_hash()` panics on mainnet if placeholder not replaced.
+- **`mainnet` feature propagation** — Defined in `ultradag-coin`, propagated via `ultradag-coin/mainnet` in both `ultradag-node` and `ultradag-network` Cargo.toml.
+- **Genesis hash computation test** — `test_compute_genesis_hash` prints hash for current build config. Run with `--features mainnet` to get mainnet hash.
+- **Startup verification** — `verify_genesis_checkpoint_hash()` called at node startup in main.rs.
+
 **State Root Verification & Adversarial Integration Tests (March 14, 2026):**
 - **State root verification on redb save/load** — `save_to_redb()` now computes `blake3(postcard(snapshot))` and stores it in the METADATA table. `load_from_redb()` recomputes the hash and compares against the stored value. Catches silent corruption from disk errors, partial writes, or software bugs. Legacy databases without a stored root skip verification gracefully.
 - **5 adversarial integration tests** — Multi-node consensus simulation with full state application (coinbase rewards, finality, deterministic ordering):
@@ -134,7 +152,7 @@
 - **Triage result: 3 valid (all previously known/documented), 17 false positives or already mitigated**
 - **VULN-01 (CheckpointSync trust on fresh nodes):** VALID — chain verification skipped when no local checkpoints exist. Already mitigated by: (1) GENESIS_CHECKPOINT_HASH hardcoded (March 13 hardening), (2) `verify_checkpoint_chain` failure now disconnects peer. **Remaining gap:** fresh nodes with zero local checkpoints still rely on quorum signatures alone as trust anchor. Mainnet requires additional hardening (e.g., embedded genesis checkpoint in binary).
 - **VULN-02 (Dynamic validator inflation):** VALID but MITIGATED — `ValidatorSet.quorum_threshold()` uses dynamic count when `configured_validators=None`. Already mitigated on testnet via `--validators N` CLI flag. **Mainnet must enforce `configured_validators`.**
-- **VULN-03 (Private keys in RPC):** VALID, BY DESIGN — testnet convenience endpoints accept `secret_key` in JSON body. SDKs provide client-side signing. Already documented with security warning on `/keygen`. **Mainnet should add signed-tx-only endpoints.**
+- **VULN-03 (Private keys in RPC):** VALID, MITIGATED — testnet convenience endpoints accept `secret_key` in JSON body. **Fixed:** `--testnet` flag (default true) gates all 7 secret-key endpoints. Mainnet mode (`--testnet false`) returns HTTP 410 GONE, directing to `/tx/submit` (pre-signed). SDKs provide client-side signing.
 - **False positives rejected:** VULN-04 (state race: RwLock serializes), VULN-05 (evidence memory: intentionally permanent, bounded), VULN-06 (timestamp: 5min window is conservative), VULN-07 (parent exhaustion: MAX_PARENTS=64 bounded), VULN-08 (memo exfiltration: 256B with min fee, like OP_RETURN), VULN-09 (rate limit bypass: universal IP limitation, mempool has fee eviction), VULN-10 (address ambiguity: hex→bytes is case-insensitive by design), VULN-11 (logging: subjective), VULN-12 (subprocess: already cached via OnceLock), VULN-13 (signature replay: NETWORK_ID + nonces prevent), VULN-14 (unbounded mempool: 10K cap + fee eviction exists), VULN-15 (message bypass: atomic read_exact + bounds check), VULN-16 (finality race: deterministic sort by (round,hash) + RwLock), VULN-17 (descendant manipulation: requires >1/3 Byzantine, BFT assumption), VULN-18 (supply invariant: saturating math + invariant check catches mismatch), VULN-19 (peer impersonation: vertices Ed25519-signed), VULN-20 (message replay: DAG rejects duplicates, tx nonces)
 
 **Architecture Improvements (March 13, 2026):**
@@ -795,6 +813,9 @@ When a vertex fails insertion due to missing parents, the node:
 - `SLASH_PERCENTAGE` = 50 — Percentage of stake burned on equivocation
 - `PROPOSAL_TITLE_MAX_BYTES` = 128 — Maximum proposal title length
 - `PROPOSAL_DESCRIPTION_MAX_BYTES` = 4096 — Maximum proposal description length
+- `COUNCIL_MIN_STAKE` = 100,000 UDAG — Minimum stake for Council of 21 membership (governance voting rights)
+- `COUNCIL_MAX_MEMBERS` = 21 — Maximum Council of 21 members
+- `COUNCIL_FOUNDATION_MEMBERSHIP_REQUIRED` = true — Panama Foundation membership flag (placeholder)
 - `MEMPOOL_TX_TTL_SECS` = 3600 — Transaction time-to-live in mempool (1 hour). Expired transactions evicted every 50 rounds.
 
 ## ultradag-network Architecture
@@ -906,6 +927,7 @@ pub struct NodeServer {
 --skip-fast-sync           # Skip fast-sync on startup, use local state only
 --pkey <HEX>               # Validator private key (64-char hex). Overrides disk/auto-generated key.
 --auto-stake <UDAG>        # Auto-stake N UDAG after startup+sync. Skips if already staked or insufficient balance.
+--testnet <BOOL>           # Enable testnet mode (default: true). Exposes secret-key-in-body RPC endpoints. Mainnet: only /tx/submit accepted.
 ```
 
 ### Validator Loop (`validator.rs`)
