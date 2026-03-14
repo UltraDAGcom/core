@@ -768,8 +768,8 @@ impl StateEngine {
             stake.staked = stake.staked.saturating_sub(slash_amount);
             // Slashed amount is burned (not credited anywhere)
             self.total_supply = self.total_supply.saturating_sub(slash_amount);
-            // Immediately remove from active set if below council minimum stake
-            if stake.staked < crate::constants::COUNCIL_MIN_STAKE {
+            // Immediately remove from active set if below minimum stake
+            if stake.staked < MIN_STAKE_SATS {
                 self.active_validator_set.retain(|a| a != addr);
             }
         }
@@ -1658,9 +1658,8 @@ mod tests {
         let sk = SecretKey::generate();
         let validator = sk.address();
 
-        // Stake 1.5x COUNCIL_MIN_STAKE so that after 50% slash (0.75x), it falls below minimum
-        let council_min = crate::constants::COUNCIL_MIN_STAKE;
-        let stake_amount = council_min + council_min / 2;
+        // Stake 1.5x MIN_STAKE_SATS so that after 50% slash (0.75x), it falls below minimum
+        let stake_amount = MIN_STAKE_SATS + MIN_STAKE_SATS / 2;
         state.credit(&validator, stake_amount);
         state.total_supply = stake_amount; // Initialize total_supply
 
@@ -1675,8 +1674,7 @@ mod tests {
         signed_stake.signature = sk.sign(&stake_tx.signable_bytes());
         state.apply_stake_tx(&signed_stake).unwrap();
 
-        // Add as council member and recalculate active set
-        state.add_council_member(validator).unwrap();
+        // Add to active validator set
         state.recalculate_active_set();
         assert!(state.is_active_validator(&validator), "Validator should be in active set before slash");
         
@@ -1685,7 +1683,7 @@ mod tests {
         
         // Verify removed from active set
         let stake_after = state.stake_of(&validator);
-        assert!(stake_after < crate::constants::COUNCIL_MIN_STAKE, "Stake should fall below minimum after slash");
+        assert!(stake_after < MIN_STAKE_SATS, "Stake should fall below minimum after slash");
         assert!(!state.is_active_validator(&validator), "Validator should be removed from active set after slash");
     }
 
@@ -1695,9 +1693,8 @@ mod tests {
         let sk = SecretKey::generate();
         let validator = sk.address();
 
-        // Stake 4x COUNCIL_MIN_STAKE so that after 50% slash, it's still above minimum
-        let council_min = crate::constants::COUNCIL_MIN_STAKE;
-        let stake_amount = council_min * 4;
+        // Stake 4x MIN_STAKE_SATS so that after 50% slash, it's still above minimum
+        let stake_amount = MIN_STAKE_SATS * 4;
         state.credit(&validator, stake_amount);
         state.total_supply = stake_amount; // Initialize total_supply
 
@@ -1712,18 +1709,17 @@ mod tests {
         signed_stake.signature = sk.sign(&stake_tx.signable_bytes());
         state.apply_stake_tx(&signed_stake).unwrap();
 
-        // Add as council member and recalculate active set
-        state.add_council_member(validator).unwrap();
+        // Add to active validator set
         state.recalculate_active_set();
         assert!(state.is_active_validator(&validator), "Validator should be in active set before slash");
         
         // Execute slash
         state.slash(&validator);
         
-        // Verify still in active set (stake is 2x COUNCIL_MIN_STAKE after 50% slash)
+        // Verify still in active set (stake is 2x MIN_STAKE_SATS after 50% slash)
         let stake_after = state.stake_of(&validator);
-        assert_eq!(stake_after, council_min * 2, "Stake should be 50% of original");
-        assert!(stake_after >= crate::constants::COUNCIL_MIN_STAKE, "Stake should still be above council minimum");
+        assert_eq!(stake_after, MIN_STAKE_SATS * 2, "Stake should be 50% of original");
+        assert!(stake_after >= MIN_STAKE_SATS, "Stake should still be above minimum");
         // Note: is_active_validator might be false if active set wasn't recalculated,
         // but the important part is the validator wasn't explicitly removed by slash()
     }
