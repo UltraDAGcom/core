@@ -31,6 +31,10 @@ pub struct Proposal {
     pub votes_for: u64,
     pub votes_against: u64,
     pub status: ProposalStatus,
+    /// Total votable stake at proposal creation time, used as quorum denominator.
+    /// Prevents quorum manipulation via coordinated unstaking during voting period.
+    #[serde(default)]
+    pub snapshot_total_stake: u64,
 }
 
 impl Proposal {

@@ -8,6 +8,12 @@
 
 ## Recent Updates (March 2026)
 
+**Governance & Hardening Pass (March 14, 2026):**
+- **Governance stake snapshot for quorum** — `Proposal` struct now includes `snapshot_total_stake: u64` field, set from `total_votable_stake()` at proposal creation time. `tick_governance()` uses this snapshot as the quorum denominator instead of live `total_votable_stake()`. Prevents governance attack where stakers vote then unstake to lower the quorum target. Individual vote weights still use live stake (pragmatic tradeoff — snapshotting the full stake table per proposal is expensive). Legacy proposals with `snapshot_total_stake=0` fall back to live total. Exposed in `/proposal/:id` RPC response.
+- **Orphan buffer per-peer caps** — Added `MAX_ORPHAN_ENTRIES_PER_PEER = 100` limit. `insert_orphan()` now tracks source peer via `OrphanEntry { vertex, peer }` struct. A single malicious peer can no longer fill the entire 1000-entry orphan buffer, crowding out legitimate orphans from other peers.
+- **CheckpointSync snapshot size validation** — Added `MAX_SNAPSHOT_ACCOUNTS = 10M` and `MAX_SNAPSHOT_PROPOSALS = 10K` limits. CheckpointSync handler validates snapshot account/proposal counts before processing, preventing OOM from malicious peers sending fabricated snapshots.
+- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+
 **Deep Review — Consensus & Safety Fixes (March 14, 2026):**
 - **CRITICAL: `topo_level` removed from vertex ordering** — `ordering.rs` sort key changed from `(round, topo_level, hash)` to `(round, hash)`. `topo_level` is `#[serde(skip)]` and computed locally during `insert()` — if two nodes have different DAG states when inserting (e.g., missing a parent), they compute different `topo_level` for the same vertex. Using it in ordering creates a **consensus split vector**: nodes disagree on transaction order → different state roots → checkpoint co-signing fails. `(round, hash)` is fully deterministic from signed vertex data.
 - **Finality liveness hole fixed (stuck parents)** — Added escape hatch for parents stuck >100 rounds behind `last_finalized_round`. Before this fix, a single parent from a slashed/offline validator that never gets 2f+1 descendants could block an entire subgraph from finalizing for up to 1000 rounds (~83 minutes) until pruning. Now these stuck parents are treated as finalized after 100 rounds (~8 minutes), unblocking descendant finality. Applied in both initial scan and forward propagation in `find_newly_finalized()`.
@@ -1839,6 +1845,15 @@ UltraDAG is offering rewards for security researchers who discover and responsib
     - **Fix:** Process uptime via `Instant::now()` in `OnceLock`.
 112. **Broken checkpoint chain produced silently (March 14, 2026)** — When previous checkpoint not found on disk, `prev_checkpoint_hash` set to `[0u8; 32]` and checkpoint produced anyway. This permanently broke the hash chain for new node fast-sync — `verify_checkpoint_chain()` would reject all subsequent checkpoints.
     - **Fix:** Skip checkpoint production (`continue`) instead of producing one with broken chain link. Other validators with the previous checkpoint will produce valid checkpoints.
+113. **Governance quorum manipulable via coordinated unstaking (March 14, 2026)** — `tick_governance()` used live `total_votable_stake()` as quorum denominator. Stakers could vote, then unstake during the voting period to lower the total, making quorum easier to reach. On a small network with few stakers, this is a real governance attack vector.
+    - **Fix:** Added `snapshot_total_stake: u64` field to `Proposal` struct, set from `total_votable_stake()` at proposal creation. `tick_governance()` uses the snapshot as quorum denominator. Individual vote weights still use live stake (pragmatic tradeoff). Legacy proposals with `snapshot_total_stake=0` fall back to live total.
+    - **Result:** Quorum target is fixed at proposal creation and cannot be gamed by coordinated unstaking.
+114. **Orphan buffer has no per-peer cap (March 14, 2026)** — Global limits (1000 entries / 50MB) existed but a single peer could fill the entire buffer with deep dependency chains, crowding out orphans from legitimate peers.
+    - **Fix:** Added `OrphanEntry` struct tracking source peer. `insert_orphan()` rejects vertices when a peer exceeds `MAX_ORPHAN_ENTRIES_PER_PEER = 100`.
+    - **Result:** Orphan buffer fairly shared across peers.
+115. **CheckpointSync accepts unbounded state snapshots (March 14, 2026)** — CheckpointSync handler validated state_root hash but not snapshot size. A malicious peer could send a snapshot with millions of fabricated accounts, causing OOM during deserialization.
+    - **Fix:** Added `MAX_SNAPSHOT_ACCOUNTS = 10M` and `MAX_SNAPSHOT_PROPOSALS = 10K` validation before processing snapshot.
+    - **Result:** Oversized snapshots rejected with warning before any state application.
 
 113. **Fee extraction duplicated in 5 locations (March 14, 2026)** — `pool.rs` had 3 inline match blocks extracting fee from Transaction variants, `block.rs` had 1, `engine.rs` had 1. All identical to the existing `Transaction::fee()` method.
     - **Fix:** Replaced all with `tx.fee()` calls.

@@ -850,7 +850,12 @@ impl StateEngine {
         // 10. Increment nonce
         self.increment_nonce(&tx.from);
 
-        // 11. Create proposal
+        // 11. Snapshot total votable stake at proposal creation for quorum denominator.
+        // This prevents quorum manipulation: coordinated unstaking during voting
+        // would lower total_votable_stake, making quorum easier to reach.
+        let snapshot_total_stake = self.total_votable_stake();
+
+        // 12. Create proposal
         let proposal = crate::governance::Proposal {
             id: tx.proposal_id,
             proposer: tx.from,
@@ -862,12 +867,13 @@ impl StateEngine {
             votes_for: 0,
             votes_against: 0,
             status: crate::governance::ProposalStatus::Active,
+            snapshot_total_stake,
         };
 
-        // 12. Insert into proposals
+        // 13. Insert into proposals
         self.proposals.insert(tx.proposal_id, proposal);
 
-        // 13. Increment next_proposal_id
+        // 14. Increment next_proposal_id
         self.next_proposal_id = self.next_proposal_id.saturating_add(1);
 
         Ok(())
@@ -967,16 +973,21 @@ impl StateEngine {
     /// Checks all active proposals and updates their status.
     /// When proposals transition to Executed, applies ParameterChange effects.
     pub fn tick_governance(&mut self, current_round: u64) {
-        // Use votable stake (excludes unstaking validators) as quorum denominator.
-        // This matches the vote weight filter in apply_vote, preventing inflated
-        // quorum requirements when a large fraction of stake is in cooldown.
-        let total_staked = self.total_votable_stake();
         let mut to_update = vec![];
 
         for (id, proposal) in &self.proposals {
             match &proposal.status {
                 crate::governance::ProposalStatus::Active if current_round > proposal.voting_ends => {
-                    let new_status = if proposal.has_passed_with_params(total_staked, &self.governance_params) {
+                    // Use snapshotted total stake from proposal creation as quorum denominator.
+                    // This prevents quorum manipulation via coordinated unstaking during voting.
+                    // Individual vote weights still use live stake (pragmatic tradeoff).
+                    let quorum_denominator = if proposal.snapshot_total_stake > 0 {
+                        proposal.snapshot_total_stake
+                    } else {
+                        // Legacy proposals without snapshot (created before this fix)
+                        self.total_votable_stake()
+                    };
+                    let new_status = if proposal.has_passed_with_params(quorum_denominator, &self.governance_params) {
                         crate::governance::ProposalStatus::PassedPending {
                             execute_at_round: current_round.saturating_add(
                                 self.governance_params.execution_delay_rounds

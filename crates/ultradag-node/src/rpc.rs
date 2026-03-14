@@ -1480,6 +1480,8 @@ async fn handle_request(
                 "votes_against": p.votes_against,
                 "votes_against_udag": p.votes_against as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                 "status": p.status,
+                "snapshot_total_stake": p.snapshot_total_stake,
+                "snapshot_total_stake_udag": p.snapshot_total_stake as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                 "voters": voters,
             }))
         }

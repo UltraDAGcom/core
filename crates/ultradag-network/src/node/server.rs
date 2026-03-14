@@ -29,6 +29,18 @@ const MAX_ORPHAN_BYTES: usize = 50 * 1024 * 1024;
 /// Maximum number of orphan entries in the buffer.
 const MAX_ORPHAN_ENTRIES: usize = 1000;
 
+/// Maximum orphan entries from a single peer. Prevents one malicious peer
+/// from filling the entire orphan buffer with deep dependency chains,
+/// crowding out legitimate orphans from other peers.
+const MAX_ORPHAN_ENTRIES_PER_PEER: usize = 100;
+
+/// Maximum accounts in a CheckpointSync state snapshot. Prevents OOM
+/// from a malicious peer sending an enormous fabricated snapshot.
+const MAX_SNAPSHOT_ACCOUNTS: usize = 10_000_000;
+
+/// Maximum proposals in a CheckpointSync state snapshot.
+const MAX_SNAPSHOT_PROPOSALS: usize = 10_000;
+
 /// Default batch size for DAG vertex sync requests.
 const DAG_SYNC_BATCH_SIZE: u32 = 50;
 
@@ -89,25 +101,38 @@ fn vertex_byte_size(v: &DagVertex) -> usize {
     postcard::to_allocvec(v).map(|b| b.len()).unwrap_or(500)
 }
 
-/// Compute total byte size of the orphan buffer.
-fn orphan_buffer_bytes(orphans: &HashMap<[u8; 32], DagVertex>) -> usize {
-    orphans.values().map(vertex_byte_size).fold(0usize, |acc, s| acc.saturating_add(s))
+/// An orphaned vertex waiting for missing parents, tagged with its source peer.
+pub struct OrphanEntry {
+    pub vertex: DagVertex,
+    pub peer: String,
 }
 
-/// Insert a vertex into the orphan buffer with eviction when full.
-/// When the buffer exceeds MAX_ORPHAN_ENTRIES or MAX_ORPHAN_BYTES, evicts the
-/// vertex with the lowest round (oldest, least likely to ever resolve).
-fn insert_orphan(orphans: &mut HashMap<[u8; 32], DagVertex>, hash: [u8; 32], vertex: DagVertex) {
+/// Compute total byte size of the orphan buffer.
+fn orphan_buffer_bytes(orphans: &HashMap<[u8; 32], OrphanEntry>) -> usize {
+    orphans.values().map(|e| vertex_byte_size(&e.vertex)).fold(0usize, |acc, s| acc.saturating_add(s))
+}
+
+/// Insert a vertex into the orphan buffer with per-peer and global eviction.
+/// Returns false if rejected due to per-peer cap.
+fn insert_orphan(orphans: &mut HashMap<[u8; 32], OrphanEntry>, hash: [u8; 32], vertex: DagVertex, peer: &str) -> bool {
+    // Per-peer cap: prevent one peer from monopolizing the buffer
+    let peer_count = orphans.values().filter(|e| e.peer == peer).count();
+    if peer_count >= MAX_ORPHAN_ENTRIES_PER_PEER {
+        warn!("Orphan buffer: rejecting vertex from {} — per-peer limit ({}) reached", peer, MAX_ORPHAN_ENTRIES_PER_PEER);
+        return false;
+    }
+
+    // Global cap: evict oldest entry when full
     if orphans.len() >= MAX_ORPHAN_ENTRIES || orphan_buffer_bytes(orphans) >= MAX_ORPHAN_BYTES {
-        // Evict the vertex with the lowest round number
         if let Some(evict_hash) = orphans.iter()
-            .min_by_key(|(_, v)| v.round)
+            .min_by_key(|(_, e)| e.vertex.round)
             .map(|(h, _)| *h)
         {
             orphans.remove(&evict_hash);
         }
     }
-    orphans.insert(hash, vertex);
+    orphans.insert(hash, OrphanEntry { vertex, peer: peer.to_string() });
+    true
 }
 
 /// Shared finality+state application logic used by DagProposal, DagVertices,
@@ -203,7 +228,8 @@ pub struct NodeServer {
     pub vertex_tx: broadcast::Sender<DagVertex>,
     pub tx_tx: broadcast::Sender<Transaction>,
     /// Orphan vertices waiting for missing parents (P2P layer buffering).
-    pub orphans: Arc<Mutex<HashMap<[u8; 32], DagVertex>>>,
+    /// Each entry tracks source peer for per-peer cap enforcement.
+    pub orphans: Arc<Mutex<HashMap<[u8; 32], OrphanEntry>>>,
     /// Notified when a new DAG vertex is inserted (for optimistic responsiveness).
     pub round_notify: Arc<Notify>,
     /// Pending checkpoints waiting for quorum signatures.
@@ -589,7 +615,7 @@ impl NodeServer {
 /// Try to insert orphaned vertices whose parents may now exist.
 /// Returns hashes of parents still missing (for further fetching).
 async fn resolve_orphans(
-    orphans: &Arc<Mutex<HashMap<[u8; 32], DagVertex>>>,
+    orphans: &Arc<Mutex<HashMap<[u8; 32], OrphanEntry>>>,
     dag: &Arc<RwLock<BlockDag>>,
     finality: &Arc<RwLock<FinalityTracker>>,
     state: &Arc<RwLock<StateEngine>>,
@@ -605,7 +631,7 @@ async fn resolve_orphans(
         resolved = false;
         let candidates: Vec<([u8; 32], DagVertex)> = {
             let orph = orphans.lock().await;
-            orph.iter().map(|(h, v)| (*h, v.clone())).collect()
+            orph.iter().map(|(h, e)| (*h, e.vertex.clone())).collect()
         };
         for (hash, vertex) in candidates {
             let result = {
@@ -818,7 +844,7 @@ struct PeerContext<'a> {
     finality: &'a Arc<RwLock<FinalityTracker>>,
     peers: &'a PeerRegistry,
     tx_tx: &'a broadcast::Sender<Transaction>,
-    orphans: &'a Arc<Mutex<HashMap<[u8; 32], DagVertex>>>,
+    orphans: &'a Arc<Mutex<HashMap<[u8; 32], OrphanEntry>>>,
     round_notify: &'a Arc<Notify>,
     pending_checkpoints: &'a Arc<RwLock<HashMap<u64, ultradag_coin::Checkpoint>>>,
     data_dir: &'a PathBuf,
@@ -1061,7 +1087,7 @@ async fn handle_peer(
                         // Buffer as orphan and request missing parents from peer
                         {
                             let mut orph = orphans.lock().await;
-                            insert_orphan(&mut orph, vertex_hash, vertex);
+                            insert_orphan(&mut orph, vertex_hash, vertex, &peer_addr);
                         }
                         // Request the missing parent vertices (cap at 32)
                         let hashes: Vec<[u8; 32]> = missing.into_iter().take(32).collect();
@@ -1244,7 +1270,7 @@ async fn handle_peer(
                 if !failed_vertices.is_empty() {
                     let mut orph = orphans.lock().await;
                     for (hash, vertex) in failed_vertices {
-                        insert_orphan(&mut orph, hash, vertex);
+                        insert_orphan(&mut orph, hash, vertex, &peer_addr);
                     }
                 }
                 // Request missing parent vertices from the peer
@@ -1365,7 +1391,7 @@ async fn handle_peer(
                         Err(DagInsertError::MissingParents(missing)) => {
                             all_missing.extend(&missing);
                             let mut orph = orphans.lock().await;
-                            insert_orphan(&mut orph, hash, vertex);
+                            insert_orphan(&mut orph, hash, vertex, &peer_addr);
                         }
                         _ => {}
                     }
@@ -1684,6 +1710,21 @@ async fn handle_peer(
                     }
                 }
                 
+                // Validate snapshot size before processing to prevent OOM from
+                // malicious peers sending fabricated snapshots with millions of entries.
+                if state_at_checkpoint.accounts.len() > MAX_SNAPSHOT_ACCOUNTS {
+                    warn!("CheckpointSync: rejecting snapshot with {} accounts (max {})",
+                        state_at_checkpoint.accounts.len(), MAX_SNAPSHOT_ACCOUNTS);
+                    checkpoint_metrics.record_fast_sync_failure();
+                    continue;
+                }
+                if state_at_checkpoint.proposals.len() > MAX_SNAPSHOT_PROPOSALS {
+                    warn!("CheckpointSync: rejecting snapshot with {} proposals (max {})",
+                        state_at_checkpoint.proposals.len(), MAX_SNAPSHOT_PROPOSALS);
+                    checkpoint_metrics.record_fast_sync_failure();
+                    continue;
+                }
+
                 // Fix 1: Use the checkpoint's own state snapshot for validator trust,
                 // not the local state engine (which may be empty on fresh nodes).
                 let checkpoint_state = ultradag_coin::StateEngine::from_snapshot(state_at_checkpoint.clone());
