@@ -379,6 +379,7 @@ async fn main() {
             fin.set_allowed_validators(allowed);
             fin.set_configured_validators(count);
             drop(fin);
+            server.state.write().await.set_configured_validator_count(count as u64);
             info!("Loaded {} allowed validators from {} (quorum threshold fixed)", count, key_file);
         }
     }
@@ -428,6 +429,7 @@ async fn main() {
             let mut fin = server.finality.write().await;
             fin.set_configured_validators(n);
             drop(fin);
+            server.state.write().await.set_configured_validator_count(n as u64);
             info!("Configured validator count: {} (quorum threshold fixed)", n);
         }
     }

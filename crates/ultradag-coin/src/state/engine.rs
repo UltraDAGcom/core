@@ -45,6 +45,10 @@ pub struct StateEngine {
     next_proposal_id: u64,
     /// Runtime-adjustable governance parameters (changed via ParameterChange proposals).
     governance_params: crate::governance::GovernanceParams,
+    /// Configured validator count for pre-staking reward splitting.
+    /// When set, block reward is divided by this count in pre-staking mode.
+    /// Should match the --validators CLI flag.
+    configured_validator_count: Option<u64>,
 }
 
 impl StateEngine {
@@ -60,7 +64,13 @@ impl StateEngine {
             votes: HashMap::new(),
             next_proposal_id: 0,
             governance_params: crate::governance::GovernanceParams::default(),
+            configured_validator_count: None,
         }
+    }
+
+    /// Set the configured validator count for pre-staking reward splitting.
+    pub fn set_configured_validator_count(&mut self, count: u64) {
+        self.configured_validator_count = Some(count);
     }
 
     /// Create a new StateEngine with genesis pre-funding.
@@ -162,10 +172,13 @@ impl StateEngine {
                 base
             }
         } else {
-            // Pre-staking fallback: equal split among active validators in this round.
-            // This handles the transition period before staking is active.
-            let n = active_validator_count.max(1);
-            total_round_reward / n
+            // Pre-staking fallback: equal split among validators.
+            // Use configured_validator_count (from --validators N) when available,
+            // otherwise fall back to batch count. This ensures all nodes agree on
+            // the split regardless of finality batch size.
+            let n = self.configured_validator_count
+                .unwrap_or(active_validator_count.max(1));
+            total_round_reward / n.max(1)
         };
 
         // Supply cap enforcement: cap reward BEFORE coinbase validation
@@ -976,6 +989,7 @@ impl StateEngine {
             votes,
             next_proposal_id,
             governance_params,
+            configured_validator_count: None,
         }
     }
 
@@ -1019,6 +1033,7 @@ impl StateEngine {
             votes: snapshot.votes.into_iter().collect(),
             next_proposal_id: snapshot.next_proposal_id,
             governance_params: snapshot.governance_params,
+            configured_validator_count: None,
         }
     }
 

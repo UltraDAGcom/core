@@ -266,11 +266,11 @@ pub async fn validator_loop(
                 }
             } else {
                 // Pre-staking fallback: split block_reward equally among validators.
-                // Use the number of validators that produced in the previous round as estimate.
-                let dag = server.dag.read().await;
-                let prev_round = if dag_round > 0 { dag_round - 1 } else { 0 };
-                let validator_count = dag.vertices_in_round(prev_round).len() as u64;
-                let n = validator_count.max(1);
+                // Use configured_validators (--validators N) for deterministic agreement
+                // between all nodes.
+                let configured = server.finality.read().await
+                    .validator_set().configured_validators().unwrap_or(1) as u64;
+                let n = configured.max(1);
                 total_round_reward / n
             };
             // Cap at supply limit (must match StateEngine validation)
