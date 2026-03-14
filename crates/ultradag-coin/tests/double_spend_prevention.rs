@@ -34,10 +34,21 @@ fn make_vertex(
     parent_hashes: Vec<[u8; 32]>,
     txs: Vec<Transaction>,
 ) -> DagVertex {
+    make_vertex_n(sk, round, height, parent_hashes, txs, 1)
+}
+
+fn make_vertex_n(
+    sk: &SecretKey,
+    round: u64,
+    height: u64,
+    parent_hashes: Vec<[u8; 32]>,
+    txs: Vec<Transaction>,
+    validator_count: u64,
+) -> DagVertex {
     let proposer = sk.address();
     let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
-    let reward = ultradag_coin::constants::block_reward(height);
-    
+    let reward = ultradag_coin::constants::block_reward(height) / validator_count.max(1);
+
     let coinbase = CoinbaseTx {
         to: proposer,
         amount: reward + total_fees,
@@ -414,15 +425,15 @@ fn dag_double_spend_deterministically_resolved() {
     finality.register_validator(sk_v2.address());
     
     // Round 0: Validators get initial rewards
-    let v0_v1 = make_vertex(&sk_v1, 0, 0, vec![], vec![]);
-    let v0_v2 = make_vertex(&sk_v2, 0, 1, vec![], vec![]);
+    let v0_v1 = make_vertex_n(&sk_v1, 0, 0, vec![], vec![], 2);
+    let v0_v2 = make_vertex_n(&sk_v2, 0, 1, vec![], vec![], 2);
     dag.insert(v0_v1.clone());
     dag.insert(v0_v2.clone());
-    
+
     // Round 1: Finalize round 0
     let r0_tips = dag.tips();
-    let v1_v1 = make_vertex(&sk_v1, 1, 2, r0_tips.clone(), vec![]);
-    let v1_v2 = make_vertex(&sk_v2, 1, 3, r0_tips, vec![]);
+    let v1_v1 = make_vertex_n(&sk_v1, 1, 2, r0_tips.clone(), vec![], 2);
+    let v1_v2 = make_vertex_n(&sk_v2, 1, 3, r0_tips, vec![], 2);
     dag.insert(v1_v1.clone());
     dag.insert(v1_v2.clone());
     
@@ -440,15 +451,15 @@ fn dag_double_spend_deterministically_resolved() {
     // Now validator 1 has funds, send exactly 1000 to A
     let r1_tips = dag.tips();
     let tx_fund_a = make_signed_tx(&sk_v1, addr_a, 1000, 0, 0);
-    let v2_v1_funding = make_vertex(&sk_v1, 2, 4, r1_tips.clone(), vec![tx_fund_a]);
-    let v2_v2 = make_vertex(&sk_v2, 2, 5, r1_tips, vec![]);
+    let v2_v1_funding = make_vertex_n(&sk_v1, 2, 4, r1_tips.clone(), vec![tx_fund_a], 2);
+    let v2_v2 = make_vertex_n(&sk_v2, 2, 5, r1_tips, vec![], 2);
     dag.insert(v2_v1_funding.clone());
     dag.insert(v2_v2.clone());
-    
+
     // Round 3: Finalize round 1 and 2
     let r2_tips = dag.tips();
-    let v3_v1 = make_vertex(&sk_v1, 3, 6, r2_tips.clone(), vec![]);
-    let v3_v2 = make_vertex(&sk_v2, 3, 7, r2_tips, vec![]);
+    let v3_v1 = make_vertex_n(&sk_v1, 3, 6, r2_tips.clone(), vec![], 2);
+    let v3_v2 = make_vertex_n(&sk_v2, 3, 7, r2_tips, vec![], 2);
     dag.insert(v3_v1.clone());
     dag.insert(v3_v2.clone());
 
@@ -473,18 +484,18 @@ fn dag_double_spend_deterministically_resolved() {
     let r3_tips = dag.tips();
     
     let tx_a_to_b = make_signed_tx(&sk_a, addr_b, 800, 10, 0);
-    let v4_v1 = make_vertex(&sk_v1, 4, 8, r3_tips.clone(), vec![tx_a_to_b]);
-    
+    let v4_v1 = make_vertex_n(&sk_v1, 4, 8, r3_tips.clone(), vec![tx_a_to_b], 2);
+
     let tx_a_to_c = make_signed_tx(&sk_a, addr_c, 700, 10, 0);
-    let v4_v2 = make_vertex(&sk_v2, 4, 9, r3_tips, vec![tx_a_to_c]);
-    
+    let v4_v2 = make_vertex_n(&sk_v2, 4, 9, r3_tips, vec![tx_a_to_c], 2);
+
     dag.insert(v4_v1.clone());
     dag.insert(v4_v2.clone());
-    
+
     // Round 5: Finalize round 4
     let r4_tips = dag.tips();
-    let v5_v1 = make_vertex(&sk_v1, 5, 10, r4_tips.clone(), vec![]);
-    let v5_v2 = make_vertex(&sk_v2, 5, 11, r4_tips, vec![]);
+    let v5_v1 = make_vertex_n(&sk_v1, 5, 10, r4_tips.clone(), vec![], 2);
+    let v5_v2 = make_vertex_n(&sk_v2, 5, 11, r4_tips, vec![], 2);
     dag.insert(v5_v1);
     dag.insert(v5_v2);
     
@@ -500,14 +511,8 @@ fn dag_double_spend_deterministically_resolved() {
         .filter_map(|h| dag.get(h).cloned())
         .collect();
 
-    // Deterministic ordering
-    finalized_vertices.sort_by_key(|v| (v.round, v.height(), v.hash()));
-
-    // Apply to state — all vertices apply (bad txs are skipped, not rejected)
-    for vertex in &finalized_vertices {
-        let result = state.apply_vertex(vertex);
-        assert!(result.is_ok(), "Finalized vertex should always apply: {:?}", result.err());
-    }
+    // Apply to state via apply_finalized_vertices which handles per-round counting
+    state.apply_finalized_vertices(&finalized_vertices).unwrap();
     
     // One of the transactions succeeded, the other failed
     let balance_b = state.balance(&addr_b);
@@ -526,9 +531,7 @@ fn dag_double_spend_deterministically_resolved() {
     state2.apply_finalized_vertices(&[v0_v1, v0_v2, v1_v1, v1_v2, v2_v1_funding, v2_v2, v3_v1, v3_v2]).unwrap();
     
     // Apply the double-spend vertices in the same order
-    for vertex in &finalized_vertices {
-        let _ = state2.apply_vertex(vertex);
-    }
+    let _ = state2.apply_finalized_vertices(&finalized_vertices);
     
     // Results must be identical
     assert_eq!(state2.balance(&addr_b), balance_b, "Replay should produce same result for B");

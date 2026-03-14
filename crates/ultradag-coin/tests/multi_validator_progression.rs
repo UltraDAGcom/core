@@ -37,9 +37,20 @@ fn make_vertex(
     parent_hashes: Vec<[u8; 32]>,
     txs: Vec<Transaction>,
 ) -> DagVertex {
+    make_vertex_n(sk, round, height, parent_hashes, txs, 1)
+}
+
+fn make_vertex_n(
+    sk: &SecretKey,
+    round: u64,
+    height: u64,
+    parent_hashes: Vec<[u8; 32]>,
+    txs: Vec<Transaction>,
+    validator_count: u64,
+) -> DagVertex {
     let proposer = sk.address();
     let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
-    let reward = ultradag_coin::constants::block_reward(height);
+    let reward = ultradag_coin::constants::block_reward(height) / validator_count.max(1);
     
     let coinbase = CoinbaseTx {
         to: proposer,
@@ -338,17 +349,18 @@ fn test_state_correctness_with_transactions() {
     }
     
     // Round 1: Give each validator initial coins (no transactions)
+    let num_v = validators.len() as u64;
     let mut round1_vertices = Vec::new();
     for (i, sk) in validators.iter().enumerate() {
-        let v = make_vertex(sk, 1, i as u64, vec![], vec![]);
+        let v = make_vertex_n(sk, 1, i as u64, vec![], vec![], num_v);
         round1_vertices.push(v.clone());
         dag.insert(v);
     }
-    
+
     // Round 2: Finalize round 1
     let r1_tips = dag.tips();
     for (i, sk) in validators.iter().enumerate() {
-        let v = make_vertex(sk, 2, (3 + i) as u64, r1_tips.clone(), vec![]);
+        let v = make_vertex_n(sk, 2, (3 + i) as u64, r1_tips.clone(), vec![], num_v);
         dag.insert(v);
     }
     
@@ -366,15 +378,15 @@ fn test_state_correctness_with_transactions() {
     assert!(any_finalized, "Round 1 should be finalized");
 
     // Check initial balances after round 1 finalized
-    // Round 1: heights 0, 1, 2 (3 validators)
-    let r0 = ultradag_coin::constants::block_reward(0);
-    let r1 = ultradag_coin::constants::block_reward(1);
-    let r2 = ultradag_coin::constants::block_reward(2);
-    
+    // Round 1: heights 0, 1, 2 (3 validators, reward split equally)
+    let r0 = ultradag_coin::constants::block_reward(0) / num_v;
+    let r1 = ultradag_coin::constants::block_reward(1) / num_v;
+    let r2 = ultradag_coin::constants::block_reward(2) / num_v;
+
     assert_eq!(state.balance(&addr_a), r0, "Account A should have reward for height 0");
     assert_eq!(state.balance(&addr_b), r1, "Account B should have reward for height 1");
     assert_eq!(state.balance(&addr_c), r2, "Account C should have reward for height 2");
-    
+
     let supply_after_r1 = state.total_supply();
     assert_eq!(supply_after_r1, r0 + r1 + r2, "Total supply should be sum of round 1 rewards");
     
@@ -383,18 +395,18 @@ fn test_state_correctness_with_transactions() {
     let r2_tips = dag.tips();
     
     // Round 3 vertices: heights 6, 7, 8
-    let v_a = make_vertex(&sk_a, 3, 6, r2_tips.clone(), vec![tx1.clone()]);
-    let v_b = make_vertex(&sk_b, 3, 7, r2_tips.clone(), vec![]);
-    let v_c = make_vertex(&sk_c, 3, 8, r2_tips, vec![]);
-    
+    let v_a = make_vertex_n(&sk_a, 3, 6, r2_tips.clone(), vec![tx1.clone()], num_v);
+    let v_b = make_vertex_n(&sk_b, 3, 7, r2_tips.clone(), vec![], num_v);
+    let v_c = make_vertex_n(&sk_c, 3, 8, r2_tips, vec![], num_v);
+
     dag.insert(v_a);
     dag.insert(v_b);
     dag.insert(v_c);
-    
+
     // Round 4: Finalize round 2 and round 3
     let r3_tips = dag.tips();
     for (i, sk) in validators.iter().enumerate() {
-        let v = make_vertex(sk, 4, (9 + i) as u64, r3_tips.clone(), vec![]);
+        let v = make_vertex_n(sk, 4, (9 + i) as u64, r3_tips.clone(), vec![], num_v);
         dag.insert(v);
     }
     
@@ -413,12 +425,12 @@ fn test_state_correctness_with_transactions() {
     // Account B: r1 + r4 (from round 2) + 1000 + r7 (from round 3)
     // Account C: r2 + r5 (from round 2) + r8 (from round 3)
     
-    let r3 = ultradag_coin::constants::block_reward(3);
-    let r4 = ultradag_coin::constants::block_reward(4);
-    let r5 = ultradag_coin::constants::block_reward(5);
-    let r6 = ultradag_coin::constants::block_reward(6);
-    let r7 = ultradag_coin::constants::block_reward(7);
-    let r8 = ultradag_coin::constants::block_reward(8);
+    let r3 = ultradag_coin::constants::block_reward(3) / num_v;
+    let r4 = ultradag_coin::constants::block_reward(4) / num_v;
+    let r5 = ultradag_coin::constants::block_reward(5) / num_v;
+    let r6 = ultradag_coin::constants::block_reward(6) / num_v;
+    let r7 = ultradag_coin::constants::block_reward(7) / num_v;
+    let r8 = ultradag_coin::constants::block_reward(8) / num_v;
     
     let expected_a = r0 + r3 - 1000 - 10 + r6 + 10; // Fee goes back to proposer
     let expected_b = r1 + r4 + 1000 + r7;

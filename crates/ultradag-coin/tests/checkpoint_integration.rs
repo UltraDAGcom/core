@@ -8,6 +8,10 @@ use ultradag_coin::block::Block;
 use ultradag_coin::tx::CoinbaseTx;
 
 fn make_vertex(nonce: u64, round: u64, parents: Vec<[u8; 32]>, sk: &SecretKey) -> DagVertex {
+    make_vertex_with_count(nonce, round, parents, sk, 1)
+}
+
+fn make_vertex_with_count(nonce: u64, round: u64, parents: Vec<[u8; 32]>, sk: &SecretKey, validator_count: u64) -> DagVertex {
     let header = BlockHeader {
         version: 1,
         height: round,
@@ -15,9 +19,10 @@ fn make_vertex(nonce: u64, round: u64, parents: Vec<[u8; 32]>, sk: &SecretKey) -
         prev_hash: [0u8; 32],
         merkle_root: [0u8; 32],
     };
+    let reward = ultradag_coin::block_reward(round) / validator_count.max(1);
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: reward,
         height: round,
     };
     let mut block = Block {
@@ -57,15 +62,16 @@ fn test_01_checkpoint_produced_at_interval() {
     }
     
     // Insert genesis
-    let genesis = make_vertex(0, 0, vec![], &validators[0]);
+    let num_validators = validators.len() as u64;
+    let genesis = make_vertex_with_count(0, 0, vec![], &validators[0], 1);
     dag.insert(genesis.clone());
-    
+
     // Run to CHECKPOINT_INTERVAL + a few more rounds to ensure finality
     let mut tips = vec![genesis.hash()];
     for round in 1..=CHECKPOINT_INTERVAL + 10 {
         let mut new_tips = Vec::new();
         for (i, sk) in validators.iter().enumerate() {
-            let vertex = make_vertex(i as u64, round, tips.clone(), sk);
+            let vertex = make_vertex_with_count(i as u64, round, tips.clone(), sk, num_validators);
             dag.insert(vertex.clone());
             new_tips.push(vertex.hash());
         }
@@ -153,19 +159,20 @@ fn test_03_new_node_fast_syncs_from_checkpoint() {
         finality.register_validator(sk.address());
     }
     
-    let genesis = make_vertex(0, 0, vec![], &validators[0]);
+    let num_validators = validators.len() as u64;
+    let genesis = make_vertex_with_count(0, 0, vec![], &validators[0], 1);
     dag.insert(genesis.clone());
-    
+
     let mut tips = vec![genesis.hash()];
     for round in 1..=2000 {
         let mut new_tips = Vec::new();
         for (i, sk) in validators.iter().enumerate() {
-            let vertex = make_vertex(i as u64, round, tips.clone(), sk);
+            let vertex = make_vertex_with_count(i as u64, round, tips.clone(), sk, num_validators);
             dag.insert(vertex.clone());
             new_tips.push(vertex.hash());
         }
         tips = new_tips;
-        
+
         let newly_finalized = finality.find_newly_finalized(&dag);
         if !newly_finalized.is_empty() {
             let finalized_vertices: Vec<DagVertex> = newly_finalized
@@ -175,7 +182,7 @@ fn test_03_new_node_fast_syncs_from_checkpoint() {
             state.apply_finalized_vertices(&finalized_vertices).ok();
         }
     }
-    
+
     // Produce checkpoint at round 1000
     let checkpoint_round = 1000u64;
     let state_snapshot = state.snapshot();

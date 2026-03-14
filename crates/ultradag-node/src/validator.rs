@@ -265,9 +265,13 @@ pub async fn validator_loop(
                     proportional
                 }
             } else {
-                // Pre-staking fallback: each vertex gets full block_reward.
-                // Matches StateEngine::apply_finalized_vertices pre-staking mode (count=1).
-                total_round_reward
+                // Pre-staking fallback: split block_reward equally among validators.
+                // Use the number of validators that produced in the previous round as estimate.
+                let dag = server.dag.read().await;
+                let prev_round = if dag_round > 0 { dag_round - 1 } else { 0 };
+                let validator_count = dag.vertices_in_round(prev_round).len() as u64;
+                let n = validator_count.max(1);
+                total_round_reward / n
             };
             // Cap at supply limit (must match StateEngine validation)
             let max_supply = ultradag_coin::constants::MAX_SUPPLY_SATS;

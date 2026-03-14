@@ -37,9 +37,20 @@ fn make_vertex(
     parent_hashes: Vec<[u8; 32]>,
     txs: Vec<Transaction>,
 ) -> DagVertex {
+    make_vertex_n(sk, round, height, parent_hashes, txs, 1)
+}
+
+fn make_vertex_n(
+    sk: &SecretKey,
+    round: u64,
+    height: u64,
+    parent_hashes: Vec<[u8; 32]>,
+    txs: Vec<Transaction>,
+    validator_count: u64,
+) -> DagVertex {
     let proposer = sk.address();
     let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
-    let reward = ultradag_coin::constants::block_reward(height);
+    let reward = ultradag_coin::constants::block_reward(height) / validator_count.max(1);
     
     let coinbase = CoinbaseTx {
         to: proposer,
@@ -96,18 +107,20 @@ fn test_multi_round_transaction_sequence() {
         finality.register_validator(sk.address());
     }
     
+    let n = validators.len() as u64;
+
     // ========================================================================
     // Round 1: Give each validator initial coins (no transactions)
     // ========================================================================
     for (i, sk) in validators.iter().enumerate() {
-        let v = make_vertex(sk, 1, i as u64, vec![], vec![]);
+        let v = make_vertex_n(sk, 1, i as u64, vec![], vec![], n);
         dag.insert(v);
     }
     
     // Round 2: Finalize round 1
     let r1_tips = dag.tips();
     for (i, sk) in validators.iter().enumerate() {
-        let v = make_vertex(sk, 2, (3 + i) as u64, r1_tips.clone(), vec![]);
+        let v = make_vertex_n(sk, 2, (3 + i) as u64, r1_tips.clone(), vec![], n);
         dag.insert(v);
     }
     
@@ -122,14 +135,14 @@ fn test_multi_round_transaction_sequence() {
     }
     
     // Initial balances
-    let r0 = ultradag_coin::constants::block_reward(0);
-    let r1 = ultradag_coin::constants::block_reward(1);
-    let r2 = ultradag_coin::constants::block_reward(2);
-    
+    let r0 = ultradag_coin::constants::block_reward(0) / n;
+    let r1 = ultradag_coin::constants::block_reward(1) / n;
+    let r2 = ultradag_coin::constants::block_reward(2) / n;
+
     let initial_a = state.balance(&addr_a);
     let initial_b = state.balance(&addr_b);
     let initial_c = state.balance(&addr_c);
-    
+
     assert_eq!(initial_a, r0);
     assert_eq!(initial_b, r1);
     assert_eq!(initial_c, r2);
@@ -142,9 +155,9 @@ fn test_multi_round_transaction_sequence() {
     let tx1 = make_signed_tx(&sk_a, addr_b, 1000, 10, 0);
     let r2_tips = dag.tips();
     
-    let v_a = make_vertex(&sk_a, 3, 6, r2_tips.clone(), vec![tx1.clone()]);
-    let v_b = make_vertex(&sk_b, 3, 7, r2_tips.clone(), vec![]);
-    let v_c = make_vertex(&sk_c, 3, 8, r2_tips, vec![]);
+    let v_a = make_vertex_n(&sk_a, 3, 6, r2_tips.clone(), vec![tx1.clone()], n);
+    let v_b = make_vertex_n(&sk_b, 3, 7, r2_tips.clone(), vec![], n);
+    let v_c = make_vertex_n(&sk_c, 3, 8, r2_tips, vec![], n);
     
     dag.insert(v_a);
     dag.insert(v_b);
@@ -153,7 +166,7 @@ fn test_multi_round_transaction_sequence() {
     // Round 4: Finalize round 2 and 3
     let r3_tips = dag.tips();
     for (i, sk) in validators.iter().enumerate() {
-        let v = make_vertex(sk, 4, (9 + i) as u64, r3_tips.clone(), vec![]);
+        let v = make_vertex_n(sk, 4, (9 + i) as u64, r3_tips.clone(), vec![], n);
         dag.insert(v);
     }
     
@@ -173,9 +186,9 @@ fn test_multi_round_transaction_sequence() {
     let tx2 = make_signed_tx(&sk_b, addr_c, 500, 5, 0);
     let r4_tips = dag.tips();
     
-    let v_a2 = make_vertex(&sk_a, 5, 12, r4_tips.clone(), vec![]);
-    let v_b2 = make_vertex(&sk_b, 5, 13, r4_tips.clone(), vec![tx2.clone()]);
-    let v_c2 = make_vertex(&sk_c, 5, 14, r4_tips, vec![]);
+    let v_a2 = make_vertex_n(&sk_a, 5, 12, r4_tips.clone(), vec![], n);
+    let v_b2 = make_vertex_n(&sk_b, 5, 13, r4_tips.clone(), vec![tx2.clone()], n);
+    let v_c2 = make_vertex_n(&sk_c, 5, 14, r4_tips, vec![], n);
     
     dag.insert(v_a2);
     dag.insert(v_b2);
@@ -184,7 +197,7 @@ fn test_multi_round_transaction_sequence() {
     // Round 6: Finalize round 4 and 5
     let r5_tips = dag.tips();
     for (i, sk) in validators.iter().enumerate() {
-        let v = make_vertex(sk, 6, (15 + i) as u64, r5_tips.clone(), vec![]);
+        let v = make_vertex_n(sk, 6, (15 + i) as u64, r5_tips.clone(), vec![], n);
         dag.insert(v);
     }
     
@@ -204,9 +217,9 @@ fn test_multi_round_transaction_sequence() {
     let tx3 = make_signed_tx(&sk_c, addr_a, 200, 2, 0);
     let r6_tips = dag.tips();
     
-    let v_a3 = make_vertex(&sk_a, 7, 18, r6_tips.clone(), vec![]);
-    let v_b3 = make_vertex(&sk_b, 7, 19, r6_tips.clone(), vec![]);
-    let v_c3 = make_vertex(&sk_c, 7, 20, r6_tips, vec![tx3.clone()]);
+    let v_a3 = make_vertex_n(&sk_a, 7, 18, r6_tips.clone(), vec![], n);
+    let v_b3 = make_vertex_n(&sk_b, 7, 19, r6_tips.clone(), vec![], n);
+    let v_c3 = make_vertex_n(&sk_c, 7, 20, r6_tips, vec![tx3.clone()], n);
     
     dag.insert(v_a3);
     dag.insert(v_b3);
@@ -215,7 +228,7 @@ fn test_multi_round_transaction_sequence() {
     // Round 8: Finalize round 6 and 7
     let r7_tips = dag.tips();
     for (i, sk) in validators.iter().enumerate() {
-        let v = make_vertex(sk, 8, (21 + i) as u64, r7_tips.clone(), vec![]);
+        let v = make_vertex_n(sk, 8, (21 + i) as u64, r7_tips.clone(), vec![], n);
         dag.insert(v);
     }
     
@@ -234,24 +247,24 @@ fn test_multi_round_transaction_sequence() {
     // ========================================================================
     
     // Calculate expected balances
-    let r3 = ultradag_coin::constants::block_reward(3);
-    let r4 = ultradag_coin::constants::block_reward(4);
-    let r5 = ultradag_coin::constants::block_reward(5);
-    let r6 = ultradag_coin::constants::block_reward(6);
-    let r7 = ultradag_coin::constants::block_reward(7);
-    let r8 = ultradag_coin::constants::block_reward(8);
-    let r9 = ultradag_coin::constants::block_reward(9);
-    let r10 = ultradag_coin::constants::block_reward(10);
-    let r11 = ultradag_coin::constants::block_reward(11);
-    let r12 = ultradag_coin::constants::block_reward(12);
-    let r13 = ultradag_coin::constants::block_reward(13);
-    let r14 = ultradag_coin::constants::block_reward(14);
-    let r15 = ultradag_coin::constants::block_reward(15);
-    let r16 = ultradag_coin::constants::block_reward(16);
-    let r17 = ultradag_coin::constants::block_reward(17);
-    let r18 = ultradag_coin::constants::block_reward(18);
-    let r19 = ultradag_coin::constants::block_reward(19);
-    let r20 = ultradag_coin::constants::block_reward(20);
+    let r3 = ultradag_coin::constants::block_reward(3) / n;
+    let r4 = ultradag_coin::constants::block_reward(4) / n;
+    let r5 = ultradag_coin::constants::block_reward(5) / n;
+    let r6 = ultradag_coin::constants::block_reward(6) / n;
+    let r7 = ultradag_coin::constants::block_reward(7) / n;
+    let r8 = ultradag_coin::constants::block_reward(8) / n;
+    let r9 = ultradag_coin::constants::block_reward(9) / n;
+    let r10 = ultradag_coin::constants::block_reward(10) / n;
+    let r11 = ultradag_coin::constants::block_reward(11) / n;
+    let r12 = ultradag_coin::constants::block_reward(12) / n;
+    let r13 = ultradag_coin::constants::block_reward(13) / n;
+    let r14 = ultradag_coin::constants::block_reward(14) / n;
+    let r15 = ultradag_coin::constants::block_reward(15) / n;
+    let r16 = ultradag_coin::constants::block_reward(16) / n;
+    let r17 = ultradag_coin::constants::block_reward(17) / n;
+    let r18 = ultradag_coin::constants::block_reward(18) / n;
+    let r19 = ultradag_coin::constants::block_reward(19) / n;
+    let r20 = ultradag_coin::constants::block_reward(20) / n;
     
     // Account A:
     // - Initial: r0
@@ -328,26 +341,28 @@ fn test_deterministic_replay() {
         finality.register_validator(sk.address());
     }
     
+    let n = validators.len() as u64;
+
     // Build DAG with transactions
     // Round 1: Genesis
     for (i, sk) in validators.iter().enumerate() {
-        let v = make_vertex(sk, 1, i as u64, vec![], vec![]);
+        let v = make_vertex_n(sk, 1, i as u64, vec![], vec![], n);
         dag.insert(v);
     }
     
     // Round 2
     let r1_tips = dag.tips();
     for (i, sk) in validators.iter().enumerate() {
-        let v = make_vertex(sk, 2, (3 + i) as u64, r1_tips.clone(), vec![]);
+        let v = make_vertex_n(sk, 2, (3 + i) as u64, r1_tips.clone(), vec![], n);
         dag.insert(v);
     }
     
     // Round 3: A sends to B
     let tx1 = make_signed_tx(&sk_a, addr_b, 1000, 10, 0);
     let r2_tips = dag.tips();
-    let v_a = make_vertex(&sk_a, 3, 6, r2_tips.clone(), vec![tx1]);
-    let v_b = make_vertex(&sk_b, 3, 7, r2_tips.clone(), vec![]);
-    let v_c = make_vertex(&sk_c, 3, 8, r2_tips, vec![]);
+    let v_a = make_vertex_n(&sk_a, 3, 6, r2_tips.clone(), vec![tx1], n);
+    let v_b = make_vertex_n(&sk_b, 3, 7, r2_tips.clone(), vec![], n);
+    let v_c = make_vertex_n(&sk_c, 3, 8, r2_tips, vec![], n);
     dag.insert(v_a);
     dag.insert(v_b);
     dag.insert(v_c);
@@ -355,7 +370,7 @@ fn test_deterministic_replay() {
     // Round 4
     let r3_tips = dag.tips();
     for (i, sk) in validators.iter().enumerate() {
-        let v = make_vertex(sk, 4, (9 + i) as u64, r3_tips.clone(), vec![]);
+        let v = make_vertex_n(sk, 4, (9 + i) as u64, r3_tips.clone(), vec![], n);
         dag.insert(v);
     }
     
@@ -437,16 +452,18 @@ fn test_fee_accounting() {
         finality.register_validator(sk.address());
     }
     
+    let n = validators.len() as u64;
+
     // Round 1: Genesis
     for (i, sk) in validators.iter().enumerate() {
-        let v = make_vertex(sk, 1, i as u64, vec![], vec![]);
+        let v = make_vertex_n(sk, 1, i as u64, vec![], vec![], n);
         dag.insert(v);
     }
     
     // Round 2
     let r1_tips = dag.tips();
     for (i, sk) in validators.iter().enumerate() {
-        let v = make_vertex(sk, 2, (2 + i) as u64, r1_tips.clone(), vec![]);
+        let v = make_vertex_n(sk, 2, (2 + i) as u64, r1_tips.clone(), vec![], n);
         dag.insert(v);
     }
     
@@ -465,15 +482,15 @@ fn test_fee_accounting() {
     // Round 3: A sends to B with fee=100
     let tx = make_signed_tx(&sk_a, addr_b, 1000, 100, 0);
     let r2_tips = dag.tips();
-    let v_a = make_vertex(&sk_a, 3, 4, r2_tips.clone(), vec![tx]);
-    let v_b = make_vertex(&sk_b, 3, 5, r2_tips, vec![]);
+    let v_a = make_vertex_n(&sk_a, 3, 4, r2_tips.clone(), vec![tx], n);
+    let v_b = make_vertex_n(&sk_b, 3, 5, r2_tips, vec![], n);
     dag.insert(v_a);
     dag.insert(v_b);
     
     // Round 4
     let r3_tips = dag.tips();
     for (i, sk) in validators.iter().enumerate() {
-        let v = make_vertex(sk, 4, (6 + i) as u64, r3_tips.clone(), vec![]);
+        let v = make_vertex_n(sk, 4, (6 + i) as u64, r3_tips.clone(), vec![], n);
         dag.insert(v);
     }
     
@@ -497,12 +514,12 @@ fn test_fee_accounting() {
     // Round 3 finalized: heights 4, 5
     // Round 4 not finalized yet (need round 5)
     
-    let r0 = ultradag_coin::constants::block_reward(0);
-    let r1 = ultradag_coin::constants::block_reward(1);
-    let r2 = ultradag_coin::constants::block_reward(2);
-    let r3 = ultradag_coin::constants::block_reward(3);
-    let r4 = ultradag_coin::constants::block_reward(4);
-    let r5 = ultradag_coin::constants::block_reward(5);
+    let r0 = ultradag_coin::constants::block_reward(0) / n;
+    let r1 = ultradag_coin::constants::block_reward(1) / n;
+    let r2 = ultradag_coin::constants::block_reward(2) / n;
+    let r3 = ultradag_coin::constants::block_reward(3) / n;
+    let r4 = ultradag_coin::constants::block_reward(4) / n;
+    let r5 = ultradag_coin::constants::block_reward(5) / n;
     
     println!("r0={}, r1={}, r2={}, r3={}, r4={}, r5={}", r0, r1, r2, r3, r4, r5);
     
