@@ -49,6 +49,24 @@
 - **Magic numbers moved to constants.rs** — `MAX_FUTURE_ROUNDS = 10` (was local const in dag.rs, duplicated in `insert()` and `try_insert()`) and `SLASH_PERCENTAGE = 50` (was local const in engine.rs `slash()`) now centralized in constants.rs for consistency and discoverability.
 - **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
 
+**Test Suite Assessment (March 14, 2026):**
+- **779 tests passing, 0 failures, 14 ignored** (jepsen long-running tests).
+- **Strengths:**
+  - Adversarial/BFT tests (`adversarial.rs`, `bft_rules.rs`) thoroughly cover consensus safety: Byzantine validators, equivocation, partition recovery, finality guarantees.
+  - Governance lifecycle tests (`governance_integration.rs`) cover full proposal lifecycle including parameter change execution, persistence across snapshots, and downstream effects (13 integration tests).
+  - Checkpoint chain tests (`checkpoint.rs`, `checkpoint_integration.rs`) verify forged checkpoint rejection, chain linking, quorum acceptance, and genesis hash determinism.
+  - Performance regression tests (`performance.rs`) enforce hard bounds: 1K vertices < 50ms, 10K vertices < 500ms.
+  - Pruning tests (`pruning.rs`) verify unfinalized vertices never pruned and finality survives pruning cycles.
+  - Staking tests (`staking.rs`) cover full lifecycle: stake/unstake, proportional rewards, slashing, supply invariants, epoch boundaries, validator cap, observer rewards.
+  - RPC tests (`rpc_tests.rs`) cover 25 endpoints including `is_trusted_proxy` for Fly.io/IPv4/IPv6.
+- **Known Gaps:**
+  - **Jepsen tests are infrastructure, not integration** — The 14 Jepsen tests use `simulate_rounds()` with real `BlockDag`, `FinalityTracker`, `StateEngine` instances but don't test actual TCP P2P. They validate consensus logic under fault injection, not network-level fault tolerance.
+  - **No multi-crate end-to-end test** — No test spins up actual `NodeServer` instances, connects them via TCP, and verifies consensus progression end-to-end. The closest is `rpc_tests.rs` which tests HTTP endpoints but not P2P consensus.
+  - **No crash-recovery integration test** — No test verifies that a node can crash mid-operation, restart from persisted state (redb), and rejoin consensus correctly. Individual persistence tests exist but don't test the full crash→restart→resync path.
+  - **Some test duplication** — `governance.rs` (3 tests), `governance_integration.rs` (13 tests), and `governance_tests.rs` (10 tests) have overlapping coverage. Could be consolidated.
+  - **No deterministic slashing test yet** — The new `apply_finalized_vertices()` equivocation detection (March 14 fix) lacks a dedicated test. Relies on existing equivocation tests which test DAG-level detection, not state-engine-level slashing during finality.
+- **Recommendation:** Highest-value additions would be (1) a deterministic slashing unit test, (2) a crash-recovery integration test, and (3) a real TCP multi-node consensus test.
+
 **Security Vulnerability Report Audit (March 13, 2026):**
 - **External report received with 20 claimed vulnerabilities (VULN-01 through VULN-20)**
 - **Triage result: 3 valid (all previously known/documented), 17 false positives or already mitigated**
