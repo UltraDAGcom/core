@@ -22,16 +22,22 @@ impl CreateProposalTx {
         buf.extend_from_slice(b"proposal");
         buf.extend_from_slice(&self.from.0);
         buf.extend_from_slice(&self.proposal_id.to_le_bytes());
+        // Length-delimit variable-length fields to prevent concatenation ambiguity
+        // ("AB"+"CD" must differ from "ABC"+"D")
+        buf.extend_from_slice(&(self.title.len() as u32).to_le_bytes());
         buf.extend_from_slice(self.title.as_bytes());
+        buf.extend_from_slice(&(self.description.len() as u32).to_le_bytes());
         buf.extend_from_slice(self.description.as_bytes());
-        
+
         match &self.proposal_type {
             ProposalType::TextProposal => {
                 buf.push(0);
             }
             ProposalType::ParameterChange { param, new_value } => {
                 buf.push(1);
+                buf.extend_from_slice(&(param.len() as u32).to_le_bytes());
                 buf.extend_from_slice(param.as_bytes());
+                buf.extend_from_slice(&(new_value.len() as u32).to_le_bytes());
                 buf.extend_from_slice(new_value.as_bytes());
             }
         }

@@ -434,9 +434,17 @@ impl StateEngine {
         Ok(())
     }
 
-    /// Total UDAG currently staked across all validators.
+    /// Total UDAG currently staked across all validators (including unstaking).
     pub fn total_staked(&self) -> u64 {
         self.stake_accounts.values().fold(0u64, |acc, s| acc.saturating_add(s.staked))
+    }
+
+    /// Total UDAG staked by validators eligible to vote (excludes unstaking).
+    /// Used as the quorum denominator in governance to match vote weight eligibility.
+    pub fn total_votable_stake(&self) -> u64 {
+        self.stake_accounts.values()
+            .filter(|s| s.unlock_at_round.is_none())
+            .fold(0u64, |acc, s| acc.saturating_add(s.staked))
     }
 
     /// Stake of a specific address.
@@ -827,6 +835,13 @@ impl StateEngine {
             .filter(|s| s.unlock_at_round.is_none())
             .map_or(0, |s| s.staked);
 
+        // 7b. Reject zero-stake votes — no governance influence, just state bloat
+        if vote_weight == 0 {
+            return Err(CoinError::ValidationError(
+                "cannot vote with zero votable stake".to_string(),
+            ));
+        }
+
         // 8. Deduct fee from voter balance
         let balance = self.balance(&tx.from);
         if balance < tx.fee {
@@ -863,7 +878,10 @@ impl StateEngine {
     /// Checks all active proposals and updates their status.
     /// When proposals transition to Executed, applies ParameterChange effects.
     pub fn tick_governance(&mut self, current_round: u64) {
-        let total_staked = self.total_staked();
+        // Use votable stake (excludes unstaking validators) as quorum denominator.
+        // This matches the vote weight filter in apply_vote, preventing inflated
+        // quorum requirements when a large fraction of stake is in cooldown.
+        let total_staked = self.total_votable_stake();
         let mut to_update = vec![];
 
         for (id, proposal) in &self.proposals {

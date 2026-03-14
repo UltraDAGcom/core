@@ -58,8 +58,8 @@ impl GovernanceParams {
                 self.min_stake_to_propose = value;
             }
             "quorum_numerator" => {
-                if value == 0 || value > 100 {
-                    return Err("quorum_numerator must be 1-100".to_string());
+                if value < 5 || value > 100 {
+                    return Err("quorum_numerator must be 5-100".to_string());
                 }
                 self.quorum_numerator = value;
             }
@@ -70,14 +70,14 @@ impl GovernanceParams {
                 self.approval_numerator = value;
             }
             "voting_period_rounds" => {
-                if value < 100 {
-                    return Err("voting_period_rounds must be >= 100".to_string());
+                if value < 1000 {
+                    return Err("voting_period_rounds must be >= 1000".to_string());
                 }
                 self.voting_period_rounds = value;
             }
             "execution_delay_rounds" => {
-                if value < 10 {
-                    return Err("execution_delay_rounds must be >= 10".to_string());
+                if value < 100 {
+                    return Err("execution_delay_rounds must be >= 100".to_string());
                 }
                 self.execution_delay_rounds = value;
             }

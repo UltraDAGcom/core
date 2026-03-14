@@ -1338,6 +1338,11 @@ async fn handle_request(
                         &format!("voting is not open for this proposal (status: {:?})", proposal.status)));
                 }
 
+                // Check if voter already voted on this proposal
+                if state.get_vote(vote_req.proposal_id, &sender).is_some() {
+                    return Ok(error_response(StatusCode::BAD_REQUEST, "already voted on this proposal"));
+                }
+
                 let nonce = next_nonce(&state, &mp, &sender);
 
                 let balance = state.balance(&sender);
