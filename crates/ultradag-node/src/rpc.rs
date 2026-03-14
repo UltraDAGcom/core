@@ -669,6 +669,11 @@ async fn handle_request(
         }
 
         (&Method::POST, ["tx"]) => {
+            // TESTNET ONLY: accepts secret_key in body. Mainnet: use /tx/submit with pre-signed tx.
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE,
+                    "POST /tx disabled: private keys must not transit over the network. Use /tx/submit with a pre-signed transaction (client-side signing)."));
+            }
             // Check endpoint-specific rate limit
             if !rate_limiter.check_rate_limit(client_ip, limits::TX) {
                 return Ok(error_response(
@@ -860,6 +865,10 @@ async fn handle_request(
         }
 
         (&Method::POST, ["faucet"]) => {
+            // TESTNET ONLY: faucet distributes free tokens for testing.
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE, "faucet disabled on mainnet"));
+            }
             // Check endpoint-specific rate limit (strict for faucet)
             if !rate_limiter.check_rate_limit(client_ip, limits::FAUCET) {
                 return Ok(error_response(
@@ -981,6 +990,11 @@ async fn handle_request(
         }
 
         (&Method::POST, ["stake"]) => {
+            // TESTNET ONLY: accepts secret_key in body. Mainnet: use /tx/submit with pre-signed StakeTx.
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE,
+                    "POST /stake disabled: private keys must not transit over the network. Use /tx/submit with a pre-signed StakeTx."));
+            }
             // Check endpoint-specific rate limit
             if !rate_limiter.check_rate_limit(client_ip, limits::STAKE) {
                 return Ok(error_response(
@@ -1063,6 +1077,11 @@ async fn handle_request(
         }
 
         (&Method::POST, ["unstake"]) => {
+            // TESTNET ONLY: accepts secret_key in body. Mainnet: use /tx/submit with pre-signed UnstakeTx.
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE,
+                    "POST /unstake disabled: private keys must not transit over the network. Use /tx/submit with a pre-signed UnstakeTx."));
+            }
             // Check endpoint-specific rate limit
             if !rate_limiter.check_rate_limit(client_ip, limits::UNSTAKE) {
                 return Ok(error_response(
@@ -1175,6 +1194,12 @@ async fn handle_request(
         }
 
         (&Method::GET, ["keygen"]) => {
+            // TESTNET ONLY: generates keys server-side (server sees private key).
+            // Mainnet: use SDK or CLI for offline key generation.
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE,
+                    "/keygen disabled on mainnet: generate keys locally using the SDK. Server must never see private keys."));
+            }
             if !rate_limiter.check_rate_limit(client_ip, limits::KEYGEN) {
                 return Ok(error_response(
                     StatusCode::TOO_MANY_REQUESTS,
@@ -1196,6 +1221,11 @@ async fn handle_request(
         // ====== Governance POST endpoints ======
 
         (&Method::POST, ["proposal"]) => {
+            // TESTNET ONLY: accepts secret_key in body. Mainnet: use /tx/submit with pre-signed CreateProposalTx.
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE,
+                    "POST /proposal disabled: private keys must not transit over the network. Use /tx/submit with a pre-signed CreateProposal transaction."));
+            }
             // Check endpoint-specific rate limit
             if !rate_limiter.check_rate_limit(client_ip, limits::PROPOSAL) {
                 return Ok(error_response(
@@ -1315,6 +1345,11 @@ async fn handle_request(
         }
 
         (&Method::POST, ["vote"]) => {
+            // TESTNET ONLY: accepts secret_key in body. Mainnet: use /tx/submit with pre-signed Vote tx.
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE,
+                    "POST /vote disabled: private keys must not transit over the network. Use /tx/submit with a pre-signed Vote transaction."));
+            }
             // Check endpoint-specific rate limit
             if !rate_limiter.check_rate_limit(client_ip, limits::VOTE) {
                 return Ok(error_response(

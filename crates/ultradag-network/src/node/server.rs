@@ -249,6 +249,9 @@ pub struct NodeServer {
     /// Highest round reported by any peer via Hello/HelloAck.
     /// Used by fast-sync task to determine if we're caught up.
     pub peer_max_round: Arc<std::sync::atomic::AtomicU64>,
+    /// Testnet mode: enables secret-key-in-body RPC endpoints (/tx, /stake, /unstake,
+    /// /proposal, /vote, /faucet, /keygen). Disabled on mainnet — only /tx/submit accepted.
+    pub testnet_mode: bool,
 }
 
 impl NodeServer {
@@ -276,6 +279,7 @@ impl NodeServer {
             checkpoint_metrics: Arc::new(crate::CheckpointMetrics::new()),
             pruning_depth: 1000,
             peer_max_round: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            testnet_mode: true,
         }
     }
 

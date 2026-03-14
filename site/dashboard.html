@@ -824,6 +824,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <div class="tab-mob" data-tab="dag">Explorer</div>
   <div class="tab-mob" data-tab="validator">Validator</div>
   <div class="tab-mob" data-tab="governance">Governance</div>
+  <div class="tab-mob" data-tab="council">Council</div>
 </div>
 
 <!-- LAYOUT -->
@@ -870,6 +871,10 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       <span>Governance</span>
       <span class="badge" id="gov-badge" style="display:none">0</span>
+    </div>
+    <div class="nav-item" data-tab="council">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      <span>Council of 21</span>
     </div>
     </div><!-- /sidebar-nav -->
   </aside>
@@ -1319,6 +1324,86 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
           </div>
           <div id="proposal-history-list">
             <div class="empty">No past proposals</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COUNCIL OF 21 -->
+    <div class="tab-panel" id="panel-council">
+      <div id="council-offline" class="empty" style="padding:80px">
+        <div class="empty-icon">&#x25CE;</div>
+        <div class="empty-text">Connect to a node to view Council of 21</div>
+      </div>
+
+      <div id="council-content" style="display:none">
+        <div class="page-header">
+          <div>
+            <div class="page-eyebrow">Council of 21</div>
+            <div class="page-title">Council <em>Management</em></div>
+            <div class="page-sub">Exclusive validator governance</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" onclick="loadCouncilStatus()">Refresh</button>
+          </div>
+        </div>
+
+        <!-- Council Members -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Current Council Members</span>
+            <span class="badge" id="council-count">0/21</span>
+          </div>
+          <div id="council-members-list">
+            <div class="empty">Loading council members...</div>
+          </div>
+        </div>
+
+        <!-- Council Application -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Apply to Council</span>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <label class="label">Requirements</label>
+              <div class="help">
+                • Minimum stake: 100,000 UDAG<br>
+                • Panama Foundation membership<br>
+                • Professional background (developer, lawyer, etc.)
+              </div>
+            </div>
+            
+            <div class="field">
+              <label class="label">Select Wallet</label>
+              <select class="select" id="council-wallet">
+                <option>No wallets available</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="label">Foundation Membership ID</label>
+              <input class="input" id="foundation-token" placeholder="Panama Foundation membership ID">
+              <div class="help">Your Panama Foundation membership verification ID</div>
+            </div>
+
+            <div class="field">
+              <label class="label">Professional Background</label>
+              <textarea class="textarea" id="professional-bg" placeholder="Describe your professional background (developer, lawyer, researcher, etc.)"></textarea>
+              <div class="help">Help us understand your expertise and qualifications</div>
+            </div>
+
+            <button class="btn btn-primary" onclick="applyToCouncil()">Submit Council Application</button>
+          </div>
+        </div>
+
+        <!-- Your Council Status -->
+        <div class="card" id="your-council-status" style="display:none">
+          <div class="card-head">
+            <span class="card-title">Your Council Status</span>
+          </div>
+          <div class="card-body" id="council-status-content">
+            <!-- Status will be populated here -->
           </div>
         </div>
       </div>
@@ -2476,6 +2561,168 @@ function updateGovBadge(count) {
 }
 
 // ========================================
+// COUNCIL OF 21
+// ========================================
+
+async function loadCouncilStatus() {
+  if (!connected) return;
+  
+  try {
+    const res = await fetch(nodeUrl + '/council/status');
+    if (!res.ok) throw new Error('Failed to load council status');
+    
+    const data = await res.json();
+    renderCouncilMembers(data.members);
+    renderCouncilApplication(data.application_status);
+    updateCouncilCount(data.members.length);
+    
+    // Show content, hide offline message
+    document.getElementById('council-offline').style.display = 'none';
+    document.getElementById('council-content').style.display = 'block';
+    
+  } catch (e) {
+    console.error('Failed to load council status:', e);
+    document.getElementById('council-offline').style.display = 'block';
+    document.getElementById('council-content').style.display = 'none';
+  }
+}
+
+function renderCouncilMembers(members) {
+  const el = document.getElementById('council-members-list');
+  
+  if (!members || members.length === 0) {
+    el.innerHTML = '<div class="empty">No council members yet</div>';
+    return;
+  }
+  
+  el.innerHTML = members.map(member => `
+    <div class="council-member" style="display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid var(--border)">
+      <div>
+        <div class="member-address" style="font-family:monospace;font-size:12px;color:var(--subtle)">${member.address}</div>
+        <div class="member-stake" style="margin-top:4px">${formatUdag(member.stake)} UDAG</div>
+      </div>
+      <div style="text-align:right">
+        <div class="member-role" style="font-size:11px;color:var(--accent)">${member.role || 'Council Member'}</div>
+        <div class="member-status" style="font-size:10px;color:var(--subtle)">Active</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderCouncilApplication(status) {
+  const statusEl = document.getElementById('your-council-status');
+  const statusContent = document.getElementById('council-status-content');
+  
+  if (!status) {
+    statusEl.style.display = 'none';
+    return;
+  }
+  
+  statusEl.style.display = 'block';
+  statusContent.innerHTML = `
+    <div style="padding:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="font-weight:600">Application Status</span>
+        <span class="badge ${status.status}">${status.status}</span>
+      </div>
+      <div style="font-size:12px;color:var(--subtle)">
+        Submitted: ${new Date(status.submitted_at).toLocaleString()}<br>
+        ${status.reviewed_at ? `Reviewed: ${new Date(status.reviewed_at).toLocaleString()}` : ''}
+        ${status.notes ? `<br><br>Notes: ${status.notes}` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function updateCouncilCount(count) {
+  document.getElementById('council-count').textContent = `${count}/21`;
+}
+
+async function applyToCouncil() {
+  if (!keystore || !connected) {
+    toast('Connect to a node and unlock keystore first', 'err');
+    return;
+  }
+  
+  const walletSelect = document.getElementById('council-wallet');
+  const selectedWallet = keystore.wallets[walletSelect.selectedIndex];
+  const foundationToken = document.getElementById('foundation-token').value.trim();
+  const professionalBg = document.getElementById('professional-bg').value.trim();
+  
+  if (!selectedWallet) {
+    toast('Please select a wallet', 'err');
+    return;
+  }
+  
+  if (!foundationToken) {
+    toast('Please provide your Panama Foundation membership ID', 'err');
+    return;
+  }
+  
+  if (!professionalBg) {
+    toast('Please describe your professional background', 'err');
+    return;
+  }
+  
+  // Check if wallet has sufficient stake
+  try {
+    const balanceRes = await fetch(nodeUrl + '/balance/' + selectedWallet.address);
+    const balanceData = await balanceRes.json();
+    
+    if (balanceData.balance < 10000000000000) {
+      toast('Insufficient stake: 100,000 UDAG required to join council', 'err');
+      return;
+    }
+  } catch (e) {
+    toast('Failed to check wallet balance', 'err');
+    return;
+  }
+  
+  const payload = {
+    applicant_address: selectedWallet.address,
+    foundation_token_id: foundationToken,
+    professional_background: professionalBg,
+    stake_amount: 10000000000000
+  };
+  
+  try {
+    const res = await fetch(nodeUrl + '/council/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Application failed');
+    }
+    
+    const data = await res.json();
+    toast('Council application submitted successfully!', 'ok');
+    
+    // Clear form
+    document.getElementById('foundation-token').value = '';
+    document.getElementById('professional-bg').value = '';
+    
+    // Refresh status
+    loadCouncilStatus();
+    
+  } catch (e) {
+    toast(e.message || 'Failed to submit application', 'err');
+  }
+}
+
+// Populate council wallet select
+function populateCouncilWallets() {
+  if (!keystore) return;
+  
+  const select = document.getElementById('council-wallet');
+  select.innerHTML = keystore.wallets.map((w, i) => 
+    `<option value="${i}">${w.name} (${formatUdag(w.balance || 0)} UDAG)</option>`
+  ).join('');
+}
+
+// ========================================
 // NODE CONNECTION
 // ========================================
 
@@ -2640,6 +2887,10 @@ function switchTab(tab) {
   if (tab === 'governance' && connected) {
     populateProposalWallets();
     loadGovernance();
+  }
+  if (tab === 'council' && connected) {
+    populateCouncilWallets();
+    loadCouncilStatus();
   }
 }
 

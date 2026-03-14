@@ -31,3 +31,7 @@ hex = "0.4"
 reqwest = { version = "0.13", features = ["json"] }
 dashmap = "6.0"
 parking_lot = "0.12"
+
+[features]
+default = []
+mainnet = ["ultradag-coin/mainnet"]  # Propagate mainnet feature to coin crate

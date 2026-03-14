@@ -85,6 +85,12 @@ struct Args {
     /// Example: --auto-stake 10000 stakes 10,000 UDAG.
     #[arg(long)]
     auto_stake: Option<u64>,
+
+    /// Enable testnet mode: exposes secret-key-in-body RPC endpoints
+    /// (/tx, /stake, /unstake, /proposal, /vote, /faucet, /keygen).
+    /// When disabled (mainnet), only /tx/submit (pre-signed) is accepted.
+    #[arg(long, default_value = "true")]
+    testnet: bool,
 }
 
 fn default_data_dir() -> String {
@@ -240,6 +246,9 @@ async fn main() {
 
     let args = Args::parse();
 
+    // Verify genesis checkpoint hash (panics on mainnet builds with placeholder hash)
+    ultradag_coin::constants::verify_genesis_checkpoint_hash();
+
     // Validate CLI arguments
     if args.round_ms == 0 {
         error!("--round-ms must be at least 1 (recommended: 1000+)");
@@ -336,7 +345,11 @@ async fn main() {
     server_inner.set_data_dir(data_dir.clone());
     server_inner.set_validator_sk(validator_sk.clone());
     server_inner.pruning_depth = if args.archive { 0 } else { args.pruning_depth };
+    server_inner.testnet_mode = args.testnet;
     server_inner.set_seed_addrs(seeds.clone());
+    if !args.testnet {
+        info!("Mainnet mode: secret-key RPC endpoints disabled. Use /tx/submit with pre-signed transactions.");
+    }
     let server = Arc::new(server_inner);
 
     // Load persisted state

@@ -18,6 +18,7 @@ hostname = "0.4"
 
 [features]
 test-helpers = []
+mainnet = ["ultradag-coin/mainnet"]  # Propagate mainnet feature to coin crate
 
 [dev-dependencies]
 chrono = "0.4"

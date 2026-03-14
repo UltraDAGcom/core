@@ -88,6 +88,21 @@ pub const EPOCH_LENGTH_ROUNDS: u64 = 210_000;
 /// Observer reward percentage: staked-but-not-active addresses earn 20% of normal.
 pub const OBSERVER_REWARD_PERCENT: u64 = 20;
 
+/// ===== COUNCIL OF 21 CONSTANTS =====
+
+/// Council of 21: Minimum stake required to join the council.
+/// Higher barrier ensures serious commitment from council members.
+pub const COUNCIL_MIN_STAKE: u64 = 100_000 * COIN; // 100,000 UDAG
+
+/// Council of 21: Panama Foundation membership requirement.
+/// In production, this would be verified against foundation records.
+/// For now, this is a placeholder for future integration.
+pub const COUNCIL_FOUNDATION_MEMBERSHIP_REQUIRED: bool = true;
+
+/// Council of 21: Maximum number of council members (fixed at 21).
+/// This matches MAX_ACTIVE_VALIDATORS but provides semantic clarity.
+pub const COUNCIL_MAX_MEMBERS: usize = 21;
+
 /// How often to produce a checkpoint (in finalized rounds).
 /// Checkpoints enable fast-sync for new nodes.
 pub const CHECKPOINT_INTERVAL: u64 = 100;
@@ -95,23 +110,47 @@ pub const CHECKPOINT_INTERVAL: u64 = 100;
 /// Genesis checkpoint hash - the blake3 hash of the genesis checkpoint.
 /// This is the trust anchor for checkpoint chain verification.
 /// Any checkpoint chain must link back to this hash to be valid.
-/// 
+///
 /// This is computed as blake3(serialize(genesis_checkpoint)) where genesis_checkpoint has:
 /// - round: 0
 /// - state_root: computed from genesis state
 /// - dag_tip: [0u8; 32] (no vertices yet)
-/// - total_supply: DEV_ALLOCATION_SATS + FAUCET_PREFUND_SATS
+/// - total_supply: genesis total (testnet includes faucet, mainnet does not)
 /// - prev_checkpoint_hash: [0u8; 32] (genesis has no predecessor)
-/// 
+///
 /// CRITICAL: This must be updated if genesis state changes.
-/// For testnet, this is computed from the current genesis configuration.
-/// For mainnet, this MUST be recomputed after removing faucet.
+/// The testnet and mainnet hashes differ because mainnet excludes faucet funds.
+/// Run `cargo test --features mainnet test_compute_mainnet_genesis_hash` to recompute.
+#[cfg(not(feature = "mainnet"))]
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
     0xd3, 0x5d, 0x13, 0x79, 0x54, 0xca, 0x55, 0xbc,
     0x2d, 0x1e, 0xe7, 0xc1, 0x29, 0x4a, 0x88, 0x95,
     0x41, 0x65, 0x76, 0x03, 0x48, 0xc5, 0x46, 0xb2,
     0x89, 0xa8, 0xa9, 0xf4, 0x8d, 0x1f, 0xac, 0x08,
-]; // Computed from StateEngine::new_with_genesis() via postcard — must recompute for mainnet after faucet removal
+]; // Testnet: computed from genesis with faucet + dev allocation
+
+/// Mainnet genesis checkpoint hash — computed from genesis WITHOUT faucet.
+/// To compute: `cargo test test_compute_genesis_hash -- --nocapture`
+/// Then replace this constant with the printed hash.
+/// IMPORTANT: This MUST be set to the real hash before mainnet launch.
+#[cfg(feature = "mainnet")]
+pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [0u8; 32]; // PLACEHOLDER — see test_compute_genesis_hash
+
+/// Runtime check: panics at startup if mainnet builds have the placeholder hash.
+/// This is a runtime guard (not compile-time) because the hash must be computed
+/// by running code, not derivable from const expressions.
+#[cfg(feature = "mainnet")]
+pub fn verify_genesis_checkpoint_hash() {
+    assert_ne!(
+        GENESIS_CHECKPOINT_HASH, [0u8; 32],
+        "FATAL: GENESIS_CHECKPOINT_HASH is placeholder [0u8; 32]. \
+         Compute mainnet hash with: cargo test test_compute_genesis_hash -- --nocapture"
+    );
+}
+
+/// Testnet: no-op (testnet hash is already correct).
+#[cfg(not(feature = "mainnet"))]
+pub fn verify_genesis_checkpoint_hash() {}
 
 /// Compute the epoch number for a given round.
 pub fn epoch_of(round: u64) -> u64 {

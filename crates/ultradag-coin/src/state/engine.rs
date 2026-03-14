@@ -57,6 +57,9 @@ pub struct StateEngine {
     proposals: HashMap<u64, crate::governance::Proposal>,
     /// Votes cast: (proposal_id, voter_address) -> vote (true=for, false=against).
     votes: HashMap<(u64, Address), bool>,
+    /// Council of 21: Authorized members who can validate and vote.
+    /// Only council members can be in the active validator set.
+    council_members: HashSet<Address>,
     /// Monotonically increasing proposal counter.
     next_proposal_id: u64,
     /// Runtime-adjustable governance parameters (changed via ParameterChange proposals).
@@ -85,6 +88,7 @@ impl StateEngine {
             current_epoch: 0,
             proposals: HashMap::new(),
             votes: HashMap::new(),
+            council_members: HashSet::new(),
             next_proposal_id: 0,
             governance_params: crate::governance::GovernanceParams::default(),
             configured_validator_count: None,
@@ -156,17 +160,27 @@ impl StateEngine {
     pub fn new_with_genesis() -> Self {
         let mut engine = Self::new();
 
-        // Faucet reserve (testnet only)
-        let faucet_addr = crate::constants::faucet_keypair().address();
-        engine.credit(&faucet_addr, crate::constants::FAUCET_PREFUND_SATS);
+        // Faucet reserve (testnet only — excluded from mainnet genesis)
+        #[cfg(not(feature = "mainnet"))]
+        {
+            let faucet_addr = crate::constants::faucet_keypair().address();
+            engine.credit(&faucet_addr, crate::constants::FAUCET_PREFUND_SATS);
+        }
 
         // Developer allocation (5% of max supply)
         let dev_addr = crate::constants::dev_address();
         engine.credit(&dev_addr, crate::constants::DEV_ALLOCATION_SATS);
 
         // total_supply tracks all credited amounts
-        engine.total_supply = crate::constants::FAUCET_PREFUND_SATS
-            + crate::constants::DEV_ALLOCATION_SATS;
+        #[cfg(not(feature = "mainnet"))]
+        {
+            engine.total_supply = crate::constants::FAUCET_PREFUND_SATS
+                + crate::constants::DEV_ALLOCATION_SATS;
+        }
+        #[cfg(feature = "mainnet")]
+        {
+            engine.total_supply = crate::constants::DEV_ALLOCATION_SATS;
+        }
 
         engine
     }
@@ -587,31 +601,65 @@ impl StateEngine {
         }
     }
 
-    /// Recalculate the active validator set: top MAX_ACTIVE_VALIDATORS by stake.
-    /// Only stakers with >= MIN_STAKE_SATS and not unstaking are eligible.
+    /// Recalculate the active validator set: top COUNCIL_MAX_MEMBERS by stake.
+    /// Only council members with >= COUNCIL_MIN_STAKE and not unstaking are eligible.
     /// 
+    /// COUNCIL OF 21: Restricts validator set to authorized council members only.
     /// WARNING: If the resulting set has fewer than MIN_ACTIVE_VALIDATORS,
     /// the system cannot guarantee BFT safety. This should be logged/monitored.
     pub fn recalculate_active_set(&mut self) {
         let mut eligible: Vec<(Address, u64)> = self.stake_accounts
             .iter()
-            .filter(|(_, s)| s.staked >= MIN_STAKE_SATS && s.unlock_at_round.is_none())
+            .filter(|(addr, s)| {
+                // Must be a council member
+                self.council_members.contains(addr) &&
+                // Must meet minimum stake requirement
+                s.staked >= crate::constants::COUNCIL_MIN_STAKE &&
+                // Must not be unstaking
+                s.unlock_at_round.is_none()
+            })
             .map(|(addr, s)| (*addr, s.staked))
             .collect();
+        
         // Sort by stake descending, then by address for determinism
         eligible.sort_by(|a, b| b.1.cmp(&a.1).then(a.0 .0.cmp(&b.0 .0)));
-        eligible.truncate(crate::constants::MAX_ACTIVE_VALIDATORS);
+        eligible.truncate(crate::constants::COUNCIL_MAX_MEMBERS);
         self.active_validator_set = eligible.into_iter().map(|(addr, _)| addr).collect();
         
         // Log warning if below minimum safe validator count
         if self.active_validator_set.len() < crate::constants::MIN_ACTIVE_VALIDATORS {
             // Using eprintln since tracing may not be available in this crate
             eprintln!(
-                "WARNING: Active validator count ({}) below minimum {} for BFT consensus",
+                "WARNING: Council validator count ({}) below minimum {} for BFT consensus",
                 self.active_validator_set.len(),
                 crate::constants::MIN_ACTIVE_VALIDATORS
             );
         }
+    }
+
+    /// Add a member to the Council of 21.
+    /// Only council members can validate and vote on governance.
+    pub fn add_council_member(&mut self, address: Address) -> Result<(), CoinError> {
+        if self.council_members.len() >= crate::constants::COUNCIL_MAX_MEMBERS {
+            return Err(CoinError::InsufficientBalance("Council already at maximum capacity".to_string()));
+        }
+        self.council_members.insert(address);
+        Ok(())
+    }
+
+    /// Remove a member from the Council of 21.
+    pub fn remove_council_member(&mut self, address: &Address) -> bool {
+        self.council_members.remove(address)
+    }
+
+    /// Check if an address is a council member.
+    pub fn is_council_member(&self, address: &Address) -> bool {
+        self.council_members.contains(address)
+    }
+
+    /// Get all current council members.
+    pub fn council_members(&self) -> impl Iterator<Item = &Address> {
+        self.council_members.iter()
     }
 
     /// Apply a StakeTx: debit liquid balance, credit stake account.
@@ -918,26 +966,25 @@ impl StateEngine {
             return Err(CoinError::AlreadyVoted);
         }
 
-        // 7. Vote weight = total staked amount.
-        // Design decision: ALL staked addresses can vote (active validators AND observers).
-        // Observers (staked but not in top-21 active set) retain full governance influence
-        // because they have economic skin-in-the-game via their stake. Only addresses in
-        // unstake cooldown (unlock_at_round.is_some()) are excluded, since their stake
-        // is leaving the system.
-        // This follows the standard stake-weighted governance model where voting power
-        // tracks economic commitment, not block-production privilege.
+        // 7. COUNCIL OF 21: Only council members can vote
+        if !self.is_council_member(&tx.from) {
+            return Err(CoinError::InsufficientBalance("Voting restricted to Council of 21 members".to_string()));
+        }
+
+        // 8. Vote weight = total staked amount.
+        // Council members must have stake to vote, ensuring economic commitment.
         let vote_weight = self.stake_accounts.get(&tx.from)
             .filter(|s| s.unlock_at_round.is_none())
             .map_or(0, |s| s.staked);
 
-        // 7b. Reject zero-stake votes — no governance influence, just state bloat
+        // 9. Reject zero-stake votes — no governance influence, just state bloat
         if vote_weight == 0 {
             return Err(CoinError::ValidationError(
                 "cannot vote with zero votable stake".to_string(),
             ));
         }
 
-        // 8. Deduct fee from voter balance
+        // 10. Deduct fee from voter balance
         let balance = self.balance(&tx.from);
         if balance < tx.fee {
             return Err(CoinError::InsufficientBalance {
