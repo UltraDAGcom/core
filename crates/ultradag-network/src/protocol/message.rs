@@ -441,6 +441,7 @@ mod tests {
             votes: vec![],
             next_proposal_id: 0,
             governance_params: Default::default(),
+            council_members: vec![],
         };
 
         let msg = Message::CheckpointSync {

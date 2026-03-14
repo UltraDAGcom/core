@@ -40,9 +40,29 @@ pub const MIN_FEE_SATS: u64 = 10_000;
 /// while preventing DAG bloat from oversized memos.
 pub const MAX_MEMO_BYTES: usize = 256;
 
+/// # Mainnet Key Lifecycle Requirements
+///
+/// - **Offline key generation only** — Never generate keys on a network-facing machine.
+///   Use an air-gapped device or hardware wallet for all mainnet keypairs.
+/// - **Hardware wallet integration recommended** — Store validator and dev allocation keys
+///   in hardware wallets (Ledger, Trezor) for production use.
+/// - **No private keys should ever transit the network** — The `/tx/submit` endpoint is
+///   the mainnet transaction path. All signing happens client-side via SDKs.
+/// - **`/keygen`, `/tx`, `/stake`, `/unstake`, `/faucet`, `/proposal`, `/vote`** are
+///   testnet-only endpoints that accept secret keys in the request body. They return
+///   HTTP 410 GONE when `--testnet false` (mainnet mode).
+
 /// Network identifier included in all signatures to prevent cross-network replay attacks.
-/// Different for mainnet, testnet, devnet, etc.
+/// Mainnet and testnet use different NETWORK_IDs, making signatures cryptographically
+/// incompatible across networks. A transaction signed for testnet cannot be replayed
+/// on mainnet (and vice versa) because the signable_bytes() include this prefix.
+#[cfg(not(feature = "mainnet"))]
 pub const NETWORK_ID: &[u8] = b"ultradag-testnet-v1";
+
+/// Network identifier for mainnet builds. Cryptographically incompatible with testnet —
+/// cross-network signature replay is impossible.
+#[cfg(feature = "mainnet")]
+pub const NETWORK_ID: &[u8] = b"ultradag-mainnet-v1";
 
 /// Developer allocation: 5% of total supply allocated at genesis.
 /// Funds protocol development. Visible and auditable from round 0.
@@ -90,9 +110,9 @@ pub const OBSERVER_REWARD_PERCENT: u64 = 20;
 
 /// ===== COUNCIL OF 21 CONSTANTS =====
 
-/// Council of 21: Minimum stake required to join the council.
-/// Higher barrier ensures serious commitment from council members.
-pub const COUNCIL_MIN_STAKE: u64 = 100_000 * COIN; // 100,000 UDAG
+/// Council of 21: No stake requirement for council members.
+/// Council seats are earned through Foundation membership and expertise,
+/// not purchased with tokens. Council members earn emission rewards instead.
 
 /// Council of 21: Panama Foundation membership requirement.
 /// In production, this would be verified against foundation records.
@@ -102,6 +122,11 @@ pub const COUNCIL_FOUNDATION_MEMBERSHIP_REQUIRED: bool = true;
 /// Council of 21: Maximum number of council members (fixed at 21).
 /// This matches MAX_ACTIVE_VALIDATORS but provides semantic clarity.
 pub const COUNCIL_MAX_MEMBERS: usize = 21;
+
+/// Council emission share: percentage of each block reward distributed to council members.
+/// 10% of each vertex reward is split equally among seated council members.
+/// Governable via ParameterChange proposals (param: "council_emission_percent").
+pub const COUNCIL_EMISSION_PERCENT: u64 = 10;
 
 /// How often to produce a checkpoint (in finalized rounds).
 /// Checkpoints enable fast-sync for new nodes.
@@ -123,11 +148,11 @@ pub const CHECKPOINT_INTERVAL: u64 = 100;
 /// Run `cargo test --features mainnet test_compute_mainnet_genesis_hash` to recompute.
 #[cfg(not(feature = "mainnet"))]
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
-    0xd3, 0x5d, 0x13, 0x79, 0x54, 0xca, 0x55, 0xbc,
-    0x2d, 0x1e, 0xe7, 0xc1, 0x29, 0x4a, 0x88, 0x95,
-    0x41, 0x65, 0x76, 0x03, 0x48, 0xc5, 0x46, 0xb2,
-    0x89, 0xa8, 0xa9, 0xf4, 0x8d, 0x1f, 0xac, 0x08,
-]; // Testnet: computed from genesis with faucet + dev allocation
+    0xda, 0x93, 0xae, 0x89, 0x67, 0x05, 0xa7, 0x5b,
+    0x6f, 0x47, 0xb9, 0x76, 0x8a, 0x72, 0x3c, 0x3b,
+    0x87, 0xa2, 0x28, 0x60, 0x6a, 0x07, 0x99, 0xff,
+    0xbe, 0xc8, 0x5b, 0xd7, 0x48, 0xcb, 0xb2, 0x40,
+]; // Testnet: computed from genesis with faucet + dev allocation + council_members
 
 /// Mainnet genesis checkpoint hash — computed from genesis WITHOUT faucet.
 /// To compute: `cargo test test_compute_genesis_hash -- --nocapture`

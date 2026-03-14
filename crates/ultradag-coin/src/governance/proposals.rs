@@ -1,5 +1,6 @@
 use crate::address::Address;
 use crate::constants::*;
+use crate::governance::council::{CouncilAction, CouncilSeatCategory};
 use serde::{Deserialize, Serialize};
 
 use super::GovernanceParams;
@@ -8,6 +9,12 @@ use super::GovernanceParams;
 pub enum ProposalType {
     TextProposal,
     ParameterChange { param: String, new_value: String },
+    /// Add or remove a council member. Executed on-chain when proposal passes.
+    CouncilMembership {
+        action: CouncilAction,
+        address: Address,
+        category: CouncilSeatCategory,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

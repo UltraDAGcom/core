@@ -21,6 +21,13 @@ pub struct GovernanceParams {
     pub max_active_proposals: u64,
     /// Observer reward percentage (param: "observer_reward_percent")
     pub observer_reward_percent: u64,
+    /// Council emission share percentage (param: "council_emission_percent")
+    #[serde(default = "default_council_emission")]
+    pub council_emission_percent: u64,
+}
+
+fn default_council_emission() -> u64 {
+    COUNCIL_EMISSION_PERCENT
 }
 
 impl Default for GovernanceParams {
@@ -34,6 +41,7 @@ impl Default for GovernanceParams {
             execution_delay_rounds: GOVERNANCE_EXECUTION_DELAY_ROUNDS,
             max_active_proposals: MAX_ACTIVE_PROPOSALS as u64,
             observer_reward_percent: OBSERVER_REWARD_PERCENT,
+            council_emission_percent: COUNCIL_EMISSION_PERCENT,
         }
     }
 }
@@ -114,6 +122,14 @@ impl GovernanceParams {
                 }
                 self.observer_reward_percent = value;
             }
+            "council_emission_percent" => {
+                // Floor: 0 (council gets nothing — effectively disabled)
+                // Ceiling: 30% — prevents council from capturing most of the emission
+                if value > 30 {
+                    return Err("council_emission_percent must be 0-30".to_string());
+                }
+                self.council_emission_percent = value;
+            }
             _ => {
                 return Err(format!("Unknown governable parameter: '{}'", param));
             }
@@ -133,6 +149,7 @@ impl GovernanceParams {
             "execution_delay_rounds",
             "max_active_proposals",
             "observer_reward_percent",
+            "council_emission_percent",
         ]
     }
 }

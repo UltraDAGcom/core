@@ -26,6 +26,9 @@ pub struct StateSnapshot {
     pub next_proposal_id: u64,
     #[serde(default)]
     pub governance_params: crate::governance::GovernanceParams,
+    /// Council of 21 members with seat categories.
+    #[serde(default)]
+    pub council_members: Vec<(crate::address::Address, crate::governance::CouncilSeatCategory)>,
 }
 
 impl StateSnapshot {

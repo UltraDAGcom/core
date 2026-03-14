@@ -63,15 +63,15 @@ mod tests {
         ft.register_validator(sk3.address());
         assert_eq!(ft.validator_count(), 3);
 
-        // Fund and stake only sk1 and sk2 (with COUNCIL_MIN_STAKE for council eligibility)
-        let council_min = crate::constants::COUNCIL_MIN_STAKE;
+        // Fund and stake only sk1 and sk2
+        let council_min = crate::tx::stake::MIN_STAKE_SATS;
         state.faucet_credit(&sk1.address(), council_min).unwrap();
         state.faucet_credit(&sk2.address(), council_min).unwrap();
         state.apply_stake_tx(&make_stake_tx(&sk1, council_min, 0)).unwrap();
         state.apply_stake_tx(&make_stake_tx(&sk2, council_min, 0)).unwrap();
         // Add sk1 and sk2 as council members (required by Council of 21)
-        state.add_council_member(sk1.address()).unwrap();
-        state.add_council_member(sk2.address()).unwrap();
+        state.add_council_member(sk1.address(), crate::governance::CouncilSeatCategory::Technical).unwrap();
+        state.add_council_member(sk2.address(), crate::governance::CouncilSeatCategory::Technical).unwrap();
         state.recalculate_active_set();
 
         // Now sync — should restrict FinalityTracker to only sk1 and sk2
@@ -90,13 +90,13 @@ mod tests {
         let sk1 = SecretKey::generate();
         let sk2 = SecretKey::generate();
 
-        let council_min = crate::constants::COUNCIL_MIN_STAKE;
+        let council_min = crate::tx::stake::MIN_STAKE_SATS;
         state.faucet_credit(&sk1.address(), council_min).unwrap();
         state.faucet_credit(&sk2.address(), council_min).unwrap();
         state.apply_stake_tx(&make_stake_tx(&sk1, council_min, 0)).unwrap();
         state.apply_stake_tx(&make_stake_tx(&sk2, council_min, 0)).unwrap();
-        state.add_council_member(sk1.address()).unwrap();
-        state.add_council_member(sk2.address()).unwrap();
+        state.add_council_member(sk1.address(), crate::governance::CouncilSeatCategory::Technical).unwrap();
+        state.add_council_member(sk2.address(), crate::governance::CouncilSeatCategory::Technical).unwrap();
         state.recalculate_active_set();
 
         ft.register_validator(sk1.address());

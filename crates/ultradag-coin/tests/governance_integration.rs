@@ -1,7 +1,7 @@
 use ultradag_coin::{
     SecretKey, StateEngine, Signature, StakeTx,
 };
-use ultradag_coin::governance::{CreateProposalTx, ProposalType, VoteTx};
+use ultradag_coin::governance::{CreateProposalTx, ProposalType, VoteTx, CouncilSeatCategory};
 use ultradag_coin::constants::{
     GOVERNANCE_APPROVAL_DENOMINATOR, GOVERNANCE_APPROVAL_NUMERATOR,
     GOVERNANCE_QUORUM_DENOMINATOR, GOVERNANCE_QUORUM_NUMERATOR,
@@ -52,7 +52,16 @@ fn make_vote_tx(
     tx
 }
 
-/// Helper: fund, stake, and add as council member (for voting rights).
+/// Helper: fund an address and add as council member (for proposal/voting rights).
+/// Also stakes so the address has balance for fees.
+fn fund_and_seat_council(state: &mut StateEngine, sk: &SecretKey, category: CouncilSeatCategory) {
+    let addr = sk.address();
+    // Give enough balance for fees
+    state.faucet_credit(&addr, 1_000_000_000).unwrap();
+    state.add_council_member(addr, category).unwrap();
+}
+
+/// Helper: fund, stake, and add as council member (for tests that also need staking).
 fn fund_stake_council(state: &mut StateEngine, sk: &SecretKey, stake_amount: u64, nonce: u64) {
     let addr = sk.address();
     state.faucet_credit(&addr, stake_amount + 1_000_000_000).unwrap();
@@ -65,28 +74,16 @@ fn fund_stake_council(state: &mut StateEngine, sk: &SecretKey, stake_amount: u64
     };
     stake_tx.signature = sk.sign(&stake_tx.signable_bytes());
     state.apply_stake_tx(&stake_tx).unwrap();
-    state.add_council_member(addr).unwrap();
+    state.add_council_member(addr, CouncilSeatCategory::Technical).unwrap();
 }
 
 #[test]
 fn test_full_proposal_lifecycle() {
     let mut state = StateEngine::new_with_genesis();
 
-    // Create proposer with sufficient stake
+    // Create proposer as council member
     let proposer = SecretKey::generate();
-    let proposer_addr = proposer.address();
-
-    // Fund and stake proposer
-    state.faucet_credit(&proposer_addr, MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
-    let mut stake_tx = StakeTx {
-        from: proposer_addr,
-        amount: MIN_STAKE_TO_PROPOSE,
-        nonce: 0,
-        pub_key: proposer.verifying_key().to_bytes(),
-        signature: Signature([0u8; 64]),
-    };
-    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
-    state.apply_stake_tx(&stake_tx).unwrap();
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
 
     // Create proposal
     let proposal_tx = make_proposal_tx(
@@ -99,7 +96,7 @@ fn test_full_proposal_lifecycle() {
             new_value: "20000".to_string(),
         },
         10_000,
-        1,
+        0,
     );
 
     // Apply proposal at round 100
@@ -108,37 +105,36 @@ fn test_full_proposal_lifecycle() {
     // Verify proposal was created
     let proposal = state.proposal(0).expect("Proposal should exist");
     assert_eq!(proposal.title, "Increase Block Size");
-    assert_eq!(proposal.proposer, proposer_addr);
+    assert_eq!(proposal.proposer, proposer.address());
     assert_eq!(proposal.voting_starts, 100);
     assert_eq!(proposal.votes_for, 0);
     assert_eq!(proposal.votes_against, 0);
     assert!(matches!(proposal.status, ultradag_coin::governance::ProposalStatus::Active));
 
-    // Create voters (council members for voting rights)
+    // Create voters (council members)
     let voter1 = SecretKey::generate();
     let voter2 = SecretKey::generate();
     let voter3 = SecretKey::generate();
 
-    let vote_stake = 50_000 * 100_000_000;
-    for sk in [&voter1, &voter2, &voter3] {
-        fund_stake_council(&mut state, sk, vote_stake, 0);
-    }
+    fund_and_seat_council(&mut state, &voter1, CouncilSeatCategory::Technical);
+    fund_and_seat_council(&mut state, &voter2, CouncilSeatCategory::Business);
+    fund_and_seat_council(&mut state, &voter3, CouncilSeatCategory::Legal);
 
     // Vote YES from voter1 and voter2
-    let vote1 = make_vote_tx(&voter1, 0, true, 10_000, 1);
-    let vote2 = make_vote_tx(&voter2, 0, true, 10_000, 1);
+    let vote1 = make_vote_tx(&voter1, 0, true, 10_000, 0);
+    let vote2 = make_vote_tx(&voter2, 0, true, 10_000, 0);
 
     state.apply_vote(&vote1, 150).unwrap();
     state.apply_vote(&vote2, 200).unwrap();
 
     // Vote NO from voter3
-    let vote3 = make_vote_tx(&voter3, 0, false, 10_000, 1);
+    let vote3 = make_vote_tx(&voter3, 0, false, 10_000, 0);
     state.apply_vote(&vote3, 250).unwrap();
 
-    // Check vote tallies
+    // Check vote tallies (1 per council member)
     let proposal = state.proposal(0).unwrap();
-    assert_eq!(proposal.votes_for, 2 * vote_stake);
-    assert_eq!(proposal.votes_against, vote_stake);
+    assert_eq!(proposal.votes_for, 2);
+    assert_eq!(proposal.votes_against, 1);
 
     // Verify individual votes
     assert_eq!(state.get_vote(0, &voter1.address()), Some(true));
@@ -150,18 +146,9 @@ fn test_full_proposal_lifecycle() {
 fn test_proposal_quorum_and_approval() {
     let mut state = StateEngine::new_with_genesis();
 
-    // Create proposer
+    // Create proposer as council member
     let proposer = SecretKey::generate();
-    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
-    let mut stake_tx = StakeTx {
-        from: proposer.address(),
-        amount: MIN_STAKE_TO_PROPOSE,
-        nonce: 0,
-        pub_key: proposer.verifying_key().to_bytes(),
-        signature: Signature([0u8; 64]),
-    };
-    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
-    state.apply_stake_tx(&stake_tx).unwrap();
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
 
     // Create proposal
     let proposal_tx = make_proposal_tx(
@@ -171,36 +158,30 @@ fn test_proposal_quorum_and_approval() {
         "Testing quorum and approval",
         ProposalType::TextProposal,
         10_000,
-        1,
+        0,
     );
     state.apply_create_proposal(&proposal_tx, 100).unwrap();
 
-    // Create voters with different stake amounts
-    let total_stake = state.total_staked();
+    // snapshot_total_stake is council count at proposal creation time (1 member)
+    // Quorum = ceil(1 * 10 / 100) = 1 vote needed
+    // We need 1 YES vote to pass
 
-    // Calculate minimum votes needed for quorum (10% of total stake)
-    let quorum_threshold = (total_stake * GOVERNANCE_QUORUM_NUMERATOR) / GOVERNANCE_QUORUM_DENOMINATOR;
-
-    // Create voter with at least quorum amount (and at least MIN_STAKE_SATS)
-    let voter = SecretKey::generate();
-    let stake_amount = quorum_threshold.max(ultradag_coin::tx::MIN_STAKE_SATS);
-    fund_stake_council(&mut state, &voter, stake_amount, 0);
-
-    // Vote YES
-    let vote = make_vote_tx(&voter, 0, true, 10_000, 1);
+    // Vote YES from proposer (they're a council member)
+    let vote = make_vote_tx(&proposer, 0, true, 10_000, 1);
     state.apply_vote(&vote, 150).unwrap();
 
     // Check if proposal meets quorum and approval
     let proposal = state.proposal(0).unwrap();
     let total_votes = proposal.votes_for + proposal.votes_against;
-    let new_total_stake = state.total_staked();
 
-    // Quorum check: total votes >= 10% of total stake
-    let meets_quorum = total_votes >= (new_total_stake * GOVERNANCE_QUORUM_NUMERATOR) / GOVERNANCE_QUORUM_DENOMINATOR;
+    // Quorum check: total votes >= ceil(snapshot * quorum_num / quorum_den)
+    let quorum_threshold = (proposal.snapshot_total_stake * GOVERNANCE_QUORUM_NUMERATOR as u64
+        + GOVERNANCE_QUORUM_DENOMINATOR as u64 - 1) / GOVERNANCE_QUORUM_DENOMINATOR as u64;
+    let meets_quorum = total_votes >= quorum_threshold;
 
-    // Approval check: votes_for >= 66% of (votes_for + votes_against)
+    // Approval check: votes_for >= 66% of total_votes
     let meets_approval = if total_votes > 0 {
-        (proposal.votes_for * GOVERNANCE_APPROVAL_DENOMINATOR) >= (total_votes * GOVERNANCE_APPROVAL_NUMERATOR)
+        (proposal.votes_for * GOVERNANCE_APPROVAL_DENOMINATOR as u64) >= (total_votes * GOVERNANCE_APPROVAL_NUMERATOR as u64)
     } else {
         false
     };
@@ -213,18 +194,9 @@ fn test_proposal_quorum_and_approval() {
 fn test_proposal_rejection() {
     let mut state = StateEngine::new_with_genesis();
 
-    // Create proposer
+    // Create proposer as council member
     let proposer = SecretKey::generate();
-    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
-    let mut stake_tx = StakeTx {
-        from: proposer.address(),
-        amount: MIN_STAKE_TO_PROPOSE,
-        nonce: 0,
-        pub_key: proposer.verifying_key().to_bytes(),
-        signature: Signature([0u8; 64]),
-    };
-    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
-    state.apply_stake_tx(&stake_tx).unwrap();
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
 
     // Create proposal
     let proposal_tx = make_proposal_tx(
@@ -234,55 +206,36 @@ fn test_proposal_rejection() {
         "This should be rejected",
         ProposalType::TextProposal,
         10_000,
-        1,
+        0,
     );
     state.apply_create_proposal(&proposal_tx, 100).unwrap();
 
     // Create voters (council members)
     let voter1 = SecretKey::generate();
     let voter2 = SecretKey::generate();
-    let vote_stake = 50_000 * 100_000_000;
-    for sk in [&voter1, &voter2] {
-        fund_stake_council(&mut state, sk, vote_stake, 0);
-    }
+    fund_and_seat_council(&mut state, &voter1, CouncilSeatCategory::Technical);
+    fund_and_seat_council(&mut state, &voter2, CouncilSeatCategory::Business);
 
     // Both vote NO
-    let vote1 = make_vote_tx(&voter1, 0, false, 10_000, 1);
-    let vote2 = make_vote_tx(&voter2, 0, false, 10_000, 1);
+    let vote1 = make_vote_tx(&voter1, 0, false, 10_000, 0);
+    let vote2 = make_vote_tx(&voter2, 0, false, 10_000, 0);
 
     state.apply_vote(&vote1, 150).unwrap();
     state.apply_vote(&vote2, 200).unwrap();
 
     // Check that proposal fails approval (0% approval)
     let proposal = state.proposal(0).unwrap();
-    let total_votes = proposal.votes_for + proposal.votes_against;
-    let approval_rate = if total_votes > 0 {
-        (proposal.votes_for * 100) / total_votes
-    } else {
-        0
-    };
-
-    assert_eq!(approval_rate, 0, "Proposal should have 0% approval");
-    assert!(proposal.votes_against > 0, "Should have NO votes");
     assert_eq!(proposal.votes_for, 0, "Should have no YES votes");
+    assert_eq!(proposal.votes_against, 2, "Should have 2 NO votes");
 }
 
 #[test]
 fn test_voting_period_expiration() {
     let mut state = StateEngine::new_with_genesis();
 
-    // Create proposer
+    // Create proposer as council member
     let proposer = SecretKey::generate();
-    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
-    let mut stake_tx = StakeTx {
-        from: proposer.address(),
-        amount: MIN_STAKE_TO_PROPOSE,
-        nonce: 0,
-        pub_key: proposer.verifying_key().to_bytes(),
-        signature: Signature([0u8; 64]),
-    };
-    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
-    state.apply_stake_tx(&stake_tx).unwrap();
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
 
     // Create proposal at round 100
     let proposal_tx = make_proposal_tx(
@@ -292,24 +245,24 @@ fn test_voting_period_expiration() {
         "Testing voting period",
         ProposalType::TextProposal,
         10_000,
-        1,
+        0,
     );
     state.apply_create_proposal(&proposal_tx, 100).unwrap();
 
     // Create voter (council member)
     let voter = SecretKey::generate();
-    fund_stake_council(&mut state, &voter, 50_000 * 100_000_000, 0);
+    fund_and_seat_council(&mut state, &voter, CouncilSeatCategory::Business);
 
     // Try to vote within voting period (should succeed)
-    let vote_early = make_vote_tx(&voter, 0, true, 10_000, 1);
+    let vote_early = make_vote_tx(&voter, 0, true, 10_000, 0);
     let early_round = 100 + GOVERNANCE_VOTING_PERIOD_ROUNDS - 1;
     assert!(state.apply_vote(&vote_early, early_round).is_ok(), "Vote within period should succeed");
 
     // Try to vote after voting period (should fail)
     let voter2 = SecretKey::generate();
-    fund_stake_council(&mut state, &voter2, 50_000 * 100_000_000, 0);
+    fund_and_seat_council(&mut state, &voter2, CouncilSeatCategory::Legal);
 
-    let vote_late = make_vote_tx(&voter2, 0, true, 10_000, 1);
+    let vote_late = make_vote_tx(&voter2, 0, true, 10_000, 0);
     let late_round = 100 + GOVERNANCE_VOTING_PERIOD_ROUNDS + 1;
     assert!(state.apply_vote(&vote_late, late_round).is_err(), "Vote after period should fail");
 }
@@ -318,18 +271,9 @@ fn test_voting_period_expiration() {
 fn test_double_voting_prevention() {
     let mut state = StateEngine::new_with_genesis();
 
-    // Create proposer
+    // Create proposer as council member
     let proposer = SecretKey::generate();
-    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
-    let mut stake_tx = StakeTx {
-        from: proposer.address(),
-        amount: MIN_STAKE_TO_PROPOSE,
-        nonce: 0,
-        pub_key: proposer.verifying_key().to_bytes(),
-        signature: Signature([0u8; 64]),
-    };
-    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
-    state.apply_stake_tx(&stake_tx).unwrap();
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
 
     // Create proposal
     let proposal_tx = make_proposal_tx(
@@ -339,34 +283,31 @@ fn test_double_voting_prevention() {
         "Testing double voting",
         ProposalType::TextProposal,
         10_000,
-        1,
+        0,
     );
     state.apply_create_proposal(&proposal_tx, 100).unwrap();
 
     // Create voter (council member)
     let voter = SecretKey::generate();
-    let vote_stake = 50_000 * 100_000_000;
-    fund_stake_council(&mut state, &voter, vote_stake, 0);
+    fund_and_seat_council(&mut state, &voter, CouncilSeatCategory::Business);
 
     // First vote (should succeed)
-    let vote1 = make_vote_tx(&voter, 0, true, 10_000, 1);
+    let vote1 = make_vote_tx(&voter, 0, true, 10_000, 0);
     assert!(state.apply_vote(&vote1, 150).is_ok(), "First vote should succeed");
 
     // Second vote (should fail - already voted)
-    let vote2 = make_vote_tx(&voter, 0, false, 10_000, 2);
+    let vote2 = make_vote_tx(&voter, 0, false, 10_000, 1);
     assert!(state.apply_vote(&vote2, 200).is_err(), "Second vote should fail");
 
-    // Verify only first vote counted
+    // Verify only first vote counted (weight = 1)
     let proposal = state.proposal(0).unwrap();
-    assert_eq!(proposal.votes_for, vote_stake);
+    assert_eq!(proposal.votes_for, 1);
     assert_eq!(proposal.votes_against, 0);
 }
 
 // --- Governance Execution Tests ---
 
-/// Helper: set up a state with a proposer and voters who pass a ParameterChange proposal.
-/// Returns (state, voting_ends_round) with proposal at id=0 in Active status.
-/// Stake a freshly-generated address so it counts toward DAO activation.
+/// Helper: stake a freshly-generated address so it counts toward DAO activation.
 fn stake_filler(state: &mut StateEngine) {
     let sk = SecretKey::generate();
     let addr = sk.address();
@@ -383,47 +324,40 @@ fn stake_filler(state: &mut StateEngine) {
     state.apply_stake_tx(&stx).unwrap();
 }
 
+/// Helper: set up a state with a proposer and voters who pass a ParameterChange proposal.
+/// Returns (state, voting_ends_round) with proposal at id=0 in Active status.
 fn setup_passing_proposal(
     param: &str,
     new_value: &str,
 ) -> (StateEngine, u64) {
     let mut state = StateEngine::new_with_genesis();
 
+    // Create proposer as council member
     let proposer = SecretKey::generate();
-    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
-    let mut stake_tx = StakeTx {
-        from: proposer.address(),
-        amount: MIN_STAKE_TO_PROPOSE,
-        nonce: 0,
-        pub_key: proposer.verifying_key().to_bytes(),
-        signature: Signature([0u8; 64]),
-    };
-    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
-    state.apply_stake_tx(&stake_tx).unwrap();
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
 
     let proposal_tx = make_proposal_tx(
         &proposer, 0, "Change Param", "Test param change",
         ProposalType::ParameterChange { param: param.to_string(), new_value: new_value.to_string() },
-        10_000, 1,
+        10_000, 0,
     );
     state.apply_create_proposal(&proposal_tx, 100).unwrap();
 
-    // Create 2 voters with large stake so they exceed quorum (council members for voting)
+    // Create 2 voters as council members — with 3 total council members and 1-per-seat voting,
+    // 2 YES votes out of 3 members is well above 10% quorum and 66% approval
     let voter1 = SecretKey::generate();
     let voter2 = SecretKey::generate();
-    let vote_stake = 50_000 * 100_000_000;
-    for sk in [&voter1, &voter2] {
-        fund_stake_council(&mut state, sk, vote_stake, 0);
-    }
+    fund_and_seat_council(&mut state, &voter1, CouncilSeatCategory::Business);
+    fund_and_seat_council(&mut state, &voter2, CouncilSeatCategory::Legal);
 
     // Both vote YES
-    let v1 = make_vote_tx(&voter1, 0, true, 10_000, 1);
-    let v2 = make_vote_tx(&voter2, 0, true, 10_000, 1);
+    let v1 = make_vote_tx(&voter1, 0, true, 10_000, 0);
+    let v2 = make_vote_tx(&voter2, 0, true, 10_000, 0);
     state.apply_vote(&v1, 150).unwrap();
     state.apply_vote(&v2, 200).unwrap();
 
-    // Stake 5 more fillers to reach MIN_DAO_VALIDATORS (8 total: proposer + 2 voters + 5 fillers)
-    for _ in 0..5 {
+    // Stake fillers to activate DAO (need MIN_DAO_VALIDATORS=8 stakers)
+    for _ in 0..8 {
         stake_filler(&mut state);
     }
     state.recalculate_active_set();
@@ -463,28 +397,20 @@ fn test_parameter_change_execution_updates_governance_params() {
 fn test_text_proposal_execution_has_no_param_effect() {
     let mut state = StateEngine::new_with_genesis();
 
+    // Create proposer as council member
     let proposer = SecretKey::generate();
-    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
-    let mut stake_tx = StakeTx {
-        from: proposer.address(),
-        amount: MIN_STAKE_TO_PROPOSE,
-        nonce: 0,
-        pub_key: proposer.verifying_key().to_bytes(),
-        signature: Signature([0u8; 64]),
-    };
-    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
-    state.apply_stake_tx(&stake_tx).unwrap();
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
 
     let proposal_tx = make_proposal_tx(
         &proposer, 0, "Text Only", "Informational proposal",
-        ProposalType::TextProposal, 10_000, 1,
+        ProposalType::TextProposal, 10_000, 0,
     );
     state.apply_create_proposal(&proposal_tx, 100).unwrap();
 
     // Vote to pass (council member)
     let voter = SecretKey::generate();
-    fund_stake_council(&mut state, &voter, 50_000 * 100_000_000, 0);
-    let v = make_vote_tx(&voter, 0, true, 10_000, 1);
+    fund_and_seat_council(&mut state, &voter, CouncilSeatCategory::Business);
+    let v = make_vote_tx(&voter, 0, true, 10_000, 0);
     state.apply_vote(&v, 150).unwrap();
 
     let voting_ends = state.proposal(0).unwrap().voting_ends;
@@ -580,21 +506,12 @@ fn test_changed_voting_period_affects_new_proposals() {
 
     // Create a new proposal — it should use the NEW voting_period_rounds
     let proposer2 = SecretKey::generate();
-    state.faucet_credit(&proposer2.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
-    let mut stx = StakeTx {
-        from: proposer2.address(),
-        amount: MIN_STAKE_TO_PROPOSE,
-        nonce: 0,
-        pub_key: proposer2.verifying_key().to_bytes(),
-        signature: Signature([0u8; 64]),
-    };
-    stx.signature = proposer2.sign(&stx.signable_bytes());
-    state.apply_stake_tx(&stx).unwrap();
+    fund_and_seat_council(&mut state, &proposer2, CouncilSeatCategory::Academic);
 
     let creation_round = execute_at + 10;
     let p2_tx = make_proposal_tx(
         &proposer2, 1, "Next Proposal", "Uses new voting period",
-        ProposalType::TextProposal, 10_000, 1,
+        ProposalType::TextProposal, 10_000, 0,
     );
     state.apply_create_proposal(&p2_tx, creation_round).unwrap();
 
@@ -617,30 +534,21 @@ fn test_multiple_param_changes_via_sequential_proposals() {
 
     // Second proposal: change observer_reward_percent
     let proposer2 = SecretKey::generate();
-    state.faucet_credit(&proposer2.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
-    let mut stx = StakeTx {
-        from: proposer2.address(),
-        amount: MIN_STAKE_TO_PROPOSE,
-        nonce: 0,
-        pub_key: proposer2.verifying_key().to_bytes(),
-        signature: Signature([0u8; 64]),
-    };
-    stx.signature = proposer2.sign(&stx.signable_bytes());
-    state.apply_stake_tx(&stx).unwrap();
+    fund_and_seat_council(&mut state, &proposer2, CouncilSeatCategory::Academic);
 
     let round2 = execute_at + 10;
     let p2_tx = make_proposal_tx(
         &proposer2, 1, "Change Observer Reward", "Set to 30%",
         ProposalType::ParameterChange { param: "observer_reward_percent".to_string(), new_value: "30".to_string() },
-        10_000, 1,
+        10_000, 0,
     );
     state.apply_create_proposal(&p2_tx, round2).unwrap();
 
     // Vote to pass proposal 1 (id=1) — council member
     let voter = SecretKey::generate();
-    fund_stake_council(&mut state, &voter, 50_000 * 100_000_000, 0);
+    fund_and_seat_council(&mut state, &voter, CouncilSeatCategory::Community);
 
-    let v = make_vote_tx(&voter, 1, true, 10_000, 1);
+    let v = make_vote_tx(&voter, 1, true, 10_000, 0);
     state.apply_vote(&v, round2 + 50).unwrap();
 
     let voting_ends2 = state.proposal(1).unwrap().voting_ends;
@@ -661,34 +569,26 @@ fn test_dao_hibernation_blocks_parameter_change() {
     // With fewer than MIN_DAO_VALIDATORS, ParameterChange proposals stay in PassedPending
     let mut state = StateEngine::new_with_genesis();
 
+    // Create proposer as council member
     let proposer = SecretKey::generate();
-    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
-    let mut stake_tx = StakeTx {
-        from: proposer.address(),
-        amount: MIN_STAKE_TO_PROPOSE,
-        nonce: 0,
-        pub_key: proposer.verifying_key().to_bytes(),
-        signature: Signature([0u8; 64]),
-    };
-    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
-    state.apply_stake_tx(&stake_tx).unwrap();
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
 
-    // Only 1 staker — recalculate active set (well below MIN_DAO_VALIDATORS=8)
+    // Only 0 stakers — DAO is hibernating
     state.recalculate_active_set();
     assert!(!state.dao_is_active());
 
     let proposal_tx = make_proposal_tx(
         &proposer, 0, "Change Fee", "Lower min fee",
         ProposalType::ParameterChange { param: "min_fee_sats".to_string(), new_value: "50000".to_string() },
-        10_000, 1,
+        10_000, 0,
     );
     state.apply_create_proposal(&proposal_tx, 100).unwrap();
 
-    // Create voter with large stake to pass quorum (council member)
+    // Create voter (council member)
     let voter = SecretKey::generate();
-    fund_stake_council(&mut state, &voter, 50_000 * 100_000_000, 0);
+    fund_and_seat_council(&mut state, &voter, CouncilSeatCategory::Business);
 
-    let v = make_vote_tx(&voter, 0, true, 10_000, 1);
+    let v = make_vote_tx(&voter, 0, true, 10_000, 0);
     state.apply_vote(&v, 150).unwrap();
 
     let voting_ends = state.proposal(0).unwrap().voting_ends;
@@ -708,7 +608,7 @@ fn test_dao_hibernation_blocks_parameter_change() {
     assert_eq!(state.governance_params().min_fee_sats, ultradag_coin::constants::MIN_FEE_SATS);
 
     // Now add enough validators to activate the DAO
-    for _ in 0..6 {
+    for _ in 0..8 {
         stake_filler(&mut state);
     }
     state.recalculate_active_set();
@@ -725,32 +625,24 @@ fn test_dao_hibernation_allows_text_proposals() {
     // TextProposals execute regardless of DAO activation status
     let mut state = StateEngine::new_with_genesis();
 
+    // Create proposer as council member
     let proposer = SecretKey::generate();
-    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
-    let mut stake_tx = StakeTx {
-        from: proposer.address(),
-        amount: MIN_STAKE_TO_PROPOSE,
-        nonce: 0,
-        pub_key: proposer.verifying_key().to_bytes(),
-        signature: Signature([0u8; 64]),
-    };
-    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
-    state.apply_stake_tx(&stake_tx).unwrap();
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
 
-    // Only 1 validator — DAO is hibernating
+    // Only 0 stakers — DAO is hibernating
     state.recalculate_active_set();
     assert!(!state.dao_is_active());
 
     let proposal_tx = make_proposal_tx(
         &proposer, 0, "Signal Support", "Community signal proposal",
-        ProposalType::TextProposal, 10_000, 1,
+        ProposalType::TextProposal, 10_000, 0,
     );
     state.apply_create_proposal(&proposal_tx, 100).unwrap();
 
     // Vote to pass (council member)
     let voter = SecretKey::generate();
-    fund_stake_council(&mut state, &voter, 50_000 * 100_000_000, 0);
-    let v = make_vote_tx(&voter, 0, true, 10_000, 1);
+    fund_and_seat_council(&mut state, &voter, CouncilSeatCategory::Business);
+    let v = make_vote_tx(&voter, 0, true, 10_000, 0);
     state.apply_vote(&v, 150).unwrap();
 
     let voting_ends = state.proposal(0).unwrap().voting_ends;
@@ -766,24 +658,24 @@ fn test_dao_hibernation_allows_text_proposals() {
 }
 
 #[test]
-fn test_insufficient_stake_to_propose() {
+fn test_non_council_member_cannot_propose() {
     let mut state = StateEngine::new_with_genesis();
 
-    // Create proposer with insufficient stake
-    let proposer = SecretKey::generate();
-    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE - 1).unwrap();
+    // Create address that is NOT a council member
+    let non_member = SecretKey::generate();
+    state.faucet_credit(&non_member.address(), 1_000_000_000).unwrap();
 
     // Try to create proposal (should fail)
     let proposal_tx = make_proposal_tx(
-        &proposer,
+        &non_member,
         0,
         "Invalid Proposal",
-        "Should fail due to insufficient stake",
+        "Should fail — not a council member",
         ProposalType::TextProposal,
         10_000,
         0,
     );
 
     let result = state.apply_create_proposal(&proposal_tx, 100);
-    assert!(result.is_err(), "Proposal creation should fail with insufficient stake");
+    assert!(result.is_err(), "Non-council member should not be able to create proposals");
 }

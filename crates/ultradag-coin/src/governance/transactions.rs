@@ -40,8 +40,17 @@ impl CreateProposalTx {
                 buf.extend_from_slice(&(new_value.len() as u32).to_le_bytes());
                 buf.extend_from_slice(new_value.as_bytes());
             }
+            ProposalType::CouncilMembership { action, address, category } => {
+                buf.push(2);
+                buf.push(match action {
+                    crate::governance::CouncilAction::Add => 0,
+                    crate::governance::CouncilAction::Remove => 1,
+                });
+                buf.extend_from_slice(&address.0);
+                buf.extend_from_slice(category.name().as_bytes());
+            }
         }
-        
+
         buf.extend_from_slice(&self.fee.to_le_bytes());
         buf.extend_from_slice(&self.nonce.to_le_bytes());
         buf
@@ -61,6 +70,15 @@ impl CreateProposalTx {
                 hasher.update(&[1]);
                 hasher.update(param.as_bytes());
                 hasher.update(new_value.as_bytes());
+            }
+            ProposalType::CouncilMembership { action, address, category } => {
+                hasher.update(&[2]);
+                hasher.update(&[match action {
+                    crate::governance::CouncilAction::Add => 0,
+                    crate::governance::CouncilAction::Remove => 1,
+                }]);
+                hasher.update(&address.0);
+                hasher.update(category.name().as_bytes());
             }
         }
         hasher.update(&self.fee.to_le_bytes());

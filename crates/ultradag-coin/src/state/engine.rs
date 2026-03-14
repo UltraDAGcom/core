@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
 use crate::address::Address;
 use crate::consensus::vertex::DagVertex;
@@ -57,9 +57,10 @@ pub struct StateEngine {
     proposals: HashMap<u64, crate::governance::Proposal>,
     /// Votes cast: (proposal_id, voter_address) -> vote (true=for, false=against).
     votes: HashMap<(u64, Address), bool>,
-    /// Council of 21: Authorized members who can validate and vote.
-    /// Only council members can be in the active validator set.
-    council_members: HashSet<Address>,
+    /// Council of 21: Authorized governance members with seat categories.
+    /// Only council members can vote on governance proposals.
+    /// Members earn a share of block emissions (COUNCIL_EMISSION_PERCENT).
+    council_members: HashMap<Address, crate::governance::CouncilSeatCategory>,
     /// Monotonically increasing proposal counter.
     next_proposal_id: u64,
     /// Runtime-adjustable governance parameters (changed via ParameterChange proposals).
@@ -88,7 +89,7 @@ impl StateEngine {
             current_epoch: 0,
             proposals: HashMap::new(),
             votes: HashMap::new(),
-            council_members: HashSet::new(),
+            council_members: HashMap::new(),
             next_proposal_id: 0,
             governance_params: crate::governance::GovernanceParams::default(),
             configured_validator_count: None,
@@ -123,12 +124,23 @@ impl StateEngine {
         active_validator_count: u64,
     ) -> u64 {
         let total_round_reward = crate::constants::block_reward(round);
+
+        // Deduct council emission share from validator reward pool
+        let council_percent = self.governance_params.council_emission_percent;
+        let council_count = self.council_members.len() as u64;
+        let validator_pool = if council_count > 0 && council_percent > 0 {
+            // Validators get (100 - council_percent)% of block reward
+            total_round_reward.saturating_mul(100u64.saturating_sub(council_percent)) / 100
+        } else {
+            total_round_reward
+        };
+
         let total_stake = self.total_staked();
         let own_stake = self.stake_of(proposer);
 
         let base_reward = if total_stake > 0 && own_stake > 0 {
             // Proportional to stake using u128 to avoid overflow
-            let proportional = ((total_round_reward as u128)
+            let proportional = ((validator_pool as u128)
                 .saturating_mul(own_stake as u128)
                 / total_stake as u128) as u64;
             // Observer penalty: staked but not in the active validator set
@@ -143,7 +155,7 @@ impl StateEngine {
             // Pre-staking fallback: equal split among validators.
             let n = self.configured_validator_count
                 .unwrap_or(active_validator_count.max(1));
-            total_round_reward / n.max(1)
+            validator_pool / n.max(1)
         };
 
         // Supply cap enforcement
@@ -153,6 +165,20 @@ impl StateEngine {
         } else {
             base_reward
         }
+    }
+
+    /// Compute the total council emission for a single vertex at the given round.
+    /// Returns (per_member_amount, total_council_amount).
+    pub fn compute_council_emission(&self, round: u64) -> (u64, u64) {
+        let council_count = self.council_members.len() as u64;
+        let council_percent = self.governance_params.council_emission_percent;
+        if council_count == 0 || council_percent == 0 {
+            return (0, 0);
+        }
+        let total_round_reward = crate::constants::block_reward(round);
+        let council_total = total_round_reward.saturating_mul(council_percent) / 100;
+        let per_member = council_total / council_count;
+        (per_member, per_member.saturating_mul(council_count))
     }
 
     /// Create a new StateEngine with genesis pre-funding.
@@ -279,6 +305,27 @@ impl StateEngine {
 
         // Credit proposer: capped block reward + fees
         self.credit(proposer, capped_reward.saturating_add(total_fees));
+
+        // Distribute council emission share
+        let (council_per_member, council_total_minted) = self.compute_council_emission(vertex.round);
+        if council_per_member > 0 {
+            // Supply cap check for council emissions
+            let remaining_supply = crate::constants::MAX_SUPPLY_SATS.saturating_sub(self.total_supply);
+            let capped_council = council_total_minted.min(remaining_supply);
+            let capped_per_member = if capped_council < council_total_minted {
+                capped_council / self.council_members.len().max(1) as u64
+            } else {
+                council_per_member
+            };
+            if capped_per_member > 0 {
+                let members: Vec<Address> = self.council_members.keys().copied().collect();
+                for member in &members {
+                    self.credit(member, capped_per_member);
+                }
+                let actually_minted = capped_per_member.saturating_mul(members.len() as u64);
+                self.total_supply = self.total_supply.saturating_add(actually_minted);
+            }
+        }
 
         // Apply transactions
         // In a DAG with multiple validators, the same transaction can appear in
@@ -611,7 +658,7 @@ impl StateEngine {
     pub fn recalculate_active_set(&mut self) {
         let mut eligible: Vec<(Address, u64)> = self.stake_accounts
             .iter()
-            .filter(|(addr, s)| {
+            .filter(|(_addr, s)| {
                 // Anyone can be a validator (not just council members)
                 // Must meet minimum stake requirement (regular staking minimum)
                 s.staked >= crate::tx::stake::MIN_STAKE_SATS &&
@@ -637,30 +684,57 @@ impl StateEngine {
         }
     }
 
-    /// Add a member to the Council of 21.
+    /// Add a member to the Council of 21 with a seat category.
     /// Only council members can vote on governance proposals.
-    /// Council members have higher stake requirements (100K UDAG) for governance rights.
-    pub fn add_council_member(&mut self, address: Address) -> Result<(), CoinError> {
+    /// No stake requirement — seats are earned through Foundation membership and expertise.
+    /// Council members earn a share of block emissions (COUNCIL_EMISSION_PERCENT).
+    pub fn add_council_member(
+        &mut self,
+        address: Address,
+        category: crate::governance::CouncilSeatCategory,
+    ) -> Result<(), CoinError> {
         if self.council_members.len() >= crate::constants::COUNCIL_MAX_MEMBERS {
-            return Err(CoinError::ValidationError("Council already at maximum capacity".to_string()));
+            return Err(CoinError::ValidationError("Council already at maximum capacity (21)".to_string()));
         }
-        self.council_members.insert(address);
+        // Check category seat limit
+        let category_count = self.council_members.values()
+            .filter(|c| **c == category)
+            .count();
+        if category_count >= category.max_seats() {
+            return Err(CoinError::ValidationError(format!(
+                "No vacant {} seats (max {})", category.name(), category.max_seats()
+            )));
+        }
+        if self.council_members.contains_key(&address) {
+            return Err(CoinError::ValidationError("Address is already a council member".to_string()));
+        }
+        self.council_members.insert(address, category);
         Ok(())
     }
 
     /// Remove a member from the Council of 21.
     pub fn remove_council_member(&mut self, address: &Address) -> bool {
-        self.council_members.remove(address)
+        self.council_members.remove(address).is_some()
     }
 
     /// Check if an address is a council member.
     pub fn is_council_member(&self, address: &Address) -> bool {
-        self.council_members.contains(address)
+        self.council_members.contains_key(address)
     }
 
-    /// Get all current council members.
-    pub fn council_members(&self) -> impl Iterator<Item = &Address> {
+    /// Get the seat category for a council member.
+    pub fn council_seat_category(&self, address: &Address) -> Option<crate::governance::CouncilSeatCategory> {
+        self.council_members.get(address).copied()
+    }
+
+    /// Get all current council members with their categories.
+    pub fn council_members(&self) -> impl Iterator<Item = (&Address, &crate::governance::CouncilSeatCategory)> {
         self.council_members.iter()
+    }
+
+    /// Count of seated council members.
+    pub fn council_member_count(&self) -> usize {
+        self.council_members.len()
     }
 
     /// Apply a StakeTx: debit liquid balance, credit stake account.
@@ -854,10 +928,11 @@ impl StateEngine {
             return Err(CoinError::FeeTooLow);
         }
 
-        // 4. Check proposer stake >= min_stake_to_propose (governance-adjustable)
-        let proposer_stake = self.stake_of(&tx.from);
-        if proposer_stake < self.governance_params.min_stake_to_propose {
-            return Err(CoinError::InsufficientStakeToPropose);
+        // 4. Only council members can create proposals
+        if !self.is_council_member(&tx.from) {
+            return Err(CoinError::ValidationError(
+                "Only Council of 21 members can create proposals".to_string(),
+            ));
         }
 
         // 5. Check title length
@@ -899,10 +974,9 @@ impl StateEngine {
         // 10. Increment nonce
         self.increment_nonce(&tx.from);
 
-        // 11. Snapshot total votable stake at proposal creation for quorum denominator.
-        // This prevents quorum manipulation: coordinated unstaking during voting
-        // would lower total_votable_stake, making quorum easier to reach.
-        let snapshot_total_stake = self.total_votable_stake();
+        // 11. Snapshot council member count at proposal creation for quorum denominator.
+        // With 1-vote-per-seat, the quorum denominator is the number of seated members.
+        let snapshot_total_stake = self.council_members.len() as u64;
 
         // 12. Create proposal
         let proposal = crate::governance::Proposal {
@@ -972,18 +1046,9 @@ impl StateEngine {
             return Err(CoinError::ValidationError("Voting restricted to Council of 21 members".to_string()));
         }
 
-        // 8. Vote weight = total staked amount.
-        // Council members must have stake to vote, ensuring economic commitment.
-        let vote_weight = self.stake_accounts.get(&tx.from)
-            .filter(|s| s.unlock_at_round.is_none())
-            .map_or(0, |s| s.staked);
-
-        // 9. Reject zero-stake votes — no governance influence, just state bloat
-        if vote_weight == 0 {
-            return Err(CoinError::ValidationError(
-                "cannot vote with zero votable stake".to_string(),
-            ));
-        }
+        // 8. Vote weight = 1 per council seat (equal governance power).
+        // Council members don't need stake to vote — their seat IS their authority.
+        let vote_weight = 1u64;
 
         // 10. Deduct fee from voter balance
         let balance = self.balance(&tx.from);
@@ -1026,14 +1091,13 @@ impl StateEngine {
         for (id, proposal) in &self.proposals {
             match &proposal.status {
                 crate::governance::ProposalStatus::Active if current_round > proposal.voting_ends => {
-                    // Use snapshotted total stake from proposal creation as quorum denominator.
-                    // This prevents quorum manipulation via coordinated unstaking during voting.
-                    // Individual vote weights still use live stake (pragmatic tradeoff).
+                    // Use snapshotted council count from proposal creation as quorum denominator.
+                    // With 1-vote-per-seat governance, the denominator is the council size.
                     let quorum_denominator = if proposal.snapshot_total_stake > 0 {
                         proposal.snapshot_total_stake
                     } else {
-                        // Legacy proposals without snapshot (created before this fix)
-                        self.total_votable_stake()
+                        // Legacy proposals without snapshot
+                        self.council_members.len() as u64
                     };
                     let new_status = if proposal.has_passed_with_params(quorum_denominator, &self.governance_params) {
                         crate::governance::ProposalStatus::PassedPending {
@@ -1052,8 +1116,8 @@ impl StateEngine {
                     // DAO activation gate: ParameterChange proposals cannot execute
                     // unless MIN_DAO_VALIDATORS are active. The proposal stays in
                     // PassedPending (hibernation) until the network is healthy enough.
-                    // TextProposals execute regardless — they have no protocol effect.
-                    if let crate::governance::ProposalType::ParameterChange { .. } = &proposal.proposal_type {
+                    // TextProposals and CouncilMembership execute regardless.
+                    if matches!(&proposal.proposal_type, crate::governance::ProposalType::ParameterChange { .. }) {
                         if !self.dao_is_active() {
                             // DAO hibernating — skip execution, leave as PassedPending
                             continue;
@@ -1065,27 +1129,48 @@ impl StateEngine {
             }
         }
 
-        for (id, status) in to_update {
-            if let Some(p) = self.proposals.get_mut(&id) {
-                // Execute ParameterChange proposals when transitioning to Executed
-                if status == crate::governance::ProposalStatus::Executed {
-                    if let crate::governance::ProposalType::ParameterChange { ref param, ref new_value } = p.proposal_type {
-                        match self.governance_params.apply_change(param, new_value) {
-                            Ok(()) => {
-                                // Parameter changed successfully — this is deterministic
-                                // across all nodes since they process the same finalized vertices
+        // Collect execution effects before mutating proposals (avoids borrow conflicts)
+        let mut effects: Vec<(u64, crate::governance::ProposalType)> = Vec::new();
+        for &(id, ref status) in &to_update {
+            if *status == crate::governance::ProposalStatus::Executed {
+                if let Some(p) = self.proposals.get(&id) {
+                    effects.push((id, p.proposal_type.clone()));
+                }
+            }
+        }
+
+        // Apply execution effects
+        for (id, proposal_type) in effects {
+            match proposal_type {
+                crate::governance::ProposalType::ParameterChange { ref param, ref new_value } => {
+                    match self.governance_params.apply_change(param, new_value) {
+                        Ok(()) => {}
+                        Err(e) => {
+                            eprintln!("ParameterChange proposal {} failed to apply: {}", id, e);
+                        }
+                    }
+                }
+                crate::governance::ProposalType::CouncilMembership { action, address, category } => {
+                    match action {
+                        crate::governance::CouncilAction::Add => {
+                            if let Err(e) = self.add_council_member(address, category) {
+                                eprintln!("CouncilMembership Add proposal {} failed: {}", id, e);
                             }
-                            Err(e) => {
-                                // Invalid parameter change — proposal passes but effect is rejected.
-                                // This can happen if validation rules changed between proposal
-                                // creation and execution. The proposal still transitions to Executed
-                                // to maintain determinism (all nodes must agree on status).
-                                eprintln!("ParameterChange proposal {} failed to apply: {}", id, e);
+                        }
+                        crate::governance::CouncilAction::Remove => {
+                            if !self.remove_council_member(&address) {
+                                eprintln!("CouncilMembership Remove proposal {} failed: not on council", id);
                             }
                         }
                     }
-                    // TextProposal: no execution effect (informational only)
                 }
+                crate::governance::ProposalType::TextProposal => {}
+            }
+        }
+
+        // Update proposal statuses
+        for (id, status) in to_update {
+            if let Some(p) = self.proposals.get_mut(&id) {
                 p.status = status;
             }
         }
@@ -1178,7 +1263,7 @@ impl StateEngine {
             next_proposal_id,
             governance_params,
             configured_validator_count,
-            council_members: HashSet::new(),
+            council_members: HashMap::new(),
             tx_index: HashMap::new(),
             tx_index_order: VecDeque::new(),
         }
@@ -1197,6 +1282,8 @@ impl StateEngine {
         proposals.sort_by_key(|(id, _)| *id);
         let mut votes: Vec<_> = self.votes.iter().map(|(k, v)| (*k, *v)).collect();
         votes.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.0.1.0.cmp(&b.0.1.0)));
+        let mut council: Vec<_> = self.council_members.iter().map(|(k, v)| (*k, *v)).collect();
+        council.sort_by_key(|(addr, _)| addr.0);
         crate::state::persistence::StateSnapshot {
             accounts,
             stake_accounts,
@@ -1208,6 +1295,7 @@ impl StateEngine {
             votes,
             next_proposal_id: self.next_proposal_id,
             governance_params: self.governance_params.clone(),
+            council_members: council,
         }
     }
 
@@ -1225,7 +1313,7 @@ impl StateEngine {
             next_proposal_id: snapshot.next_proposal_id,
             governance_params: snapshot.governance_params,
             configured_validator_count: None,
-            council_members: HashSet::new(),
+            council_members: snapshot.council_members.into_iter().collect(),
             tx_index: HashMap::new(),
             tx_index_order: VecDeque::new(),
         }
@@ -1243,6 +1331,7 @@ impl StateEngine {
         self.votes = snapshot.votes.into_iter().collect();
         self.next_proposal_id = snapshot.next_proposal_id;
         self.governance_params = snapshot.governance_params;
+        self.council_members = snapshot.council_members.into_iter().collect();
     }
 
     /// Save state to redb database (ACID, crash-safe).

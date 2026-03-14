@@ -178,6 +178,7 @@ fn test_compute_state_root_deterministic() {
         votes: vec![],
         next_proposal_id: 0,
         governance_params: Default::default(),
+        council_members: vec![],
     };
 
     let root1 = compute_state_root(&snapshot);
@@ -199,6 +200,7 @@ fn test_compute_state_root_different_for_different_state() {
         votes: vec![],
         next_proposal_id: 0,
         governance_params: Default::default(),
+        council_members: vec![],
     };
 
     let snapshot2 = StateSnapshot {
@@ -212,6 +214,7 @@ fn test_compute_state_root_different_for_different_state() {
         votes: vec![],
         next_proposal_id: 0,
         governance_params: Default::default(),
+        council_members: vec![],
     };
 
     let root1 = compute_state_root(&snapshot1);

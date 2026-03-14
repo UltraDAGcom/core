@@ -286,31 +286,19 @@ fn test_block_reward_geometric_series_converges() {
 
 #[test]
 fn test_deterministic_tiebreaking_in_active_set_selection() {
-    use ultradag_coin::constants::COUNCIL_MIN_STAKE;
     use ultradag_coin::tx::stake::MIN_STAKE_SATS;
     let mut state = StateEngine::new_with_genesis();
 
-    // Create 21 council members (maximum)
-    let council_members: Vec<SecretKey> = (0..21).map(|_| SecretKey::generate()).collect();
-    
-    // Create 1 regular staker (to test open staking)
-    let regular_staker = SecretKey::generate();
+    // Create 22 stakers (21 + 1 to test max cap)
+    let stakers: Vec<SecretKey> = (0..22).map(|_| SecretKey::generate()).collect();
 
-    // Add council members with high stake
-    for sk in &council_members {
-        state.credit(&sk.address(), COUNCIL_MIN_STAKE);
-        state.total_supply = state.total_supply.saturating_add(COUNCIL_MIN_STAKE);
-        let stake_tx = make_stake_tx(sk, COUNCIL_MIN_STAKE, 0);
+    // Add all 22 with same stake amount
+    for sk in &stakers {
+        state.credit(&sk.address(), MIN_STAKE_SATS);
+        state.total_supply = state.total_supply.saturating_add(MIN_STAKE_SATS);
+        let stake_tx = make_stake_tx(sk, MIN_STAKE_SATS, 0);
         state.apply_stake_tx(&stake_tx).unwrap();
-        state.add_council_member(sk.address()).unwrap();
     }
-
-    // Add regular staker with minimum stake
-    state.credit(&regular_staker.address(), MIN_STAKE_SATS);
-    state.total_supply = state.total_supply.saturating_add(MIN_STAKE_SATS);
-    let stake_tx = make_stake_tx(&regular_staker, MIN_STAKE_SATS, 0);
-    state.apply_stake_tx(&stake_tx).unwrap();
-    // Note: Not adding as council member - regular staker
 
     state.recalculate_active_set();
     let active1: Vec<_> = state.active_validators().to_vec();
@@ -325,18 +313,17 @@ fn test_deterministic_tiebreaking_in_active_set_selection() {
 
 #[test]
 fn test_epoch_transition_with_exactly_21_stakers() {
-    use ultradag_coin::constants::COUNCIL_MIN_STAKE;
+    use ultradag_coin::tx::stake::MIN_STAKE_SATS;
     let mut state = StateEngine::new_with_genesis();
 
     let validators: Vec<SecretKey> = (0..21).map(|_| SecretKey::generate()).collect();
 
-    // Credit directly and add as council members
+    // Credit directly and stake (no council membership needed for validation)
     for sk in &validators {
-        state.credit(&sk.address(), COUNCIL_MIN_STAKE);
-        state.total_supply = state.total_supply.saturating_add(COUNCIL_MIN_STAKE);
-        let stake_tx = make_stake_tx(sk, COUNCIL_MIN_STAKE, 0);
+        state.credit(&sk.address(), MIN_STAKE_SATS);
+        state.total_supply = state.total_supply.saturating_add(MIN_STAKE_SATS);
+        let stake_tx = make_stake_tx(sk, MIN_STAKE_SATS, 0);
         state.apply_stake_tx(&stake_tx).unwrap();
-        state.add_council_member(sk.address()).unwrap();
     }
 
     state.recalculate_active_set();
