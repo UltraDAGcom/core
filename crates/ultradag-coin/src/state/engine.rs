@@ -1373,7 +1373,7 @@ mod tests {
         // Create a vertex with incorrect coinbase amount
         let mut vertex = make_vertex_for(&proposer, 0, 0, vec![], &sk);
         
-        // Tamper with coinbase amount (should be 50 UDAG for height 0)
+        // Tamper with coinbase amount (should be INITIAL_REWARD_SATS for height 0)
         vertex.block.coinbase.amount = 1_000_000 * crate::constants::COIN;
         
         // Re-sign the vertex
@@ -1385,7 +1385,7 @@ mod tests {
         assert!(result.is_err());
         match result {
             Err(CoinError::InvalidCoinbase { expected, got }) => {
-                assert_eq!(expected, 50 * crate::constants::COIN);
+                assert_eq!(expected, crate::constants::INITIAL_REWARD_SATS);
                 assert_eq!(got, 1_000_000 * crate::constants::COIN);
             }
             _ => panic!("Expected InvalidCoinbase error"),

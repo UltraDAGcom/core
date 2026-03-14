@@ -35,7 +35,7 @@ fn make_stake_tx(sk: &SecretKey, amount: u64, nonce: u64) -> StakeTx {
 fn make_vertex(sk: &SecretKey, round: u64, parents: Vec<[u8; 32]>) -> DagVertex {
     let validator = sk.address();
     let mempool = Mempool::new();
-    let block = create_block([0u8; 32], round, &validator, &mempool, 50 * COIN);
+    let block = create_block([0u8; 32], round, &validator, &mempool, INITIAL_REWARD_SATS);
     let mut vertex = DagVertex::new(
         block,
         parents,
@@ -155,7 +155,7 @@ fn test_reject_vertex_with_timestamp_too_far_in_future() {
     
     let validator = sk.address();
     let mempool = Mempool::new();
-    let mut block = create_block([0u8; 32], 1, &validator, &mempool, 50 * COIN);
+    let mut block = create_block([0u8; 32], 1, &validator, &mempool, INITIAL_REWARD_SATS);
     block.header.timestamp = now + 600; // 10 minutes in future
     
     let mut vertex = DagVertex::new(
@@ -246,19 +246,19 @@ fn test_transaction_to_self_is_valid() {
 // ============================================================================
 
 #[test]
-fn test_block_reward_halves_at_210000_rounds() {
+fn test_block_reward_halves_at_interval() {
     let reward_before = block_reward(HALVING_INTERVAL - 1);
     let reward_at = block_reward(HALVING_INTERVAL);
     let reward_after = block_reward(HALVING_INTERVAL + 1);
     
-    assert_eq!(reward_before, 50 * COIN);
-    assert_eq!(reward_at, 25 * COIN);
-    assert_eq!(reward_after, 25 * COIN);
+    assert_eq!(reward_before, INITIAL_REWARD_SATS);
+    assert_eq!(reward_at, INITIAL_REWARD_SATS / 2);
+    assert_eq!(reward_after, INITIAL_REWARD_SATS / 2);
 }
 
 #[test]
 fn test_block_reward_at_round_zero() {
-    assert_eq!(block_reward(0), 50 * COIN);
+    assert_eq!(block_reward(0), INITIAL_REWARD_SATS);
 }
 
 #[test]
@@ -272,7 +272,7 @@ fn test_block_reward_geometric_series_converges() {
     }
     
     // Total emission approaches MAX_SUPPLY (21M UDAG = 2,100,000,000,000,000 sats)
-    // Geometric series: 50 * COIN * 210000 * (1 + 1/2 + 1/4 + ...) ≈ 50 * COIN * 210000 * 2
+    // Geometric series: INITIAL_REWARD_SATS * HALVING_INTERVAL * (1 + 1/2 + 1/4 + ...) ≈ INITIAL_REWARD_SATS * HALVING_INTERVAL * 2
     let expected_min = 20_900_000 * COIN; // Just under 21M
     let expected_max = MAX_SUPPLY_SATS;   // At most 21M
 

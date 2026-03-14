@@ -192,7 +192,7 @@ fn no_overflow_genesis_plus_rounds() {
     }
 
     // FAUCET_PREFUND_SATS = 1_000_000 * 10^8 = 10^14
-    // 1000 rounds * 50 UDAG * 10^8 = 5 * 10^12
+    // 1000 rounds * INITIAL_REWARD_SATS = 1000 * 10^8 = 10^11
     // Total ~ 1.05 * 10^14, well within u64
     assert!(state.total_supply() < u64::MAX);
     let sum: u64 = (0..4).map(|i| state.balance(&validators[i].address())).sum::<u64>()

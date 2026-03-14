@@ -12,11 +12,12 @@ pub fn sats_to_udag(sats: u64) -> f64 {
     sats as f64 / SATS_PER_UDAG as f64
 }
 
-/// Initial block reward: 50 UDAG
-pub const INITIAL_REWARD_SATS: u64 = 50 * COIN;
+/// Initial block reward: 1 UDAG per round (split among validators)
+pub const INITIAL_REWARD_SATS: u64 = 1 * COIN;
 
-/// Reward halves every 210,000 rounds
-pub const HALVING_INTERVAL: u64 = 210_000;
+/// Reward halves every 10,500,000 rounds (~1.66 years at 5s rounds)
+/// Chosen so that reward × interval × 2 = MAX_SUPPLY (21M UDAG).
+pub const HALVING_INTERVAL: u64 = 10_500_000;
 
 /// Genesis timestamp
 pub const GENESIS_TIMESTAMP: i64 = 1741132800; // 2025-03-05T00:00:00Z
@@ -186,22 +187,22 @@ mod tests {
 
     #[test]
     fn block_reward_at_height_zero() {
-        assert_eq!(block_reward(0), 50 * COIN);
+        assert_eq!(block_reward(0), INITIAL_REWARD_SATS);
     }
 
     #[test]
     fn block_reward_first_halving() {
-        assert_eq!(block_reward(HALVING_INTERVAL), 25 * COIN);
+        assert_eq!(block_reward(HALVING_INTERVAL), INITIAL_REWARD_SATS / 2);
     }
 
     #[test]
     fn block_reward_second_halving() {
-        assert_eq!(block_reward(2 * HALVING_INTERVAL), 12 * COIN + COIN / 2);
+        assert_eq!(block_reward(2 * HALVING_INTERVAL), INITIAL_REWARD_SATS / 4);
     }
 
     #[test]
     fn block_reward_just_before_halving() {
-        assert_eq!(block_reward(HALVING_INTERVAL - 1), 50 * COIN);
+        assert_eq!(block_reward(HALVING_INTERVAL - 1), INITIAL_REWARD_SATS);
     }
 
     #[test]

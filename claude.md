@@ -299,7 +299,7 @@ Comprehensive review of all recently added features to verify they are truly int
 - Fixed `balance_tdag` → `balance_udag` in RPC response examples
 - Documented `/faucet` as testnet-only with 100 UDAG per request limit
 - Clarified RPC port default formula: P2P port + 1000 (e.g., 9333 → 10333)
-- Clarified emission schedule: 50 UDAG per vertex (not per round total)
+- Clarified emission schedule: 1 UDAG per round total, split among validators
 
 **Governance & Testing (March 10, 2026):**
 - Implemented comprehensive governance integration tests (26 test cases: 3 hash/sig, 13 integration including 7 execution tests, 10 unit)
@@ -602,8 +602,8 @@ When a vertex fails insertion due to missing parents, the node:
 
 ### Supply
 - Max supply: 21,000,000 UDAG (1 UDAG = 100,000,000 sats)
-- Initial block reward: 50 UDAG per vertex (each validator earns 50 UDAG per block produced)
-- Halving: every 210,000 rounds
+- Initial block reward: 1 UDAG per round total, split equally among validators (pre-staking) or proportional to stake (post-staking)
+- Halving: every 10,500,000 rounds (~1.66 years at 5s rounds)
 - Default round time: 5 seconds (configurable via `--round-ms`)
 
 ### Genesis Allocations
@@ -613,7 +613,7 @@ When a vertex fails insertion due to missing parents, the node:
 
 ### Emission Model (Stake-Proportional)
 - **With staking active**: each validator's reward = `block_reward(height) × (own_stake / total_stake)`
-- **Pre-staking fallback**: each vertex gets full `block_reward(height)` (backward compatible)
+- **Pre-staking fallback**: `block_reward(height) / configured_validators` per vertex (equal split among N validators)
 - `create_block()` takes `validator_reward` parameter; validator computes its share before block production
 - Remainder from integer division is implicitly burned (sum of rewards <= block_reward)
 - Supply cap enforced: reward capped at `MAX_SUPPLY_SATS - total_supply`
@@ -1679,6 +1679,16 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 92. **CLEAN_STATE wipe misses flat checkpoint files (March 12, 2026)** — Docker entrypoint did `rm -rf /data/checkpoints` and `rm -rf /data/checkpoint_states`, but checkpoint files are stored as flat files in `/data/` (e.g., `checkpoint_0000007500.json`, `checkpoint_state_0000007500.json`), not in subdirectories. Old checkpoint files survived clean deploys, causing fast-sync to resurrect stale state.
     - **Fix:** Added `rm -f "${DATA_DIR:-/data}"/checkpoint_*.json` to docker-entrypoint.sh CLEAN_STATE block.
     - **Result:** Clean deploys now properly wipe all state including checkpoint files.
+93. **Pre-staking emission rate 5x too high (March 14, 2026)** — Each validator received the full 50 UDAG `block_reward` instead of splitting 50 UDAG among all validators per round. With 5 validators, emission was 250 UDAG/round instead of 50 UDAG/round, which would exhaust the 21M supply in ~4 days.
+    - **Root cause 1:** Validator loop computed reward from DAG vertex count in the previous round, but at startup this was 0 (`n = max(1) = 1`), giving full 50 UDAG per vertex.
+    - **Root cause 2:** Engine's `apply_finalized_vertices` counted validators per batch, but finality batches are partial (vertices finalize piecemeal as P2P messages arrive), so count was often 1.
+    - **Fix part 1:** Added `configured_validator_count` field to `StateEngine`, set from `--validators N` CLI flag.
+    - **Fix part 2:** Engine pre-staking branch uses `configured_validator_count` instead of batch count.
+    - **Fix part 3:** Validator loop uses `configured_validators` from `FinalityTracker` instead of DAG vertex count.
+    - **Result:** Emission is now 1 UDAG per round total, split equally among N validators (0.2 UDAG each with 5 validators).
+94. **Emission schedule too fast for mainnet (March 14, 2026)** — `INITIAL_REWARD_SATS` was 50 UDAG and `HALVING_INTERVAL` was 210,000 rounds (copied from Bitcoin). At 5s rounds, first halving occurred after 12.15 days — 60% of supply emitted in under 2 weeks. Not credible for mainnet.
+    - **Fix:** Changed to `INITIAL_REWARD_SATS = 1 UDAG` and `HALVING_INTERVAL = 10,500,000` rounds (~1.66 years). Maintains `reward × interval × 2 = 21M UDAG` identity. Full emission over ~106 years.
+    - **Tests:** All hardcoded `50 * COIN` assertions replaced with `INITIAL_REWARD_SATS`. Recovery test rewritten to use per-period math instead of per-height iteration (would be 400M iterations with new interval).
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.

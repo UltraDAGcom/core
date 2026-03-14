@@ -96,34 +96,17 @@ fn test_11_state_behind_dag_recovery() {
 /// MAX_SUPPLY_SATS cap. Faucet prefund comes from the cap, reducing mining rewards.
 #[test]
 fn test_12_coinbase_reward_sum_equals_21m() {
-    // Calculate total supply from block rewards
-    // Sum of block_reward(h) for h in 0..infinity (for 1 validator producing all blocks)
-    
-    // The reward halves every HALVING_INTERVAL blocks
-    // After 64 halvings, reward = 0
-    // Total blocks with rewards = 64 * HALVING_INTERVAL
-    
+    // Compute total supply from block rewards mathematically:
+    // Each halving period has HALVING_INTERVAL rounds at the same reward.
+    // reward_per_round halves each period until it reaches 0 (after 64 halvings).
     let mut total_reward: u64 = 0;
-    let mut height = 0u64;
-    
-    // Sum rewards until they reach 0
-    loop {
-        let reward = block_reward(height);
+    for halving in 0..64 {
+        let reward = block_reward(halving * HALVING_INTERVAL);
         if reward == 0 {
             break;
         }
-        total_reward = total_reward.saturating_add(reward);
-        height += 1;
-        
-        // Safety check to prevent infinite loop
-        if height > 64 * HALVING_INTERVAL + 1000 {
-            break;
-        }
+        total_reward = total_reward.saturating_add(HALVING_INTERVAL.saturating_mul(reward));
     }
-    
-    // The raw block_reward() schedule sums to ~21M UDAG (before supply cap enforcement).
-    // In practice, StateEngine caps total_supply at MAX_SUPPLY_SATS.
-    // Faucet prefund is credited via faucet_credit() and counts toward MAX_SUPPLY_SATS.
 
     println!("Total reward from schedule (uncapped): {} sats = {} UDAG",
         total_reward, total_reward / COIN);
@@ -139,7 +122,7 @@ fn test_12_coinbase_reward_sum_equals_21m() {
         "Raw reward schedule deviates too much from MAX_SUPPLY: {} vs {} (diff: {} sats)",
         total_reward, MAX_SUPPLY_SATS, diff
     );
-    
+
     // Verify that after 64 halvings, reward is 0
     assert_eq!(block_reward(64 * HALVING_INTERVAL), 0);
     assert_eq!(block_reward(64 * HALVING_INTERVAL + 1), 0);
