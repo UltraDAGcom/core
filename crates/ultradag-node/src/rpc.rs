@@ -864,7 +864,7 @@ async fn handle_request(
             if !rate_limiter.check_rate_limit(client_ip, limits::FAUCET) {
                 return Ok(error_response(
                     StatusCode::TOO_MANY_REQUESTS,
-                    "rate limit exceeded: faucet limited to 1 request per 10 minutes",
+                    "rate limit exceeded: faucet limited to 1 request per 5 seconds",
                 ));
             }
 

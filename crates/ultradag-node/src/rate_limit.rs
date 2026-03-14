@@ -36,7 +36,7 @@ pub mod limits {
     use super::*;
 
     pub const TX: RateLimit = RateLimit::new("tx", 10, 60);            // 10 tx/min
-    pub const FAUCET: RateLimit = RateLimit::new("faucet", 1, 600);   // 1 request/10min
+    pub const FAUCET: RateLimit = RateLimit::new("faucet", 1, 5);    // 1 request/5s (testnet)
     pub const STAKE: RateLimit = RateLimit::new("stake", 5, 60);      // 5 stake/min
     pub const UNSTAKE: RateLimit = RateLimit::new("unstake", 5, 60);  // 5 unstake/min
     pub const PROPOSAL: RateLimit = RateLimit::new("proposal", 5, 60); // 5 proposal/min
@@ -153,7 +153,7 @@ mod tests {
         assert!(!limiter.check_rate_limit(ip, global));
 
         // "faucet" should still be allowed (separate bucket)
-        let faucet = RateLimit::new("faucet", 1, 600);
+        let faucet = RateLimit::new("faucet", 1, 5);
         assert!(limiter.check_rate_limit(ip, faucet));
     }
 
