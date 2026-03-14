@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="UltraDAG blog: technical deep dives, network updates, and research on DAG-BFT consensus.">
-<meta property="og:title" content="Blog — UltraDAG">
-<meta property="og:description" content="Technical deep dives and network updates from the UltraDAG team.">
-<meta property="og:type" content="website">
+<meta name="description" content="Why UltraDAG's emission schedule changed from 50 UDAG/round to 1 UDAG/round, and the math behind credible tokenomics for a mainnet launch.">
+<meta property="og:title" content="Fixing the Emission Schedule — UltraDAG Blog">
+<meta property="og:description" content="How we caught a 50x emission rate bug and redesigned the halving schedule for mainnet credibility.">
+<meta property="og:type" content="article">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%233d9be9' stroke-width='2'/%3E%3Ccircle cx='50' cy='50' r='15' fill='%233d9be9'/%3E%3C/svg%3E">
-<title>Blog — UltraDAG</title>
+<title>Fixing the Emission Schedule — UltraDAG Blog</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -27,14 +27,8 @@ html{scroll-behavior:smooth}
 body{margin:0;padding:0;background:var(--bg);color:var(--body);font-family:'Syne',sans-serif;font-size:16px;line-height:1.7;cursor:default}
 a{color:var(--accent);text-decoration:none;transition:color .2s}
 a:hover{color:var(--white)}
-
-/* NOISE OVERLAY */
 body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.4}
-
-/* GRID BG */
 .grid-bg{position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.5625;pointer-events:none;z-index:0;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,black 30%,transparent 100%)}
-
-/* NAV */
 nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid transparent;transition:border-color .3s,background .3s;background:rgba(10,14,26,.92);backdrop-filter:blur(16px)}
 nav.scrolled{border-color:var(--border)}
 .nav-logo{font-family:'Cormorant',serif;font-size:22px;font-weight:300;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px}
@@ -54,7 +48,6 @@ nav.scrolled{border-color:var(--border)}
 .nav-cta::after{display:none!important}
 .nav-links>li:has(.nav-cta){margin-left:-16px}
 .nav-links>li:has(.nav-cta)+li:has(.nav-cta){margin-left:-20px}
-
 .mega-menu{position:absolute;top:64px;left:50%;transform:translateX(-50%);background:rgba(10,14,26,.98);backdrop-filter:blur(24px);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;padding:32px;min-width:720px;max-width:920px;opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;box-shadow:0 12px 40px rgba(0,0,0,.4)}
 .nav-links>li:hover .mega-menu{opacity:1;visibility:visible}
 .mega-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:32px}
@@ -63,8 +56,6 @@ nav.scrolled{border-color:var(--border)}
 .mega-col a{font-family:'Syne',sans-serif;font-size:13px;color:var(--subtle);padding:6px 0;transition:color .2s,padding-left .2s;letter-spacing:0;text-transform:none}
 .mega-col a:hover{color:var(--white);padding-left:8px}
 .mega-col a::after{display:none!important}
-
-/* HAMBURGER MENU */
 .hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;background:none;border:none;z-index:101}
 .hamburger span{width:24px;height:2px;background:var(--white);transition:all .3s;border-radius:2px}
 .hamburger.active span:nth-child(1){transform:rotate(45deg) translate(7px,7px)}
@@ -77,24 +68,39 @@ nav.scrolled{border-color:var(--border)}
 .mobile-menu a:hover{color:var(--white)}
 .mobile-menu .nav-cta{display:inline-block;margin-top:8px}
 @media(min-width:901px){.mobile-menu{display:none}}
-
-/* BLOG CONTAINER */
-.blog-container{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:120px 48px 80px}
-
-/* BLOG HEADER */
-.blog-header{margin-bottom:64px}
-.blog-title{font-family:'Cormorant',serif;font-size:clamp(40px,6vw,64px);font-weight:300;line-height:1.05;color:var(--white);margin-bottom:12px;letter-spacing:-.01em}
-.blog-subtitle{font-family:'Cormorant',serif;font-size:18px;font-weight:300;font-style:italic;color:var(--subtle);max-width:600px}
-
-/* BLOG POST CARD */
-.post-card{border:1px solid var(--bg4);background:var(--bg2);padding:32px;margin-bottom:24px;border-radius:2px;transition:border-color .2s,background .2s;text-decoration:none;display:block}
-.post-card:hover{border-color:var(--accent2);background:var(--bg3)}
-.post-meta{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--subtle);margin-bottom:12px;display:flex;gap:16px}
-.post-category{color:var(--accent)}
-.post-title{font-family:'Cormorant',serif;font-size:28px;font-weight:400;color:var(--white);margin-bottom:8px;line-height:1.2}
-.post-summary{font-size:15px;color:var(--bright);line-height:1.6}
-
-/* RESPONSIVE */
+.article-container{position:relative;z-index:1;max-width:800px;margin:0 auto;padding:120px 48px 80px}
+.article-header{margin-bottom:48px;padding-bottom:32px;border-bottom:1px solid var(--border)}
+.back-link{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:24px;display:inline-block}
+.back-link:hover{color:var(--accent)}
+.article-meta{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:16px;display:flex;gap:16px}
+.article-category{color:var(--accent)}
+.article-title{font-family:'Cormorant',serif;font-size:clamp(36px,5vw,52px);font-weight:300;line-height:1.1;color:var(--white);margin-bottom:0;letter-spacing:-.01em}
+.article-content{font-family:'Syne',sans-serif;font-size:16px;line-height:1.75;color:var(--body)}
+.article-content h2{font-family:'Cormorant',serif;font-size:32px;font-weight:400;color:var(--white);margin:48px 0 20px;line-height:1.2}
+.article-content h3{font-family:'Syne',sans-serif;font-size:20px;font-weight:600;color:var(--bright);margin:36px 0 16px}
+.article-content p{margin-bottom:20px;font-weight:300}
+.article-content strong{color:var(--bright);font-weight:600}
+.article-content em{font-style:italic;color:var(--subtle)}
+.article-content code{font-family:'DM Mono',monospace;font-size:14px;color:var(--accent);background:var(--bg3);padding:2px 8px;border-radius:2px;border:1px solid var(--border)}
+.article-content pre{background:var(--bg3);border:1px solid var(--border);border-radius:2px;padding:20px 24px;overflow-x:auto;margin:24px 0}
+.article-content pre code{background:none;border:none;padding:0;font-size:13px;line-height:1.6;color:var(--body);display:block}
+.article-content ul,.article-content ol{margin:16px 0 24px;padding-left:28px}
+.article-content li{margin-bottom:8px;font-weight:300}
+.callout{border-left:3px solid var(--accent2);padding:20px 24px;background:var(--bg2);margin:28px 0;border-radius:0 2px 2px 0}
+.callout p{margin-bottom:12px}
+.callout p:last-child{margin-bottom:0}
+.bug-box{border:1px solid #8b3a3a;background:rgba(139,58,58,0.08);padding:24px;margin:28px 0;border-radius:2px}
+.bug-box h4{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:#ff6b6b;margin-bottom:16px}
+.bug-box p{margin-bottom:12px;font-size:16px}
+.bug-box code{background:rgba(139,58,58,0.15);border-color:#8b3a3a}
+.fix-box{border:1px solid #3a8b5c;background:rgba(58,139,92,0.08);padding:24px;margin:28px 0;border-radius:2px}
+.fix-box h4{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:#6bffb3;margin-bottom:16px}
+.fix-box p{margin-bottom:12px;font-size:16px}
+.emission-table{width:100%;border-collapse:collapse;margin:24px 0;font-size:14px}
+.emission-table th{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);text-align:left;padding:12px 16px;border-bottom:1px solid var(--border2);font-weight:600}
+.emission-table td{padding:12px 16px;border-bottom:1px solid var(--border);font-family:'DM Mono',monospace;font-size:13px}
+.emission-table tr:hover{background:var(--bg2)}
+.emission-table .highlight{color:var(--success)}
 @media(max-width:900px){
   nav{padding:0 24px;height:56px}
   .nav-logo{font-size:18px}
@@ -103,13 +109,14 @@ nav.scrolled{border-color:var(--border)}
   .nav-links{display:none}
   .hamburger{display:flex}
   .mobile-menu{display:block;top:56px}
-  .blog-container{padding:80px 24px 60px}
-  .blog-title{font-size:40px}
-  .post-card{padding:24px}
-  .post-title{font-size:24px}
+  .article-container{padding:80px 24px 60px}
+  .article-title{font-size:32px}
+  .article-content{font-size:17px}
+  .article-content h2{font-size:28px}
+  .article-content h3{font-size:18px}
+  .emission-table{font-size:12px}
+  .emission-table th,.emission-table td{padding:8px 10px}
 }
-
-/* FOOTER */
 footer{position:relative;z-index:1;border-top:1px solid var(--border);background:var(--bg);margin-top:120px}
 .footer-inner{max-width:1200px;margin:0 auto;padding:64px 48px 32px}
 .footer-top{display:grid;grid-template-columns:1.2fr 2fr;gap:80px;margin-bottom:48px}
@@ -144,7 +151,6 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 
 <div class="grid-bg"></div>
 
-<!-- NAV -->
 <nav id="nav">
   <a href="../index.html" class="nav-logo">
     <div class="nav-logo-mark"></div>
@@ -168,7 +174,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
           <div class="mega-col">
             <h4>Advanced Topics</h4>
             <ul>
-              <li><a href="../whitepaper.html#staking">Staking & Validation</a></li>
+              <li><a href="../whitepaper.html#staking">Staking &amp; Validation</a></li>
               <li><a href="../whitepaper.html#governance">Governance</a></li>
               <li><a href="../whitepaper.html#checkpoints">Checkpoints</a></li>
               <li><a href="../whitepaper.html#security">Security Model</a></li>
@@ -200,9 +206,9 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
           <div class="mega-col">
             <h4>Validators</h4>
             <ul>
-              <li><a href="../docs.html#staking">Staking & Validation</a></li>
+              <li><a href="../docs.html#staking">Staking &amp; Validation</a></li>
               <li><a href="../docs.html#governance">Governance</a></li>
-              <li><a href="../docs.html#monitoring">Metrics & Monitoring</a></li>
+              <li><a href="../docs.html#monitoring">Metrics &amp; Monitoring</a></li>
             </ul>
           </div>
           <div class="mega-col">
@@ -210,7 +216,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
             <ul>
               <li><a href="../docs.html#arch">Architecture</a></li>
               <li><a href="../docs.html#transactions">Transaction Format</a></li>
-              <li><a href="../docs.html#checkpoints">Checkpoints & Fast-Sync</a></li>
+              <li><a href="../docs.html#checkpoints">Checkpoints &amp; Fast-Sync</a></li>
               <li><a href="../docs.html#troubleshooting">Troubleshooting</a></li>
             </ul>
           </div>
@@ -230,7 +236,6 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   </button>
 </nav>
 
-<!-- MOBILE MENU -->
 <div class="mobile-menu" id="mobile-menu">
   <ul>
     <li><a href="../index.html">Home</a></li>
@@ -244,48 +249,153 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   </ul>
 </div>
 
-<!-- BLOG CONTAINER -->
-<div class="blog-container">
-  <!-- POST CARDS -->
-  <a href="2026-03-emission-schedule.html" class="post-card">
-    <div class="post-meta">
-      <span class="post-category">Tokenomics</span>
+<article class="article-container">
+  <header class="article-header">
+    <a href="index.html" class="back-link">&larr; Back to Blog</a>
+    <div class="article-meta">
+      <span class="article-category">Tokenomics</span>
       <span>March 14, 2026</span>
     </div>
-    <h2 class="post-title">Redesigning the Emission Schedule for Mainnet</h2>
-    <p class="post-summary">Why we changed from 50 UDAG/round with 12-day halvings to 1 UDAG/round with 1.66-year halvings, and the coupled constraint that ties reward, interval, and max supply together.</p>
-  </a>
+    <h1 class="article-title">Fixing the Emission Schedule</h1>
+  </header>
 
-  <a href="2026-03-governance-dao-audit.html" class="post-card">
-    <div class="post-meta">
-      <span class="post-category">Security</span>
-      <span>March 14, 2026</span>
+  <div class="article-content">
+    <p>UltraDAG inherited Bitcoin's halving constants: 50 coins per block, halving every 210,000 blocks, 21 million max supply. Bitcoin produces blocks every 10 minutes. UltraDAG produces rounds every 5 seconds.</p>
+
+    <p>That difference&mdash;a factor of 120&mdash;meant the entire emission schedule would complete in three months instead of a hundred years. We caught it before mainnet launch and redesigned the schedule from first principles.</p>
+
+    <h2>The Constraint</h2>
+
+    <p>Bitcoin's emission has an elegant identity that most people don't think about:</p>
+
+    <pre><code>initial_reward &times; halving_interval &times; 2 = max_supply
+50 BTC &times; 210,000 blocks &times; 2 = 21,000,000 BTC</code></pre>
+
+    <p>The factor of 2 comes from the geometric series <code>1 + 1/2 + 1/4 + ... = 2</code>. This means the three constants&mdash;initial reward, halving interval, and max supply&mdash;are mathematically coupled. You can't change one without adjusting another.</p>
+
+    <p>UltraDAG kept 21M max supply (the right choice for brand clarity). It kept 210,000 as the halving interval (wrong&mdash;this is a block count, not a time duration). And it kept 50 as the initial reward (wrong&mdash;this was sized for 10-minute blocks).</p>
+
+    <h2>Two Bugs, Not One</h2>
+
+    <h3>Bug 1: Per-Validator Instead of Per-Round</h3>
+
+    <div class="bug-box">
+      <h4>Pre-Staking Emission Bug</h4>
+      <p>Before staking is active, the pre-staking emission model should split <code>block_reward</code> equally among all validators. Instead, each validator received the <strong>full</strong> reward. With 5 validators: 250 UDAG/round instead of 50.</p>
+      <p>Root cause: the validator count used for splitting was derived from DAG vertex counts in the previous round, which was 0 at startup. <code>max(0, 1) = 1</code>, so each validator got the undivided reward.</p>
     </div>
-    <h2 class="post-title">Adversarial Audit of On-Chain Governance</h2>
-    <p class="post-summary">22 attack vectors tested against UltraDAG's governance system. 6 vulnerabilities found and fixed, 16 confirmed safe with line-number evidence.</p>
-  </a>
 
-  <a href="2026-03-jepsen-chaos-testing.html" class="post-card">
-    <div class="post-meta">
-      <span class="post-category">Testing</span>
-      <span>March 11, 2026</span>
+    <div class="fix-box">
+      <h4>Fix</h4>
+      <p>Added <code>configured_validator_count</code> field to StateEngine, set from the <code>--validators N</code> CLI flag. Both engine and validator loop now use this deterministic value instead of counting vertices in finality batches.</p>
     </div>
-    <h2 class="post-title">Chaos Testing Found a Consensus Safety Bug</h2>
-    <p class="post-summary">How Jepsen-style chaos testing found a critical finality conflict bug in partition recovery before mainnet launch.</p>
-  </a>
 
-  <a href="2026-03-checkpoint-tofu.html" class="post-card">
-    <div class="post-meta">
-      <span class="post-category">Security</span>
-      <span>March 2026</span>
+    <h3>Bug 2: The Schedule Itself</h3>
+
+    <p>Even after fixing the per-validator split, the emission was still far too fast. At 50 UDAG/round with 5-second rounds:</p>
+
+    <ul>
+      <li>17,280 rounds/day &times; 50 UDAG = <strong>864,000 UDAG/day</strong></li>
+      <li>First halving at 210,000 rounds = <strong>12.15 days</strong></li>
+      <li>60% of all mining rewards emitted in under two weeks</li>
+      <li>Supply effectively exhausted within 3 months</li>
+    </ul>
+
+    <p>For comparison, Bitcoin's first halving took 4 years. Most serious L1s measure halvings in years, not days.</p>
+
+    <h2>The Redesign</h2>
+
+    <p>We fixed <code>max_supply</code> at 21M and solved for reward and interval combinations that produce credible timelines:</p>
+
+    <table class="emission-table">
+      <thead>
+        <tr>
+          <th>Reward/Round</th>
+          <th>Halving Interval</th>
+          <th>First Halving</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>50 UDAG</td><td>210,000</td><td>12 days</td></tr>
+        <tr><td>5 UDAG</td><td>2,100,000</td><td>4 months</td></tr>
+        <tr><td>2 UDAG</td><td>5,250,000</td><td>10 months</td></tr>
+        <tr class="highlight"><td><strong>1 UDAG</strong></td><td><strong>10,500,000</strong></td><td><strong>~1.66 years</strong></td></tr>
+      </tbody>
+    </table>
+
+    <p>We chose <strong>1 UDAG per round</strong> with a <strong>10,500,000-round halving interval</strong>. The identity holds:</p>
+
+    <pre><code>1 UDAG &times; 10,500,000 rounds &times; 2 = 21,000,000 UDAG</code></pre>
+
+    <h2>The New Schedule</h2>
+
+    <p>Genesis allocates 2,050,000 UDAG (faucet reserve + developer allocation), leaving 18,950,000 UDAG for mining. The supply cap in StateEngine enforces the 21M ceiling&mdash;once cumulative mining + genesis reaches 21M, block rewards drop to zero regardless of the halving schedule.</p>
+
+    <table class="emission-table">
+      <thead>
+        <tr>
+          <th>Period</th>
+          <th>Reward/Round</th>
+          <th>Mined</th>
+          <th>Cumulative</th>
+          <th>% of 21M</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Year 0&ndash;1.7</td><td>1.0000 UDAG</td><td>10,500,000</td><td>12,550,000</td><td>59.8%</td></tr>
+        <tr><td>Year 1.7&ndash;3.3</td><td>0.5000 UDAG</td><td>5,250,000</td><td>17,800,000</td><td>84.8%</td></tr>
+        <tr><td>Year 3.3&ndash;5.0</td><td>0.2500 UDAG</td><td>2,625,000</td><td>20,425,000</td><td>97.3%</td></tr>
+        <tr><td>Year 5.0&ndash;5.7</td><td>0.1250 UDAG</td><td>575,000</td><td class="highlight">21,000,000</td><td class="highlight">100%</td></tr>
+      </tbody>
+    </table>
+
+    <p>Supply cap reached at approximately <strong>year 5.7</strong>. After that, validators earn only from transaction fees.</p>
+
+    <h2>Validator Economics</h2>
+
+    <p>Daily emission is 17,280 UDAG (one per round, 17,280 rounds per day). Split among validators:</p>
+
+    <table class="emission-table">
+      <thead>
+        <tr>
+          <th>Validators</th>
+          <th>UDAG/Day Each</th>
+          <th>UDAG/Year Each</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>5 (testnet)</td><td>3,456</td><td>1,262,304</td></tr>
+        <tr><td>10</td><td>1,728</td><td>631,152</td></tr>
+        <tr><td>21 (max active)</td><td>823</td><td>300,549</td></tr>
+      </tbody>
+    </table>
+
+    <p>At 21 validators, each earns ~823 UDAG/day in the first halving period. This is meaningful enough to incentivize early validators while conservative enough that the schedule doesn't look like an exit scam.</p>
+
+    <h2>Why Not Exactly Bitcoin's Timeline?</h2>
+
+    <p>Bitcoin's 4-year halvings at 5-second rounds would require an initial reward of ~0.033 UDAG per round. That's too small to meaningfully reward early validators, especially when split 21 ways. The daily emission per validator would be ~27 UDAG&mdash;less than a single faucet request.</p>
+
+    <p>1.66-year halvings hit the sweet spot: aggressive enough to reward early participants, conservative enough that the schedule extends over 5+ years of meaningful emission. The supply cap provides a hard ceiling regardless.</p>
+
+    <h2>What Changed</h2>
+
+    <pre><code>// Before
+INITIAL_REWARD_SATS = 50 * COIN      // 50 UDAG per round
+HALVING_INTERVAL    = 210,000         // ~12 days at 5s rounds
+
+// After
+INITIAL_REWARD_SATS = 1 * COIN       // 1 UDAG per round
+HALVING_INTERVAL    = 10,500,000      // ~1.66 years at 5s rounds</code></pre>
+
+    <p>Two constants changed. The rest of the system&mdash;supply cap enforcement, stake-proportional distribution, observer penalties, halving logic&mdash;was already correct. The fix was purely parametric.</p>
+
+    <div class="callout">
+      <p>The emission schedule is enforced at three levels: <code>block_reward(height)</code> computes the halved reward, <code>apply_vertex_with_validators()</code> caps coinbase at <code>MAX_SUPPLY - total_supply</code>, and the supply invariant (<code>liquid + staked == total_supply</code>) is checked unconditionally in release builds.</p>
     </div>
-    <h2 class="post-title">Fixing a Trust-On-First-Use Vulnerability in Checkpoint Sync</h2>
-    <p class="post-summary">How we discovered and fixed a critical vulnerability where new nodes blindly trusted checkpoint state from the first peer they connected to.</p>
-  </a>
+  </div>
+</article>
 
-</div>
-
-<!-- FOOTER -->
 <footer>
   <div class="footer-inner">
     <div class="footer-top">
@@ -304,7 +414,6 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
           </a>
         </div>
       </div>
-      
       <div class="footer-links-grid">
         <div class="footer-col">
           <h4>Product</h4>
@@ -315,7 +424,6 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
             <li><a href="../whitepaper.html">Whitepaper</a></li>
           </ul>
         </div>
-        
         <div class="footer-col">
           <h4>Developers</h4>
           <ul>
@@ -325,7 +433,6 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
             <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
           </ul>
         </div>
-        
         <div class="footer-col">
           <h4>Resources</h4>
           <ul>
@@ -335,16 +442,14 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
             <li><a href="../docs.html#troubleshooting">Support</a></li>
           </ul>
         </div>
-        
       </div>
     </div>
-    
     <div class="footer-bottom">
       <div class="footer-legal">
-        <span>© 2026 UltraDAG</span>
-        <span class="footer-separator">•</span>
+        <span>&copy; 2026 UltraDAG</span>
+        <span class="footer-separator">&bull;</span>
         <span>Licensed under BUSL-1.1</span>
-        <span class="footer-separator">•</span>
+        <span class="footer-separator">&bull;</span>
         <span>Converts to MIT March 2030</span>
       </div>
       <div class="footer-status">
@@ -356,7 +461,6 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 </footer>
 
 <script>
-// Hamburger menu toggle
 const hamburger = document.getElementById('hamburger');
 const mobileMenu = document.getElementById('mobile-menu');
 hamburger.addEventListener('click', () => {
@@ -364,7 +468,6 @@ hamburger.addEventListener('click', () => {
   mobileMenu.classList.toggle('active');
 });
 
-// Scrolled nav state
 const nav = document.getElementById('nav');
 window.addEventListener('scroll', () => {
   if (window.scrollY > 20) {
