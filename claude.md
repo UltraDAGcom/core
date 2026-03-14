@@ -8,18 +8,28 @@
 
 ## Recent Updates (March 2026)
 
+**State Root Verification & Adversarial Integration Tests (March 14, 2026):**
+- **State root verification on redb save/load** — `save_to_redb()` now computes `blake3(postcard(snapshot))` and stores it in the METADATA table. `load_from_redb()` recomputes the hash and compares against the stored value. Catches silent corruption from disk errors, partial writes, or software bugs. Legacy databases without a stored root skip verification gracefully.
+- **5 adversarial integration tests** — Multi-node consensus simulation with full state application (coinbase rewards, finality, deterministic ordering):
+  - `test_crash_restart_state_convergence` — Kill node mid-round, restart with fresh state, replay all vertices from peers, verify state root matches surviving nodes.
+  - `test_partition_heal_state_agreement` — Partition [0,1] vs [2,3] for 50 rounds, heal, run 50 more, verify all 4 nodes agree on state root and supply.
+  - `test_equivocation_slash_identical_across_nodes` — Node produces two different vertices in same round. All nodes process equivocation deterministically via `apply_finalized_vertices`, verify identical state roots.
+  - `test_minority_partition_no_finality` — Isolated node cannot advance finality alone (needs quorum). Majority partition continues.
+  - `test_state_root_deterministic` — Two independent 4-node simulations with same keys produce identical state roots.
+- **Tests:** 784 passed, 0 failed, 14 ignored (jepsen long-running).
+
 **Governance & Hardening Pass (March 14, 2026):**
 - **Governance stake snapshot for quorum** — `Proposal` struct now includes `snapshot_total_stake: u64` field, set from `total_votable_stake()` at proposal creation time. `tick_governance()` uses this snapshot as the quorum denominator instead of live `total_votable_stake()`. Prevents governance attack where stakers vote then unstake to lower the quorum target. Individual vote weights still use live stake (pragmatic tradeoff — snapshotting the full stake table per proposal is expensive). Legacy proposals with `snapshot_total_stake=0` fall back to live total. Exposed in `/proposal/:id` RPC response.
 - **Orphan buffer per-peer caps** — Added `MAX_ORPHAN_ENTRIES_PER_PEER = 100` limit. `insert_orphan()` now tracks source peer via `OrphanEntry { vertex, peer }` struct. A single malicious peer can no longer fill the entire 1000-entry orphan buffer, crowding out legitimate orphans from other peers.
 - **CheckpointSync snapshot size validation** — Added `MAX_SNAPSHOT_ACCOUNTS = 10M` and `MAX_SNAPSHOT_PROPOSALS = 10K` limits. CheckpointSync handler validates snapshot account/proposal counts before processing, preventing OOM from malicious peers sending fabricated snapshots.
-- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+- **Tests:** 784 passed, 0 failed, 14 ignored (jepsen long-running).
 
 **Deep Review — Consensus & Safety Fixes (March 14, 2026):**
 - **CRITICAL: `topo_level` removed from vertex ordering** — `ordering.rs` sort key changed from `(round, topo_level, hash)` to `(round, hash)`. `topo_level` is `#[serde(skip)]` and computed locally during `insert()` — if two nodes have different DAG states when inserting (e.g., missing a parent), they compute different `topo_level` for the same vertex. Using it in ordering creates a **consensus split vector**: nodes disagree on transaction order → different state roots → checkpoint co-signing fails. `(round, hash)` is fully deterministic from signed vertex data.
 - **Finality liveness hole fixed (stuck parents)** — Added escape hatch for parents stuck >100 rounds behind `last_finalized_round`. Before this fix, a single parent from a slashed/offline validator that never gets 2f+1 descendants could block an entire subgraph from finalizing for up to 1000 rounds (~83 minutes) until pruning. Now these stuck parents are treated as finalized after 100 rounds (~8 minutes), unblocking descendant finality. Applied in both initial scan and forward propagation in `find_newly_finalized()`.
 - **Governance parameter ceilings** — Added upper bounds to all governable parameters in `apply_change()` to prevent destructive governance: `min_fee_sats` max 1 UDAG (prevents prohibitive fees), `min_stake_to_propose` max 1M UDAG (prevents whale-only governance), `voting_period_rounds` max 1M (~58 days), `execution_delay_rounds` max 100K (~5.8 days).
 - **`tick_governance` moved to per-round** — Previously ran per-vertex in `apply_vertex_with_validators()`. A ParameterChange proposal executing mid-round could cause same-round vertices to see different governance parameters, creating non-deterministic behavior. Now runs once per completed round in `apply_finalized_vertices()` and in the `apply_vertex()` convenience method.
-- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+- **Tests:** 784 passed, 0 failed, 14 ignored (jepsen long-running).
 
 **Robustness & Correctness Pass (March 14, 2026):**
 - **Genesis merkle root consistency** — `genesis_block()` now uses `merkle_root()` function instead of raw `coinbase.hash()`, matching the path all other blocks take via `compute_merkle_root()`. Functionally identical for single-leaf case but eliminates inconsistency.
@@ -40,7 +50,7 @@
 - **Governance voter breakdown** — `/proposal/{id}` now includes a `voters` array with each voter's address, vote (yes/no), and stake weight in sats and UDAG.
 - **`Mempool::get()` method** — Look up a transaction by hash for status endpoints.
 - **Faucet mainnet compile-time guard** — Added `#[cfg(feature = "mainnet")]` assertion that rejects the test `FAUCET_SEED = [0xFA; 32]`. `mainnet` feature flag added to ultradag-coin Cargo.toml. Prevents accidentally shipping the deterministic faucet keypair to mainnet.
-- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+- **Tests:** 784 passed, 0 failed, 14 ignored (jepsen long-running).
 
 **Correctness & Stability Pass (March 14, 2026):**
 - **`is_multiple_of` replaced with `%`** — 4 uses of nightly-only `is_multiple_of()` API replaced with stable `% N == 0` equivalents in block.rs, constants.rs, validator.rs. Prevents compile failure on stable Rust.
@@ -49,7 +59,7 @@
 - **`select_parents` dead code eliminated** — `BlockDag::select_parents()` now uses `vertices_in_round(round)` instead of `tips()` (which was the root cause of Bug #5, finality lag 250+). Validator loop calls `dag.select_parents()` instead of duplicating the inline parent selection code. Signature changed to `select_parents(&self, proposer, round, k)`.
 - **`get_equivocation_evidence` survives pruning** — Now falls back to permanent `evidence_store` when `equivocation_evidence` (prunable) doesn't have the entry. Enables evidence re-broadcast after pruning.
 - **File extensions fixed** — `dag.json`/`finality.json` renamed to `dag.bin`/`finality.bin` (files use postcard binary, not JSON). Updated across main.rs, validator.rs, docker-entrypoint.sh, and all test files.
-- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+- **Tests:** 784 passed, 0 failed, 14 ignored (jepsen long-running).
 
 **Block Explorer Update (March 14, 2026):**
 - **Transaction search** — Explorer search now tries `/tx/{hash}` for 64-hex queries. Shows status (pending/finalized), round, vertex link, and validator for finalized transactions.
@@ -65,14 +75,14 @@
 - **Merkle tree CVE-2012-2459 mitigation** — `merkle_root()` duplicated the last leaf for odd counts, making `[A,B,C]` and `[A,B,C,C]` produce the same root. Fix: mix leaf count into final hash via `blake3(tree_root || leaf_count_u64_le)`. While not practically exploitable in this system (duplicate tx hashes require identical nonces), this eliminates a theoretical concern. Breaking change — requires clean testnet restart.
 - **Fee extraction DRY** — 6 inline `match tx { Transfer(t) => t.fee, ... }` blocks in `pool.rs` (3), `block.rs` (1), `engine.rs` (1), `producer.rs` (1) replaced with `tx.fee()` calls.
 - **`hex_short` deduplicated** — Identical function in `server.rs` and `validator.rs`. Made pub in server.rs, re-exported via `ultradag_network::hex_short`, removed duplicate.
-- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+- **Tests:** 784 passed, 0 failed, 14 ignored (jepsen long-running).
 - **Breaking change:** Merkle root computation changed. Clean testnet restart required.
 
 **Node Crate Quality Pass (March 14, 2026):**
 - **MEMORY_CACHE OnceLock bug** — `get_memory_usage()` used `OnceLock<(Option<u64>, Instant)>` which can only be set once. The "30 second refresh" logic was dead code — `OnceLock::set()` silently fails after first `get_or_init()`. Replaced with `tokio::sync::Mutex` for proper refresh. Uses `try_lock()` to avoid blocking RPC on contention.
 - **`get_uptime()` returned system uptime, not process uptime** — Read `/proc/uptime` (Linux) or `kern.boottime` (macOS), returning time since system boot. Replaced with `Instant::now()` captured in `OnceLock` at first call, returning process uptime. Old system uptime logic preserved as `get_system_uptime()`.
 - **Checkpoint chain silently broken on missing predecessor** — When previous checkpoint not found on disk, produced checkpoint with `prev_checkpoint_hash = [0u8; 32]`, permanently breaking the hash chain for fast-sync. Now skips checkpoint production entirely (`continue`) and logs at error level. Chain integrity preserved — other validators with the previous checkpoint will produce valid checkpoints.
-- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+- **Tests:** 784 passed, 0 failed, 14 ignored (jepsen long-running).
 
 **Network Layer Hardening (March 14, 2026):**
 - **Orphan buffer eviction** — When orphan buffer reaches capacity (1000 entries / 50MB), evicts the vertex with the lowest round (oldest, least likely to resolve) instead of silently dropping new orphans. `insert_orphan()` helper used by all 3 insertion sites (DagProposal, DagVertices, ParentVertices).
@@ -82,14 +92,14 @@
 - **Heartbeat reconnect threshold raised** — `MIN_PEERS_FOR_RECONNECT = 4` (was hardcoded `3`). Must be above the validator production gate (2 peers) to prevent production stalls between heartbeat cycles.
 - **GetRoundHashes rate limited** — Added 10-second per-peer cooldown for `GetRoundHashes` requests. Prevents abuse where a peer floods the node with expensive DAG hash queries.
 - **banned_peers dead code removed** — Field existed on NodeServer but no peer was ever banned (insert never called). Removed field, initialization, and IP ban check from `listen()`.
-- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+- **Tests:** 784 passed, 0 failed, 14 ignored (jepsen long-running).
 
 **Network Crate Quality Pass (March 14, 2026):**
 - **TOCTOU race in `try_connect_peer`** — Two tasks checking `is_listen_addr_connected` simultaneously could both proceed to connect, creating duplicate connections. Added `connecting: HashSet<String>` to PeerRegistry with `start_connecting()`/`finish_connecting()` methods. `try_connect_peer` atomically marks address as connecting before TCP connect, clears on success or failure. All early return paths call `finish_connecting`.
 - **Orphan resolution loop bounded** — `resolve_orphans` while loop had no iteration limit. A malicious peer sending carefully crafted orphan chains could cause unbounded processing. Added `MAX_ORPHAN_RESOLUTION_PASSES = 10` constant to cap iterations per invocation.
 - **GetDagVertices rate limited** — Added 2-second per-peer cooldown for `GetDagVertices` requests in DagVertices handler. Prevents a peer from flooding the node with expensive DAG sync queries.
 - **`send_raw`/`send_raw_len` gated behind feature flag** — Test-only methods on PeerWriter were compiled into production builds. Moved behind `#[cfg(any(test, feature = "test-helpers"))]`. Added `test-helpers` feature to ultradag-network Cargo.toml, activated in `[dev-dependencies]` for integration tests.
-- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+- **Tests:** 784 passed, 0 failed, 14 ignored (jepsen long-running).
 
 **Coin Crate Quality Pass (March 14, 2026):**
 - **CRITICAL: `select_parents` determinism fix** — Sort by `(score, tip_hash)` instead of just `score`. If two tips have the same blake3 first-8-bytes score (collision), the unstable sort was non-deterministic. Added tiebreaker on tip hash for guaranteed consensus-critical determinism.
@@ -99,10 +109,10 @@
 - **`configured_validator_count` persisted in redb** — Previously set at runtime via `--validators N` but lost on restart. Now saved/loaded via the METADATA table in state.redb. Also added to `from_parts()` constructor parameter list so redb loading restores it.
 - **Duplicate merkle root eliminated** — `block.rs::merkle_root()` made `pub` and re-exported from block module. `producer.rs::compute_merkle()` (identical 20-line duplicate) replaced with call to shared `merkle_root()`.
 - **Magic numbers moved to constants.rs** — `MAX_FUTURE_ROUNDS = 10` (was local const in dag.rs, duplicated in `insert()` and `try_insert()`) and `SLASH_PERCENTAGE = 50` (was local const in engine.rs `slash()`) now centralized in constants.rs for consistency and discoverability.
-- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+- **Tests:** 784 passed, 0 failed, 14 ignored (jepsen long-running).
 
 **Test Suite Assessment (March 14, 2026):**
-- **779 tests passing, 0 failures, 14 ignored** (jepsen long-running tests).
+- **784 tests passing, 0 failures, 14 ignored** (jepsen long-running tests).
 - **Strengths:**
   - Adversarial/BFT tests (`adversarial.rs`, `bft_rules.rs`) thoroughly cover consensus safety: Byzantine validators, equivocation, partition recovery, finality guarantees.
   - Governance lifecycle tests (`governance_integration.rs`) cover full proposal lifecycle including parameter change execution, persistence across snapshots, and downstream effects (13 integration tests).
@@ -133,7 +143,7 @@
 - **WAL + HWM removed** — `FinalityWal` (wal.rs) and high-water mark (monotonicity.rs) no longer used in production. redb's ACID guarantees replace both. server.rs function parameters reduced from 18 to 17. ~60 lines removed from main.rs startup.
 - **Postcard for P2P messages** — Replaced `serde_json` with `postcard` (zero-copy binary) for `Message::encode()`/`decode()`. ~40% smaller wire format for typical messages.
 - **ValidatorIndex struct** — `BlockDag` now carries `validator_index: ValidatorIndex` for compact bitmap indexing. Append-only, rebuilt on load.
-- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+- **Tests:** 784 passed, 0 failed, 14 ignored (jepsen long-running).
 
 **Final Hardening Pass (March 13, 2026):**
 - **`/keygen` rate-limited** — Was the only mutation-free endpoint with no rate limit. Added `KEYGEN: 10/min` rate limit. Also added `"warning": "TESTNET ONLY"` to response JSON.
@@ -150,7 +160,7 @@
 - **Orphan buffer `.sum()` overflow fixed** — `orphan_buffer_bytes()` in server.rs used `.sum()`. Changed to `.fold(0usize, saturating_add)`.
 - **`block.rs total_fees()` `.sum()` overflow fixed** — `.sum()` → `.fold(0u64, saturating_add)`.
 - **`futures` and `chrono` moved to dev-dependencies** — Neither crate used in production code (only test code). Moved from `[dependencies]` to `[dev-dependencies]` in ultradag-network.
-- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+- **Tests:** 784 passed, 0 failed, 14 ignored (jepsen long-running).
 
 **Comprehensive Quality & Security Max Pass (March 13, 2026):**
 - **11 unchecked `.sum()` overflow bugs fixed** — engine.rs (fee summation, supply invariant liquid+staked, test helper), rpc.rs (5 pending_cost calculations in /tx, /faucet, /stake, /proposal, /vote), main.rs (auto-stake pending_cost). All replaced with `.fold(0u64, |acc, x| acc.saturating_add(x))`.
@@ -1093,11 +1103,11 @@ cargo test --workspace
 
 ## Tests
 
-**779 tests passing** (all pass, zero failures, 14 ignored jepsen long-running tests):
+**784 tests passing** (all pass, zero failures, 14 ignored jepsen long-running tests):
 
 Run `cargo test --workspace --release` to verify:
 ```
-test result: ok. 779 passed; 0 failed; 14 ignored
+test result: ok. 784 passed; 0 failed; 14 ignored
 ```
 
 ### Test Breakdown by Crate:
@@ -1141,6 +1151,9 @@ test result: ok. 779 passed; 0 failed; 14 ignored
 
 ### Integration Test Files (ultradag-node/tests/):
 - `rpc_tests.rs` — 25 tests: is_trusted_proxy (12 tests covering IPv4/IPv6/private/public/Fly.io), RPC endpoints (health, status, keygen, balance, tx validation, mempool, peers, validators, 404, rate limiting, CORS)
+
+### Adversarial Integration Tests (ultradag-network/tests/):
+- `adversarial_integration_tests.rs` — 5 tests: crash-restart convergence, partition-heal agreement, equivocation slash determinism, minority partition blocked, state root determinism. All tests use full state application (coinbase rewards, finality, deterministic ordering).
 
 ## Validator Round Synchronization Fix (March 7, 2026)
 
