@@ -406,6 +406,23 @@ fn test_double_voting_prevention() {
 
 /// Helper: set up a state with a proposer and voters who pass a ParameterChange proposal.
 /// Returns (state, voting_ends_round) with proposal at id=0 in Active status.
+/// Stake a freshly-generated address so it counts toward DAO activation.
+fn stake_filler(state: &mut StateEngine) {
+    let sk = SecretKey::generate();
+    let addr = sk.address();
+    let amount = ultradag_coin::constants::MIN_STAKE_TO_PROPOSE;
+    state.faucet_credit(&addr, amount + 100_000_000).unwrap();
+    let mut stx = StakeTx {
+        from: addr,
+        amount,
+        nonce: 0,
+        pub_key: sk.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stx.signature = sk.sign(&stx.signable_bytes());
+    state.apply_stake_tx(&stx).unwrap();
+}
+
 fn setup_passing_proposal(
     param: &str,
     new_value: &str,
@@ -453,6 +470,12 @@ fn setup_passing_proposal(
     let v2 = make_vote_tx(&voter2, 0, true, 10_000, 1);
     state.apply_vote(&v1, 150).unwrap();
     state.apply_vote(&v2, 200).unwrap();
+
+    // Stake 5 more fillers to reach MIN_DAO_VALIDATORS (8 total: proposer + 2 voters + 5 fillers)
+    for _ in 0..5 {
+        stake_filler(&mut state);
+    }
+    state.recalculate_active_set();
 
     let voting_ends = state.proposal(0).unwrap().voting_ends;
     (state, voting_ends)
@@ -698,6 +721,133 @@ fn test_multiple_param_changes_via_sequential_proposals() {
     // Both changes should be in effect
     assert_eq!(state.governance_params().min_fee_sats, 20_000);
     assert_eq!(state.governance_params().observer_reward_percent, 30);
+}
+
+#[test]
+fn test_dao_hibernation_blocks_parameter_change() {
+    // With fewer than MIN_DAO_VALIDATORS, ParameterChange proposals stay in PassedPending
+    let mut state = StateEngine::new_with_genesis();
+
+    let proposer = SecretKey::generate();
+    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
+    let mut stake_tx = StakeTx {
+        from: proposer.address(),
+        amount: MIN_STAKE_TO_PROPOSE,
+        nonce: 0,
+        pub_key: proposer.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
+    state.apply_stake_tx(&stake_tx).unwrap();
+
+    // Only 1 staker — recalculate active set (well below MIN_DAO_VALIDATORS=8)
+    state.recalculate_active_set();
+    assert!(!state.dao_is_active());
+
+    let proposal_tx = make_proposal_tx(
+        &proposer, 0, "Change Fee", "Lower min fee",
+        ProposalType::ParameterChange { param: "min_fee_sats".to_string(), new_value: "50000".to_string() },
+        10_000, 1,
+    );
+    state.apply_create_proposal(&proposal_tx, 100).unwrap();
+
+    // Create voter with large stake to pass quorum
+    let voter = SecretKey::generate();
+    state.faucet_credit(&voter.address(), 60_000 * 100_000_000 + 1_000_000).unwrap();
+    let mut stx = StakeTx {
+        from: voter.address(),
+        amount: 50_000 * 100_000_000,
+        nonce: 0,
+        pub_key: voter.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stx.signature = voter.sign(&stx.signable_bytes());
+    state.apply_stake_tx(&stx).unwrap();
+
+    let v = make_vote_tx(&voter, 0, true, 10_000, 1);
+    state.apply_vote(&v, 150).unwrap();
+
+    let voting_ends = state.proposal(0).unwrap().voting_ends;
+    state.tick_governance(voting_ends + 1);
+    let execute_at = match state.proposal(0).unwrap().status {
+        ultradag_coin::governance::ProposalStatus::PassedPending { execute_at_round } => execute_at_round,
+        _ => panic!("Expected PassedPending"),
+    };
+
+    // Try to execute — should stay in PassedPending (DAO hibernating)
+    state.tick_governance(execute_at);
+    assert!(matches!(
+        state.proposal(0).unwrap().status,
+        ultradag_coin::governance::ProposalStatus::PassedPending { .. }
+    ));
+    // Param should be unchanged
+    assert_eq!(state.governance_params().min_fee_sats, ultradag_coin::constants::MIN_FEE_SATS);
+
+    // Now add enough validators to activate the DAO
+    for _ in 0..6 {
+        stake_filler(&mut state);
+    }
+    state.recalculate_active_set();
+    assert!(state.dao_is_active());
+
+    // Tick again — now the proposal should execute
+    state.tick_governance(execute_at);
+    assert_eq!(state.proposal(0).unwrap().status, ultradag_coin::governance::ProposalStatus::Executed);
+    assert_eq!(state.governance_params().min_fee_sats, 50_000);
+}
+
+#[test]
+fn test_dao_hibernation_allows_text_proposals() {
+    // TextProposals execute regardless of DAO activation status
+    let mut state = StateEngine::new_with_genesis();
+
+    let proposer = SecretKey::generate();
+    state.faucet_credit(&proposer.address(), MIN_STAKE_TO_PROPOSE + 100_000_000).unwrap();
+    let mut stake_tx = StakeTx {
+        from: proposer.address(),
+        amount: MIN_STAKE_TO_PROPOSE,
+        nonce: 0,
+        pub_key: proposer.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stake_tx.signature = proposer.sign(&stake_tx.signable_bytes());
+    state.apply_stake_tx(&stake_tx).unwrap();
+
+    // Only 1 validator — DAO is hibernating
+    state.recalculate_active_set();
+    assert!(!state.dao_is_active());
+
+    let proposal_tx = make_proposal_tx(
+        &proposer, 0, "Signal Support", "Community signal proposal",
+        ProposalType::TextProposal, 10_000, 1,
+    );
+    state.apply_create_proposal(&proposal_tx, 100).unwrap();
+
+    // Vote to pass
+    let voter = SecretKey::generate();
+    state.faucet_credit(&voter.address(), 60_000 * 100_000_000 + 1_000_000).unwrap();
+    let mut stx = StakeTx {
+        from: voter.address(),
+        amount: 50_000 * 100_000_000,
+        nonce: 0,
+        pub_key: voter.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    stx.signature = voter.sign(&stx.signable_bytes());
+    state.apply_stake_tx(&stx).unwrap();
+    let v = make_vote_tx(&voter, 0, true, 10_000, 1);
+    state.apply_vote(&v, 150).unwrap();
+
+    let voting_ends = state.proposal(0).unwrap().voting_ends;
+    state.tick_governance(voting_ends + 1);
+    let execute_at = match state.proposal(0).unwrap().status {
+        ultradag_coin::governance::ProposalStatus::PassedPending { execute_at_round } => execute_at_round,
+        _ => panic!("Expected PassedPending"),
+    };
+
+    // TextProposal should execute even with DAO hibernating
+    state.tick_governance(execute_at);
+    assert_eq!(state.proposal(0).unwrap().status, ultradag_coin::governance::ProposalStatus::Executed);
 }
 
 #[test]

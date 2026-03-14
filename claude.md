@@ -231,6 +231,7 @@ Comprehensive review of all recently added features to verify they are truly int
 - **Slash saturating arithmetic** — `slash()` now uses `saturating_mul()` and `saturating_sub()` for slash amount calculation.
 - **json_response panic prevention** — `serde_json::to_string_pretty()` now uses `unwrap_or_else` with error fallback instead of `unwrap()`.
 - **Governance execution fully implemented** — `tick_governance()` transitions `PassedPending` proposals to `Executed` when `execute_at_round` is reached. ParameterChange proposals now apply changes to runtime `GovernanceParams` via `apply_change()` with validation bounds. `apply_create_proposal()` and `tick_governance()` use `self.governance_params` instead of hardcoded constants. `GovernanceParams` persisted in `StateSnapshot`. `/governance/config` RPC returns live params.
+- **DAO activation gate** — ParameterChange proposals require `MIN_DAO_VALIDATORS` (8) active validators to execute. Below threshold, proposals stay in `PassedPending` (hibernation). TextProposals execute regardless. Self-healing: DAO reactivates automatically when validator count recovers, hibernates if it drops. Prevents a small group from changing protocol parameters before decentralization.
 - **Complete saturating arithmetic** — All remaining unchecked arithmetic in StateEngine fixed: `total_supply +=` (line 179), `capped_reward + total_fees` (line 182), `stake.staked +=` in `apply_vertex` and `apply_stake_tx`, nonce increments, `next_proposal_id`, `voting_ends`, `execute_at_round`, unstake cooldown. Zero unchecked arithmetic remains in financial/counter paths.
 - **MAX_PARENTS validator-side cap** — Validator loop now truncates parents to `MAX_PARENTS` before calling `insert()`. Previously `try_insert()` (peer path) enforced the limit but `insert()` (local path) did not. Prevents local validator from producing oversized vertices.
 - **CheckpointSync mempool cleanup** — After `load_snapshot()` in CheckpointSync handler, mempool is now cleared. Old transactions referencing stale nonces/balances could cause invalid block production after fast-sync.
@@ -668,6 +669,7 @@ When a vertex fails insertion due to missing parents, the node:
 - `GOVERNANCE_QUORUM_NUMERATOR` / `GOVERNANCE_QUORUM_DENOMINATOR` = 10/100 — 10% quorum of total staked supply
 - `GOVERNANCE_APPROVAL_NUMERATOR` / `GOVERNANCE_APPROVAL_DENOMINATOR` = 66/100 — 66% supermajority approval threshold
 - `GOVERNANCE_EXECUTION_DELAY_ROUNDS` = 2,016 rounds — Execution delay after proposal passes (~1.4 hours)
+- `MIN_DAO_VALIDATORS` = 8 — Minimum active validators for DAO governance execution. ParameterChange proposals stay in PassedPending (hibernation) below this threshold. TextProposals execute regardless. Self-healing: DAO reactivates when validator count recovers.
 - `MAX_ACTIVE_PROPOSALS` = 20 — Maximum simultaneous active proposals
 - `PROPOSAL_TITLE_MAX_BYTES` = 128 — Maximum proposal title length
 - `PROPOSAL_DESCRIPTION_MAX_BYTES` = 4096 — Maximum proposal description length
@@ -1689,6 +1691,9 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 94. **Emission schedule too fast for mainnet (March 14, 2026)** — `INITIAL_REWARD_SATS` was 50 UDAG and `HALVING_INTERVAL` was 210,000 rounds (copied from Bitcoin). At 5s rounds, first halving occurred after 12.15 days — 60% of supply emitted in under 2 weeks. Not credible for mainnet.
     - **Fix:** Changed to `INITIAL_REWARD_SATS = 1 UDAG` and `HALVING_INTERVAL = 10,500,000` rounds (~1.66 years). Maintains `reward × interval × 2 = 21M UDAG` identity. Full emission over ~106 years.
     - **Tests:** All hardcoded `50 * COIN` assertions replaced with `INITIAL_REWARD_SATS`. Recovery test rewritten to use per-period math instead of per-height iteration (would be 400M iterations with new interval).
+95. **DAO activation gate for governance execution (March 14, 2026)** — ParameterChange proposals could execute with as few as 1-2 validators controlling the network. A small group could change protocol parameters before decentralization is achieved.
+    - **Fix:** Added `MIN_DAO_VALIDATORS = 8` constant. `dao_is_active()` checks `active_validator_set.len() >= 8`. `tick_governance()` skips ParameterChange execution when DAO is hibernating — proposals stay in `PassedPending` until the network has enough validators. TextProposals execute regardless (informational only, no protocol effect). Self-healing: DAO automatically reactivates when validator count recovers, and automatically hibernates if it drops.
+    - **Tests:** 2 new integration tests: `test_dao_hibernation_blocks_parameter_change` (verifies hibernation + reactivation), `test_dao_hibernation_allows_text_proposals`. All 15 governance integration tests pass.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.

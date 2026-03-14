@@ -172,6 +172,14 @@ pub const GOVERNANCE_APPROVAL_DENOMINATOR: u64 = 100;
 /// ~1.4 hours at 2.5s/round.
 pub const GOVERNANCE_EXECUTION_DELAY_ROUNDS: u64 = 2_016;
 
+/// Minimum active validators for DAO governance execution.
+/// Below this threshold, ParameterChange proposals cannot execute (they remain
+/// in PassedPending until the network is healthy enough). TextProposals are
+/// unaffected — the community can signal at any validator count.
+/// This prevents a small group from changing protocol parameters before the
+/// network is sufficiently decentralized.
+pub const MIN_DAO_VALIDATORS: usize = 8;
+
 /// Maximum proposals active simultaneously (prevents state bloat).
 pub const MAX_ACTIVE_PROPOSALS: usize = 20;
 

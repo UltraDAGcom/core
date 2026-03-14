@@ -477,6 +477,14 @@ impl StateEngine {
         self.active_validator_set.contains(addr)
     }
 
+    /// Whether the DAO has enough active validators for governance execution.
+    /// ParameterChange proposals can only execute when this returns true.
+    /// Below MIN_DAO_VALIDATORS, proposals stay in PassedPending (hibernation).
+    /// The DAO automatically reactivates when the validator count recovers.
+    pub fn dao_is_active(&self) -> bool {
+        self.active_validator_set.len() >= crate::constants::MIN_DAO_VALIDATORS
+    }
+
     /// Current epoch number.
     pub fn current_epoch(&self) -> u64 {
         self.current_epoch
@@ -901,6 +909,16 @@ impl StateEngine {
                 crate::governance::ProposalStatus::PassedPending { execute_at_round }
                     if current_round >= *execute_at_round =>
                 {
+                    // DAO activation gate: ParameterChange proposals cannot execute
+                    // unless MIN_DAO_VALIDATORS are active. The proposal stays in
+                    // PassedPending (hibernation) until the network is healthy enough.
+                    // TextProposals execute regardless — they have no protocol effect.
+                    if let crate::governance::ProposalType::ParameterChange { .. } = &proposal.proposal_type {
+                        if !self.dao_is_active() {
+                            // DAO hibernating — skip execution, leave as PassedPending
+                            continue;
+                        }
+                    }
                     to_update.push((*id, crate::governance::ProposalStatus::Executed));
                 }
                 _ => {}
