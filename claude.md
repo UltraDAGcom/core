@@ -8,6 +8,17 @@
 
 ## Recent Updates (March 2026)
 
+**RPC & Mempool Hardening Pass (March 14, 2026):**
+- **Mempool transaction expiry** — Transactions now have a 1-hour TTL (`MEMPOOL_TX_TTL_SECS = 3600`). `evict_expired()` called every 50 rounds in validator loop. Prevents stale transactions from lingering indefinitely and executing unexpectedly. `MempoolEntry` struct wraps `Transaction` with `inserted_at: Instant`.
+- **Transaction index** — `StateEngine` now maintains a bounded index (`MAX_TX_INDEX_SIZE = 100_000`) mapping finalized tx hashes to their `TxLocation` (round, vertex_hash, validator). FIFO eviction when at capacity. Indexed during `apply_finalized_vertices()`. Covers ~3 hours of history.
+- **`/tx/{hash}` endpoint** — Look up transaction status: returns "pending" (in mempool), "finalized" (with round/vertex/validator), or 404. Essential for wallets and explorers.
+- **`/vertex/{hash}` endpoint** — Look up a DAG vertex by hash: returns round, validator, parents, coinbase, and all transactions with types/hashes/fees.
+- **`/tx/submit` endpoint** — Accept pre-signed transactions (JSON-serialized `Transaction`). Verifies Ed25519 signature, validates balance/nonce, inserts in mempool, broadcasts. Enables client-side signing and light clients without exposing secret keys to the server.
+- **Governance voter breakdown** — `/proposal/{id}` now includes a `voters` array with each voter's address, vote (yes/no), and stake weight in sats and UDAG.
+- **`Mempool::get()` method** — Look up a transaction by hash for status endpoints.
+- **Faucet mainnet compile-time guard** — Added `#[cfg(feature = "mainnet")]` assertion that rejects the test `FAUCET_SEED = [0xFA; 32]`. `mainnet` feature flag added to ultradag-coin Cargo.toml. Prevents accidentally shipping the deterministic faucet keypair to mainnet.
+- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+
 **Consensus Correctness & Security Pass (March 14, 2026):**
 - **CRITICAL: Slashing made deterministic** — Slashing was triggered via P2P side-channel (`execute_slash` called from DagProposal, DagVertices, and EquivocationEvidence handlers). Different nodes could slash at different points depending on message arrival order, causing `total_supply` divergence and checkpoint co-signing failure. Fix: removed all 3 `execute_slash` calls from P2P handlers (and the function itself). Slashing now happens deterministically in `apply_finalized_vertices()` — detects duplicate (validator, round) pairs in the sorted finality batch and calls `slash()` before vertex application. All nodes process the same sorted batch, so slashing is deterministic. P2P handlers still broadcast evidence for peer awareness.
 - **Merkle tree CVE-2012-2459 mitigation** — `merkle_root()` duplicated the last leaf for odd counts, making `[A,B,C]` and `[A,B,C,C]` produce the same root. Fix: mix leaf count into final hash via `blake3(tree_root || leaf_count_u64_le)`. While not practically exploitable in this system (duplicate tx hashes require identical nonces), this eliminates a theoretical concern. Breaking change — requires clean testnet restart.
@@ -731,6 +742,7 @@ When a vertex fails insertion due to missing parents, the node:
 - `SLASH_PERCENTAGE` = 50 — Percentage of stake burned on equivocation
 - `PROPOSAL_TITLE_MAX_BYTES` = 128 — Maximum proposal title length
 - `PROPOSAL_DESCRIPTION_MAX_BYTES` = 4096 — Maximum proposal description length
+- `MEMPOOL_TX_TTL_SECS` = 3600 — Transaction time-to-live in mempool (1 hour). Expired transactions evicted every 50 rounds.
 
 ## ultradag-network Architecture
 
@@ -948,6 +960,9 @@ Default port: P2P port + 1000 (e.g., P2P 9333 → RPC 10333).
 | `/proposal/:id` | GET | Get proposal details by ID |
 | `/vote/:id/:address` | GET | Get vote status for address on proposal |
 | `/governance/config` | GET | Get governance configuration parameters |
+| `/tx/:hash` | GET | Transaction status: pending (mempool), finalized (with round/vertex), or 404 |
+| `/vertex/:hash` | GET | Vertex details by hash: round, validator, parents, coinbase, transactions |
+| `/tx/submit` | POST | Submit pre-signed transaction (JSON `Transaction`). Enables client-side signing. |
 
 All responses are JSON with CORS headers for browser wallet access.
 
@@ -1796,6 +1811,18 @@ UltraDAG is offering rewards for security researchers who discover and responsib
     - **Fix:** Removed all 3 `execute_slash` calls and the function itself from server.rs. Slashing now happens deterministically in `apply_finalized_vertices()` — scans sorted finality batch for duplicate (validator, round) pairs and slashes before vertex application. All nodes process the same sorted batch. P2P handlers only broadcast evidence.
 116. **Merkle tree CVE-2012-2459 duplicate-leaf collision (March 14, 2026)** — `merkle_root()` duplicated the last leaf for odd counts. `[A,B,C]` and `[A,B,C,C]` produced the same root. While not practically exploitable (duplicate tx hashes require identical nonces), this is a known vulnerability class.
     - **Fix:** Mix leaf count into final hash: `blake3(tree_root || leaf_count_u64_le)`. Breaking change — requires clean testnet restart.
+117. **Mempool transactions never expire (March 14, 2026)** — Transactions in the mempool had no TTL. A valid-but-stale transaction could linger indefinitely and execute unexpectedly much later (e.g., after balance changes make it undesirable).
+    - **Fix:** Added `MEMPOOL_TX_TTL_SECS = 3600` (1 hour). `MempoolEntry` wraps `Transaction` with `inserted_at: Instant`. `evict_expired()` called every 50 rounds in validator loop.
+118. **No transaction lookup by hash (March 14, 2026)** — No way to check if a transaction is pending, finalized, or unknown. Essential for any wallet or explorer.
+    - **Fix:** Added bounded `tx_index` (100K entries, FIFO eviction) to StateEngine. Indexed during `apply_finalized_vertices()`. New `/tx/{hash}` endpoint returns status (pending/finalized/not found) with location details.
+119. **No vertex lookup by hash (March 14, 2026)** — `/round/{n}` existed but no way to look up a specific vertex by hash.
+    - **Fix:** Added `/vertex/{hash}` endpoint returning round, validator, parents, coinbase, and transaction list.
+120. **No pre-signed transaction submission (March 14, 2026)** — All RPC endpoints accepted `secret_key` in the body, requiring the server to see private keys. No way for light clients or SDKs to submit pre-signed transactions.
+    - **Fix:** Added `/tx/submit` POST endpoint accepting JSON-serialized `Transaction`. Verifies Ed25519 signature, validates balance/nonce, inserts in mempool, broadcasts. Enables client-side signing.
+121. **No governance vote weight breakdown (March 14, 2026)** — `/proposal/{id}` showed aggregate `votes_for`/`votes_against` in sats but no individual voter information.
+    - **Fix:** Added `voters` array to `/proposal/{id}` response with each voter's address, vote direction, and stake weight. Added `votes_for_proposal()` method to StateEngine.
+122. **Faucet keypair has no mainnet guard (March 14, 2026)** — `FAUCET_SEED = [0xFA; 32]` is deterministic and public. Anyone can derive the faucet key. No compile-time check prevents this from shipping to mainnet (unlike DEV_ADDRESS_SEED which has an assertion).
+    - **Fix:** Added `#[cfg(feature = "mainnet")]` compile-time assertion rejecting the test seed. `mainnet` feature flag added to ultradag-coin Cargo.toml.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.

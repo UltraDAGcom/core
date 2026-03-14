@@ -125,7 +125,16 @@ pub fn is_epoch_boundary(round: u64) -> bool {
 
 /// Deterministic seed for the testnet faucet keypair.
 /// Same on every node so all nodes recognize the faucet address.
+/// MAINNET: Remove faucet entirely. This assertion prevents shipping the test seed.
 pub const FAUCET_SEED: [u8; 32] = [0xFA; 32];
+
+/// Compile-time assertion: faucet seed must not ship with mainnet builds.
+/// Enable `--features mainnet` to trigger this check.
+#[cfg(feature = "mainnet")]
+const _FAUCET_GUARD: () = assert!(
+    FAUCET_SEED[0] != 0xFA || FAUCET_SEED[1] != 0xFA || FAUCET_SEED[16] != 0xFA,
+    "FAUCET_SEED is the test placeholder [0xFA; 32]. Remove faucet before mainnet launch."
+);
 
 /// Faucet genesis pre-fund: 1,000,000 UDAG in sats.
 pub const FAUCET_PREFUND_SATS: u64 = 1_000_000 * COIN;
@@ -189,6 +198,11 @@ pub const MAX_FUTURE_ROUNDS: u64 = 10;
 
 /// Percentage of stake burned on equivocation (slashing).
 pub const SLASH_PERCENTAGE: u64 = 50;
+
+/// Transaction time-to-live in mempool (in seconds).
+/// Transactions older than this are evicted to prevent stale execution.
+/// 1 hour = 3600 seconds.
+pub const MEMPOOL_TX_TTL_SECS: u64 = 3600;
 
 /// Maximum title length in bytes.
 pub const PROPOSAL_TITLE_MAX_BYTES: usize = 128;

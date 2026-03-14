@@ -538,6 +538,14 @@ pub async fn validator_loop(
             }
         }
 
+        // Evict expired transactions from mempool (every 50 rounds to amortize cost)
+        if dag_round % 50 == 0 {
+            let evicted = server.mempool.write().await.evict_expired();
+            if evicted > 0 {
+                info!("Evicted {} expired transactions from mempool", evicted);
+            }
+        }
+
         // Prune old rounds to bound memory (every 50 rounds to amortize cost)
         // pruning_depth=0 means archive mode (no pruning)
         if dag_round % 50 == 0 && server.pruning_depth > 0 {

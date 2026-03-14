@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Instant;
 
 use crate::address::Address;
 use crate::tx::transaction::Transaction;
@@ -10,10 +11,17 @@ const MAX_MEMPOOL_SIZE: usize = 10_000;
 /// Prevents a single address from monopolizing mempool capacity.
 const MAX_TXS_PER_SENDER: usize = 100;
 
+/// Mempool entry: transaction + insertion timestamp for TTL eviction.
+#[derive(Clone)]
+struct MempoolEntry {
+    tx: Transaction,
+    inserted_at: Instant,
+}
+
 /// In-memory transaction pool (mempool).
 #[derive(Clone)]
 pub struct Mempool {
-    txs: HashMap<[u8; 32], Transaction>,
+    txs: HashMap<[u8; 32], MempoolEntry>,
     /// Secondary index: sender address → transaction hashes for O(1) sender lookups.
     by_sender: HashMap<Address, Vec<[u8; 32]>>,
 }
@@ -52,14 +60,14 @@ impl Mempool {
         if self.txs.len() >= MAX_MEMPOOL_SIZE {
             // Find lowest-fee transaction (stake/unstake have 0 fee)
             if let Some((lowest_hash, lowest_fee)) = self.txs.iter()
-                .map(|(h, t)| (*h, t.fee()))
+                .map(|(h, entry)| (*h, entry.tx.fee()))
                 .min_by_key(|(_, fee)| *fee)
             {
                 let new_fee = tx.fee();
                 // Only evict if new transaction has higher fee
                 if new_fee > lowest_fee {
                     if let Some(evicted) = self.txs.remove(&lowest_hash) {
-                        let evicted_sender = evicted.from();
+                        let evicted_sender = evicted.tx.from();
                         if let Some(hashes) = self.by_sender.get_mut(&evicted_sender) {
                             hashes.retain(|h| h != &lowest_hash);
                             if hashes.is_empty() {
@@ -75,30 +83,46 @@ impl Mempool {
         }
 
         self.by_sender.entry(sender).or_default().push(hash);
-        self.txs.insert(hash, tx);
+        self.txs.insert(hash, MempoolEntry { tx, inserted_at: Instant::now() });
         true
     }
 
     /// Remove a transaction by hash (after it's been included in a block).
     pub fn remove(&mut self, hash: &[u8; 32]) -> Option<Transaction> {
-        if let Some(tx) = self.txs.remove(hash) {
-            let sender = tx.from();
+        if let Some(entry) = self.txs.remove(hash) {
+            let sender = entry.tx.from();
             if let Some(hashes) = self.by_sender.get_mut(&sender) {
                 hashes.retain(|h| h != hash);
                 if hashes.is_empty() {
                     self.by_sender.remove(&sender);
                 }
             }
-            Some(tx)
+            Some(entry.tx)
         } else {
             None
         }
     }
 
+    /// Evict transactions older than the configured TTL.
+    /// Returns the number of transactions evicted.
+    pub fn evict_expired(&mut self) -> usize {
+        let ttl = std::time::Duration::from_secs(crate::constants::MEMPOOL_TX_TTL_SECS);
+        let now = Instant::now();
+        let expired: Vec<[u8; 32]> = self.txs.iter()
+            .filter(|(_, entry)| now.duration_since(entry.inserted_at) >= ttl)
+            .map(|(h, _)| *h)
+            .collect();
+        let count = expired.len();
+        for hash in expired {
+            self.remove(&hash);
+        }
+        count
+    }
+
     /// Get the best transactions for a block (sorted by fee descending).
     /// Transfers sorted by fee, stake/unstake transactions have priority 0.
     pub fn best(&self, max: usize) -> Vec<Transaction> {
-        let mut txs: Vec<&Transaction> = self.txs.values().collect();
+        let mut txs: Vec<&Transaction> = self.txs.values().map(|e| &e.tx).collect();
         txs.sort_by(|a, b| b.fee().cmp(&a.fee()));
         txs.into_iter().take(max).cloned().collect()
     }
@@ -122,6 +146,11 @@ impl Mempool {
         self.txs.contains_key(hash)
     }
 
+    /// Get a transaction by hash (for status lookups).
+    pub fn get(&self, hash: &[u8; 32]) -> Option<&Transaction> {
+        self.txs.get(hash).map(|e| &e.tx)
+    }
+
     /// Count pending transactions from a specific sender address.
     pub fn pending_count(&self, from: &crate::Address) -> u64 {
         self.by_sender.get(from).map_or(0, |v| v.len()) as u64
@@ -132,7 +161,7 @@ impl Mempool {
         self.by_sender.get(from).and_then(|hashes| {
             hashes.iter()
                 .filter_map(|h| self.txs.get(h))
-                .map(|tx| tx.nonce())
+                .map(|entry| entry.tx.nonce())
                 .max()
         })
     }
@@ -140,7 +169,7 @@ impl Mempool {
     /// Save mempool to disk
     pub fn save(&self, path: &std::path::Path) -> Result<(), crate::persistence::PersistenceError> {
         let snapshot = crate::tx::persistence::MempoolSnapshot {
-            transactions: self.txs.values().cloned().collect(),
+            transactions: self.txs.values().map(|e| e.tx.clone()).collect(),
         };
         snapshot.save(path)
     }

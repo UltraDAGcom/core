@@ -1457,6 +1457,16 @@ async fn handle_request(
             let Some(p) = state.proposal(id) else {
                 return Ok(error_response(StatusCode::NOT_FOUND, "proposal not found"));
             };
+            // Include individual voter breakdown with vote weights
+            let voters: Vec<serde_json::Value> = state.votes_for_proposal(id)
+                .iter()
+                .map(|(addr, vote, weight)| serde_json::json!({
+                    "address": addr.to_hex(),
+                    "vote": if *vote { "yes" } else { "no" },
+                    "weight": weight,
+                    "weight_udag": *weight as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                }))
+                .collect();
             json_response(StatusCode::OK, &serde_json::json!({
                 "id": p.id,
                 "proposer": p.proposer.to_hex(),
@@ -1470,6 +1480,7 @@ async fn handle_request(
                 "votes_against": p.votes_against,
                 "votes_against_udag": p.votes_against as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                 "status": p.status,
+                "voters": voters,
             }))
         }
 
@@ -1486,6 +1497,141 @@ async fn handle_request(
             
             json_response(StatusCode::OK, &serde_json::json!({
                 "vote": vote,
+            }))
+        }
+
+        // ====== Transaction status & lookup endpoints ======
+
+        // Look up a transaction by hash: checks mempool (pending) then finalized index.
+        (&Method::GET, ["tx", hash_hex]) => {
+            let Some(hash) = parse_hash_hex(hash_hex) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid transaction hash (need 64 hex chars)"));
+            };
+
+            // Check mempool first (pending)
+            {
+                let mp = read_lock_or_503!(server.mempool);
+                if mp.contains(&hash) {
+                    return Ok(json_response(StatusCode::OK, &serde_json::json!({
+                        "status": "pending",
+                        "tx_hash": hash_hex,
+                    })));
+                }
+            }
+
+            // Check finalized tx index
+            let state = read_lock_or_503!(server.state);
+            if let Some(loc) = state.tx_location(&hash) {
+                return Ok(json_response(StatusCode::OK, &serde_json::json!({
+                    "status": "finalized",
+                    "tx_hash": hash_hex,
+                    "round": loc.round,
+                    "vertex_hash": hex_encode(&loc.vertex_hash),
+                    "validator": loc.validator.to_hex(),
+                })));
+            }
+
+            error_response(StatusCode::NOT_FOUND, "transaction not found (not in mempool or recent finalized history)")
+        }
+
+        // Look up a vertex by hash
+        (&Method::GET, ["vertex", hash_hex]) => {
+            let Some(hash) = parse_hash_hex(hash_hex) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid vertex hash (need 64 hex chars)"));
+            };
+            let dag = read_lock_or_503!(server.dag);
+            let Some(v) = dag.get(&hash) else {
+                return Ok(error_response(StatusCode::NOT_FOUND, "vertex not found (may be pruned)"));
+            };
+            let txs: Vec<serde_json::Value> = v.block.transactions.iter().map(|tx| {
+                serde_json::json!({
+                    "hash": hex_encode(&tx.hash()),
+                    "type": match tx {
+                        Transaction::Transfer(_) => "transfer",
+                        Transaction::Stake(_) => "stake",
+                        Transaction::Unstake(_) => "unstake",
+                        Transaction::CreateProposal(_) => "create_proposal",
+                        Transaction::Vote(_) => "vote",
+                    },
+                    "from": tx.from().to_hex(),
+                    "fee": tx.fee(),
+                    "nonce": tx.nonce(),
+                })
+            }).collect();
+            json_response(StatusCode::OK, &serde_json::json!({
+                "hash": hash_hex,
+                "round": v.round,
+                "validator": v.validator.to_hex(),
+                "parent_count": v.parent_hashes.len(),
+                "coinbase": {
+                    "to": v.block.coinbase.to.to_hex(),
+                    "amount": v.block.coinbase.amount,
+                    "height": v.block.coinbase.height,
+                },
+                "transactions": txs,
+            }))
+        }
+
+        // Submit a pre-signed transaction (enables client-side signing / light clients).
+        // Accepts a JSON-serialized Transaction. Verifies signature, validates against
+        // state, inserts in mempool, and broadcasts.
+        (&Method::POST, ["tx", "submit"]) => {
+            if !rate_limiter.check_rate_limit(client_ip, limits::TX) {
+                return Ok(error_response(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "rate limit exceeded: too many tx requests",
+                ));
+            }
+            let body = req.collect().await?.to_bytes();
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large (max 1MB)"));
+            }
+            let Ok(tx) = serde_json::from_slice::<Transaction>(&body) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    "invalid JSON: expected a serialized Transaction (Transfer, Stake, Unstake, CreateProposal, or Vote)"));
+            };
+
+            // Verify Ed25519 signature
+            if !tx.verify_signature() {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid signature"));
+            }
+
+            // Validate against current state
+            {
+                let state = read_lock_or_503!(server.state);
+                let sender = tx.from();
+                let balance = state.balance(&sender);
+                let total_cost = tx.total_cost();
+                if balance < total_cost {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!("insufficient balance: need {} sats, have {} sats", total_cost, balance)));
+                }
+                // Check nonce isn't stale (already confirmed)
+                let expected_nonce = state.nonce(&sender);
+                if tx.nonce() < expected_nonce {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!("nonce too low: expected >= {}, got {}", expected_nonce, tx.nonce())));
+                }
+                drop(state);
+            }
+
+            let tx_hash = tx.hash();
+
+            // Insert into mempool
+            {
+                let mut mp = write_lock_or_503!(server.mempool);
+                if !mp.insert(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, "transaction rejected by mempool (duplicate or fee too low)"));
+                }
+            }
+
+            // Broadcast
+            server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+            let _ = server.tx_tx.send(tx);
+
+            json_response(StatusCode::OK, &serde_json::json!({
+                "status": "pending",
+                "tx_hash": hex_encode(&tx_hash),
             }))
         }
 
@@ -1601,4 +1747,17 @@ pub async fn start_rpc(server: Arc<NodeServer>, rpc_port: u16) {
 
 fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Parse a 64-hex-char hash string into a [u8; 32].
+fn parse_hash_hex(hex: &str) -> Option<[u8; 32]> {
+    if hex.len() != 64 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let mut bytes = [0u8; 32];
+    for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
+        let s = std::str::from_utf8(chunk).ok()?;
+        bytes[i] = u8::from_str_radix(s, 16).ok()?;
+    }
+    Some(bytes)
 }

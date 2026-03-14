@@ -18,6 +18,10 @@ postcard = { workspace = true }
 bitvec = { workspace = true }
 redb = { workspace = true }
 
+[features]
+default = []
+mainnet = []  # Enable mainnet guards (rejects test faucet seed, etc.)
+
 [dev-dependencies]
 serde_json = "1"
 tempfile = "3"

@@ -1,9 +1,25 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use crate::address::Address;
 use crate::consensus::vertex::DagVertex;
 use crate::error::CoinError;
 use crate::tx::stake::{StakeTx, UnstakeTx, MIN_STAKE_SATS, UNSTAKE_COOLDOWN_ROUNDS};
+
+/// Maximum number of finalized transactions to keep in the index.
+/// At ~10 tx/vertex × 5 vertices/round × 720 rounds/hour = ~36K tx/hour.
+/// 100K covers ~3 hours of history.
+const MAX_TX_INDEX_SIZE: usize = 100_000;
+
+/// Location of a finalized transaction in the DAG.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct TxLocation {
+    /// Round in which the transaction was finalized.
+    pub round: u64,
+    /// Hash of the DagVertex containing this transaction.
+    pub vertex_hash: [u8; 32],
+    /// Validator that produced the vertex.
+    pub validator: Address,
+}
 
 /// Account balance state.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -49,6 +65,12 @@ pub struct StateEngine {
     /// When set, block reward is divided by this count in pre-staking mode.
     /// Should match the --validators CLI flag.
     configured_validator_count: Option<u64>,
+    /// Bounded index of finalized transaction hashes → their location in the DAG.
+    /// Enables `/tx/{hash}` lookups without scanning the full DAG.
+    /// FIFO eviction when exceeding MAX_TX_INDEX_SIZE.
+    tx_index: HashMap<[u8; 32], TxLocation>,
+    /// Insertion order for FIFO eviction of tx_index entries.
+    tx_index_order: VecDeque<[u8; 32]>,
 }
 
 impl StateEngine {
@@ -65,6 +87,8 @@ impl StateEngine {
             next_proposal_id: 0,
             governance_params: crate::governance::GovernanceParams::default(),
             configured_validator_count: None,
+            tx_index: HashMap::new(),
+            tx_index_order: VecDeque::new(),
         }
     }
 
@@ -115,6 +139,28 @@ impl StateEngine {
 
     pub fn last_finalized_round(&self) -> Option<u64> {
         self.last_finalized_round
+    }
+
+    /// Look up a finalized transaction by hash.
+    pub fn tx_location(&self, tx_hash: &[u8; 32]) -> Option<&TxLocation> {
+        self.tx_index.get(tx_hash)
+    }
+
+    /// Index a finalized transaction, evicting oldest entries if the index is full.
+    fn index_tx(&mut self, tx_hash: [u8; 32], location: TxLocation) {
+        if self.tx_index.contains_key(&tx_hash) {
+            return; // already indexed (e.g., duplicate hash across vertices)
+        }
+        // FIFO eviction when at capacity
+        while self.tx_index.len() >= MAX_TX_INDEX_SIZE {
+            if let Some(old_hash) = self.tx_index_order.pop_front() {
+                self.tx_index.remove(&old_hash);
+            } else {
+                break;
+            }
+        }
+        self.tx_index.insert(tx_hash, location);
+        self.tx_index_order.push_back(tx_hash);
     }
 
     /// Apply a finalized vertex to the state.
@@ -410,48 +456,41 @@ impl StateEngine {
             }
         }
 
-        if self.total_staked() > 0 {
-            // Stake-proportional mode: validator count per round for equal-split fallback
-            let mut round_counts: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();
-            for v in &sorted {
-                *round_counts.entry(v.round).or_insert(0) += 1;
+        // Count vertices per round for reward splitting
+        let mut round_counts: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();
+        for v in &sorted {
+            *round_counts.entry(v.round).or_insert(0) += 1;
+        }
+        // Group vertices by round. Update last_finalized_round only BETWEEN rounds,
+        // so all vertices in the same round compute the same expected_height.
+        let mut prev_round = None;
+        for vertex in &sorted {
+            // Before processing first vertex of a new round, update last_finalized_round
+            // to the previous round (if any). This ensures same-round vertices share height.
+            if prev_round.is_some() && prev_round != Some(vertex.round) {
+                self.last_finalized_round = prev_round;
             }
-            // Group vertices by round. Update last_finalized_round only BETWEEN rounds,
-            // so all vertices in the same round compute the same expected_height.
-            let mut prev_round = None;
-            for vertex in &sorted {
-                // Before processing first vertex of a new round, update last_finalized_round
-                // to the previous round (if any). This ensures same-round vertices share height.
-                if prev_round.is_some() && prev_round != Some(vertex.round) {
-                    self.last_finalized_round = prev_round;
-                }
-                let count = round_counts.get(&vertex.round).copied().unwrap_or(1);
-                self.apply_vertex_with_validators(vertex, count)?;
-                prev_round = Some(vertex.round);
+            let count = round_counts.get(&vertex.round).copied().unwrap_or(1);
+            self.apply_vertex_with_validators(vertex, count)?;
+
+            // Index all transactions in this vertex for /tx/{hash} lookups
+            let vertex_hash = vertex.hash();
+            let location = TxLocation {
+                round: vertex.round,
+                vertex_hash,
+                validator: vertex.validator,
+            };
+            // Index the coinbase as well
+            self.index_tx(vertex.block.coinbase.hash(), location.clone());
+            for tx in &vertex.block.transactions {
+                self.index_tx(tx.hash(), location.clone());
             }
-            // Update for the final round
-            if let Some(r) = prev_round {
-                self.last_finalized_round = Some(r);
-            }
-        } else {
-            // Pre-staking mode: split block_reward equally among validators in each round.
-            // Prevents emission scaling linearly with validator count.
-            let mut round_counts: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();
-            for v in &sorted {
-                *round_counts.entry(v.round).or_insert(0) += 1;
-            }
-            let mut prev_round = None;
-            for vertex in &sorted {
-                if prev_round.is_some() && prev_round != Some(vertex.round) {
-                    self.last_finalized_round = prev_round;
-                }
-                let count = round_counts.get(&vertex.round).copied().unwrap_or(1);
-                self.apply_vertex_with_validators(vertex, count)?;
-                prev_round = Some(vertex.round);
-            }
-            if let Some(r) = prev_round {
-                self.last_finalized_round = Some(r);
-            }
+
+            prev_round = Some(vertex.round);
+        }
+        // Update for the final round
+        if let Some(r) = prev_round {
+            self.last_finalized_round = Some(r);
         }
         Ok(())
     }
@@ -987,6 +1026,17 @@ impl StateEngine {
         self.votes.get(&(proposal_id, *voter)).copied()
     }
 
+    /// Get all votes for a proposal with voter addresses and vote weights.
+    pub fn votes_for_proposal(&self, proposal_id: u64) -> Vec<(Address, bool, u64)> {
+        self.votes.iter()
+            .filter(|((pid, _), _)| *pid == proposal_id)
+            .map(|((_, voter), &vote)| {
+                let weight = self.stake_of(voter);
+                (*voter, vote, weight)
+            })
+            .collect()
+    }
+
     /// Get the next proposal ID that will be assigned.
     pub fn next_proposal_id(&self) -> u64 {
         self.next_proposal_id
@@ -1048,6 +1098,8 @@ impl StateEngine {
             next_proposal_id,
             governance_params,
             configured_validator_count,
+            tx_index: HashMap::new(),
+            tx_index_order: VecDeque::new(),
         }
     }
 
@@ -1092,6 +1144,8 @@ impl StateEngine {
             next_proposal_id: snapshot.next_proposal_id,
             governance_params: snapshot.governance_params,
             configured_validator_count: None,
+            tx_index: HashMap::new(),
+            tx_index_order: VecDeque::new(),
         }
     }
 
