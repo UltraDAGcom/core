@@ -112,6 +112,9 @@ impl FinalityTracker {
         }
 
         let genesis: [u8; 32] = [0u8; 32];
+        // Stuck parent threshold: parents >100 rounds behind last finalized round
+        // are treated as finalized for liveness. See comment in parents_ok check.
+        let stuck_threshold = self.last_finalized_round.saturating_sub(100);
 
         // Scan from pruning_floor (not last_finalized_round) so that late-arriving
         // vertices recovered via reconciliation are picked up. Most vertices between
@@ -127,13 +130,24 @@ impl FinalityTracker {
                     continue;
                 }
                 if let Some(vertex) = dag.get(hash) {
-                    // Parent is considered "ok" if:
-                    // - It's the genesis hash, OR
-                    // - It's in the finalized set, OR
-                    // - It's been pruned from the DAG (pruned == deeply finalized)
+                    // Parent is considered "ok" if any of:
+                    // 1. It's the genesis sentinel hash, OR
+                    // 2. It's in the finalized set, OR
+                    // 3. It's been pruned from the DAG (pruned == deeply finalized), OR
+                    // 4. It's a stuck parent: still in the DAG but >100 rounds behind
+                    //    last_finalized_round. This prevents a finality liveness hole
+                    //    where one bad parent (slashed/offline validator whose vertex
+                    //    never gets 2f+1 descendants) blocks an entire subgraph from
+                    //    finalizing indefinitely. 100 rounds (~8 min at 5s) is enough
+                    //    time for descendants to propagate under normal conditions.
                     let parents_ok = vertex.parent_hashes.is_empty()
                         || vertex.parent_hashes.iter()
-                            .all(|p| *p == genesis || self.finalized.contains(p) || dag.get(p).is_none());
+                            .all(|p| {
+                                *p == genesis
+                                    || self.finalized.contains(p)
+                                    || dag.get(p).is_none()
+                                    || dag.get(p).map_or(false, |pv| pv.round < stuck_threshold)
+                            });
                     
                     if !parents_ok {
                         continue;
@@ -174,7 +188,12 @@ impl FinalityTracker {
                     }
                     if let Some(vertex) = dag.get(&child) {
                         let parents_ok = vertex.parent_hashes.iter()
-                            .all(|p| *p == genesis || self.finalized.contains(p) || dag.get(p).is_none());
+                            .all(|p| {
+                                *p == genesis
+                                    || self.finalized.contains(p)
+                                    || dag.get(p).is_none()
+                                    || dag.get(p).map_or(false, |pv| pv.round < stuck_threshold)
+                            });
                         if parents_ok {
                             ready.insert(child);
                         }

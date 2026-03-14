@@ -2,12 +2,17 @@ use crate::consensus::dag::BlockDag;
 use crate::consensus::vertex::DagVertex;
 
 /// Produces a deterministic total ordering of DAG vertices.
-/// Uses round number as primary key, then pre-computed topological level,
-/// then hash as final tiebreaker for determinism.
+/// Uses `(round, hash)` as the sort key — round for causal ordering,
+/// hash as tiebreaker for determinism.
+///
+/// IMPORTANT: We intentionally do NOT use `topo_level` in ordering because
+/// `topo_level` is derived locally during `insert()` and is `#[serde(skip)]`.
+/// If two nodes have different DAG states when inserting (e.g., missing a parent),
+/// they could compute different `topo_level` for the same vertex, causing a
+/// consensus split. `(round, hash)` is fully deterministic from signed data.
 ///
 /// # Performance
 /// O(N log N) — single sort pass with O(1) per-comparison cost.
-/// Topological levels are pre-computed during DAG insertion.
 pub fn order_vertices<'a>(
     hashes: &[[u8; 32]],
     dag: &'a BlockDag,
@@ -18,10 +23,9 @@ pub fn order_vertices<'a>(
         .filter_map(|h| dag.get(h).map(|v| (v.hash(), v)))
         .collect();
 
-    // Sort by: (round, topo_level, hash)
+    // Sort by: (round, hash) — both are deterministic from signed vertex data.
     vertices.sort_by(|(ha, a), (hb, b)| {
         a.round.cmp(&b.round)
-            .then_with(|| a.topo_level.cmp(&b.topo_level))
             .then_with(|| ha.cmp(hb))
     });
 
@@ -87,20 +91,22 @@ mod tests {
     }
 
     #[test]
-    fn ordering_same_round_by_depth() {
+    fn ordering_same_round_by_hash() {
         let mut dag = BlockDag::new();
 
         let v1 = make_vertex(1, 0, vec![], &SecretKey::generate());
         let h1 = v1.hash();
         dag.insert(v1);
 
-        let v2 = make_vertex(2, 0, vec![h1], &SecretKey::generate());
+        let v2 = make_vertex(2, 0, vec![], &SecretKey::generate());
         let h2 = v2.hash();
         dag.insert(v2);
 
+        // Same round: ordered by hash (deterministic from signed data)
         let ordered = order_vertices(&[h2, h1], &dag);
-        assert_eq!(ordered[0].hash(), h1);
-        assert_eq!(ordered[1].hash(), h2);
+        let first = ordered[0].hash();
+        let second = ordered[1].hash();
+        assert!(first < second, "Same-round vertices should be ordered by hash");
     }
 
     #[test]

@@ -8,6 +8,13 @@
 
 ## Recent Updates (March 2026)
 
+**Deep Review — Consensus & Safety Fixes (March 14, 2026):**
+- **CRITICAL: `topo_level` removed from vertex ordering** — `ordering.rs` sort key changed from `(round, topo_level, hash)` to `(round, hash)`. `topo_level` is `#[serde(skip)]` and computed locally during `insert()` — if two nodes have different DAG states when inserting (e.g., missing a parent), they compute different `topo_level` for the same vertex. Using it in ordering creates a **consensus split vector**: nodes disagree on transaction order → different state roots → checkpoint co-signing fails. `(round, hash)` is fully deterministic from signed vertex data.
+- **Finality liveness hole fixed (stuck parents)** — Added escape hatch for parents stuck >100 rounds behind `last_finalized_round`. Before this fix, a single parent from a slashed/offline validator that never gets 2f+1 descendants could block an entire subgraph from finalizing for up to 1000 rounds (~83 minutes) until pruning. Now these stuck parents are treated as finalized after 100 rounds (~8 minutes), unblocking descendant finality. Applied in both initial scan and forward propagation in `find_newly_finalized()`.
+- **Governance parameter ceilings** — Added upper bounds to all governable parameters in `apply_change()` to prevent destructive governance: `min_fee_sats` max 1 UDAG (prevents prohibitive fees), `min_stake_to_propose` max 1M UDAG (prevents whale-only governance), `voting_period_rounds` max 1M (~58 days), `execution_delay_rounds` max 100K (~5.8 days).
+- **`tick_governance` moved to per-round** — Previously ran per-vertex in `apply_vertex_with_validators()`. A ParameterChange proposal executing mid-round could cause same-round vertices to see different governance parameters, creating non-deterministic behavior. Now runs once per completed round in `apply_finalized_vertices()` and in the `apply_vertex()` convenience method.
+- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+
 **Robustness & Correctness Pass (March 14, 2026):**
 - **Genesis merkle root consistency** — `genesis_block()` now uses `merkle_root()` function instead of raw `coinbase.hash()`, matching the path all other blocks take via `compute_merkle_root()`. Functionally identical for single-leaf case but eliminates inconsistency.
 - **Fee clawback made best-effort** — `apply_vertex_with_validators()` fee debit on skipped transactions (bad nonce, insufficient balance, invalid signature) now logs error and continues instead of returning hard error. Prevents theoretical deadlock: finalized vertices can't be un-finalized, so a hard error during fee recovery would halt state application for the entire batch.
@@ -648,7 +655,7 @@ formal/
 - **ValidatorSet**: tracks known validators and computes quorum threshold (ceil(2n/3))
 - **Permissioned validator allowlist**: `--validator-key FILE` loads trusted validator addresses; only listed validators count toward quorum/finality
 - **Configured validators**: `--validators N` CLI arg fixes quorum denominator to prevent phantom validator inflation
-- **Deterministic ordering**: finalized vertices are ordered by (round, topological depth, hash) for state application
+- **Deterministic ordering**: finalized vertices are ordered by (round, hash) for state application — both fields are deterministic from signed vertex data
 - **Parallel vertices**: multiple validators produce vertices concurrently in the same round
 - **Min validators**: finality requires at least 3 active validators (configurable via `FinalityTracker::new(min)`)
 - **No PoW**: round timer replaces proof-of-work as the rate limiter; `tokio::interval` for clean async timing
@@ -660,7 +667,7 @@ formal/
 - `checkpoint.rs` — `Checkpoint`: signed snapshots for fast-sync; includes `state_root`, `dag_tip`, `total_supply`, validator signatures; `sign()`, `verify()`, `is_accepted()` with quorum validation
 - `epoch.rs` — `sync_epoch_validators()`: synchronizes FinalityTracker with StateEngine's active validator set at epoch boundaries
 - `validator_set.rs` — `ValidatorSet`: tracks validator addresses, computes `quorum_threshold()` = ceil(2n/3), `has_quorum(count)` check, `configured_validators` field, permissioned allowlist with `set_allowed_validators()`
-- `ordering.rs` — `order_vertices()`: deterministic total ordering of finalized vertices (uses pre-computed `topo_level`)
+- `ordering.rs` — `order_vertices()`: deterministic total ordering of finalized vertices by `(round, hash)` — both fields are deterministic from signed vertex data
 - `persistence.rs` — `DagSnapshot`, `FinalitySnapshot`: serializable state for save/load
 
 ### State module layout (`ultradag-coin/src/state/`):
@@ -675,7 +682,7 @@ formal/
 ### Single consensus path (DAG-BFT only):
 1. **DAG vertex production**: Validator produces vertex every round -> references all DAG tips -> signs with Ed25519
 2. **DAG vertex propagation**: `DagProposal` -> verify signature -> equivocation check -> DAG insert -> finality check
-3. **State derivation**: Finalized vertices -> ordered by (round, depth, hash) -> applied to StateEngine -> account balances updated
+3. **State derivation**: Finalized vertices -> ordered by (round, hash) -> applied to StateEngine -> account balances updated
 
 ### P2P DAG messages:
 - `DagProposal(DagVertex)` — broadcast new signed DAG vertex to peers (signature + equivocation verified on receipt)
@@ -1997,11 +2004,11 @@ TLA+ specification of UltraDAG's DAG-BFT consensus, derived directly from the Ru
 ### ✅ Vertex Ordering Optimization (P3 — COMPLETED)
 **Before:** `order_vertices()` used `count_ancestors_in_set()` calling `dag.ancestors(hash)` per vertex — O(N²).
 
-**After:** Pre-computed `topo_level` assigned during DAG insertion via BFS. Ordering uses `(round, topo_level, hash)` — O(N log N).
+**After:** Pre-computed `topo_level` assigned during DAG insertion via BFS. Ordering uses `(round, hash)` — O(N log N).
 
 **Implementation:**
-- Added `topo_level: u64` to `DagVertex` (max parent topo_level + 1, computed on insert)
-- `order_vertices()` sorts by `(round, topo_level, hash)` without any DAG traversal
+- Added `topo_level: u64` to `DagVertex` (max parent topo_level + 1, computed on insert, used for diagnostics only)
+- `order_vertices()` sorts by `(round, hash)` — both deterministic from signed vertex data. `topo_level` intentionally NOT used in ordering because it's `#[serde(skip)]` and computed locally, creating consensus split risk.
 - Committed as a2ff09f
 
 ### Known Performance Limitations (Non-Critical)

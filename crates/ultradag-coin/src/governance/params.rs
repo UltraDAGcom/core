@@ -46,14 +46,24 @@ impl GovernanceParams {
 
         match param {
             "min_fee_sats" => {
+                // Floor: 1 sat (no free transactions)
+                // Ceiling: 1 UDAG (100M sats) — prevents governance from making txs prohibitively expensive
                 if value == 0 {
                     return Err("min_fee_sats cannot be zero".to_string());
+                }
+                if value > 100_000_000 {
+                    return Err("min_fee_sats cannot exceed 1 UDAG (100_000_000 sats)".to_string());
                 }
                 self.min_fee_sats = value;
             }
             "min_stake_to_propose" => {
+                // Floor: 1 sat (anyone with stake can propose)
+                // Ceiling: 1M UDAG — prevents governance from being locked to whales
                 if value == 0 {
                     return Err("min_stake_to_propose cannot be zero".to_string());
+                }
+                if value > 1_000_000 * 100_000_000 {
+                    return Err("min_stake_to_propose cannot exceed 1,000,000 UDAG".to_string());
                 }
                 self.min_stake_to_propose = value;
             }
@@ -70,16 +80,25 @@ impl GovernanceParams {
                 self.approval_numerator = value;
             }
             "voting_period_rounds" => {
+                // Floor: 1000 rounds (~1.4 hours at 5s) — meaningful governance window
+                // Ceiling: 1,000,000 rounds (~58 days at 5s) — prevents indefinite voting
                 if value < 1000 {
                     return Err("voting_period_rounds must be >= 1000".to_string());
+                }
+                if value > 1_000_000 {
+                    return Err("voting_period_rounds cannot exceed 1,000,000".to_string());
                 }
                 self.voting_period_rounds = value;
             }
             "execution_delay_rounds" => {
                 // Hard floor matches UNSTAKE_COOLDOWN_ROUNDS (2,016 rounds / ~2.8 hours).
                 // Prevents coordinated attacks from executing before community notices.
+                // Ceiling: 100,000 rounds (~5.8 days at 5s) — prevents indefinite delay
                 if value < 2016 {
                     return Err("execution_delay_rounds must be >= 2016".to_string());
+                }
+                if value > 100_000 {
+                    return Err("execution_delay_rounds cannot exceed 100,000".to_string());
                 }
                 self.execution_delay_rounds = value;
             }

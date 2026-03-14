@@ -219,9 +219,10 @@ impl StateEngine {
     /// Pass 1 for tests that don't care about proportional rewards.
     pub fn apply_vertex(&mut self, vertex: &DagVertex) -> Result<(), CoinError> {
         self.apply_vertex_with_validators(vertex, 1)?;
-        // Single-vertex convenience: also update last_finalized_round.
+        // Single-vertex convenience: also update last_finalized_round and tick governance.
         // (apply_finalized_vertices handles this per-round for batches.)
         self.last_finalized_round = Some(vertex.round);
+        self.tick_governance(vertex.round);
         Ok(())
     }
 
@@ -412,8 +413,10 @@ impl StateEngine {
             self.current_epoch = new_epoch;
         }
 
-        // Tick governance to update proposal statuses
-        self.tick_governance(vertex.round);
+        // NOTE: tick_governance() is called per-round in apply_finalized_vertices(),
+        // not per-vertex. If called per-vertex, 4 validators producing in round N
+        // would tick governance 4 times, and a ParameterChange execution could apply
+        // before remaining vertices in the same round are processed.
 
         // Supply invariant check — unconditional (catches state corruption in release builds too)
         // sum(liquid balances) + sum(staked) == total_supply
@@ -473,12 +476,19 @@ impl StateEngine {
         }
         // Group vertices by round. Update last_finalized_round only BETWEEN rounds,
         // so all vertices in the same round compute the same expected_height.
+        // Governance ticks once per round (not per vertex) to prevent ParameterChange
+        // proposals from applying mid-round, which would cause same-round vertices
+        // to see different governance parameters.
         let mut prev_round = None;
         for vertex in &sorted {
             // Before processing first vertex of a new round, update last_finalized_round
-            // to the previous round (if any). This ensures same-round vertices share height.
+            // to the previous round (if any) and tick governance for the completed round.
             if prev_round.is_some() && prev_round != Some(vertex.round) {
                 self.last_finalized_round = prev_round;
+                // Tick governance once for the completed round
+                if let Some(r) = prev_round {
+                    self.tick_governance(r);
+                }
             }
             let count = round_counts.get(&vertex.round).copied().unwrap_or(1);
             self.apply_vertex_with_validators(vertex, count)?;
@@ -498,9 +508,10 @@ impl StateEngine {
 
             prev_round = Some(vertex.round);
         }
-        // Update for the final round
+        // Update for the final round and tick governance
         if let Some(r) = prev_round {
             self.last_finalized_round = Some(r);
+            self.tick_governance(r);
         }
         Ok(())
     }
