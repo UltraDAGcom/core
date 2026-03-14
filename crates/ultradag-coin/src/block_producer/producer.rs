@@ -24,11 +24,11 @@ pub fn create_block(
             Transaction::Vote(t) => t.fee,
             Transaction::Stake(_) | Transaction::Unstake(_) => 0,
         }
-    }).sum();
+    }).fold(0u64, |acc, f| acc.saturating_add(f));
 
     let coinbase = CoinbaseTx {
         to: *validator_address,
-        amount: validator_reward + total_fees,
+        amount: validator_reward.saturating_add(total_fees),
         height,
     };
 

@@ -243,7 +243,7 @@ fn crash_recovery_state_behind_dag() {
         let v = make_vertex(&sk, r, r, vec![], vec![]);
         state.apply_vertex(&v).unwrap();
     }
-    state.save(&tmp.join("state.json")).unwrap();
+    state.save(&tmp.join("state.redb")).unwrap();
 
     // Create a DAG at round 9 (state saved at round 5, crashed before saving at 10)
     let mut dag = BlockDag::new();
@@ -254,7 +254,7 @@ fn crash_recovery_state_behind_dag() {
     dag.save(&tmp.join("dag.json")).unwrap();
 
     // Load both back
-    let loaded_state = StateEngine::load(&tmp.join("state.json")).unwrap();
+    let loaded_state = StateEngine::load(&tmp.join("state.redb")).unwrap();
     let loaded_dag = BlockDag::load(&tmp.join("dag.json")).unwrap();
 
     // State is behind DAG — state at round 5, DAG at round 9
@@ -280,7 +280,7 @@ fn state_ahead_of_dag_detected() {
         let v = make_vertex(&sk, r, r, vec![], vec![]);
         state.apply_vertex(&v).unwrap();
     }
-    state.save(&tmp.join("state.json")).unwrap();
+    state.save(&tmp.join("state.redb")).unwrap();
 
     // DAG at round 2 (corrupted/incomplete)
     let mut dag = BlockDag::new();
@@ -290,7 +290,7 @@ fn state_ahead_of_dag_detected() {
     }
     dag.save(&tmp.join("dag.json")).unwrap();
 
-    let loaded_state = StateEngine::load(&tmp.join("state.json")).unwrap();
+    let loaded_state = StateEngine::load(&tmp.join("state.redb")).unwrap();
     let loaded_dag = BlockDag::load(&tmp.join("dag.json")).unwrap();
 
     // State is ahead — this scenario doesn't crash, just results in stale DAG
@@ -332,7 +332,7 @@ fn leftover_tmp_file_from_crash() {
     let tmp = std::env::temp_dir().join("ultradag_test_tmp_leftover");
     std::fs::create_dir_all(&tmp).unwrap();
 
-    let path = tmp.join("state.json");
+    let path = tmp.join("state.redb");
     let tmp_path = tmp.join("state.tmp");
 
     // Simulate a crash that left a .tmp file

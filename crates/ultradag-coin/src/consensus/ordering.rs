@@ -12,19 +12,20 @@ pub fn order_vertices<'a>(
     hashes: &[[u8; 32]],
     dag: &'a BlockDag,
 ) -> Vec<&'a DagVertex> {
-    let mut vertices: Vec<&DagVertex> = hashes
+    // Precompute hashes to avoid recomputing blake3 in sort comparator
+    let mut vertices: Vec<([u8; 32], &DagVertex)> = hashes
         .iter()
-        .filter_map(|h| dag.get(h))
+        .filter_map(|h| dag.get(h).map(|v| (v.hash(), v)))
         .collect();
 
     // Sort by: (round, topo_level, hash)
-    vertices.sort_by(|a, b| {
+    vertices.sort_by(|(ha, a), (hb, b)| {
         a.round.cmp(&b.round)
             .then_with(|| a.topo_level.cmp(&b.topo_level))
-            .then_with(|| a.hash().cmp(&b.hash()))
+            .then_with(|| ha.cmp(hb))
     });
 
-    vertices
+    vertices.into_iter().map(|(_, v)| v).collect()
 }
 
 #[cfg(test)]

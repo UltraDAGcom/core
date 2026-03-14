@@ -15,7 +15,13 @@ pub enum MonotonicityError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
     #[error("Serialization error: {0}")]
-    Serialization(#[from] serde_json::Error),
+    Serialization(String),
+}
+
+impl From<postcard::Error> for MonotonicityError {
+    fn from(e: postcard::Error) -> Self {
+        MonotonicityError::Serialization(e.to_string())
+    }
 }
 
 /// High-water mark tracking the highest round ever finalized.
@@ -44,7 +50,7 @@ impl HighWaterMark {
     pub fn load_or_create(path: &Path) -> Result<Self, MonotonicityError> {
         if path.exists() {
             let data = fs::read(path)?;
-            let hwm: HighWaterMark = serde_json::from_slice(&data)?;
+            let hwm: HighWaterMark = postcard::from_bytes(&data)?;
             Ok(hwm)
         } else {
             Ok(Self::new())
@@ -75,7 +81,7 @@ impl HighWaterMark {
 
     /// Save to disk atomically
     pub fn save(&self, path: &Path) -> Result<(), MonotonicityError> {
-        let data = serde_json::to_vec_pretty(self)?;
+        let data = postcard::to_allocvec(self)?;
         atomic_write(path, &data)?;
         Ok(())
     }
@@ -87,7 +93,7 @@ impl HighWaterMark {
 
     /// Get the path for the high-water mark file in a data directory
     pub fn path_in_dir(data_dir: &Path) -> PathBuf {
-        data_dir.join("high_water_mark.json")
+        data_dir.join("high_water_mark.bin")
     }
 }
 
@@ -200,6 +206,6 @@ mod tests {
     fn test_path_in_dir() {
         let dir = Path::new("/data");
         let path = HighWaterMark::path_in_dir(dir);
-        assert_eq!(path, Path::new("/data/high_water_mark.json"));
+        assert_eq!(path, Path::new("/data/high_water_mark.bin"));
     }
 }

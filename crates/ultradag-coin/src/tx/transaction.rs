@@ -29,7 +29,7 @@ pub struct TransferTx {
     pub signature: Signature,
     /// Optional data payload (max 256 bytes). Used for IoT sensor data, receipts, etc.
     /// Stored on-chain permanently. Keep small to prevent DAG bloat.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub memo: Option<Vec<u8>>,
 }
 

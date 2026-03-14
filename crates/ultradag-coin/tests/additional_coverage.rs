@@ -354,7 +354,7 @@ fn test_checkpoint_file_persisted_to_disk() {
     
     ultradag_coin::persistence::save_checkpoint(&temp_dir, &checkpoint).unwrap();
     
-    let checkpoint_file = temp_dir.join("checkpoint_0000001000.json");
+    let checkpoint_file = temp_dir.join("checkpoint_0000001000.bin");
     assert!(checkpoint_file.exists(), "Expected {:?} to exist", checkpoint_file);
     
     std::fs::remove_dir_all(&temp_dir).ok();

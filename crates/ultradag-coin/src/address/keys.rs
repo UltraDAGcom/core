@@ -17,23 +17,41 @@ pub struct Signature(pub [u8; 64]);
 
 impl Serialize for Signature {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let hex: String = self.0.iter().map(|b| format!("{b:02x}")).collect();
-        serializer.serialize_str(&hex)
+        if serializer.is_human_readable() {
+            // JSON/RPC: hex string for readability
+            let hex: String = self.0.iter().map(|b| format!("{b:02x}")).collect();
+            serializer.serialize_str(&hex)
+        } else {
+            // Binary formats (postcard): raw bytes
+            serializer.serialize_bytes(&self.0)
+        }
     }
 }
 
 impl<'de> Deserialize<'de> for Signature {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let hex = String::deserialize(deserializer)?;
-        if hex.len() != 128 {
-            return Err(serde::de::Error::custom("signature hex must be 128 chars"));
+        if deserializer.is_human_readable() {
+            // JSON/RPC: hex string
+            let hex = String::deserialize(deserializer)?;
+            if hex.len() != 128 {
+                return Err(serde::de::Error::custom("signature hex must be 128 chars"));
+            }
+            let mut bytes = [0u8; 64];
+            for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
+                let s = std::str::from_utf8(chunk).map_err(serde::de::Error::custom)?;
+                bytes[i] = u8::from_str_radix(s, 16).map_err(serde::de::Error::custom)?;
+            }
+            Ok(Signature(bytes))
+        } else {
+            // Binary formats (postcard): raw bytes
+            let bytes: Vec<u8> = Deserialize::deserialize(deserializer)?;
+            if bytes.len() != 64 {
+                return Err(serde::de::Error::custom("signature must be 64 bytes"));
+            }
+            let mut arr = [0u8; 64];
+            arr.copy_from_slice(&bytes);
+            Ok(Signature(arr))
         }
-        let mut bytes = [0u8; 64];
-        for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
-            let s = std::str::from_utf8(chunk).map_err(serde::de::Error::custom)?;
-            bytes[i] = u8::from_str_radix(s, 16).map_err(serde::de::Error::custom)?;
-        }
-        Ok(Signature(bytes))
     }
 }
 

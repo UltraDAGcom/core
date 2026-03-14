@@ -35,7 +35,7 @@ macro_rules! write_lock_or_503 {
     };
 }
 
-use ultradag_coin::{Address, SecretKey, Signature, Transaction, TransferTx, StakeTx, UnstakeTx, MIN_STAKE_SATS};
+use ultradag_coin::{Address, Mempool, SecretKey, Signature, StateEngine, Transaction, TransferTx, StakeTx, UnstakeTx, MIN_STAKE_SATS};
 use ultradag_coin::governance::{CreateProposalTx, VoteTx, ProposalType};
 use ultradag_network::{Message, NodeServer};
 use crate::rate_limit::{RateLimiter, limits};
@@ -69,6 +69,30 @@ fn error_response(status: StatusCode, msg: &str) -> Response<BoxBody> {
     json_response(status, &serde_json::json!({"error": msg}))
 }
 
+/// Check if the TCP peer address is a trusted proxy that we should accept
+/// forwarded headers from. Trusted proxies include loopback, private networks
+/// (RFC 1918 / RFC 4193), and Fly.io's internal network (fdaa::/16).
+/// An attacker connecting directly from a public IP can spoof X-Forwarded-For
+/// headers to bypass rate limits, so we only trust these headers from known proxies.
+pub fn is_trusted_proxy(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            v4.is_loopback()          // 127.0.0.0/8
+            || v4.is_private()        // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+            || v4.is_link_local()     // 169.254.0.0/16
+        }
+        std::net::IpAddr::V6(v6) => {
+            v6.is_loopback()          // ::1
+            // Fly.io internal network: fdaa::/16
+            || v6.segments()[0] == 0xfdaa
+            // General unique-local addresses: fc00::/7
+            || (v6.segments()[0] & 0xfe00) == 0xfc00
+            // IPv4-mapped loopback/private (e.g., ::ffff:127.0.0.1)
+            || v6.to_ipv4_mapped().map(|v4| v4.is_loopback() || v4.is_private()).unwrap_or(false)
+        }
+    }
+}
+
 /// Parse a 64-hex-char secret key string into a SecretKey.
 fn parse_secret_key(hex: &str) -> Result<SecretKey, &'static str> {
     if hex.len() != 64 {
@@ -83,6 +107,24 @@ fn parse_secret_key(hex: &str) -> Result<SecretKey, &'static str> {
         bytes[i] = u8::from_str_radix(s, 16).map_err(|_| "invalid hex")?;
     }
     Ok(SecretKey::from_bytes(bytes))
+}
+
+/// Compute the next nonce for a sender, accounting for pending mempool transactions.
+fn next_nonce(state: &StateEngine, mp: &Mempool, sender: &Address) -> u64 {
+    let base_nonce = state.nonce(sender);
+    match mp.pending_nonce(sender) {
+        Some(max_pending) => max_pending.saturating_add(1),
+        None => base_nonce,
+    }
+}
+
+/// Calculate total cost of pending transactions from a sender in the mempool.
+fn pending_cost(mp: &Mempool, sender: &Address) -> u64 {
+    mp.best(MAX_MEMPOOL_SCAN)
+        .iter()
+        .filter(|t| t.from() == *sender)
+        .map(|t| t.total_cost())
+        .fold(0u64, |acc, x| acc.saturating_add(x))
 }
 
 #[derive(Serialize, Clone)]
@@ -115,11 +157,16 @@ fn status_cache() -> &'static tokio::sync::Mutex<Option<StatusResponse>> {
     STATUS_CACHE.get_or_init(|| tokio::sync::Mutex::new(None))
 }
 
-/// Get current process memory usage in bytes (best-effort, returns None on failure)
+/// Get current process memory usage in bytes (cached to avoid subprocess spam)
 fn get_memory_usage() -> Option<u64> {
-    #[cfg(target_os = "linux")]
-    {
-        std::fs::read_to_string("/proc/self/status")
+    use std::sync::OnceLock;
+    use std::time::{Duration, Instant};
+    
+    static MEMORY_CACHE: OnceLock<(Option<u64>, Instant)> = OnceLock::new();
+    
+    let (cached_memory, cached_time) = MEMORY_CACHE.get_or_init(|| {
+        #[cfg(target_os = "linux")]
+        let memory = std::fs::read_to_string("/proc/self/status")
             .ok()
             .and_then(|content| {
                 content.lines()
@@ -130,24 +177,35 @@ fn get_memory_usage() -> Option<u64> {
                             .and_then(|kb| kb.parse::<u64>().ok())
                             .map(|kb| kb * 1024) // Convert KB to bytes
                     })
-            })
-    }
-    #[cfg(target_os = "macos")]
-    {
-        use std::process::Command;
-        Command::new("ps")
-            .args(["-o", "rss=", "-p", &std::process::id().to_string()])
-            .output()
-            .ok()
-            .and_then(|output| {
-                String::from_utf8(output.stdout)
-                    .ok()
-                    .and_then(|s| s.trim().parse::<u64>().ok())
-                    .map(|kb| kb * 1024) // Convert KB to bytes
-            })
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    {
+            });
+        
+        #[cfg(target_os = "macos")]
+        let memory = {
+            use std::process::Command;
+            Command::new("ps")
+                .args(["-o", "rss=", "-p", &std::process::id().to_string()])
+                .output()
+                .ok()
+                .and_then(|output| {
+                    String::from_utf8(output.stdout)
+                        .ok()
+                        .and_then(|s| s.trim().parse::<u64>().ok())
+                        .map(|kb| kb * 1024) // Convert KB to bytes
+                })
+        };
+        
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let memory = None;
+        
+        (memory, Instant::now())
+    });
+    
+    // Cache for 30 seconds to avoid subprocess spam
+    if cached_time.elapsed() < Duration::from_secs(30) {
+        *cached_memory
+    } else {
+        // Clear cache and return None (will be refreshed on next call)
+        let _ = MEMORY_CACHE.set((None, Instant::now()));
         None
     }
 }
@@ -254,7 +312,8 @@ struct UnstakeRequest {
 
 #[derive(Deserialize)]
 struct ProposalRequest {
-    proposer_secret: String,
+    #[serde(alias = "proposer_secret")]
+    secret_key: String,
     title: String,
     description: String,
     proposal_type: String,
@@ -268,7 +327,8 @@ struct ProposalRequest {
 
 #[derive(Deserialize)]
 struct VoteRequest {
-    voter_secret: String,
+    #[serde(alias = "voter_secret")]
+    secret_key: String,
     proposal_id: u64,
     vote: bool,
     #[serde(default)]
@@ -335,14 +395,20 @@ async fn handle_request(
     let path: Vec<&str> = req.uri().path().trim_matches('/').split('/').collect();
 
     // Behind reverse proxies (e.g. Fly.io), peer_addr is the proxy IP, not the real client.
-    // Try to extract real client IP from proxy headers; fall back to TCP peer address.
-    let client_ip = req.headers()
-        .get("fly-client-ip")
-        .or_else(|| req.headers().get("x-forwarded-for"))
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next()) // X-Forwarded-For may be comma-separated
-        .and_then(|s| s.trim().parse::<std::net::IpAddr>().ok())
-        .unwrap_or(client_ip);
+    // Only trust proxy headers when the TCP peer is a known proxy (loopback, private network,
+    // or Fly.io internal fdaa::/16). If the TCP peer is a public IP, an attacker could spoof
+    // these headers to bypass rate limits.
+    let client_ip = if is_trusted_proxy(client_ip) {
+        req.headers()
+            .get("fly-client-ip")
+            .or_else(|| req.headers().get("x-forwarded-for"))
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.split(',').next()) // X-Forwarded-For may be comma-separated
+            .and_then(|s| s.trim().parse::<std::net::IpAddr>().ok())
+            .unwrap_or(client_ip)
+    } else {
+        client_ip
+    };
 
     // Check global rate limit
     if !rate_limiter.check_rate_limit(client_ip, limits::GLOBAL) {
@@ -562,7 +628,7 @@ async fn handle_request(
                     address: addr.to_hex(),
                     balance,
                     nonce,
-                    balance_udag: balance as f64 / 100_000_000.0,
+                    balance_udag: balance as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                 },
             )
         }
@@ -609,25 +675,11 @@ async fn handle_request(
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {secret_key, to, amount, fee, memo?}"));
             };
 
-            // Parse secret key (64 hex chars = 32 bytes)
-            if send_req.secret_key.len() != 64 {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "secret_key must be 64 hex chars (32 bytes)"));
-            }
-            // Reject null bytes and other invalid characters
-            if send_req.secret_key.contains('\0') || !send_req.secret_key.chars().all(|c| c.is_ascii_hexdigit()) {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex in secret_key"));
-            }
-            let mut sk_bytes = [0u8; 32];
-            for (i, chunk) in send_req.secret_key.as_bytes().chunks(2).enumerate() {
-                let Ok(s) = std::str::from_utf8(chunk) else {
-                    return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex in secret_key"));
-                };
-                let Ok(b) = u8::from_str_radix(s, 16) else {
-                    return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex in secret_key"));
-                };
-                sk_bytes[i] = b;
-            }
-            let sk = SecretKey::from_bytes(sk_bytes);
+            // Parse and validate secret key
+            let sk = match parse_secret_key(&send_req.secret_key) {
+                Ok(sk) => sk,
+                Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, e)),
+            };
             let sender = sk.address();
 
             // Parse recipient
@@ -637,10 +689,12 @@ async fn handle_request(
 
             // Parse and validate memo (if provided)
             let memo = if let Some(memo_str) = send_req.memo {
-                // Try to parse as hex first, fall back to UTF-8
+                // 0x prefix: require valid hex (don't silently fall back to UTF-8)
                 let memo_bytes = if let Some(hex_str) = memo_str.strip_prefix("0x") {
-                    // Hex encoding: 0x[hex]
-                    hex::decode(hex_str).map_err(|_| ()).ok()
+                    match hex::decode(hex_str) {
+                        Ok(bytes) => Some(bytes),
+                        Err(_) => return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex in memo (after 0x prefix)")),
+                    }
                 } else if memo_str.chars().all(|c| c.is_ascii_hexdigit()) && memo_str.len() % 2 == 0 {
                     // Raw hex (even length, all hex digits)
                     hex::decode(&memo_str).map_err(|_| ()).ok()
@@ -681,19 +735,11 @@ async fn handle_request(
                 let mut mp = write_lock_or_503!(server.mempool);
 
                 // Compute nonce: highest pending + 1, or state nonce if no pending
-                let base_nonce = state.nonce(&sender);
-                let nonce = match mp.pending_nonce(&sender) {
-                    Some(max_pending) => max_pending.saturating_add(1),
-                    None => base_nonce,
-                };
+                let nonce = next_nonce(&state, &mp, &sender);
 
                 // Validate balance including pending cost
                 let balance = state.balance(&sender);
-                let pending_cost: u64 = mp.best(MAX_MEMPOOL_SCAN)
-                    .iter()
-                    .filter(|t| t.from() == sender)
-                    .map(|t| t.total_cost())
-                    .sum();
+                let pending_cost = pending_cost(&mp, &sender);
                 let tx_cost = send_req.amount.saturating_add(send_req.fee);
                 let total_needed = pending_cost.saturating_add(tx_cost);
                 if balance < total_needed {
@@ -704,7 +750,7 @@ async fn handle_request(
                             total_needed,
                             pending_cost,
                             balance,
-                            balance as f64 / 100_000_000.0,
+                            balance as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                         ),
                     ));
                 }
@@ -828,7 +874,7 @@ async fn handle_request(
             }
 
             // Cap faucet amount at 100 UDAG per request
-            const MAX_FAUCET_SATS: u64 = 100 * 100_000_000; // 100 UDAG
+            const MAX_FAUCET_SATS: u64 = 100 * ultradag_coin::COIN; // 100 UDAG
             if faucet_req.amount > MAX_FAUCET_SATS {
                 return Ok(error_response(
                     StatusCode::BAD_REQUEST,
@@ -845,25 +891,17 @@ async fn handle_request(
                 let state = read_lock_or_503!(server.state);
                 let mut mp = write_lock_or_503!(server.mempool);
 
-                let base_nonce = state.nonce(&faucet_addr);
-                let nonce = match mp.pending_nonce(&faucet_addr) {
-                    Some(max_pending) => max_pending.saturating_add(1),
-                    None => base_nonce,
-                };
+                let nonce = next_nonce(&state, &mp, &faucet_addr);
 
                 let balance = state.balance(&faucet_addr);
-                let pending_cost: u64 = mp.best(MAX_MEMPOOL_SCAN)
-                    .iter()
-                    .filter(|t| t.from() == faucet_addr)
-                    .map(|t| t.total_cost())
-                    .sum();
+                let pending_cost = pending_cost(&mp, &faucet_addr);
                 let total_needed = pending_cost.saturating_add(faucet_req.amount).saturating_add(fee);
                 if balance < total_needed {
                     return Ok(error_response(
                         StatusCode::BAD_REQUEST,
                         &format!(
                             "faucet insufficient balance: need {} sats, have {} sats ({:.4} UDAG)",
-                            total_needed, balance, balance as f64 / 100_000_000.0,
+                            total_needed, balance, balance as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                         ),
                     ));
                 }
@@ -900,7 +938,7 @@ async fn handle_request(
                     "from": faucet_addr.to_hex(),
                     "to": faucet_req.address,
                     "amount": faucet_req.amount,
-                    "amount_udag": faucet_req.amount as f64 / 100_000_000.0,
+                    "amount_udag": faucet_req.amount as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                     "nonce": nonce,
                 }),
             )
@@ -948,24 +986,10 @@ async fn handle_request(
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {secret_key, amount}"));
             };
 
-            if stake_req.secret_key.len() != 64 {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "secret_key must be 64 hex chars"));
-            }
-            // Reject null bytes and other invalid characters
-            if stake_req.secret_key.contains('\0') || !stake_req.secret_key.chars().all(|c| c.is_ascii_hexdigit()) {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex in secret_key"));
-            }
-            let mut sk_bytes = [0u8; 32];
-            for (i, chunk) in stake_req.secret_key.as_bytes().chunks(2).enumerate() {
-                let Ok(s) = std::str::from_utf8(chunk) else {
-                    return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex"));
-                };
-                let Ok(b) = u8::from_str_radix(s, 16) else {
-                    return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex"));
-                };
-                sk_bytes[i] = b;
-            }
-            let sk = SecretKey::from_bytes(sk_bytes);
+            let sk = match parse_secret_key(&stake_req.secret_key) {
+                Ok(sk) => sk,
+                Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, e)),
+            };
             let sender = sk.address();
 
             // Build stake transaction and add to mempool (will be included in next vertex)
@@ -973,24 +997,16 @@ async fn handle_request(
                 let state = read_lock_or_503!(server.state);
                 let mut mp = write_lock_or_503!(server.mempool);
 
-                let base_nonce = state.nonce(&sender);
-                let nonce = match mp.pending_nonce(&sender) {
-                    Some(max_pending) => max_pending.saturating_add(1),
-                    None => base_nonce,
-                };
+                let nonce = next_nonce(&state, &mp, &sender);
 
                 let balance = state.balance(&sender);
-                let pending_cost: u64 = mp.best(MAX_MEMPOOL_SCAN)
-                    .iter()
-                    .filter(|t| t.from() == sender)
-                    .map(|t| t.total_cost())
-                    .sum();
+                let pending_cost = pending_cost(&mp, &sender);
                 // StakeTx has zero fee — don't add MIN_FEE_SATS
                 let total_needed = pending_cost.saturating_add(stake_req.amount);
 
                 if stake_req.amount < MIN_STAKE_SATS {
                     return Ok(error_response(StatusCode::BAD_REQUEST,
-                        &format!("minimum stake is {} sats ({} UDAG)", MIN_STAKE_SATS, MIN_STAKE_SATS / 100_000_000)));
+                        &format!("minimum stake is {} sats ({} UDAG)", MIN_STAKE_SATS, MIN_STAKE_SATS / ultradag_coin::SATS_PER_UDAG)));
                 }
                 if balance < total_needed {
                     return Ok(error_response(StatusCode::BAD_REQUEST,
@@ -1025,7 +1041,7 @@ async fn handle_request(
                 "tx_hash": hex_encode(&tx_hash),
                 "address": sender.to_hex(),
                 "amount": stake_req.amount,
-                "amount_udag": stake_req.amount as f64 / 100_000_000.0,
+                "amount_udag": stake_req.amount as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                 "nonce": nonce,
                 "note": "Stake transaction added to mempool. Will be applied when included in a finalized vertex."
             }))
@@ -1052,24 +1068,10 @@ async fn handle_request(
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {secret_key}"));
             };
 
-            if unstake_req.secret_key.len() != 64 {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "secret_key must be 64 hex chars"));
-            }
-            // Reject null bytes and other invalid characters
-            if unstake_req.secret_key.contains('\0') || !unstake_req.secret_key.chars().all(|c| c.is_ascii_hexdigit()) {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex in secret_key"));
-            }
-            let mut sk_bytes = [0u8; 32];
-            for (i, chunk) in unstake_req.secret_key.as_bytes().chunks(2).enumerate() {
-                let Ok(s) = std::str::from_utf8(chunk) else {
-                    return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex"));
-                };
-                let Ok(b) = u8::from_str_radix(s, 16) else {
-                    return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex"));
-                };
-                sk_bytes[i] = b;
-            }
-            let sk = SecretKey::from_bytes(sk_bytes);
+            let sk = match parse_secret_key(&unstake_req.secret_key) {
+                Ok(sk) => sk,
+                Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, e)),
+            };
             let sender = sk.address();
 
             let current_round = {
@@ -1087,11 +1089,7 @@ async fn handle_request(
                     return Ok(error_response(StatusCode::BAD_REQUEST, "not staked"));
                 }
 
-                let base_nonce = state.nonce(&sender);
-                let nonce = match mp.pending_nonce(&sender) {
-                    Some(max_pending) => max_pending.saturating_add(1),
-                    None => base_nonce,
-                };
+                let nonce = next_nonce(&state, &mp, &sender);
 
                 let mut unstake_tx = UnstakeTx {
                     from: sender,
@@ -1137,7 +1135,7 @@ async fn handle_request(
             json_response(StatusCode::OK, &StakeInfoResponse {
                 address: addr.to_hex(),
                 staked,
-                staked_udag: staked as f64 / 100_000_000.0,
+                staked_udag: staked as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                 unlock_at_round: unlock_at,
                 is_active_validator: is_active,
             })
@@ -1151,7 +1149,7 @@ async fn handle_request(
                 ValidatorInfo {
                     address: addr.to_hex(),
                     staked,
-                    staked_udag: staked as f64 / 100_000_000.0,
+                    staked_udag: staked as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                 }
             }).collect();
             json_response(StatusCode::OK, &serde_json::json!({
@@ -1162,11 +1160,18 @@ async fn handle_request(
         }
 
         (&Method::GET, ["keygen"]) => {
+            if !rate_limiter.check_rate_limit(client_ip, limits::KEYGEN) {
+                return Ok(error_response(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "rate limit exceeded: too many keygen requests",
+                ));
+            }
             let sk = SecretKey::generate();
             let addr = sk.address();
             json_response(
                 StatusCode::OK,
                 &serde_json::json!({
+                    "warning": "TESTNET ONLY — never use /keygen for mainnet. The server sees your private key.",
                     "secret_key": hex_encode(&sk.to_bytes()),
                     "address": addr.to_hex(),
                 }),
@@ -1189,7 +1194,7 @@ async fn handle_request(
             }
             let Ok(prop_req) = serde_json::from_slice::<ProposalRequest>(&body) else {
                 return Ok(error_response(StatusCode::BAD_REQUEST,
-                    "invalid JSON: need {proposer_secret, title, description, proposal_type}"));
+                    "invalid JSON: need {secret_key, title, description, proposal_type}"));
             };
 
             // Validate title/description lengths before doing any crypto work
@@ -1202,7 +1207,7 @@ async fn handle_request(
                     &format!("description too long: max {} bytes", ultradag_coin::constants::PROPOSAL_DESCRIPTION_MAX_BYTES)));
             }
 
-            let sk = match parse_secret_key(&prop_req.proposer_secret) {
+            let sk = match parse_secret_key(&prop_req.secret_key) {
                 Ok(sk) => sk,
                 Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, e)),
             };
@@ -1228,23 +1233,15 @@ async fn handle_request(
                 let state = read_lock_or_503!(server.state);
                 let mut mp = write_lock_or_503!(server.mempool);
 
-                let base_nonce = state.nonce(&sender);
-                let nonce = match mp.pending_nonce(&sender) {
-                    Some(max_pending) => max_pending.saturating_add(1),
-                    None => base_nonce,
-                };
+                let nonce = next_nonce(&state, &mp, &sender);
 
                 let balance = state.balance(&sender);
-                let pending_cost: u64 = mp.best(MAX_MEMPOOL_SCAN)
-                    .iter()
-                    .filter(|t| t.from() == sender)
-                    .map(|t| t.total_cost())
-                    .sum();
-                let total_needed = pending_cost.saturating_add(fee);
+                let pending = pending_cost(&mp, &sender);
+                let total_needed = pending.saturating_add(fee);
                 if balance < total_needed {
                     return Ok(error_response(StatusCode::BAD_REQUEST,
                         &format!("insufficient balance for fee: need {} (fee={}, pending={}), have {}",
-                            total_needed, fee, pending_cost, balance)));
+                            total_needed, fee, pending, balance)));
                 }
 
                 // Check proposer has sufficient stake
@@ -1253,7 +1250,7 @@ async fn handle_request(
                 if proposer_stake < min_stake {
                     return Ok(error_response(StatusCode::BAD_REQUEST,
                         &format!("insufficient stake to propose: need {} UDAG staked, have {} UDAG staked",
-                            min_stake / 100_000_000, proposer_stake / 100_000_000)));
+                            min_stake / 100_000_000, proposer_stake / ultradag_coin::SATS_PER_UDAG)));
                 }
 
                 // Check active proposal count limit
@@ -1316,10 +1313,10 @@ async fn handle_request(
             }
             let Ok(vote_req) = serde_json::from_slice::<VoteRequest>(&body) else {
                 return Ok(error_response(StatusCode::BAD_REQUEST,
-                    "invalid JSON: need {voter_secret, proposal_id, vote}"));
+                    "invalid JSON: need {secret_key, proposal_id, vote}"));
             };
 
-            let sk = match parse_secret_key(&vote_req.voter_secret) {
+            let sk = match parse_secret_key(&vote_req.secret_key) {
                 Ok(sk) => sk,
                 Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, e)),
             };
@@ -1330,28 +1327,26 @@ async fn handle_request(
                 let state = read_lock_or_503!(server.state);
                 let mut mp = write_lock_or_503!(server.mempool);
 
-                // Check that proposal exists
-                if state.proposal(vote_req.proposal_id).is_none() {
-                    return Ok(error_response(StatusCode::BAD_REQUEST, "proposal not found"));
+                // Check that proposal exists and is accepting votes
+                let proposal = match state.proposal(vote_req.proposal_id) {
+                    Some(p) => p,
+                    None => return Ok(error_response(StatusCode::BAD_REQUEST, "proposal not found")),
+                };
+                let current_round = state.last_finalized_round().unwrap_or(0);
+                if !proposal.is_voting_open(current_round) {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!("voting is not open for this proposal (status: {:?})", proposal.status)));
                 }
 
-                let base_nonce = state.nonce(&sender);
-                let nonce = match mp.pending_nonce(&sender) {
-                    Some(max_pending) => max_pending.saturating_add(1),
-                    None => base_nonce,
-                };
+                let nonce = next_nonce(&state, &mp, &sender);
 
                 let balance = state.balance(&sender);
-                let pending_cost: u64 = mp.best(MAX_MEMPOOL_SCAN)
-                    .iter()
-                    .filter(|t| t.from() == sender)
-                    .map(|t| t.total_cost())
-                    .sum();
-                let total_needed = pending_cost.saturating_add(fee);
+                let pending = pending_cost(&mp, &sender);
+                let total_needed = pending.saturating_add(fee);
                 if balance < total_needed {
                     return Ok(error_response(StatusCode::BAD_REQUEST,
                         &format!("insufficient balance for fee: need {} (fee={}, pending={}), have {}",
-                            total_needed, fee, pending_cost, balance)));
+                            total_needed, fee, pending, balance)));
                 }
 
                 let mut vote_tx = VoteTx {
@@ -1396,7 +1391,7 @@ async fn handle_request(
                 StatusCode::OK,
                 &serde_json::json!({
                     "min_stake_to_propose": gp.min_stake_to_propose,
-                    "min_stake_to_propose_udag": gp.min_stake_to_propose as f64 / 100_000_000.0,
+                    "min_stake_to_propose_udag": gp.min_stake_to_propose as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                     "voting_period_rounds": gp.voting_period_rounds,
                     "quorum_percent": (gp.quorum_numerator as f64 / ultradag_coin::constants::GOVERNANCE_QUORUM_DENOMINATOR as f64) * 100.0,
                     "approval_percent": (gp.approval_numerator as f64 / ultradag_coin::constants::GOVERNANCE_APPROVAL_DENOMINATOR as f64) * 100.0,
@@ -1422,9 +1417,9 @@ async fn handle_request(
                     "voting_starts": p.voting_starts,
                     "voting_ends": p.voting_ends,
                     "votes_for": p.votes_for,
-                    "votes_for_udag": p.votes_for as f64 / 100_000_000.0,
+                    "votes_for_udag": p.votes_for as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                     "votes_against": p.votes_against,
-                    "votes_against_udag": p.votes_against as f64 / 100_000_000.0,
+                    "votes_against_udag": p.votes_against as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                     "status": p.status,
                 }))
                 .collect();
@@ -1451,9 +1446,9 @@ async fn handle_request(
                 "voting_starts": p.voting_starts,
                 "voting_ends": p.voting_ends,
                 "votes_for": p.votes_for,
-                "votes_for_udag": p.votes_for as f64 / 100_000_000.0,
+                "votes_for_udag": p.votes_for as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                 "votes_against": p.votes_against,
-                "votes_against_udag": p.votes_against as f64 / 100_000_000.0,
+                "votes_against_udag": p.votes_against as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                 "status": p.status,
             }))
         }

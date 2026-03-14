@@ -658,7 +658,7 @@ fn test_23_mid_epoch_stake_does_not_change_active_set() {
 fn test_24_stale_epoch_on_load_triggers_recalculation() {
     let tmp = std::env::temp_dir().join(format!("ultradag_test24_{}", std::process::id()));
     let _ = std::fs::create_dir_all(&tmp);
-    let state_path = tmp.join("state.json");
+    let state_path = tmp.join("state.redb");
 
     let mut state = StateEngine::new_with_genesis();
     let sks: Vec<_> = (0..3).map(|_| SecretKey::generate()).collect();
@@ -691,10 +691,22 @@ fn test_24_stale_epoch_on_load_triggers_recalculation() {
     // Save state
     state.save(&state_path).unwrap();
 
-    // Tamper: load the raw snapshot and set current_epoch back to 0
-    let raw = std::fs::read_to_string(&state_path).unwrap();
-    let tampered = raw.replacen("\"current_epoch\":1", "\"current_epoch\":0", 1);
-    std::fs::write(&state_path, tampered).unwrap();
+    // Tamper: load state, modify epoch to 0, and re-save
+    let mut tampered = StateEngine::load(&state_path).unwrap();
+    // Use from_parts to reconstruct with epoch=0
+    let tampered_state = StateEngine::from_parts(
+        tampered.all_accounts().map(|(k, v)| (*k, v.clone())).collect(),
+        tampered.all_stakes().map(|(k, v)| (*k, v.clone())).collect(),
+        tampered.active_validators().to_vec(),
+        0, // stale epoch
+        tampered.total_supply(),
+        tampered.last_finalized_round(),
+        tampered.all_proposals().map(|(k, v)| (*k, v.clone())).collect(),
+        tampered.all_votes().map(|(k, v)| (*k, *v)).collect(),
+        tampered.next_proposal_id(),
+        tampered.governance_params().clone(),
+    );
+    tampered_state.save(&state_path).unwrap();
 
     // Reload — should detect stale epoch and recalculate
     let reloaded = StateEngine::load(&state_path).unwrap();

@@ -65,6 +65,12 @@ impl ValidatorSet {
         self.validators.insert(addr)
     }
 
+    /// Remove a validator (e.g., after equivocation/slashing).
+    /// Prevents Byzantine validators from inflating the quorum threshold.
+    pub fn remove(&mut self, addr: &Address) -> bool {
+        self.validators.remove(addr)
+    }
+
     pub fn contains(&self, addr: &Address) -> bool {
         self.validators.contains(addr)
     }

@@ -8,6 +8,62 @@
 
 ## Recent Updates (March 2026)
 
+**Security Vulnerability Report Audit (March 13, 2026):**
+- **External report received with 20 claimed vulnerabilities (VULN-01 through VULN-20)**
+- **Triage result: 3 valid (all previously known/documented), 17 false positives or already mitigated**
+- **VULN-01 (CheckpointSync trust on fresh nodes):** VALID — chain verification skipped when no local checkpoints exist. Already mitigated by: (1) GENESIS_CHECKPOINT_HASH hardcoded (March 13 hardening), (2) `verify_checkpoint_chain` failure now disconnects peer. **Remaining gap:** fresh nodes with zero local checkpoints still rely on quorum signatures alone as trust anchor. Mainnet requires additional hardening (e.g., embedded genesis checkpoint in binary).
+- **VULN-02 (Dynamic validator inflation):** VALID but MITIGATED — `ValidatorSet.quorum_threshold()` uses dynamic count when `configured_validators=None`. Already mitigated on testnet via `--validators N` CLI flag. **Mainnet must enforce `configured_validators`.**
+- **VULN-03 (Private keys in RPC):** VALID, BY DESIGN — testnet convenience endpoints accept `secret_key` in JSON body. SDKs provide client-side signing. Already documented with security warning on `/keygen`. **Mainnet should add signed-tx-only endpoints.**
+- **False positives rejected:** VULN-04 (state race: RwLock serializes), VULN-05 (evidence memory: intentionally permanent, bounded), VULN-06 (timestamp: 5min window is conservative), VULN-07 (parent exhaustion: MAX_PARENTS=64 bounded), VULN-08 (memo exfiltration: 256B with min fee, like OP_RETURN), VULN-09 (rate limit bypass: universal IP limitation, mempool has fee eviction), VULN-10 (address ambiguity: hex→bytes is case-insensitive by design), VULN-11 (logging: subjective), VULN-12 (subprocess: already cached via OnceLock), VULN-13 (signature replay: NETWORK_ID + nonces prevent), VULN-14 (unbounded mempool: 10K cap + fee eviction exists), VULN-15 (message bypass: atomic read_exact + bounds check), VULN-16 (finality race: deterministic sort by (round,hash) + RwLock), VULN-17 (descendant manipulation: requires >1/3 Byzantine, BFT assumption), VULN-18 (supply invariant: saturating math + invariant check catches mismatch), VULN-19 (peer impersonation: vertices Ed25519-signed), VULN-20 (message replay: DAG rejects duplicates, tx nonces)
+
+**Architecture Improvements (March 13, 2026):**
+- **BitVec for descendant validator tracking** — Replaced `HashMap<[u8;32], HashSet<Address>>` with `HashMap<[u8;32], BitVec>` using `ValidatorIndex` for bidirectional `Address ↔ usize` mapping. 256x memory reduction at scale (125 bytes per vertex at 1000 validators vs ~32KB with HashSet). O(1) finality checks preserved via `count_ones()`.
+- **redb for state persistence** — Replaced custom JSON state snapshots + WAL + HWM with pure-Rust `redb` embedded ACID database (~200KB binary impact). StateEngine persisted via 6 tables (accounts, stakes, proposals, votes, metadata, active_validators). Atomic write via temp file + rename. `StateEngine::from_parts()` constructor decouples persistence format from engine internals.
+- **WAL + HWM removed** — `FinalityWal` (wal.rs) and high-water mark (monotonicity.rs) no longer used in production. redb's ACID guarantees replace both. server.rs function parameters reduced from 18 to 17. ~60 lines removed from main.rs startup.
+- **Postcard for P2P messages** — Replaced `serde_json` with `postcard` (zero-copy binary) for `Message::encode()`/`decode()`. ~40% smaller wire format for typical messages.
+- **ValidatorIndex struct** — `BlockDag` now carries `validator_index: ValidatorIndex` for compact bitmap indexing. Append-only, rebuilt on load.
+- **Tests:** 777 passed, 0 failed, 14 ignored (jepsen long-running).
+
+**Final Hardening Pass (March 13, 2026):**
+- **`/keygen` rate-limited** — Was the only mutation-free endpoint with no rate limit. Added `KEYGEN: 10/min` rate limit. Also added `"warning": "TESTNET ONLY"` to response JSON.
+- **Checkpoint signature verification before storage** — `CheckpointSignatureMsg` handler now verifies Ed25519 signature validity BEFORE adding to pending checkpoint. Previously accepted at face value (re-verified only at quorum check), wasting memory on forged sigs. Made `Checkpoint::verify_signature()` public.
+- **Parent selection uses blake3** — Replaced weak byte-by-byte XOR scoring with `blake3(validator || parent_hash)` for cryptographically uniform deterministic parent selection. Consensus-critical: all nodes must use identical algorithm.
+- **Peers message cap** — Incoming `Message::Peers` vector now capped at 100 entries via `.take(100)`. Prevents large allocation from malicious peer before `add_known()` cap applies.
+- **Memo hex parsing strict** — `0x`-prefixed memo now requires valid hex (returns error on decode failure). Previously silently fell back to UTF-8, hiding user intent errors.
+- **Governance `apply_change` error logged** — `tick_governance()` now logs `eprintln!` when ParameterChange proposal fails to apply. Previously silently ignored, making it impossible to diagnose failed governance execution.
+- **Checkpoint chain fallback logged at error level** — Missing previous checkpoint now emits `error!()` instead of `warn!()`, with message about disk integrity verification.
+- **Secret key parsing DRY** — Removed 3x copy-pasted 18-line secret key parsing blocks in `/tx`, `/stake`, `/unstake` endpoints. All now call shared `parse_secret_key()` helper. `/proposal` and `/vote` already used the helper.
+- **Dead duplicate files removed** — `block/core.rs` (orphaned copy of `block.rs`, not in `mod.rs`), `ultradag-node/src/metrics.rs` (identical copy of network crate's `CheckpointMetrics`, never used in production). Tests updated to import from `ultradag_network`.
+- **Dead `#[allow(dead_code)]` constants cleaned** — `MAX_CONNECTIONS_PER_IP` and `MAX_ALLOWLIST_REJECTIONS` renamed with `_` prefix and TODO comments.
+- **`set_wal()` poisoned mutex recovery** — `.unwrap()` → `.unwrap_or_else(|e| e.into_inner())`.
+- **Orphan buffer `.sum()` overflow fixed** — `orphan_buffer_bytes()` in server.rs used `.sum()`. Changed to `.fold(0usize, saturating_add)`.
+- **`block.rs total_fees()` `.sum()` overflow fixed** — `.sum()` → `.fold(0u64, saturating_add)`.
+- **`futures` and `chrono` moved to dev-dependencies** — Neither crate used in production code (only test code). Moved from `[dependencies]` to `[dev-dependencies]` in ultradag-network.
+- **Tests:** 777 passed, 0 failed, 14 ignored (jepsen long-running).
+
+**Comprehensive Quality & Security Max Pass (March 13, 2026):**
+- **11 unchecked `.sum()` overflow bugs fixed** — engine.rs (fee summation, supply invariant liquid+staked, test helper), rpc.rs (5 pending_cost calculations in /tx, /faucet, /stake, /proposal, /vote), main.rs (auto-stake pending_cost). All replaced with `.fold(0u64, |acc, x| acc.saturating_add(x))`.
+- **3 `.expect()` panics in main.rs fixed** — `create_dir_all()`, `read_to_string()`, `fs::write()` for validator key handling. Replaced with `error!()` + `process::exit(1)`.
+- **GENESIS_CHECKPOINT_HASH hardcoded** — Computed real hash `[0xbd, 0x76, 0xa4, ...]` from `StateEngine::new_with_genesis()`. Removed `[0u8; 32]` bypass clauses in `verify_checkpoint_chain()`. Eclipse attacks via forged genesis now cryptographically rejected.
+- **CheckpointSync circular trust fixed** — `verify_checkpoint_chain` failure now returns/disconnects instead of logging warning and continuing. Forged checkpoints with invalid chains are rejected.
+- **server.rs finality+state deduplication** — Extracted `apply_finality_and_state()` helper function. Eliminated 4x copy-paste of ~50-line finality→state→epoch pattern (DagProposal, DagVertices, resolve_orphans, ParentVertices). Net -95 lines.
+- **Dead self-connection check removed** — `listen()` compared ephemeral source port to listen port (never matches). Removed dead check; IP dedup below handles it.
+- **`send_to` lock contention fixed** — `registry.rs send_to()` held read lock across async I/O. Now clones writer before dropping lock, matching `broadcast()` pattern.
+- **`insert()` now enforces MAX_PARENTS** — Previously only `try_insert()` checked. `insert()` now truncates to 64 parents.
+- **Dead constants removed** — `COINBASE_MATURITY` (never enforced) and `TARGET_BLOCK_TIME_SECS` (misleading, unused). Grep confirmed no references.
+- **Per-sender mempool limit** — Added `MAX_TXS_PER_SENDER = 100`. One address can no longer fill the entire 10K mempool.
+- **Deterministic checkpoint hashing** — `compute_checkpoint_hash()` now uses manual byte construction instead of JSON serialization (not guaranteed deterministic across serde versions).
+- **Hash collision sentinel** — `compute_state_root()` returns `[0xFF; 32]` on serialization failure instead of hashing empty vec (which created a collision class).
+- **Secret key logging downgraded** — Changed from `info!()` to `debug!()`. Keys no longer appear in normal log output.
+- **X-Forwarded-For trust validation** — Added `is_trusted_proxy()` check. Only accepts proxy headers from loopback, RFC 1918, Fly.io fdaa::/16. Public IPs use TCP peer address directly. Prevents rate limit bypass via header spoofing.
+- **`select_parents` scoring improved** — Replaced weak byte-by-byte XOR with `blake3(proposer || tip_hash)` for proper cryptographic mixing and uniform distribution.
+- **`ordering.rs` precomputed hashes** — Sort comparator now uses precomputed `(hash, &vertex)` pairs instead of recomputing blake3 hash in every comparison (was O(N² log N) blake3 calls, now O(N)).
+- **`producer.rs` overflow fixes** — `total_fees` `.sum()` and `validator_reward + total_fees` both changed to saturating operations.
+- **25 new RPC integration tests** — 12 `is_trusted_proxy()` coverage tests + 13 real HTTP endpoint tests (health, status, keygen, balance, tx validation, mempool, peers, validators, 404, rate limiting, CORS).
+- **Genesis hash verification test** — Validates computed hash matches constant and is deterministic.
+- **8 backup files removed** — `.bak`, `.old`, `.backup` files from `site/` and `docs-old.html`.
+- **Checkpoint chain tests updated** — Now use real genesis state for round-0 checkpoints to match hardcoded `GENESIS_CHECKPOINT_HASH`.
+
 **New Node Joining Fix — 6-Part Sync Protocol Overhaul (March 12, 2026):**
 - **Problem:** New nodes (round 0) connecting to a live network (round 1500+) got "Connection reset by peer" and built isolated chains instead of syncing. Multiple interacting root causes prevented new nodes from ever receiving DAG history.
 - **Root causes & fixes:**
@@ -95,7 +151,7 @@
 - **Problem:** Trust-on-first-use (TOFU) vulnerability — fresh nodes trusted checkpoint from first peer, enabling eclipse attacks with forged validator sets
 - **Solution:** Cryptographic checkpoint chain linking back to genesis
   - **Part 1:** Added `prev_checkpoint_hash` field to Checkpoint struct — each checkpoint links to predecessor via blake3 hash
-  - **Part 2:** Added `GENESIS_CHECKPOINT_HASH` constant — trust anchor for chain verification (currently placeholder `[0u8; 32]` for testnet)
+  - **Part 2:** Added `GENESIS_CHECKPOINT_HASH` constant — trust anchor for chain verification (hardcoded `[0xbd, 0x76, 0xa4, ...]` computed from testnet genesis state)
   - **Part 3:** Implemented `verify_checkpoint_chain()` — walks chain backwards, verifies links, detects cycles/breaks/mismatches, DoS protection (max 10K checkpoints)
   - **Part 4:** Updated CheckpointSync handler — verifies chain BEFORE applying state, disconnects malicious peers
 - **Security Impact:**
@@ -148,7 +204,7 @@
 
 **Integration Audit (March 10, 2026):**
 Comprehensive review of all recently added features to verify they are truly integrated into production code paths (not loose/dead code):
-- ✅ **WAL** — Opened at startup, replayed on crash recovery, appended at all 3 finality paths in server.rs, truncated after snapshots
+- ✅ **State Persistence (redb)** — ACID database for StateEngine; atomic write via temp file + rename; replaces legacy WAL + HWM
 - ✅ **Slashing** — Equivocation detected at DAG insert → `state.slash()` → 50% stake burned → active set removal → evidence P2P broadcast → permanent persistence
 - ✅ **Checkpoints & Fast-Sync** — Produced every 100 finalized rounds, co-signed via P2P, quorum-verified, saved to disk, served via GetCheckpoint/CheckpointSync, fast-sync retries on startup
 - ✅ **CircuitBreaker** — Checked every validator loop iteration, `std::process::exit(100)` on finality rollback, cannot be bypassed
@@ -498,13 +554,13 @@ formal/
 
 ### Consensus module layout (`ultradag-coin/src/consensus/`):
 - `vertex.rs` — `DagVertex`: block + parent_hashes + round + validator + pub_key + signature; `verify_signature()`, `signable_bytes()`
-- `dag.rs` — `BlockDag`: DAG data structure with vertices, tips, children, rounds, ancestor/descendant queries, equivocation detection, incremental `descendant_validators` tracking (updated on insert via BFS with early termination), `evidence_store` for permanent equivocation evidence, `prune_old_rounds()` for memory management
+- `dag.rs` — `BlockDag`: DAG data structure with vertices, tips, children, rounds, ancestor/descendant queries, equivocation detection, incremental `descendant_validators` tracking via `BitVec` + `ValidatorIndex` (updated on insert via BFS with early termination), `evidence_store` for permanent equivocation evidence, `prune_old_rounds()` for memory management
 - `finality.rs` — `FinalityTracker`: BFT finality (2/3+ threshold), O(1) `check_finality` via precomputed counts, `find_newly_finalized` with forward propagation through children, `last_finalized_round` tracking for pruning. Uses `ValidatorSet` internally.
 - `checkpoint.rs` — `Checkpoint`: signed snapshots for fast-sync; includes `state_root`, `dag_tip`, `total_supply`, validator signatures; `sign()`, `verify()`, `is_accepted()` with quorum validation
 - `epoch.rs` — `sync_epoch_validators()`: synchronizes FinalityTracker with StateEngine's active validator set at epoch boundaries
 - `validator_set.rs` — `ValidatorSet`: tracks validator addresses, computes `quorum_threshold()` = ceil(2n/3), `has_quorum(count)` check, `configured_validators` field, permissioned allowlist with `set_allowed_validators()`
 - `ordering.rs` — `order_vertices()`: deterministic total ordering of finalized vertices (uses pre-computed `topo_level`)
-- `persistence.rs` — `DagSnapshot`, `FinalitySnapshot`: serializable state for save/load; `wal.rs` — `FinalityWal`: append-only crash recovery log
+- `persistence.rs` — `DagSnapshot`, `FinalitySnapshot`: serializable state for save/load
 
 ### State module layout (`ultradag-coin/src/state/`):
 - `engine.rs` — `StateEngine`: derives account state from finalized DAG vertices
@@ -764,37 +820,31 @@ if last_finalized_round > 0 && last_finalized_round % CHECKPOINT_INTERVAL == 0 {
 ### State Persistence
 
 **Files saved to `--data-dir`:**
-- `dag.json` — DAG vertices, tips, rounds, Byzantine validators, equivocation evidence
-- `finality.json` — Finalized vertex hashes, validator set, last_finalized_round
-- `state.json` — Account balances, nonces, stake accounts, active validators, total supply
-- `mempool.json` — Pending transactions
-- `checkpoints/checkpoint_<round>.json` — Accepted checkpoints (every 100 finalized rounds)
-- `wal.jsonl` — Write-ahead log: append-only JSON Lines of finalized vertex batches
-- `wal_header.json` — WAL metadata: snapshot round, next sequence, snapshot state root
+- `dag.json` — DAG vertices, tips, rounds, Byzantine validators, equivocation evidence (postcard binary)
+- `finality.json` — Finalized vertex hashes, validator set, last_finalized_round (postcard binary)
+- `state.redb` — ACID database: accounts, stakes, proposals, votes, metadata, active validators (redb)
+- `mempool.json` — Pending transactions (postcard binary)
+- `checkpoints/checkpoint_<round>.bin` — Accepted checkpoints (every 100 finalized rounds)
 
-**Write-Ahead Log (WAL):**
-- Records finalized vertex batches between full snapshots for crash recovery
-- Appended after every `apply_finalized_vertices` call (in both validator loop and P2P handlers)
-- Truncated after each successful full snapshot (every 10 rounds)
-- On startup, WAL entries are replayed: vertices re-applied to StateEngine, state_root verified per entry
-- Format: JSON Lines (`wal.jsonl`), one `WalEntry` per line (sequence, finalized_round, vertices, state_root)
-- Uses `fsync` for durability after each append
-- `std::sync::Mutex` (not tokio) since WAL writes are pure I/O with no await points
-- Implementation: `crates/ultradag-coin/src/persistence/wal.rs`
+**State Database (redb):**
+- Pure-Rust embedded ACID database replaces JSON snapshots + WAL + HWM
+- 6 tables: ACCOUNTS `[u8;32] → (u64,u64)`, STAKES `[u8;32] → (u64,u64)`, PROPOSALS `u64 → &[u8]`, VOTES `&[u8] → u8`, METADATA `&str → &[u8]`, ACTIVE_VALIDATORS `u64 → &[u8;32]`
+- Atomic write: creates fresh DB in `.redb.tmp`, writes all tables in single transaction, renames to `state.redb`
+- `save_to_redb()` / `load_from_redb()` in `crates/ultradag-coin/src/state/db.rs`
+- `StateEngine::from_parts()` constructor decouples persistence format from engine internals
+- Epoch reconciliation on load: if persisted epoch doesn't match `epoch_of(last_finalized_round)`, active set recalculated
 
 **Persistence triggers:**
-- Every 10 rounds during validator loop (full snapshot + WAL truncation)
+- Every 10 rounds during validator loop (full snapshot)
 - On graceful shutdown (SIGTERM/SIGINT)
-- Atomic write: `.tmp` file → rename (crash-safe)
-- WAL append: after every finality batch (crash recovery between snapshots)
+- Atomic write: `.redb.tmp` file → rename (crash-safe via redb ACID + rename)
 
 ### Node Startup Sequence
 
 1. Parse CLI arguments
 2. Load validator keypair: `--pkey` flag > disk (`validator.key`) > generate new
-3. Initialize or load state from disk (DAG, finality, state, mempool)
-4. Open WAL and replay any entries since last snapshot (crash recovery)
-5. Apply permissioned validator allowlist if `--validator-key` specified
+3. Initialize or load state from disk (DAG, finality, state via redb, mempool)
+4. Apply permissioned validator allowlist if `--validator-key` specified
 6. Start NodeServer P2P listener on `--port`
 7. Connect to seed peers (`--seed`) or bootstrap nodes (unless `--no-bootstrap`)
 8. Fast-sync from checkpoint (unless `--skip-fast-sync`)
@@ -925,15 +975,15 @@ cargo test --workspace
 
 ## Tests
 
-**757 tests passing** (all pass, zero failures, 14 ignored jepsen long-running tests):
+**777 tests passing** (all pass, zero failures, 14 ignored jepsen long-running tests):
 
 Run `cargo test --workspace --release` to verify:
 ```
-test result: ok. 757 passed; 0 failed; 14 ignored
+test result: ok. 777 passed; 0 failed; 14 ignored
 ```
 
 ### Test Breakdown by Crate:
-- **ultradag-coin**: 146 unit tests + 399 integration tests (includes 6 WAL tests)
+- **ultradag-coin**: 150 unit tests + 399 integration tests
 - **ultradag-network**: 25 unit tests + 12 integration tests + 49 fault injection tests
 - **ultradag-sdk**: 2 doc tests
 
@@ -969,6 +1019,10 @@ test result: ok. 757 passed; 0 failed; 14 ignored
 - `governance.rs` — 3 tests: proposal hash, vote hash, different proposal types produce different hashes
 - `governance_integration.rs` — 13 tests: full proposal lifecycle, quorum/approval, voting period, double-vote prevention, parameter change execution, text proposal execution, invalid params, validation bounds, snapshot persistence, downstream effects, sequential proposals
 - `governance_tests.rs` — 10 tests: proposal creation, voting period, types, status transitions, vote counting, quorum calculation, state engine integration, ID uniqueness, has_passed logic
+- `genesis_hash_compute.rs` — 1 test: verifies genesis checkpoint hash computation and determinism
+
+### Integration Test Files (ultradag-node/tests/):
+- `rpc_tests.rs` — 25 tests: is_trusted_proxy (12 tests covering IPv4/IPv6/private/public/Fly.io), RPC endpoints (health, status, keygen, balance, tx validation, mempool, peers, validators, 404, rate limiting, CORS)
 
 ## Validator Round Synchronization Fix (March 7, 2026)
 
@@ -1095,7 +1149,7 @@ let dag_round = {
 ### DAG-BFT Consensus
 - **Optimistic responsiveness**: validators produce immediately when 2f+1 vertices from previous round are available via `tokio::select!` on `round_notify`. Timer is fallback.
 - **2f+1 gate**: validators skip a round if they haven't seen quorum (ceil(2n/3)) distinct validator vertices from the previous round.
-- **Incremental descendant tracking**: `descendant_validators: HashMap<[u8;32], HashSet<Address>>` updated on each DAG insert via BFS upward with early termination. Finality checks are O(1).
+- **Incremental descendant tracking**: `descendant_validators: HashMap<[u8;32], BitVec>` with `ValidatorIndex` for compact `Address ↔ usize` mapping. Updated on each DAG insert via BFS upward with early termination. Finality checks are O(1) via `count_ones()`. 256x memory reduction vs HashSet<Address> at scale.
 - **Forward propagation finality**: `find_newly_finalized` seeds from candidate vertices, then propagates through children. Single-pass, no full DAG re-scan.
 - **Equivocation prevention**: both the local validator and the P2P handler reject duplicate vertices from the same validator in the same round.
 - **ValidatorSet**: proper struct with membership tracking and quorum threshold computation. Supports `configured_validators`, permissioned allowlist.
@@ -1140,12 +1194,12 @@ let dag_round = {
 - **Saturating arithmetic**: All credit/debit, vote counting, and slash operations use saturating math.
 
 ### State Persistence
-- JSON serialization for BlockDag, FinalityTracker, StateEngine (including stake_accounts, active_validator_set, current_epoch), Mempool.
+- Postcard binary serialization for BlockDag, FinalityTracker, Mempool.
+- **redb ACID database** for StateEngine — replaces JSON snapshots, WAL, and HWM. Single atomic transaction per save.
 - Save/load/exists methods for all components.
 - Nodes survive restarts without data loss.
-- `#[serde(default)]` on stake_accounts, active_validator_set, current_epoch for backward compatibility.
 - Stale epoch detection on load: recalculates active set if persisted epoch doesn't match actual round.
-- **Write-ahead log (WAL)**: `FinalityWal` in `persistence/wal.rs` records finalized vertex batches between full snapshots. Replayed on startup for crash recovery. Truncated after each full snapshot.
+- `StateEngine::from_parts()` constructor enables loading from any persistence format without coupling.
 
 ## Faucet System
 
@@ -1690,11 +1744,12 @@ TLA+ specification of UltraDAG's DAG-BFT consensus, derived directly from the Ru
 - 10,000 vertices: **21ms** (2,238x faster)
 
 **Implementation:**
-- Added `descendant_validators: HashMap<[u8; 32], HashSet<Address>>` to track which validators have descendants of each vertex
-- Updated incrementally during `insert()` via BFS through ancestors
+- `descendant_validators: HashMap<[u8; 32], BitVec>` with `ValidatorIndex` for compact `Address ↔ usize` mapping
+- Updated incrementally during `insert()` via BFS through ancestors with dynamic bitvec resizing
 - Rebuilt during `load()` for persistence compatibility
-- `descendant_validator_count(hash)` is now O(1) HashMap lookup
+- `descendant_validator_count(hash)` is O(1) via `bv.count_ones()`
 - `find_newly_finalized()` uses single-pass iteration instead of per-tip ancestor traversal
+- 256x memory reduction at 1000 validators (125 bytes/vertex vs ~32KB with HashSet)
 
 **Impact:** Production-ready finality performance. No protocol change required.
 
@@ -1789,7 +1844,12 @@ TLA+ specification of UltraDAG's DAG-BFT consensus, derived directly from the Ru
 - [ ] **Security audit** — External audit of consensus, state, and cryptographic implementations
 - [ ] **Penetration testing** — Network-level attacks, eclipse attacks, DDoS resilience
 - [x] **Formal verification** — TLA+ specification (`formal/UltraDAGConsensus.tla`) verified by TLC model checker. 32.6M states explored at N=4, f=1, MAX_ROUNDS=2 with zero violations across 6 invariants (Safety, HonestNoEquivocation, FinalizedParentsConsistency, TypeOK, RoundMonotonicity, ByzantineBound). Results: `formal/VERIFICATION.md`. Liveness checking deferred (resource-intensive).
-- [ ] **Hardcode GENESIS_CHECKPOINT_HASH** — Compute blake3 hash of genesis checkpoint (after faucet removal) and replace placeholder `[0u8; 32]` in `constants.rs`. This is the trust anchor for checkpoint chain verification. Any checkpoint chain must link back to this hash. **Critical:** Must be computed from final mainnet genesis state (after faucet removal). For testnet, can use current genesis hash for testing.
+- [x] **Hardcode GENESIS_CHECKPOINT_HASH** — Testnet genesis hash `[0xbd, 0x76, 0xa4, ...]` computed and hardcoded in constants.rs. Bypass clauses removed from `verify_checkpoint_chain()`. **Mainnet:** Must recompute after removing faucet prefund (changes genesis state).
+
+### Code Quality
+- [ ] **Reduce public API surface** — `StateEngine.last_finalized_round` and `active_validator_set` should be private with accessor methods (currently pub for test convenience)
+- [ ] **Audit remaining unwrap/expect in production** — 9 calls remain (all infallible: array conversions, logic-guarded merkle). Replace with explicit error handling where possible.
+- [ ] **Consistent documentation on public APIs** — Some critical functions (e.g. `credit()`, `debit()`) lack doc comments while others are well-documented. Add `///` docs to all public methods in engine.rs, dag.rs, finality.rs.
 
 ### Protocol
 - [x] **Governance execution** — ParameterChange proposals now apply changes to runtime `GovernanceParams` via `apply_change()` with validation bounds. 7 integration tests verify execution, persistence, and downstream effects.

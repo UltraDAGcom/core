@@ -144,9 +144,13 @@ impl PeerRegistry {
     }
 
     /// Send a message to a specific peer.
+    /// Clones the writer before dropping the read lock to avoid holding it across async I/O.
     pub async fn send_to(&self, addr: &str, msg: &Message) -> std::io::Result<()> {
-        let writers = self.writers.read().await;
-        if let Some(writer) = writers.get(addr) {
+        let writer = {
+            let writers = self.writers.read().await;
+            writers.get(addr).cloned()
+        };
+        if let Some(writer) = writer {
             writer.send(msg).await
         } else {
             Err(std::io::Error::new(

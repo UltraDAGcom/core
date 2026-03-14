@@ -49,6 +49,12 @@ impl FinalityTracker {
         &self.validators
     }
 
+    /// Remove a validator from the set (e.g., after equivocation/slashing).
+    /// This prevents slashed validators from inflating the quorum threshold.
+    pub fn remove_validator(&mut self, addr: &Address) -> bool {
+        self.validators.remove(addr)
+    }
+
     /// Calculate the minimum number of validators needed for BFT finality.
     pub fn finality_threshold(&self) -> usize {
         self.validators.quorum_threshold()
@@ -133,15 +139,11 @@ impl FinalityTracker {
                         continue;
                     }
 
-                    // Late-arriving vertices in already-finalized rounds: auto-finalize.
-                    // These vertices were recovered via reconciliation after finality
-                    // advanced past their round. They have no descendants (subsequent
-                    // vertices were produced without them as parents), so they can never
-                    // reach the descendant threshold normally. Since their round is already
-                    // settled and they passed signature + equivocation checks at insertion,
-                    // they are safe to finalize.
-                    let in_settled_round = round < self.last_finalized_round;
-                    if in_settled_round || dag.descendant_validator_count(hash) >= threshold {
+                    // Only finalize vertices that have reached the proper BFT threshold.
+                    // Late-arriving vertices (recovered via reconciliation) must still
+                    // meet the 2f+1 descendant requirement — auto-finalizing without
+                    // threshold would allow injection of malicious vertices.
+                    if dag.descendant_validator_count(hash) >= threshold {
                         ready.insert(*hash);
                     }
                 }

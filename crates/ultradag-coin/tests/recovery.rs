@@ -69,13 +69,13 @@ fn test_11_state_behind_dag_recovery() {
     for v in &all_vertices[0..11] {
         state_partial.apply_vertex(v).unwrap();
     }
-    state_partial.save(&tmp.join("state.json")).unwrap();
+    state_partial.save(&tmp.join("state.redb")).unwrap();
 
     // Save full DAG
     dag.save(&tmp.join("dag.json")).unwrap();
 
     // Load the round-10 state
-    let mut loaded_state = StateEngine::load(&tmp.join("state.json")).unwrap();
+    let mut loaded_state = StateEngine::load(&tmp.join("state.redb")).unwrap();
     assert_eq!(loaded_state.last_finalized_round(), Some(10));
 
     // Re-apply rounds 11-20 from the persisted DAG

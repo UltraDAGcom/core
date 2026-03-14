@@ -80,7 +80,7 @@ impl Checkpoint {
         matching >= quorum
     }
 
-    fn verify_signature(&self, sig: &CheckpointSignature) -> bool {
+    pub fn verify_signature(&self, sig: &CheckpointSignature) -> bool {
         // Verify pub_key → address mapping
         let expected_addr = Address(*blake3::hash(&sig.pub_key).as_bytes());
         if expected_addr != sig.validator { return false; }
@@ -93,22 +93,34 @@ impl Checkpoint {
 }
 
 /// Compute the state root hash from a StateSnapshot.
+///
+/// Uses postcard binary serialization which is deterministic for the same input.
+/// Depends on accounts/stakes/proposals/votes being sorted before serialization
+/// (done in `StateEngine::snapshot()`).
 pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
-    let bytes = serde_json::to_vec(snapshot)
-        .expect("StateSnapshot serialization must not fail");
-    *blake3::hash(&bytes).as_bytes()
+    match postcard::to_allocvec(snapshot) {
+        Ok(bytes) => *blake3::hash(&bytes).as_bytes(),
+        Err(e) => {
+            // Return a clearly invalid sentinel instead of creating a collision class.
+            // [0xFF; 32] will never match a real blake3 hash in practice, and will
+            // cause checkpoint validation to fail loudly rather than silently.
+            eprintln!("CRITICAL: StateSnapshot serialization failed: {e}");
+            [0xFF; 32]
+        }
+    }
 }
 
 /// Compute the hash of a checkpoint (for linking in the chain).
-/// This is blake3(serialize(checkpoint)) excluding signatures.
+/// Uses deterministic raw byte construction instead of JSON serialization
+/// to guarantee identical hashes across serde versions.
 pub fn compute_checkpoint_hash(checkpoint: &Checkpoint) -> [u8; 32] {
-    // Serialize checkpoint without signatures for stable hash
-    let mut cp_for_hash = checkpoint.clone();
-    cp_for_hash.signatures.clear();
-    
-    let bytes = serde_json::to_vec(&cp_for_hash)
-        .expect("Checkpoint serialization must not fail");
-    *blake3::hash(&bytes).as_bytes()
+    let mut buf = Vec::new();
+    buf.extend_from_slice(&checkpoint.round.to_le_bytes());
+    buf.extend_from_slice(&checkpoint.state_root);
+    buf.extend_from_slice(&checkpoint.dag_tip);
+    buf.extend_from_slice(&checkpoint.total_supply.to_le_bytes());
+    buf.extend_from_slice(&checkpoint.prev_checkpoint_hash);
+    *blake3::hash(&buf).as_bytes()
 }
 
 /// Verify that a checkpoint chain links correctly back to genesis.
@@ -137,10 +149,6 @@ where
         if genesis_hash == crate::constants::GENESIS_CHECKPOINT_HASH {
             return Ok(());
         }
-        // If GENESIS_CHECKPOINT_HASH is all zeros (placeholder), accept any genesis
-        if crate::constants::GENESIS_CHECKPOINT_HASH == [0u8; 32] {
-            return Ok(());
-        }
         return Err(format!(
             "Genesis checkpoint hash mismatch: expected {:?}, got {:?}",
             crate::constants::GENESIS_CHECKPOINT_HASH,
@@ -163,10 +171,6 @@ where
         if current.round == 0 {
             let genesis_hash = compute_checkpoint_hash(&current);
             if genesis_hash == crate::constants::GENESIS_CHECKPOINT_HASH {
-                return Ok(());
-            }
-            // If GENESIS_CHECKPOINT_HASH is all zeros (placeholder), accept any genesis
-            if crate::constants::GENESIS_CHECKPOINT_HASH == [0u8; 32] {
                 return Ok(());
             }
             return Err(format!(

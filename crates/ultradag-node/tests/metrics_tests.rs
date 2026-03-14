@@ -1,4 +1,4 @@
-use ultradag_node::CheckpointMetrics;
+use ultradag_network::CheckpointMetrics;
 
 #[test]
 fn test_checkpoint_production_metrics() {

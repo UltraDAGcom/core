@@ -39,7 +39,7 @@ impl Block {
                 Transaction::Vote(t) => t.fee,
                 Transaction::Stake(_) | Transaction::Unstake(_) => 0,
             }
-        }).sum()
+        }).fold(0u64, |acc, f| acc.saturating_add(f))
     }
 }
 

@@ -119,27 +119,24 @@ pub enum Message {
 }
 
 impl Message {
-    /// Serialize to length-prefixed JSON bytes.
-    pub fn encode(&self) -> Result<Vec<u8>, serde_json::Error> {
-        let json = serde_json::to_vec(self)?;
-        let len = (json.len() as u32).to_be_bytes();
-        let mut buf = Vec::with_capacity(4 + json.len());
+    /// Serialize to length-prefixed binary bytes (postcard format).
+    pub fn encode(&self) -> Result<Vec<u8>, postcard::Error> {
+        let bytes = postcard::to_allocvec(self)?;
+        let len = (bytes.len() as u32).to_be_bytes();
+        let mut buf = Vec::with_capacity(4 + bytes.len());
         buf.extend_from_slice(&len);
-        buf.extend_from_slice(&json);
+        buf.extend_from_slice(&bytes);
         Ok(buf)
     }
 
-    /// Deserialize from JSON bytes (without length prefix).
+    /// Deserialize from binary bytes (without length prefix).
     /// Enforces maximum message size to prevent DoS attacks.
-    pub fn decode(data: &[u8]) -> Result<Self, serde_json::Error> {
+    pub fn decode(data: &[u8]) -> Result<Self, postcard::Error> {
         // CRITICAL: Reject oversized messages before deserialization
         if data.len() > MAX_MESSAGE_SIZE {
-            return Err(serde_json::Error::io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Message too large: {} bytes (max {})", data.len(), MAX_MESSAGE_SIZE)
-            )));
+            return Err(postcard::Error::DeserializeUnexpectedEnd);
         }
-        serde_json::from_slice(data)
+        postcard::from_bytes(data)
     }
 }
 
@@ -188,9 +185,9 @@ mod tests {
         assert!(encoded.len() >= 4);
         let len = u32::from_be_bytes([encoded[0], encoded[1], encoded[2], encoded[3]]) as usize;
         assert_eq!(len, encoded.len() - 4);
-        // Body must be valid JSON
+        // Body must be valid postcard binary
         let body = &encoded[4..];
-        assert!(serde_json::from_slice::<serde_json::Value>(body).is_ok());
+        Message::decode(body).expect("roundtrip decode failed");
         encoded
     }
 
@@ -338,27 +335,17 @@ mod tests {
 
     #[test]
     fn reject_oversized_message() {
-        // Create a message larger than MAX_MESSAGE_SIZE (4MB + 1 byte)
         let oversized_data = vec![0u8; MAX_MESSAGE_SIZE + 1];
         let result = Message::decode(&oversized_data);
-        
         assert!(result.is_err(), "Oversized message should be rejected");
-        let err = result.unwrap_err();
-        let err_msg = format!("{}", err);
-        assert!(err_msg.contains("Message too large"), "Error should mention message size");
     }
 
     #[test]
     fn accept_max_size_message() {
-        // Create a valid JSON message exactly at MAX_MESSAGE_SIZE
-        // Use a simple Ping message padded to max size
-        let ping_json = serde_json::to_vec(&Message::Ping(12345)).unwrap();
-        
-        // If the message is smaller than max, it should decode successfully
-        if ping_json.len() <= MAX_MESSAGE_SIZE {
-            let result = Message::decode(&ping_json);
-            assert!(result.is_ok(), "Message at or below max size should be accepted");
-        }
+        let ping_bytes = postcard::to_allocvec(&Message::Ping(12345)).unwrap();
+        assert!(ping_bytes.len() <= MAX_MESSAGE_SIZE);
+        let result = Message::decode(&ping_bytes);
+        assert!(result.is_ok(), "Message at or below max size should be accepted");
     }
 
     #[test]

@@ -41,6 +41,7 @@ pub mod limits {
     pub const UNSTAKE: RateLimit = RateLimit::new("unstake", 5, 60);  // 5 unstake/min
     pub const PROPOSAL: RateLimit = RateLimit::new("proposal", 5, 60); // 5 proposal/min
     pub const VOTE: RateLimit = RateLimit::new("vote", 10, 60);       // 10 vote/min
+    pub const KEYGEN: RateLimit = RateLimit::new("keygen", 10, 60);   // 10 keygen/min
     pub const GLOBAL: RateLimit = RateLimit::new("global", 100, 60);  // 100 total/min
 
     pub const MAX_CONCURRENT_CONNECTIONS: u32 = 1000;

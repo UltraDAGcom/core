@@ -4,13 +4,12 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, Mutex, Notify, RwLock};
 use tokio::time::Instant;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 use std::path::PathBuf;
 
-use ultradag_coin::{BlockDag, DagVertex, FinalityTracker, Mempool, SecretKey, StateEngine, Transaction, sync_epoch_validators};
+use ultradag_coin::{Address, BlockDag, DagVertex, FinalityTracker, Mempool, SecretKey, StateEngine, Transaction, sync_epoch_validators};
 use ultradag_coin::consensus::dag::{DagInsertError, MAX_PARENTS};
-use ultradag_coin::persistence::wal::FinalityWal;
 
 use crate::peer::{split_connection, PeerReader, PeerRegistry};
 use crate::protocol::Message;
@@ -19,7 +18,6 @@ use crate::protocol::Message;
 const PROTOCOL_VERSION: u32 = 1;
 
 /// Maximum number of connections allowed from a single IP address.
-#[allow(dead_code)]
 const MAX_CONNECTIONS_PER_IP: usize = 3;
 
 /// Maximum number of suffix vertices to include in a GetCheckpoint response.
@@ -28,17 +26,141 @@ const MAX_CHECKPOINT_SUFFIX_VERTICES: usize = 500;
 /// Maximum orphan buffer size in bytes (50MB).
 const MAX_ORPHAN_BYTES: usize = 50 * 1024 * 1024;
 
+/// Maximum number of orphan entries in the buffer.
+const MAX_ORPHAN_ENTRIES: usize = 1000;
+
+/// Default batch size for DAG vertex sync requests.
+const DAG_SYNC_BATCH_SIZE: u32 = 50;
+
+/// Maximum peers to include in a GetPeers response.
+const MAX_PEERS_RESPONSE: usize = 100;
+
+/// Round gap threshold to trigger fast-sync instead of incremental sync.
+const FAST_SYNC_GAP_THRESHOLD: u64 = 100;
+
 /// Estimate the byte size of a DagVertex for orphan buffer accounting.
 fn estimate_vertex_size(v: &DagVertex) -> usize {
-    // 32 (hash) + block header (~100) + coinbase (~80) + txs + parents + round/validator/sig
-    let tx_size: usize = v.block.transactions.len() * 300; // ~300 bytes per tx estimate
+    // Each tx: from(32) + to(32) + amount(8) + fee(8) + nonce(8) + pub_key(32) + signature(64) + overhead ≈ 250 bytes
+    // Governance txs (CreateProposal) can be larger due to title+description (up to ~4KB)
+    let tx_size: usize = v.block.transactions.len() * 500; // conservative estimate
     let parent_size = v.parent_hashes.len() * 32;
     200 + tx_size + parent_size + 32 + 64 // base + txs + parents + pubkey + signature
 }
 
 /// Estimate total byte size of the orphan buffer.
 fn orphan_buffer_bytes(orphans: &HashMap<[u8; 32], DagVertex>) -> usize {
-    orphans.values().map(estimate_vertex_size).sum()
+    orphans.values().map(estimate_vertex_size).fold(0usize, |acc, s| acc.saturating_add(s))
+}
+
+/// Execute slashing for a single validator: slash stake, remove from finality, log result.
+///
+/// Lock ordering: state (scoped) -> drop -> finality (scoped) -> drop.
+async fn execute_slash(
+    state: &Arc<RwLock<StateEngine>>,
+    finality: &Arc<RwLock<FinalityTracker>>,
+    validator: &Address,
+) {
+    let mut state_w = state.write().await;
+    let stake_before = state_w.stake_of(validator);
+    state_w.slash(validator);
+    let stake_after = state_w.stake_of(validator);
+    let burned = stake_before.saturating_sub(stake_after);
+    drop(state_w);
+
+    {
+        let mut fin_w = finality.write().await;
+        fin_w.remove_validator(validator);
+    }
+
+    warn!(
+        "Slashed validator {}: burned {} UDAG for equivocation (stake: {} -> {})",
+        validator.to_hex(),
+        burned as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+        stake_before as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+        stake_after as f64 / ultradag_coin::SATS_PER_UDAG as f64
+    );
+}
+
+/// Shared finality+state application logic used by DagProposal, DagVertices,
+/// resolve_orphans, and ParentVertices handlers.
+///
+/// Lock ordering: finality+dag (scoped) -> drop -> state (scoped) -> drop -> finality for epoch.
+///
+/// Returns the list of finalized vertices and the last finalized round (or 0 if none).
+async fn apply_finality_and_state(
+    new_validators: &[Address],
+    dag: &Arc<RwLock<BlockDag>>,
+    finality: &Arc<RwLock<FinalityTracker>>,
+    state: &Arc<RwLock<StateEngine>>,
+    mempool: &Arc<RwLock<Mempool>>,
+) -> (Vec<DagVertex>, u64) {
+    // Phase 1: Register validators and find newly-finalized vertices.
+    // Hold finality+dag locks, then drop both before touching state.
+    let (all_finalized, finalized_vertices) = {
+        let mut fin = finality.write().await;
+        for v in new_validators {
+            fin.register_validator(*v);
+        }
+        let dag_r = dag.read().await;
+
+        let mut all_finalized = Vec::new();
+        loop {
+            let newly_finalized = fin.find_newly_finalized(&dag_r);
+            if newly_finalized.is_empty() {
+                break;
+            }
+            all_finalized.extend(newly_finalized);
+        }
+
+        let finalized_vertices: Vec<DagVertex> = all_finalized
+            .iter()
+            .filter_map(|h| dag_r.get(h).cloned())
+            .collect();
+        // Drop finality + dag locks before state application
+        (all_finalized, finalized_vertices)
+    };
+
+    if all_finalized.is_empty() {
+        return (Vec::new(), 0);
+    }
+
+    info!("Finalized {} vertices", all_finalized.len());
+
+    // Phase 2: Apply finalized vertices to state. Hold state lock, then drop.
+    let epoch_changed;
+    let last_fin_round;
+    {
+        let mut state_w = state.write().await;
+        let prev_round = state_w.last_finalized_round();
+        if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
+            warn!("Failed to apply finalized vertices: {}", e);
+            return (finalized_vertices, 0);
+        }
+        epoch_changed = state_w.epoch_just_changed(prev_round);
+        last_fin_round = state_w.last_finalized_round().unwrap_or(0);
+
+        // Remove finalized transactions from mempool
+        let mut mp = mempool.write().await;
+        for v in &finalized_vertices {
+            for tx in &v.block.transactions {
+                mp.remove(&tx.hash());
+            }
+        }
+    } // state_w dropped here
+
+    // Phase 3: Epoch transition — acquire finality AFTER dropping state to prevent deadlock.
+    if epoch_changed {
+        let mut fin = finality.write().await;
+        let state_r = state.read().await;
+        sync_epoch_validators(&mut fin, &state_r);
+        info!(
+            "Epoch transition to epoch {} — active set: {} validators",
+            state_r.current_epoch(),
+            state_r.active_validators().len()
+        );
+    }
+
+    (finalized_vertices, last_fin_round)
 }
 
 /// The P2P node server.
@@ -69,8 +191,6 @@ pub struct NodeServer {
     pub seed_addrs: Arc<Vec<String>>,
     /// Metrics for checkpoint production and synchronization.
     pub checkpoint_metrics: Arc<crate::CheckpointMetrics>,
-    /// Write-ahead log for finalized vertex batches (crash recovery).
-    pub wal: Arc<std::sync::Mutex<Option<FinalityWal>>>,
     /// Custom pruning depth (0 = archive mode, no pruning).
     pub pruning_depth: u64,
     /// Highest round reported by any peer via Hello/HelloAck.
@@ -103,7 +223,6 @@ impl NodeServer {
             banned_peers: Arc::new(Mutex::new(HashMap::new())),
             seed_addrs: Arc::new(Vec::new()),
             checkpoint_metrics: Arc::new(crate::CheckpointMetrics::new()),
-            wal: Arc::new(std::sync::Mutex::new(None)),
             pruning_depth: 1000,
             peer_max_round: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
@@ -122,33 +241,6 @@ impl NodeServer {
     /// Set seed/bootstrap addresses for automatic reconnection.
     pub fn set_seed_addrs(&mut self, addrs: Vec<String>) {
         self.seed_addrs = Arc::new(addrs);
-    }
-
-    /// Initialize the write-ahead log for crash recovery.
-    pub fn set_wal(&self, wal: FinalityWal) {
-        *self.wal.lock().unwrap() = Some(wal);
-    }
-
-    /// Append a finalized vertex batch to the WAL. Non-fatal on failure.
-    pub fn wal_append(&self, vertices: &[DagVertex], finalized_round: u64, state_root: [u8; 32]) {
-        if let Ok(mut guard) = self.wal.lock() {
-            if let Some(ref mut wal) = *guard {
-                if let Err(e) = wal.append(vertices, finalized_round, state_root) {
-                    tracing::warn!("WAL append failed: {} (crash recovery degraded)", e);
-                }
-            }
-        }
-    }
-
-    /// Truncate the WAL after a successful full snapshot.
-    pub fn wal_truncate(&self, snapshot_round: u64, state_root: [u8; 32]) {
-        if let Ok(mut guard) = self.wal.lock() {
-            if let Some(ref mut wal) = *guard {
-                if let Err(e) = wal.truncate_after_snapshot(snapshot_round, state_root) {
-                    tracing::warn!("WAL truncate failed: {}", e);
-                }
-            }
-        }
     }
 
     /// Attempt fast-sync from a connected peer using checkpoint protocol.
@@ -211,9 +303,11 @@ impl NodeServer {
             let (stream, addr) = listener.accept().await?;
             let addr_str = addr.to_string();
 
-            // Reject self-connections (e.g. node connecting to its own listen port)
-            if addr.ip().is_loopback() && addr.port() == self.port {
-                info!("Skipping self-connection to {}", addr_str);
+            // Reject self-connections from loopback addresses.
+            // Inbound connections have ephemeral source ports, so we only check IP.
+            // The IP dedup check below handles non-loopback self-connections.
+            if addr.ip().is_loopback() {
+                info!("Skipping loopback connection from {}", addr_str);
                 drop(stream);
                 continue;
             }
@@ -222,6 +316,18 @@ impl NodeServer {
             let current_peers = self.peers.connected_count().await;
             if current_peers >= Self::MAX_INBOUND_PEERS {
                 warn!("Rejecting connection from {} — peer limit ({}) reached", addr_str, Self::MAX_INBOUND_PEERS);
+                drop(stream);
+                continue;
+            }
+
+            // Enforce per-IP connection limit to prevent DoS
+            let remote_ip = addr.ip();
+            let ip_connections = self.peers.connected_addrs().await
+                .iter()
+                .filter(|a| a.contains(&remote_ip.to_string()))
+                .count();
+            if ip_connections >= MAX_CONNECTIONS_PER_IP {
+                warn!("Rejecting connection from {} — IP limit ({}) reached", addr_str, MAX_CONNECTIONS_PER_IP);
                 drop(stream);
                 continue;
             }
@@ -273,23 +379,34 @@ impl NodeServer {
             let dag = self.dag.clone();
             let finality = self.finality.clone();
             let peers = self.peers.clone();
-            let vertex_tx = self.vertex_tx.clone();
             let tx_tx = self.tx_tx.clone();
             let orphans = self.orphans.clone();
             let round_notify = self.round_notify.clone();
             let pending_checkpoints = self.pending_checkpoints.clone();
             let data_dir = self.data_dir.clone();
             let validator_sk = self.validator_sk.clone();
-            let banned_peers = self.banned_peers.clone();
-
-            let listen_port = self.port;
             let checkpoint_metrics = self.checkpoint_metrics.clone();
-            let wal = self.wal.clone();
             let sync_complete = self.sync_complete.clone();
             let peer_max_round = self.peer_max_round.clone();
             tokio::spawn(async move {
+                let ctx = PeerContext {
+                    state: &state,
+                    mempool: &mempool,
+                    dag: &dag,
+                    finality: &finality,
+                    peers: &peers,
+                    tx_tx: &tx_tx,
+                    orphans: &orphans,
+                    round_notify: &round_notify,
+                    pending_checkpoints: &pending_checkpoints,
+                    data_dir: &data_dir,
+                    validator_sk: validator_sk.as_ref(),
+                    checkpoint_metrics: &checkpoint_metrics,
+                    sync_complete: &sync_complete,
+                    peer_max_round: &peer_max_round,
+                };
                 // handle_peer may rename peer_addr via Hello; remove both keys on disconnect
-                if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers, &checkpoint_metrics, &wal, &sync_complete, &peer_max_round).await {
+                if let Err(e) = handle_peer(reader, &ctx).await {
                     warn!("Peer {} disconnected: {}", addr_str, e);
                 }
                 // Remove by original ephemeral addr and any possible listen addr
@@ -309,16 +426,13 @@ impl NodeServer {
         let state = self.state.clone();
         let mempool = self.mempool.clone();
         let finality = self.finality.clone();
-        let vertex_tx = self.vertex_tx.clone();
         let tx_tx = self.tx_tx.clone();
         let orphans = self.orphans.clone();
         let round_notify = self.round_notify.clone();
         let pending_checkpoints = self.pending_checkpoints.clone();
         let data_dir = self.data_dir.clone();
         let validator_sk = self.validator_sk.clone();
-        let banned_peers = self.banned_peers.clone();
         let checkpoint_metrics = self.checkpoint_metrics.clone();
-        let wal = self.wal.clone();
         let sync_complete = self.sync_complete.clone();
         let peer_max_round = self.peer_max_round.clone();
         tokio::spawn(async move {
@@ -356,27 +470,40 @@ impl NodeServer {
                 if peer_count < 3 && !seed_addrs.is_empty() {
                     info!("Heartbeat: low peer count ({}), reconnecting to seeds...", peer_count);
                     for addr in seed_addrs.iter() {
-                        tokio::spawn(try_connect_peer(
-                            addr.clone(),
-                            listen_port,
-                            dag.clone(),
-                            peers.clone(),
-                            state.clone(),
-                            mempool.clone(),
-                            finality.clone(),
-                            vertex_tx.clone(),
-                            tx_tx.clone(),
-                            orphans.clone(),
-                            round_notify.clone(),
-                            pending_checkpoints.clone(),
-                            data_dir.clone(),
-                            validator_sk.clone(),
-                            banned_peers.clone(),
-                            checkpoint_metrics.clone(),
-                            wal.clone(),
-                            sync_complete.clone(),
-                            peer_max_round.clone(),
-                        ));
+                        let state = state.clone();
+                        let mempool = mempool.clone();
+                        let dag = dag.clone();
+                        let finality = finality.clone();
+                        let peers = peers.clone();
+                        let tx_tx = tx_tx.clone();
+                        let orphans = orphans.clone();
+                        let round_notify = round_notify.clone();
+                        let pending_checkpoints = pending_checkpoints.clone();
+                        let data_dir = data_dir.clone();
+                        let validator_sk = validator_sk.clone();
+                        let checkpoint_metrics = checkpoint_metrics.clone();
+                        let sync_complete = sync_complete.clone();
+                        let peer_max_round = peer_max_round.clone();
+                        let addr = addr.clone();
+                        tokio::spawn(async move {
+                            let ctx = PeerContext {
+                                state: &state,
+                                mempool: &mempool,
+                                dag: &dag,
+                                finality: &finality,
+                                peers: &peers,
+                                tx_tx: &tx_tx,
+                                orphans: &orphans,
+                                round_notify: &round_notify,
+                                pending_checkpoints: &pending_checkpoints,
+                                data_dir: &data_dir,
+                                validator_sk: validator_sk.as_ref(),
+                                checkpoint_metrics: &checkpoint_metrics,
+                                sync_complete: &sync_complete,
+                                peer_max_round: &peer_max_round,
+                            };
+                            try_connect_peer(addr, listen_port, &ctx).await;
+                        });
                     }
                 }
             }
@@ -438,22 +565,34 @@ impl NodeServer {
         let dag = self.dag.clone();
         let finality = self.finality.clone();
         let peers = self.peers.clone();
-        let vertex_tx = self.vertex_tx.clone();
         let tx_tx = self.tx_tx.clone();
         let orphans = self.orphans.clone();
         let round_notify = self.round_notify.clone();
         let pending_checkpoints = self.pending_checkpoints.clone();
         let data_dir = self.data_dir.clone();
         let validator_sk = self.validator_sk.clone();
-        let banned_peers = self.banned_peers.clone();
-        let listen_port = self.port;
         let checkpoint_metrics = self.checkpoint_metrics.clone();
-        let wal = self.wal.clone();
         let sync_complete = self.sync_complete.clone();
         let peer_max_round = self.peer_max_round.clone();
 
         tokio::spawn(async move {
-            if let Err(e) = handle_peer(reader, &state, &mempool, &dag, &finality, &peers, &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify, &pending_checkpoints, &data_dir, validator_sk.as_ref(), &banned_peers, &checkpoint_metrics, &wal, &sync_complete, &peer_max_round).await {
+            let ctx = PeerContext {
+                state: &state,
+                mempool: &mempool,
+                dag: &dag,
+                finality: &finality,
+                peers: &peers,
+                tx_tx: &tx_tx,
+                orphans: &orphans,
+                round_notify: &round_notify,
+                pending_checkpoints: &pending_checkpoints,
+                data_dir: &data_dir,
+                validator_sk: validator_sk.as_ref(),
+                checkpoint_metrics: &checkpoint_metrics,
+                sync_complete: &sync_complete,
+                peer_max_round: &peer_max_round,
+            };
+            if let Err(e) = handle_peer(reader, &ctx).await {
                 warn!("Peer {} disconnected: {}", addr_str, e);
             }
             peers.remove_peer(&addr_str).await;
@@ -475,7 +614,6 @@ async fn resolve_orphans(
     peers: &PeerRegistry,
     peer_addr: &str,
     _round_notify: &Arc<Notify>,
-    wal: &Arc<std::sync::Mutex<Option<FinalityWal>>>,
 ) {
     let mut resolved = true;
     while resolved {
@@ -497,70 +635,9 @@ async fn resolve_orphans(
                     // The single-vertex DagProposal handler already notifies.
 
                     let validator = vertex.validator;
-                    // Register validator + check finality (multi-pass)
-                    // Lock ordering: finality+dag → drop both → state (matches DagProposal handler)
-                    let (all_finalized, finalized_vertices) = {
-                        let mut fin = finality.write().await;
-                        fin.register_validator(validator);
-                        let dag_r = dag.read().await;
-
-                        let mut all_finalized = Vec::new();
-                        loop {
-                            let newly_finalized = fin.find_newly_finalized(&dag_r);
-                            if newly_finalized.is_empty() {
-                                break;
-                            }
-                            all_finalized.extend(newly_finalized);
-                        }
-
-                        let finalized_vertices: Vec<DagVertex> = all_finalized
-                            .iter()
-                            .filter_map(|h| dag_r.get(h).cloned())
-                            .collect();
-                        // Drop finality + dag locks before state application
-                        (all_finalized, finalized_vertices)
-                    };
-
-                    if !all_finalized.is_empty() {
-                        info!("Orphan resolve: finalized {} vertices", all_finalized.len());
-                        let epoch_changed;
-                        {
-                            let mut state_w = state.write().await;
-                            let prev_round = state_w.last_finalized_round();
-                            if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
-                                warn!("Failed to apply finalized vertices: {}", e);
-                                epoch_changed = false;
-                            } else {
-                                epoch_changed = state_w.epoch_just_changed(prev_round);
-                                // WAL: log finalized vertices for crash recovery
-                                let fin_round = state_w.last_finalized_round().unwrap_or(0);
-                                let sr = ultradag_coin::consensus::compute_state_root(&state_w.snapshot());
-                                if let Ok(mut wg) = wal.lock() {
-                                    if let Some(ref mut w) = *wg {
-                                        let finalized_vec: Vec<DagVertex> = finalized_vertices.clone();
-                                        if let Err(e) = w.append(&finalized_vec, fin_round, sr) {
-                                            warn!("WAL append failed: {}", e);
-                                        }
-                                    }
-                                }
-                                let mut mp = mempool.write().await;
-                                for v in &finalized_vertices {
-                                    for tx in &v.block.transactions {
-                                        mp.remove(&tx.hash());
-                                    }
-                                }
-                            }
-                        } // state_w dropped here
-
-                        // Epoch transition: acquire finality AFTER dropping state
-                        if epoch_changed {
-                            let mut fin = finality.write().await;
-                            let state_r = state.read().await;
-                            sync_epoch_validators(&mut fin, &state_r);
-                            info!("Epoch transition to epoch {} — active set: {} validators",
-                                state_r.current_epoch(), state_r.active_validators().len());
-                        }
-                    }
+                    apply_finality_and_state(
+                        &[validator], dag, finality, state, mempool,
+                    ).await;
                     peers.broadcast(&Message::DagProposal(vertex), peer_addr).await;
                 }
                 Err(DagInsertError::MissingParents(missing)) => {
@@ -586,24 +663,22 @@ const MAX_OUTBOUND_PEERS: usize = 8;
 async fn try_connect_peer(
     addr: String,
     listen_port: u16,
-    dag: Arc<RwLock<BlockDag>>,
-    peers: PeerRegistry,
-    state: Arc<RwLock<StateEngine>>,
-    mempool: Arc<RwLock<Mempool>>,
-    finality: Arc<RwLock<FinalityTracker>>,
-    vertex_tx: broadcast::Sender<DagVertex>,
-    tx_tx: broadcast::Sender<Transaction>,
-    orphans: Arc<Mutex<HashMap<[u8; 32], DagVertex>>>,
-    round_notify: Arc<Notify>,
-    pending_checkpoints: Arc<RwLock<HashMap<u64, ultradag_coin::Checkpoint>>>,
-    data_dir: std::path::PathBuf,
-    validator_sk: Option<SecretKey>,
-    banned_peers: Arc<Mutex<HashMap<String, Instant>>>,
-    checkpoint_metrics: Arc<crate::CheckpointMetrics>,
-    wal: Arc<std::sync::Mutex<Option<FinalityWal>>>,
-    sync_complete: Arc<std::sync::atomic::AtomicBool>,
-    peer_max_round: Arc<std::sync::atomic::AtomicU64>,
+    ctx: &PeerContext<'_>,
 ) {
+    let dag = ctx.dag;
+    let peers = ctx.peers;
+    let state = ctx.state;
+    let mempool = ctx.mempool;
+    let finality = ctx.finality;
+    let tx_tx = ctx.tx_tx;
+    let orphans = ctx.orphans;
+    let round_notify = ctx.round_notify;
+    let pending_checkpoints = ctx.pending_checkpoints;
+    let data_dir = ctx.data_dir;
+    let validator_sk = ctx.validator_sk;
+    let checkpoint_metrics = ctx.checkpoint_metrics;
+    let sync_complete = ctx.sync_complete;
+    let peer_max_round = ctx.peer_max_round;
     // Don't connect to ourselves — check loopback, wildcard, .internal hostname
     let loopback_addrs = [
         format!("127.0.0.1:{}", listen_port),
@@ -716,16 +791,39 @@ async fn try_connect_peer(
 
             // Process incoming messages (bidirectional connection).
             // Box::pin breaks the async opaque type cycle between try_connect_peer and handle_peer.
+            let state = state.clone();
+            let mempool = mempool.clone();
+            let dag = dag.clone();
+            let finality = finality.clone();
             let peers_clone = peers.clone();
+            let tx_tx = tx_tx.clone();
+            let orphans = orphans.clone();
+            let round_notify = round_notify.clone();
+            let pending_checkpoints = pending_checkpoints.clone();
+            let data_dir = data_dir.clone();
+            let validator_sk = validator_sk.cloned();
+            let checkpoint_metrics = checkpoint_metrics.clone();
+            let sync_complete = sync_complete.clone();
+            let peer_max_round = peer_max_round.clone();
             let addr_clone = addr.clone();
             tokio::spawn(async move {
-                let fut = Box::pin(handle_peer(
-                    reader, &state, &mempool, &dag, &finality, &peers_clone,
-                    &vertex_tx, &tx_tx, &orphans, listen_port, &round_notify,
-                    &pending_checkpoints, &data_dir, validator_sk.as_ref(),
-                    &banned_peers, &checkpoint_metrics, &wal, &sync_complete,
-                    &peer_max_round,
-                ));
+                let inner_ctx = PeerContext {
+                    state: &state,
+                    mempool: &mempool,
+                    dag: &dag,
+                    finality: &finality,
+                    peers: &peers_clone,
+                    tx_tx: &tx_tx,
+                    orphans: &orphans,
+                    round_notify: &round_notify,
+                    pending_checkpoints: &pending_checkpoints,
+                    data_dir: &data_dir,
+                    validator_sk: validator_sk.as_ref(),
+                    checkpoint_metrics: &checkpoint_metrics,
+                    sync_complete: &sync_complete,
+                    peer_max_round: &peer_max_round,
+                };
+                let fut = Box::pin(handle_peer(reader, &inner_ctx));
                 if let Err(e) = fut.await {
                     warn!("Peer {} disconnected: {}", addr_clone, e);
                 }
@@ -739,31 +837,44 @@ async fn try_connect_peer(
     }
 }
 
-/// Maximum allowlist rejections before logging stops (to avoid log spam).
-#[allow(dead_code)]
-const MAX_ALLOWLIST_REJECTIONS: u32 = 10;
+/// Shared context for peer message handling.
+/// Eliminates the 18-parameter function signature.
+struct PeerContext<'a> {
+    state: &'a Arc<RwLock<StateEngine>>,
+    mempool: &'a Arc<RwLock<Mempool>>,
+    dag: &'a Arc<RwLock<BlockDag>>,
+    finality: &'a Arc<RwLock<FinalityTracker>>,
+    peers: &'a PeerRegistry,
+    tx_tx: &'a broadcast::Sender<Transaction>,
+    orphans: &'a Arc<Mutex<HashMap<[u8; 32], DagVertex>>>,
+    round_notify: &'a Arc<Notify>,
+    pending_checkpoints: &'a Arc<RwLock<HashMap<u64, ultradag_coin::Checkpoint>>>,
+    data_dir: &'a PathBuf,
+    validator_sk: Option<&'a SecretKey>,
+    checkpoint_metrics: &'a Arc<crate::CheckpointMetrics>,
+    sync_complete: &'a Arc<std::sync::atomic::AtomicBool>,
+    peer_max_round: &'a Arc<std::sync::atomic::AtomicU64>,
+}
 
 async fn handle_peer(
     mut reader: PeerReader,
-    state: &Arc<RwLock<StateEngine>>,
-    mempool: &Arc<RwLock<Mempool>>,
-    dag: &Arc<RwLock<BlockDag>>,
-    finality: &Arc<RwLock<FinalityTracker>>,
-    peers: &PeerRegistry,
-    _vertex_tx: &broadcast::Sender<DagVertex>,
-    tx_tx: &broadcast::Sender<Transaction>,
-    orphans: &Arc<Mutex<HashMap<[u8; 32], DagVertex>>>,
-    _listen_port: u16,
-    round_notify: &Arc<Notify>,
-    pending_checkpoints: &Arc<RwLock<HashMap<u64, ultradag_coin::Checkpoint>>>,
-    data_dir: &PathBuf,
-    validator_sk: Option<&SecretKey>,
-    _banned_peers: &Arc<Mutex<HashMap<String, Instant>>>,
-    checkpoint_metrics: &Arc<crate::CheckpointMetrics>,
-    wal: &Arc<std::sync::Mutex<Option<FinalityWal>>>,
-    sync_complete: &Arc<std::sync::atomic::AtomicBool>,
-    peer_max_round: &Arc<std::sync::atomic::AtomicU64>,
+    ctx: &PeerContext<'_>,
 ) -> std::io::Result<()> {
+    let state = ctx.state;
+    let mempool = ctx.mempool;
+    let dag = ctx.dag;
+    let finality = ctx.finality;
+    let peers = ctx.peers;
+    let tx_tx = ctx.tx_tx;
+    let orphans = ctx.orphans;
+    let round_notify = ctx.round_notify;
+    let pending_checkpoints = ctx.pending_checkpoints;
+    let data_dir = ctx.data_dir;
+    let validator_sk = ctx.validator_sk;
+    let checkpoint_metrics = ctx.checkpoint_metrics;
+    let sync_complete = ctx.sync_complete;
+    let peer_max_round = ctx.peer_max_round;
+
     let peer_addr = reader.addr.clone();
     let mut allowlist_rejections: u32 = 0;
 
@@ -796,7 +907,7 @@ async fn handle_peer(
                 // If peer is ahead, sync from them
                 if height > our_round {
                     let gap = height - our_round;
-                    if gap > 100 {
+                    if gap > FAST_SYNC_GAP_THRESHOLD {
                         // Large gap — try checkpoint AND incremental sync in parallel.
                         // Checkpoint may fail (no quorum-accepted checkpoints), so
                         // incremental sync provides fallback.
@@ -807,7 +918,7 @@ async fn handle_peer(
                     peers
                         .send_to(&peer_addr, &Message::GetDagVertices {
                             from_round: our_round + 1,
-                            max_count: 50,
+                            max_count: DAG_SYNC_BATCH_SIZE,
                         })
                         .await?;
                 }
@@ -851,14 +962,14 @@ async fn handle_peer(
                 let our_round = dag.read().await.current_round();
                 if height > our_round {
                     let gap = height - our_round;
-                    if gap > 100 {
+                    if gap > FAST_SYNC_GAP_THRESHOLD {
                         info!("Large gap ({} rounds behind peer {}), requesting checkpoint + incremental sync", gap, peer_addr);
                         peers.send_to(&peer_addr, &Message::GetCheckpoint { min_round: our_round }).await?;
                     }
                     peers
                         .send_to(&peer_addr, &Message::GetDagVertices {
                             from_round: our_round + 1,
-                            max_count: 50,
+                            max_count: DAG_SYNC_BATCH_SIZE,
                         })
                         .await?;
                 }
@@ -936,21 +1047,8 @@ async fn handle_peer(
                         );
                         
                         // Execute slashing immediately
-                        let mut state_w = state.write().await;
-                        let stake_before = state_w.stake_of(&validator);
-                        state_w.slash(&validator);
-                        let stake_after = state_w.stake_of(&validator);
-                        let burned = stake_before.saturating_sub(stake_after);
-                        drop(state_w);
-                        
-                        warn!(
-                            "Slashed validator {}: burned {} UDAG for equivocation (stake: {} -> {})",
-                            validator.to_hex(),
-                            burned as f64 / 100_000_000.0,
-                            stake_before as f64 / 100_000_000.0,
-                            stake_after as f64 / 100_000_000.0
-                        );
-                        
+                        execute_slash(&state, &finality, &validator).await;
+
                         let dag_w = dag.read().await;
                         if let Some([hash1, hash2]) = dag_w.get_equivocation_evidence(&validator, round) {
                             if let (Some(v1), Some(v2)) = (dag_w.get_including_equivocations(&hash1), dag_w.get_including_equivocations(&hash2)) {
@@ -976,7 +1074,7 @@ async fn handle_peer(
                         // Buffer as orphan and request missing parents from peer
                         {
                             let mut orph = orphans.lock().await;
-                            if orph.len() < 1000 && orphan_buffer_bytes(&orph) < MAX_ORPHAN_BYTES {
+                            if orph.len() < MAX_ORPHAN_ENTRIES && orphan_buffer_bytes(&orph) < MAX_ORPHAN_BYTES {
                                 orph.insert(vertex_hash, vertex);
                             }
                         }
@@ -1003,78 +1101,14 @@ async fn handle_peer(
                         peer_addr,
                     );
 
-                    // Check finality (multi-pass for parent finality guarantee)
-                    let (all_finalized, finalized_vertices) = {
-                        let mut fin = finality.write().await;
-                        fin.register_validator(validator);
-                        let dag_r = dag.read().await;
-
-                        let mut all_finalized = Vec::new();
-                        loop {
-                            let newly_finalized = fin.find_newly_finalized(&dag_r);
-                            if newly_finalized.is_empty() {
-                                break;
-                            }
-                            all_finalized.extend(newly_finalized);
-                        }
-
-                        let finalized_vertices: Vec<DagVertex> = all_finalized
-                            .iter()
-                            .filter_map(|h| dag_r.get(h).cloned())
-                            .collect();
-                        // Drop finality + dag locks before state application
-                        (all_finalized, finalized_vertices)
-                    };
-
-                    if !all_finalized.is_empty() {
-                        info!("DAG-BFT finalized {} vertices", all_finalized.len());
-
-                        // Track whether epoch changed for finality sync below
-                        let epoch_changed;
-                        {
-                            let mut state_w = state.write().await;
-                            let prev_round = state_w.last_finalized_round();
-                            if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
-                                warn!("Failed to apply finalized vertices to state: {}", e);
-                                epoch_changed = false;
-                            } else {
-                                epoch_changed = state_w.epoch_just_changed(prev_round);
-                                // WAL: log finalized vertices for crash recovery
-                                let fin_round = state_w.last_finalized_round().unwrap_or(0);
-                                let sr = ultradag_coin::consensus::compute_state_root(&state_w.snapshot());
-                                if let Ok(mut wg) = wal.lock() {
-                                    if let Some(ref mut w) = *wg {
-                                        let finalized_vec: Vec<DagVertex> = finalized_vertices.clone();
-                                        if let Err(e) = w.append(&finalized_vec, fin_round, sr) {
-                                            warn!("WAL append failed: {}", e);
-                                        }
-                                    }
-                                }
-                                let mut mp = mempool.write().await;
-                                for v in &finalized_vertices {
-                                    for tx in &v.block.transactions {
-                                        mp.remove(&tx.hash());
-                                    }
-                                }
-                            }
-                        } // state_w dropped here
-
-                        // Epoch transition: acquire finality AFTER dropping state to prevent deadlock.
-                        // All other code paths (resolve_orphans, DagVertices, validator loop) acquire
-                        // finality before state — we must not hold state while acquiring finality.
-                        if epoch_changed {
-                            let mut fin = finality.write().await;
-                            let state_r = state.read().await;
-                            sync_epoch_validators(&mut fin, &state_r);
-                            info!("Epoch transition to epoch {} — active set: {} validators",
-                                state_r.current_epoch(), state_r.active_validators().len());
-                        }
-                    }
+                    apply_finality_and_state(
+                        &[validator], dag, finality, state, mempool,
+                    ).await;
 
                     peers.broadcast(&Message::DagProposal(vertex), &peer_addr).await;
 
                     // Try to resolve orphaned vertices now that a new vertex was inserted
-                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify, wal).await;
+                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify).await;
                 }
             }
 
@@ -1195,23 +1229,8 @@ async fn handle_peer(
                     drop(dag_w);
                     
                     // Execute slashing for all equivocating validators
-                    if !equivocating_validators.is_empty() {
-                        let mut state_w = state.write().await;
-                        for validator in equivocating_validators {
-                            let stake_before = state_w.stake_of(&validator);
-                            state_w.slash(&validator);
-                            let stake_after = state_w.stake_of(&validator);
-                            let burned = stake_before.saturating_sub(stake_after);
-                            
-                            warn!(
-                                "Slashed validator {}: burned {} UDAG for equivocation (stake: {} -> {})",
-                                validator.to_hex(),
-                                burned as f64 / 100_000_000.0,
-                                stake_before as f64 / 100_000_000.0,
-                                stake_after as f64 / 100_000_000.0
-                            );
-                        }
-                        drop(state_w);
+                    for validator in &equivocating_validators {
+                        execute_slash(&state, &finality, validator).await;
                     }
                     
                     // Broadcast equivocation evidence after loop
@@ -1223,7 +1242,7 @@ async fn handle_peer(
                 if !failed_vertices.is_empty() {
                     let mut orph = orphans.lock().await;
                     for (hash, vertex) in failed_vertices {
-                        if orph.len() < 1000 && orphan_buffer_bytes(&orph) < MAX_ORPHAN_BYTES {
+                        if orph.len() < MAX_ORPHAN_ENTRIES && orphan_buffer_bytes(&orph) < MAX_ORPHAN_BYTES {
                             orph.insert(hash, vertex);
                         }
                     }
@@ -1237,76 +1256,10 @@ async fn handle_peer(
                 }
                 if !new_validators.is_empty() {
                     // Don't notify here — DagVertices is bulk sync context.
-                    // Multi-pass finality — drop finality+dag before state to avoid deadlock
-                    let (all_finalized, finalized_vertices) = {
-                        let mut fin = finality.write().await;
-                        for v in &new_validators {
-                            fin.register_validator(*v);
-                        }
-                        let dag_r = dag.read().await;
-                        let mut all_finalized = Vec::new();
-                        loop {
-                            let newly_finalized = fin.find_newly_finalized(&dag_r);
-                            if newly_finalized.is_empty() {
-                                break;
-                            }
-                            all_finalized.extend(newly_finalized);
-                        }
-                        let finalized_vertices: Vec<DagVertex> = all_finalized
-                            .iter()
-                            .filter_map(|h| dag_r.get(h).cloned())
-                            .collect();
-                        (all_finalized, finalized_vertices)
-                    }; // finality + dag locks dropped here
-                    if !all_finalized.is_empty() {
-                        info!("Sync finalized {} vertices", all_finalized.len());
-                        // Apply finalized vertices and check for epoch change.
-                        // IMPORTANT: drop state_w before acquiring finality.write()
-                        // to maintain lock ordering (finality → state) and avoid deadlock.
-                        let (epoch_changed, epoch_info) = {
-                            let mut state_w = state.write().await;
-                            let prev_round = state_w.last_finalized_round();
-                            if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
-                                warn!("Failed to apply sync-finalized vertices: {}", e);
-                                (false, None)
-                            } else {
-                                let changed = state_w.epoch_just_changed(prev_round);
-                                let info = if changed {
-                                    Some((state_w.current_epoch(), state_w.active_validators().len()))
-                                } else {
-                                    None
-                                };
-                                // WAL: log finalized vertices for crash recovery
-                                let fin_round = state_w.last_finalized_round().unwrap_or(0);
-                                let sr = ultradag_coin::consensus::compute_state_root(&state_w.snapshot());
-                                if let Ok(mut wg) = wal.lock() {
-                                    if let Some(ref mut w) = *wg {
-                                        let finalized_vec: Vec<DagVertex> = finalized_vertices.clone();
-                                        if let Err(e) = w.append(&finalized_vec, fin_round, sr) {
-                                            warn!("WAL append failed: {}", e);
-                                        }
-                                    }
-                                }
-                                let mut mp = mempool.write().await;
-                                for v in &finalized_vertices {
-                                    for tx in &v.block.transactions {
-                                        mp.remove(&tx.hash());
-                                    }
-                                }
-                                (changed, info)
-                            }
-                        }; // state_w dropped here
-                        if epoch_changed {
-                            let mut fin = finality.write().await;
-                            let state_r = state.read().await;
-                            sync_epoch_validators(&mut fin, &state_r);
-                            if let Some((epoch, count)) = epoch_info {
-                                info!("Epoch transition to epoch {} — active set: {} validators",
-                                    epoch, count);
-                            }
-                        }
-                    }
-                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify, wal).await;
+                    apply_finality_and_state(
+                        &new_validators, dag, finality, state, mempool,
+                    ).await;
+                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify).await;
                 }
 
                 // Sync continuation: if we received new vertices, request the next batch.
@@ -1319,19 +1272,20 @@ async fn handle_peer(
                     // to start producing while still hundreds of rounds behind.
                     let _ = peers.send_to(&peer_addr, &Message::GetDagVertices {
                         from_round: our_round + 1,
-                        max_count: 100,
+                        max_count: DAG_SYNC_BATCH_SIZE,
                     }).await;
                 }
             }
 
             Message::GetPeers => {
                 let mut known = peers.known_peers().await;
-                known.truncate(100); // Cap response size to prevent topology leakage
+                known.truncate(MAX_PEERS_RESPONSE); // Cap response size to prevent topology leakage
                 peers.send_to(&peer_addr, &Message::Peers(known)).await?;
             }
 
             Message::Peers(addrs) => {
-                for addr in &addrs {
+                // Cap incoming peer list to prevent large allocation abuse
+                for addr in addrs.iter().take(MAX_PEERS_RESPONSE) {
                     peers.add_known(addr.clone()).await;
                 }
                 // Connect to learned peers for mesh topology
@@ -1361,20 +1315,7 @@ async fn handle_peer(
                     
                     // Execute slashing immediately
                     drop(dag_w);
-                    let mut state_w = state.write().await;
-                    let stake_before = state_w.stake_of(&validator_addr);
-                    state_w.slash(&validator_addr);
-                    let stake_after = state_w.stake_of(&validator_addr);
-                    let burned = stake_before.saturating_sub(stake_after);
-                    drop(state_w);
-                    
-                    warn!(
-                        "Slashed validator {}: burned {} UDAG for equivocation (stake: {} -> {})",
-                        validator_addr.to_hex(),
-                        burned as f64 / 100_000_000.0,
-                        stake_before as f64 / 100_000_000.0,
-                        stake_after as f64 / 100_000_000.0
-                    );
+                    execute_slash(&state, &finality, &validator_addr).await;
                     
                     // Broadcast evidence to all other peers
                     let evidence_msg = Message::EquivocationEvidence {
@@ -1402,7 +1343,7 @@ async fn handle_peer(
             Message::ParentVertices { vertices } => {
                 // Received parent vertices we requested — insert and resolve orphans.
                 let mut all_missing: Vec<[u8; 32]> = Vec::new();
-                let mut inserted_any = false;
+                let mut new_validators: Vec<Address> = Vec::new();
 
                 // Filter out non-allowlisted vertices before processing
                 let filtered: Vec<DagVertex> = {
@@ -1421,14 +1362,12 @@ async fn handle_peer(
                     };
                     match insert_result {
                         Ok(true) => {
-                            inserted_any = true;
-                            let mut fin = finality.write().await;
-                            fin.register_validator(validator);
+                            new_validators.push(validator);
                         }
                         Err(DagInsertError::MissingParents(missing)) => {
                             all_missing.extend(&missing);
                             let mut orph = orphans.lock().await;
-                            if orph.len() < 1000 && orphan_buffer_bytes(&orph) < MAX_ORPHAN_BYTES {
+                            if orph.len() < MAX_ORPHAN_ENTRIES && orphan_buffer_bytes(&orph) < MAX_ORPHAN_BYTES {
                                 orph.insert(hash, vertex);
                             }
                         }
@@ -1452,10 +1391,13 @@ async fn handle_peer(
                     }
                 }
 
-                // If we inserted any parent vertices, try to resolve orphans
-                if inserted_any {
+                // If we inserted any parent vertices, run finality and resolve orphans
+                if !new_validators.is_empty() {
                     // Don't notify here — ParentVertices is bulk sync context.
-                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify, wal).await;
+                    apply_finality_and_state(
+                        &new_validators, dag, finality, state, mempool,
+                    ).await;
+                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify).await;
                 }
             }
 
@@ -1467,7 +1409,17 @@ async fn handle_peer(
 
                 if checkpoint.round > our_finalized {
                     // We haven't finalized this round yet — store for later
-                    pending_checkpoints.write().await.insert(checkpoint.round, checkpoint);
+                    let mut pending = pending_checkpoints.write().await;
+                    pending.insert(checkpoint.round, checkpoint);
+                    // Evict oldest if over cap (same cap as co-signing path)
+                    while pending.len() > 10 {
+                        if let Some(&oldest) = pending.keys().min() {
+                            pending.remove(&oldest);
+                        } else {
+                            break;
+                        }
+                    }
+                    drop(pending);
                     continue;
                 }
 
@@ -1575,6 +1527,12 @@ async fn handle_peer(
                     continue;
                 }
                 
+                // Verify the signature is valid before storing
+                if !checkpoint.verify_signature(&signature) {
+                    warn!("CheckpointSignature from {:?} has invalid signature", &signature.pub_key[..4]);
+                    continue;
+                }
+
                 // Add signature if not duplicate
                 let already_signed = checkpoint.signatures.iter()
                     .any(|s| s.validator == signature.validator);
@@ -1720,9 +1678,9 @@ async fn handle_peer(
                                 info!("Checkpoint chain verification passed for round {}", checkpoint.round);
                             }
                             Err(e) => {
-                                warn!("Checkpoint chain verification failed: {} — skipping chain check, relying on quorum signatures", e);
-                                // Don't block fast-sync — quorum signature verification below
-                                // is the primary trust mechanism. Chain verification is defense-in-depth.
+                                error!("Checkpoint chain verification FAILED: {} — disconnecting peer {}", e, peer_addr);
+                                checkpoint_metrics.record_fast_sync_failure();
+                                return Ok(());
                             }
                         }
                     } else {

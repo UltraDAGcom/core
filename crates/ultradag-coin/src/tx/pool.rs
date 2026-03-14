@@ -1,20 +1,28 @@
 use std::collections::HashMap;
 
+use crate::address::Address;
 use crate::tx::transaction::Transaction;
 
 /// Maximum transactions in mempool to prevent DoS
 const MAX_MEMPOOL_SIZE: usize = 10_000;
 
+/// Maximum transactions per sender address in the mempool.
+/// Prevents a single address from monopolizing mempool capacity.
+const MAX_TXS_PER_SENDER: usize = 100;
+
 /// In-memory transaction pool (mempool).
 #[derive(Clone)]
 pub struct Mempool {
     txs: HashMap<[u8; 32], Transaction>,
+    /// Secondary index: sender address → transaction hashes for O(1) sender lookups.
+    by_sender: HashMap<Address, Vec<[u8; 32]>>,
 }
 
 impl Mempool {
     pub fn new() -> Self {
         Self {
             txs: HashMap::new(),
+            by_sender: HashMap::new(),
         }
     }
 
@@ -30,6 +38,13 @@ impl Mempool {
         // Stake/Unstake are fee-exempt (they have fee=0 by design).
         let fee_exempt = matches!(tx, Transaction::Stake(_) | Transaction::Unstake(_));
         if !fee_exempt && tx.fee() < crate::constants::MIN_FEE_SATS {
+            return false;
+        }
+
+        // Per-sender limit: prevent one address from filling the entire mempool
+        let sender = tx.from();
+        let sender_count = self.by_sender.get(&sender).map_or(0, |v| v.len());
+        if sender_count >= MAX_TXS_PER_SENDER {
             return false;
         }
 
@@ -56,7 +71,15 @@ impl Mempool {
                 };
                 // Only evict if new transaction has higher fee
                 if new_fee > lowest_fee {
-                    self.txs.remove(&lowest_hash);
+                    if let Some(evicted) = self.txs.remove(&lowest_hash) {
+                        let evicted_sender = evicted.from();
+                        if let Some(hashes) = self.by_sender.get_mut(&evicted_sender) {
+                            hashes.retain(|h| h != &lowest_hash);
+                            if hashes.is_empty() {
+                                self.by_sender.remove(&evicted_sender);
+                            }
+                        }
+                    }
                 } else {
                     // Mempool full and new tx has lower/equal fee - reject
                     return false;
@@ -64,13 +87,25 @@ impl Mempool {
             }
         }
 
+        self.by_sender.entry(sender).or_default().push(hash);
         self.txs.insert(hash, tx);
         true
     }
 
     /// Remove a transaction by hash (after it's been included in a block).
     pub fn remove(&mut self, hash: &[u8; 32]) -> Option<Transaction> {
-        self.txs.remove(hash)
+        if let Some(tx) = self.txs.remove(hash) {
+            let sender = tx.from();
+            if let Some(hashes) = self.by_sender.get_mut(&sender) {
+                hashes.retain(|h| h != hash);
+                if hashes.is_empty() {
+                    self.by_sender.remove(&sender);
+                }
+            }
+            Some(tx)
+        } else {
+            None
+        }
     }
 
     /// Get the best transactions for a block (sorted by fee descending).
@@ -106,6 +141,7 @@ impl Mempool {
     /// Remove all transactions from the mempool.
     pub fn clear(&mut self) {
         self.txs.clear();
+        self.by_sender.clear();
     }
 
     /// Check if a transaction is in the pool.
@@ -115,15 +151,17 @@ impl Mempool {
 
     /// Count pending transactions from a specific sender address.
     pub fn pending_count(&self, from: &crate::Address) -> u64 {
-        self.txs.values().filter(|tx| &tx.from() == from).count() as u64
+        self.by_sender.get(from).map_or(0, |v| v.len()) as u64
     }
 
     /// Get the highest nonce for a sender in the mempool, if any.
     pub fn pending_nonce(&self, from: &crate::Address) -> Option<u64> {
-        self.txs.values()
-            .filter(|tx| &tx.from() == from)
-            .map(|tx| tx.nonce())
-            .max()
+        self.by_sender.get(from).and_then(|hashes| {
+            hashes.iter()
+                .filter_map(|h| self.txs.get(h))
+                .map(|tx| tx.nonce())
+                .max()
+        })
     }
 
     /// Save mempool to disk

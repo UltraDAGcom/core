@@ -1,5 +1,5 @@
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -36,8 +36,8 @@ pub struct WalHeader {
 /// crash recovery can replay them instead of losing progress.
 ///
 /// File layout:
-/// - `wal_header.json` — atomic metadata (snapshot round, sequence counter)
-/// - `wal.jsonl` — append-only JSON Lines, one `WalEntry` per line
+/// - `wal_header.bin` — atomic metadata (snapshot round, sequence counter)
+/// - `wal.bin` — append-only length-prefixed postcard entries
 pub struct FinalityWal {
     wal_path: PathBuf,
     header_path: PathBuf,
@@ -48,12 +48,12 @@ pub struct FinalityWal {
 impl FinalityWal {
     /// Open or create the WAL in the given data directory.
     pub fn open(data_dir: &Path) -> io::Result<Self> {
-        let wal_path = data_dir.join("wal.jsonl");
-        let header_path = data_dir.join("wal_header.json");
+        let wal_path = data_dir.join("wal.bin");
+        let header_path = data_dir.join("wal_header.bin");
 
         let header = if header_path.exists() {
             let bytes = fs::read(&header_path)?;
-            serde_json::from_slice(&bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+            postcard::from_bytes(&bytes).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?
         } else {
             WalHeader {
                 snapshot_round: 0,
@@ -77,6 +77,7 @@ impl FinalityWal {
 
     /// Append a finalized vertex batch to the WAL.
     /// Called after `apply_finalized_vertices` succeeds.
+    /// Format: 4-byte LE length prefix + postcard bytes per entry.
     pub fn append(&mut self, vertices: &[DagVertex], finalized_round: u64, state_root: [u8; 32]) -> io::Result<()> {
         let entry = WalEntry {
             sequence: self.header.next_sequence,
@@ -85,12 +86,13 @@ impl FinalityWal {
             state_root,
         };
 
-        let mut line = serde_json::to_string(&entry)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-        line.push('\n');
+        let bytes = postcard::to_allocvec(&entry)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+        let len = (bytes.len() as u32).to_le_bytes();
 
         if let Some(ref mut file) = self.file {
-            file.write_all(line.as_bytes())?;
+            file.write_all(&len)?;
+            file.write_all(&bytes)?;
             file.flush()?;
             // fsync for durability — ensures the entry is on disk before we return
             file.sync_data()?;
@@ -110,10 +112,10 @@ impl FinalityWal {
         // (not strictly necessary, but aids debugging)
 
         // Atomically write header
-        let header_json = serde_json::to_vec_pretty(&self.header)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        let header_bytes = postcard::to_allocvec(&self.header)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
         let tmp = self.header_path.with_extension("tmp");
-        fs::write(&tmp, &header_json)?;
+        fs::write(&tmp, &header_bytes)?;
         fs::rename(&tmp, &self.header_path)?;
 
         // Close and truncate WAL file
@@ -130,14 +132,15 @@ impl FinalityWal {
 
     /// Read all WAL entries for replay on startup.
     /// Skips corrupted trailing entries (simulated crash mid-write).
+    /// Format: sequence of 4-byte LE length prefix + postcard bytes.
     pub fn replay(data_dir: &Path) -> io::Result<(WalHeader, Vec<WalEntry>)> {
-        let header_path = data_dir.join("wal_header.json");
-        let wal_path = data_dir.join("wal.jsonl");
+        let header_path = data_dir.join("wal_header.bin");
+        let wal_path = data_dir.join("wal.bin");
 
         let header = if header_path.exists() {
             let bytes = fs::read(&header_path)?;
-            serde_json::from_slice(&bytes)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+            postcard::from_bytes(&bytes)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?
         } else {
             WalHeader {
                 snapshot_round: 0,
@@ -148,20 +151,19 @@ impl FinalityWal {
 
         let mut entries = Vec::new();
         if wal_path.exists() {
-            let file = File::open(&wal_path)?;
-            let reader = BufReader::new(file);
-            for line in reader.lines() {
-                let line = match line {
-                    Ok(l) => l,
-                    Err(_) => break, // I/O error — stop replay
-                };
-                if line.trim().is_empty() {
-                    continue;
+            let data = fs::read(&wal_path)?;
+            let mut pos = 0;
+            while pos + 4 <= data.len() {
+                let len = u32::from_le_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]) as usize;
+                pos += 4;
+                if pos + len > data.len() {
+                    break; // Incomplete entry (crash mid-write) — stop here
                 }
-                match serde_json::from_str::<WalEntry>(&line) {
+                match postcard::from_bytes::<WalEntry>(&data[pos..pos+len]) {
                     Ok(entry) => entries.push(entry),
-                    Err(_) => break, // Corrupted entry (crash mid-write) — stop here
+                    Err(_) => break, // Corrupted entry — stop here
                 }
+                pos += len;
             }
         }
 
@@ -170,7 +172,7 @@ impl FinalityWal {
 
     /// Check if there are WAL entries to replay.
     pub fn has_entries(data_dir: &Path) -> bool {
-        let wal_path = data_dir.join("wal.jsonl");
+        let wal_path = data_dir.join("wal.bin");
         wal_path.exists() && fs::metadata(&wal_path).map(|m| m.len() > 0).unwrap_or(false)
     }
 
@@ -271,7 +273,7 @@ mod tests {
     }
 
     #[test]
-    fn partial_line_ignored() {
+    fn partial_entry_ignored() {
         let dir = temp_dir("partial");
         let mut wal = FinalityWal::open(&dir).unwrap();
 
@@ -279,10 +281,12 @@ mod tests {
         wal.append(&[v1], 1, [1u8; 32]).unwrap();
         drop(wal);
 
-        // Simulate crash: append a partial JSON line
-        let wal_path = dir.join("wal.jsonl");
+        // Simulate crash: append a partial length-prefixed entry
+        let wal_path = dir.join("wal.bin");
         let mut f = OpenOptions::new().append(true).open(&wal_path).unwrap();
-        f.write_all(b"{\"sequence\":1,\"finalized_round\":2,\"verti").unwrap();
+        // Write a length prefix claiming 1000 bytes, but only write 5 bytes of data
+        f.write_all(&1000u32.to_le_bytes()).unwrap();
+        f.write_all(b"parti").unwrap();
         drop(f);
 
         let (_, entries) = FinalityWal::replay(&dir).unwrap();

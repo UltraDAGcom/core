@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use ultradag_coin::{DagVertex, SecretKey, Signature, create_block, sync_epoch_validators};
 use ultradag_coin::safety::circuit_breaker::CircuitBreaker;
@@ -211,17 +211,15 @@ pub async fn validator_loop(
             
             // Use partial parent selection if we have more than K_PARENTS vertices
             if parents.len() > ultradag_coin::consensus::dag::K_PARENTS {
-                // Deterministic selection based on validator address
-                // This ensures reproducibility and prevents gaming
-                let mut scored: Vec<([u8; 32], u64)> = parents
+                // Deterministic selection: blake3(validator || parent_hash) for uniform scoring.
+                // All nodes must use identical algorithm for consensus.
+                let mut scored: Vec<([u8; 32], [u8; 32])> = parents
                     .iter()
                     .map(|parent| {
-                        let mut score = 0u64;
-                        for i in 0..8 {
-                            score ^= (validator.0[i] as u64) << (i * 8);
-                            score ^= (parent[i] as u64) << (i * 8);
-                        }
-                        (*parent, score)
+                        let mut h = blake3::Hasher::new();
+                        h.update(&validator.0);
+                        h.update(parent);
+                        (*parent, *h.finalize().as_bytes())
                     })
                     .collect();
                 scored.sort_by_key(|(_, s)| *s);
@@ -405,10 +403,6 @@ pub async fn validator_loop(
                     false
                 } else {
                     let changed = state_w.epoch_just_changed(prev_round);
-                    // WAL: log finalized vertices for crash recovery
-                    let fin_round = state_w.last_finalized_round().unwrap_or(0);
-                    let sr = ultradag_coin::consensus::compute_state_root(&state_w.snapshot());
-                    server.wal_append(&finalized_vertices, fin_round, sr);
                     let mut mp = server.mempool.write().await;
                     for v in &finalized_vertices {
                         for tx in &v.block.transactions {
@@ -462,16 +456,18 @@ pub async fn validator_loop(
             let prev_checkpoint_hash = if checkpoint_round == 0 {
                 [0u8; 32] // Genesis has no predecessor
             } else {
-                // Try to load the previous checkpoint from disk
+                // Load the specific previous checkpoint by round (not "latest")
                 let prev_round = checkpoint_round.saturating_sub(ultradag_coin::CHECKPOINT_INTERVAL);
-                match ultradag_coin::persistence::load_latest_checkpoint(&data_dir) {
+                match ultradag_coin::persistence::load_checkpoint_by_round(&data_dir, prev_round) {
                     Some(prev_cp) if prev_cp.round == prev_round => {
                         ultradag_coin::consensus::compute_checkpoint_hash(&prev_cp)
                     }
                     _ => {
-                        // If we can't find the previous checkpoint, use zero hash
-                        // This can happen on first checkpoint after node restart
-                        warn!("Could not find previous checkpoint at round {}, using zero hash", prev_round);
+                        // Missing previous checkpoint breaks chain verification.
+                        // This can happen on first checkpoint after node restart or clean deploy.
+                        // Peers will still accept the checkpoint if they can verify signatures,
+                        // but chain verification will fail for new nodes doing fast-sync.
+                        error!("Previous checkpoint at round {} not found — checkpoint chain will be broken. Verify disk integrity.", prev_round);
                         [0u8; 32]
                     }
                 }
@@ -628,7 +624,7 @@ pub async fn validator_loop(
         if dag_round % 10 == 0 {
             let dag_path = data_dir.join("dag.json");
             let finality_path = data_dir.join("finality.json");
-            let state_path = data_dir.join("state.json");
+            let state_path = data_dir.join("state.redb");
             let mempool_path = data_dir.join("mempool.json");
 
             let dag = server.dag.read().await;
@@ -643,31 +639,6 @@ pub async fn validator_loop(
             let mp = server.mempool.read().await;
             if let Err(e) = mp.save(&mempool_path) { warn!("Persist mempool: {}", e); }
             drop(mp);
-
-            // Update high-water mark AFTER all state files are persisted.
-            // This prevents crash loops: if we crash between HWM update and state save,
-            // on restart the HWM would be ahead of persisted state, blocking startup.
-            let last_fin = server.finality.read().await.last_finalized_round();
-            if last_fin > 0 {
-                use ultradag_coin::persistence::monotonicity::HighWaterMark;
-                let hwm_path = HighWaterMark::path_in_dir(&data_dir);
-                if let Ok(mut hwm) = HighWaterMark::load_or_create(&hwm_path) {
-                    let st = server.state.read().await;
-                    let state_hash = ultradag_coin::consensus::compute_state_root(&st.snapshot());
-                    drop(st);
-                    hwm.update(last_fin, state_hash);
-                    if let Err(e) = hwm.save(&hwm_path) {
-                        warn!("Failed to save high-water mark: {}", e);
-                    }
-                }
-            }
-
-            // Truncate WAL after successful full snapshot
-            let st = server.state.read().await;
-            let state_root = ultradag_coin::consensus::compute_state_root(&st.snapshot());
-            drop(st);
-            let last_fin = server.finality.read().await.last_finalized_round();
-            server.wal_truncate(last_fin, state_root);
 
             info!("State persisted at round {}", dag_round);
         }

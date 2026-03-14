@@ -55,7 +55,7 @@ impl PeerReader {
         let mut body = vec![0u8; len];
         self.reader.read_exact(&mut body).await?;
 
-        Message::decode(&body).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+        Message::decode(&body).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{}", e)))
     }
 }
 
@@ -88,7 +88,7 @@ impl PeerWriter {
 
     /// Send a message to this peer.
     pub async fn send(&self, msg: &Message) -> std::io::Result<()> {
-        let data = msg.encode().map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        let data = msg.encode().map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{}", e)))?;
         let mut writer = self.writer.lock().await;
         writer.write_all(&data).await?;
         writer.flush().await?;

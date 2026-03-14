@@ -1,7 +1,6 @@
 mod rpc;
 mod validator;
 mod rate_limit;
-mod metrics;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -9,10 +8,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use clap::Parser;
-use tracing::{info, warn, error};
+use tracing::{debug, info, warn, error};
 
 use ultradag_coin::{BlockDag, FinalityTracker, Mempool, SecretKey, StateEngine};
-use ultradag_coin::persistence::wal::FinalityWal;
 use ultradag_network::NodeServer;
 
 #[derive(Parser)]
@@ -101,7 +99,7 @@ fn default_data_dir() -> String {
 async fn save_state(server: &NodeServer, data_dir: &std::path::Path) {
     let dag_path = data_dir.join("dag.json");
     let finality_path = data_dir.join("finality.json");
-    let state_path = data_dir.join("state.json");
+    let state_path = data_dir.join("state.redb");
     let mempool_path = data_dir.join("mempool.json");
 
     let dag = server.dag.read().await;
@@ -133,65 +131,17 @@ async fn save_state(server: &NodeServer, data_dir: &std::path::Path) {
 
 /// Load all node state from disk if available.
 async fn load_state(server: &NodeServer, data_dir: &std::path::Path) {
-    use ultradag_coin::persistence::monotonicity::HighWaterMark;
-    
     let dag_path = data_dir.join("dag.json");
     let finality_path = data_dir.join("finality.json");
-    let state_path = data_dir.join("state.json");
+    let state_path = data_dir.join("state.redb");
     let mempool_path = data_dir.join("mempool.json");
-    let hwm_path = HighWaterMark::path_in_dir(data_dir);
 
     info!("Loading state from: {}", data_dir.display());
-
-    // Load high-water mark for monotonicity checking
-    let hwm = match HighWaterMark::load_or_create(&hwm_path) {
-        Ok(hwm) => {
-            if hwm.current_round() > 0 {
-                info!("High-water mark: round {}", hwm.current_round());
-            }
-            hwm
-        }
-        Err(e) => {
-            error!("Failed to load high-water mark: {}", e);
-            error!("Cannot verify state monotonicity. Refusing to start.");
-            std::process::exit(1);
-        }
-    };
 
     if BlockDag::exists(&dag_path) {
         match BlockDag::load(&dag_path) {
             Ok(dag) => {
                 let current_round = dag.current_round();
-                
-                // CRITICAL: Verify monotonicity - prevent rollback
-                if let Err(e) = hwm.verify_monotonic(current_round) {
-                    error!("╔═══════════════════════════════════════════════════════╗");
-                    error!("║  🚨 STATE ROLLBACK DETECTED - REFUSING TO START 🚨   ║");
-                    error!("╚═══════════════════════════════════════════════════════╝");
-                    error!("");
-                    error!("Error: {}", e);
-                    error!("High-water mark: round {}", hwm.current_round());
-                    error!("Attempting to load: round {}", current_round);
-                    error!("Rollback amount: {} rounds", hwm.current_round() - current_round);
-                    error!("");
-                    error!("This indicates you are trying to load an old state file.");
-                    error!("Loading old state would cause a network rollback.");
-                    error!("");
-                    error!("POSSIBLE CAUSES:");
-                    error!("1. Deployment with old Docker image");
-                    error!("2. Restored from old backup");
-                    error!("3. State file corruption");
-                    error!("");
-                    error!("MANUAL INTERVENTION REQUIRED:");
-                    error!("1. Verify the state file is correct");
-                    error!("2. Check deployment configuration");
-                    error!("3. Consider fast-sync from network");
-                    error!("");
-                    error!("DO NOT bypass this check unless you understand the consequences.");
-                    std::process::exit(1);
-                }
-                
-                info!("✅ Monotonicity check passed: round {}", current_round);
                 info!("Loaded DAG from disk: current_round={}", current_round);
                 *server.dag.write().await = dag;
             }
@@ -305,7 +255,10 @@ async fn main() {
     }
 
     let data_dir = PathBuf::from(&args.data_dir);
-    std::fs::create_dir_all(&data_dir).expect("Failed to create data directory");
+    if let Err(e) = std::fs::create_dir_all(&data_dir) {
+        error!("Failed to create data directory {:?}: {}", data_dir, e);
+        std::process::exit(1);
+    }
 
     // Load validator keypair: --pkey flag > disk > generate new
     let key_path = data_dir.join("validator.key");
@@ -331,7 +284,13 @@ async fn main() {
         info!("  Address: {}", sk.address().to_hex());
         sk
     } else if key_path.exists() {
-        let hex = std::fs::read_to_string(&key_path).expect("Failed to read validator key");
+        let hex = match std::fs::read_to_string(&key_path) {
+            Ok(h) => h,
+            Err(e) => {
+                error!("Failed to read validator key from {:?}: {}", key_path, e);
+                std::process::exit(1);
+            }
+        };
         let hex = hex.trim();
         let mut bytes = [0u8; 32];
         for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
@@ -351,9 +310,12 @@ async fn main() {
     } else {
         let sk = SecretKey::generate();
         let sk_hex: String = sk.to_bytes().iter().map(|b| format!("{b:02x}")).collect();
-        std::fs::write(&key_path, &sk_hex).expect("Failed to save validator key");
+        if let Err(e) = std::fs::write(&key_path, &sk_hex) {
+            error!("Failed to save validator key to {:?}: {}", key_path, e);
+            std::process::exit(1);
+        }
         info!("Generated and saved validator keypair:");
-        info!("  Secret key: {}", sk_hex);
+        debug!("  Secret key: {}", sk_hex);
         info!("  Address:    {}", sk.address().to_hex());
         sk
     };
@@ -379,71 +341,6 @@ async fn main() {
 
     // Load persisted state
     load_state(&server, &data_dir).await;
-
-    // Initialize WAL and replay any entries from last crash
-    match FinalityWal::open(&data_dir) {
-        Ok(wal) => {
-            // Replay WAL entries to recover state since last snapshot
-            match FinalityWal::replay(&data_dir) {
-                Ok((header, entries)) => {
-                    if !entries.is_empty() {
-                        info!("WAL: replaying {} entries from snapshot round {}", entries.len(), header.snapshot_round);
-                        let mut state_w = server.state.write().await;
-                        let mut replayed = 0;
-                        for entry in &entries {
-                            match state_w.apply_finalized_vertices(&entry.vertices) {
-                                Ok(()) => {
-                                    replayed += 1;
-                                    // Verify state root matches
-                                    let current_root = ultradag_coin::consensus::compute_state_root(&state_w.snapshot());
-                                    if current_root != entry.state_root {
-                                        warn!("WAL: state root mismatch at seq={}, stopping replay", entry.sequence);
-                                        break;
-                                    }
-                                }
-                                Err(e) => {
-                                    // Vertices may already be applied (idempotent replay)
-                                    warn!("WAL: entry seq={} apply error: {} (may be already applied)", entry.sequence, e);
-                                }
-                            }
-                        }
-                        drop(state_w);
-
-                        // Update finality tracker with replayed vertices
-                        if replayed > 0 {
-                            let last_entry = &entries[replayed - 1];
-                            let mut fin = server.finality.write().await;
-                            for entry in &entries[..replayed] {
-                                for v in &entry.vertices {
-                                    fin.mark_as_finalized(v.hash());
-                                    fin.register_validator(v.validator);
-                                }
-                            }
-                            fin.set_last_finalized_round(last_entry.finalized_round);
-                            drop(fin);
-
-                            // Insert vertices into DAG (idempotent)
-                            let mut dag_w = server.dag.write().await;
-                            for entry in &entries[..replayed] {
-                                for v in &entry.vertices {
-                                    dag_w.insert(v.clone());
-                                }
-                            }
-                            drop(dag_w);
-                        }
-
-                        info!("WAL: recovered {} entries, now at finalized round {}",
-                            replayed,
-                            entries.get(replayed.saturating_sub(1)).map(|e| e.finalized_round).unwrap_or(0));
-                    }
-                }
-                Err(e) => warn!("WAL: replay failed: {} (starting from snapshot)", e),
-            }
-            server.set_wal(wal);
-            info!("WAL: initialized at {}/wal.jsonl", data_dir.display());
-        }
-        Err(e) => warn!("WAL: failed to open: {} (crash recovery disabled)", e),
-    }
 
     // Load permissioned validator allowlist BEFORE rebuilding validator set from DAG.
     // This ensures the allowlist gates which validators get registered during rebuild.
@@ -674,7 +571,7 @@ async fn main() {
 
     // Auto-stake: submit a stake transaction after sync if requested
     if let Some(auto_stake_udag) = args.auto_stake {
-        let auto_stake_sats = auto_stake_udag.saturating_mul(100_000_000);
+        let auto_stake_sats = auto_stake_udag.saturating_mul(ultradag_coin::SATS_PER_UDAG);
         let server_clone = server.clone();
         let auto_sk = validator_sk.clone();
         tokio::spawn(async move {
@@ -687,7 +584,7 @@ async fn main() {
             if auto_stake_sats < ultradag_coin::MIN_STAKE_SATS {
                 warn!("Auto-stake: {} UDAG below minimum stake of {} UDAG",
                     auto_stake_udag,
-                    ultradag_coin::MIN_STAKE_SATS / 100_000_000);
+                    ultradag_coin::MIN_STAKE_SATS / ultradag_coin::SATS_PER_UDAG);
                 return;
             }
 
@@ -700,7 +597,7 @@ async fn main() {
                 let current_stake = state.stake_of(&sender);
                 if current_stake >= ultradag_coin::MIN_STAKE_SATS {
                     info!("Auto-stake: already staked {} UDAG, skipping",
-                        current_stake / 100_000_000);
+                        current_stake / ultradag_coin::SATS_PER_UDAG);
                     return;
                 }
 
@@ -710,7 +607,7 @@ async fn main() {
                     .iter()
                     .filter(|t| t.from() == sender)
                     .map(|t| t.total_cost())
-                    .sum();
+                    .fold(0u64, |acc, x| acc.saturating_add(x));
                 let total_needed = pending_cost
                     .saturating_add(auto_stake_sats)
                     .saturating_add(ultradag_coin::constants::MIN_FEE_SATS);

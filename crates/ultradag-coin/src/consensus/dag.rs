@@ -1,9 +1,50 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use bitvec::prelude::*;
 use serde::{Serialize, Deserialize};
 
 use crate::address::Address;
 use crate::consensus::vertex::DagVertex;
+
+/// Bidirectional mapping between validator addresses and compact bitmap indices.
+/// Enables O(1) finality checks using BitVec instead of HashSet<Address>.
+/// Indices are append-only and never reused within a DAG lifetime.
+/// Rebuilt from vertices on load().
+pub struct ValidatorIndex {
+    addr_to_idx: HashMap<Address, usize>,
+    idx_to_addr: Vec<Address>,
+}
+
+impl ValidatorIndex {
+    pub fn new() -> Self {
+        Self {
+            addr_to_idx: HashMap::new(),
+            idx_to_addr: Vec::new(),
+        }
+    }
+
+    /// Get or assign an index for a validator address.
+    pub fn get_or_insert(&mut self, addr: Address) -> usize {
+        if let Some(&idx) = self.addr_to_idx.get(&addr) {
+            idx
+        } else {
+            let idx = self.idx_to_addr.len();
+            self.idx_to_addr.push(addr);
+            self.addr_to_idx.insert(addr, idx);
+            idx
+        }
+    }
+
+    /// Get the index for a validator address, if it exists.
+    pub fn get(&self, addr: &Address) -> Option<usize> {
+        self.addr_to_idx.get(addr).copied()
+    }
+
+    /// Number of indexed validators.
+    pub fn len(&self) -> usize {
+        self.idx_to_addr.len()
+    }
+}
 
 /// Error returned when a DAG insert is rejected.
 #[derive(Debug, PartialEq)]
@@ -74,8 +115,14 @@ pub struct BlockDag {
     /// These vertices were NOT inserted into the DAG but are needed to prove equivocation.
     equivocation_vertices: HashMap<[u8; 32], DagVertex>,
     /// Incremental descendant validator tracking for O(1) finality checks.
-    /// Maps vertex hash -> set of distinct validators that have at least one descendant.
-    descendant_validators: HashMap<[u8; 32], HashSet<Address>>,
+    /// Maps vertex hash -> bitmap of validator indices that have at least one descendant.
+    /// Uses BitVec for 256x memory reduction vs HashSet<Address> at 1000 validators.
+    descendant_validators: HashMap<[u8; 32], BitVec>,
+    /// Bidirectional mapping between validator addresses and bitmap indices.
+    validator_index: ValidatorIndex,
+    /// Secondary index: (validator, round) -> vertex hash for O(1) equivocation checks.
+    /// Only stores the FIRST vertex from each validator in each round.
+    validator_round_vertex: HashMap<(Address, u64), [u8; 32]>,
     /// Earliest round still kept in memory (for pruning tracking).
     /// Vertices from rounds < pruning_floor have been pruned.
     pruning_floor: u64,
@@ -94,17 +141,27 @@ impl BlockDag {
             evidence_store: HashMap::new(),
             equivocation_vertices: HashMap::new(),
             descendant_validators: HashMap::new(),
+            validator_index: ValidatorIndex::new(),
+            validator_round_vertex: HashMap::new(),
             pruning_floor: 0,
         }
     }
 
     /// Insert a vertex into the DAG. Returns false if already present.
     /// Does NOT check equivocation — use `try_insert` for untrusted vertices.
+    /// Truncates parents to MAX_PARENTS if exceeded (matching validator loop behavior).
     pub fn insert(&mut self, vertex: DagVertex) -> bool {
         let hash = vertex.hash();
 
         if self.vertices.contains_key(&hash) {
             return false;
+        }
+
+        // Enforce MAX_PARENTS: truncate excess parents instead of rejecting
+        // (matches what the validator loop does before calling insert)
+        let mut vertex = vertex;
+        if vertex.parent_hashes.len() > MAX_PARENTS {
+            vertex.parent_hashes.truncate(MAX_PARENTS);
         }
 
         // CRITICAL: Verify all parents exist before inserting.
@@ -134,7 +191,6 @@ impl BlockDag {
                 }
             }
         }
-        let mut vertex = vertex;
         vertex.topo_level = if vertex.parent_hashes.is_empty() || (vertex.parent_hashes.len() == 1 && vertex.parent_hashes[0] == genesis_topo) {
             0
         } else {
@@ -162,10 +218,12 @@ impl BlockDag {
             self.current_round = round;
         }
 
-        // Update incremental descendant validator counts.
-        // Walk upward through ancestors; stop early when the validator is already tracked.
+        // Update incremental descendant validator counts using BitVec.
+        // Walk upward through ancestors; stop early when the validator bit is already set.
         let validator = vertex.validator;
-        self.descendant_validators.entry(hash).or_default();
+        let val_idx = self.validator_index.get_or_insert(validator);
+        // Ensure this vertex has a bitvec entry
+        self.descendant_validators.entry(hash).or_insert_with(|| bitvec![0; val_idx + 1]);
         let mut queue = VecDeque::new();
         for parent in &vertex.parent_hashes {
             queue.push_back(*parent);
@@ -176,11 +234,16 @@ impl BlockDag {
             if ancestor == genesis || !visited.insert(ancestor) {
                 continue;
             }
-            let set = self.descendant_validators.entry(ancestor).or_default();
-            if !set.insert(validator) {
+            let bv = self.descendant_validators.entry(ancestor).or_insert_with(|| bitvec![0; val_idx + 1]);
+            // Grow bitvec if needed
+            if bv.len() <= val_idx {
+                bv.resize(val_idx + 1, false);
+            }
+            if bv[val_idx] {
                 // Already tracked — all further ancestors already have this validator
                 continue;
             }
+            bv.set(val_idx, true);
             if let Some(v) = self.vertices.get(&ancestor) {
                 for p in &v.parent_hashes {
                     if !visited.contains(p) {
@@ -189,6 +252,9 @@ impl BlockDag {
                 }
             }
         }
+
+        // Update secondary index for O(1) equivocation checks
+        self.validator_round_vertex.entry((vertex.validator, round)).or_insert(hash);
 
         self.vertices.insert(hash, vertex);
         true
@@ -231,19 +297,10 @@ impl BlockDag {
             return Ok(false); // Timestamp too far in future
         }
 
-        // Equivocation: same validator, same round, different vertex
-        if let Some(existing_hash) = self.rounds
-            .get(&vertex.round)
-            .and_then(|hashes| {
-                hashes.iter()
-                    .find(|&&h| {
-                        self.vertices.get(&h)
-                            .map(|v| v.validator == vertex.validator)
-                            .unwrap_or(false)
-                    })
-                    .copied()
-            })
-        {
+        // Equivocation: same validator, same round, different vertex (O(1) via secondary index)
+        if let Some(&existing_hash) = self.validator_round_vertex.get(&(vertex.validator, vertex.round)) {
+            // existing_hash is the first vertex from this validator in this round;
+            // if it differs from the new vertex hash, this is equivocation
             // Store equivocation evidence and mark as Byzantine.
             // Also store the rejected vertex so evidence can be broadcast
             // (the vertex is NOT inserted into the DAG, so dag.get(hash) would fail).
@@ -308,17 +365,16 @@ impl BlockDag {
             return tips;
         }
         
-        // Deterministic sampling: use proposer address as seed for reproducibility
-        // XOR proposer address with each tip hash to create a score, then take top K
+        // Deterministic sampling: hash(proposer || tip) with blake3 for proper mixing.
+        // Using the first 8 bytes of the hash as a u64 score gives uniform distribution.
         let mut scored_tips: Vec<([u8; 32], u64)> = tips
             .iter()
             .map(|tip| {
-                // Simple deterministic score: XOR first 8 bytes of proposer with tip
-                let mut score = 0u64;
-                for (i, &tip_byte) in tip.iter().enumerate().take(8) {
-                    score ^= (proposer.0[i] as u64) << (i * 8);
-                    score ^= (tip_byte as u64) << (i * 8);
-                }
+                let mut input = [0u8; 64];
+                input[..32].copy_from_slice(&proposer.0);
+                input[32..].copy_from_slice(tip);
+                let hash = blake3::hash(&input);
+                let score = u64::from_le_bytes(hash.as_bytes()[..8].try_into().unwrap());
                 (*tip, score)
             })
             .collect();
@@ -378,17 +434,12 @@ impl BlockDag {
     }
 
     /// Get the number of distinct validators that have at least one descendant of this vertex.
-    /// O(1) lookup using incrementally maintained counts.
+    /// O(1) lookup using incrementally maintained bitmap counts.
     pub fn descendant_validator_count(&self, hash: &[u8; 32]) -> usize {
         self.descendant_validators
             .get(hash)
-            .map(|s| s.len())
+            .map(|bv| bv.count_ones())
             .unwrap_or(0)
-    }
-
-    /// Get the set of distinct validators that have at least one descendant of this vertex.
-    pub fn descendant_validators_of(&self, hash: &[u8; 32]) -> Option<&HashSet<Address>> {
-        self.descendant_validators.get(hash)
     }
 
     /// Get direct children of a vertex.
@@ -453,9 +504,7 @@ impl BlockDag {
         validator: &crate::address::Address,
         round: u64,
     ) -> bool {
-        self.vertices_in_round(round)
-            .iter()
-            .any(|v| &v.validator == validator)
+        self.validator_round_vertex.contains_key(&(*validator, round))
     }
 
     /// Count distinct validators that produced vertices in the given round.
@@ -606,23 +655,30 @@ impl BlockDag {
         for round in rounds_to_prune {
             if let Some(hashes) = self.rounds.remove(&round) {
                 for hash in hashes {
+                    // Remove from secondary index before removing the vertex
+                    if let Some(v) = self.vertices.get(&hash) {
+                        self.validator_round_vertex.remove(&(v.validator, v.round));
+                    }
+
                     // Remove from vertices
                     self.vertices.remove(&hash);
-                    
+
                     // Remove from children map
                     self.children.remove(&hash);
-                    
+
                     // Remove from tips (if present)
                     self.tips.remove(&hash);
-                    
+
                     // Remove from descendant_validators
                     self.descendant_validators.remove(&hash);
-                    
-                    // Remove from children of other vertices
-                    for children_set in self.children.values_mut() {
-                        children_set.remove(&hash);
-                    }
-                    
+
+                    // Stale entries in other vertices' children sets are harmless:
+                    // they point to removed hashes and are ignored during traversal.
+                    // Removing them was O(V*C) and caused lock contention under load.
+
+                    // Remove from equivocation_vertices if present
+                    self.equivocation_vertices.remove(&hash);
+
                     pruned_count += 1;
                 }
             }
@@ -666,17 +722,27 @@ impl BlockDag {
         let snapshot = crate::consensus::persistence::DagSnapshot::load(path)?;
         let vertices: HashMap<[u8; 32], DagVertex> = snapshot.vertices.into_iter().collect();
 
-        // Rebuild descendant_validators from all vertices
-        let mut descendant_validators: HashMap<[u8; 32], HashSet<Address>> = HashMap::new();
-        for hash in vertices.keys() {
-            descendant_validators.entry(*hash).or_default();
+        // Rebuild validator index and descendant_validators (BitVec) from all vertices
+        let mut validator_index = ValidatorIndex::new();
+        let mut descendant_validators: HashMap<[u8; 32], BitVec> = HashMap::new();
+
+        // First pass: assign indices to all validators
+        for vertex in vertices.values() {
+            validator_index.get_or_insert(vertex.validator);
         }
+        let num_validators = validator_index.len();
+
+        // Initialize empty bitvecs for all vertices
+        for hash in vertices.keys() {
+            descendant_validators.insert(*hash, bitvec![0; num_validators]);
+        }
+
         // Sort vertices by round so we process parents before children
         let mut sorted: Vec<_> = vertices.iter().collect();
         sorted.sort_by_key(|(_, v)| v.round);
         let genesis: [u8; 32] = [0u8; 32];
-        for (hash, vertex) in &sorted {
-            let validator = vertex.validator;
+        for (_hash, vertex) in &sorted {
+            let val_idx = validator_index.get(&vertex.validator).unwrap();
             let mut queue = VecDeque::new();
             for parent in &vertex.parent_hashes {
                 queue.push_back(*parent);
@@ -686,9 +752,11 @@ impl BlockDag {
                 if ancestor == genesis || !visited.insert(ancestor) {
                     continue;
                 }
-                let set = descendant_validators.entry(ancestor).or_default();
-                if !set.insert(validator) {
-                    continue;
+                if let Some(bv) = descendant_validators.get_mut(&ancestor) {
+                    if bv[val_idx] {
+                        continue; // Already tracked
+                    }
+                    bv.set(val_idx, true);
                 }
                 if let Some(v) = vertices.get(&ancestor) {
                     for p in &v.parent_hashes {
@@ -698,7 +766,12 @@ impl BlockDag {
                     }
                 }
             }
-            let _ = hash; // used above via sorted iteration
+        }
+
+        // Rebuild secondary index: (validator, round) -> first vertex hash
+        let mut validator_round_vertex = HashMap::new();
+        for (hash, vertex) in &vertices {
+            validator_round_vertex.entry((vertex.validator, vertex.round)).or_insert(*hash);
         }
 
         Ok(Self {
@@ -712,6 +785,8 @@ impl BlockDag {
             evidence_store: snapshot.evidence_store.into_iter().collect(),
             equivocation_vertices: snapshot.equivocation_vertices.into_iter().collect(),
             descendant_validators,
+            validator_index,
+            validator_round_vertex,
             pruning_floor: snapshot.pruning_floor,
         })
     }

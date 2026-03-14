@@ -16,6 +16,7 @@ path = "src/bin/loadtest.rs"
 [dependencies]
 ultradag-coin = { workspace = true }
 ultradag-network = { workspace = true }
+blake3 = { workspace = true }
 tokio = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }

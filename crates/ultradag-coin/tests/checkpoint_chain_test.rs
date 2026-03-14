@@ -8,25 +8,33 @@ use ultradag_coin::{
 };
 use std::collections::HashMap;
 
-/// Create a test checkpoint with given parameters
+/// Create a test checkpoint with given parameters.
+/// For round 0 (genesis), uses the real genesis state to match GENESIS_CHECKPOINT_HASH.
 fn make_checkpoint(
     round: u64,
     prev_hash: [u8; 32],
     sk: &SecretKey,
 ) -> Checkpoint {
-    let state = StateEngine::new();
-    let snapshot = state.snapshot();
-    let state_root = compute_state_root(&snapshot);
-    
+    let (state_root, total_supply) = if round == 0 {
+        // Genesis checkpoint must match the hardcoded GENESIS_CHECKPOINT_HASH
+        let state = StateEngine::new_with_genesis();
+        let snapshot = state.snapshot();
+        (compute_state_root(&snapshot), state.total_supply())
+    } else {
+        let state = StateEngine::new();
+        let snapshot = state.snapshot();
+        (compute_state_root(&snapshot), 0)
+    };
+
     let mut checkpoint = Checkpoint {
         round,
         state_root,
         dag_tip: [0u8; 32],
-        total_supply: 0,
+        total_supply,
         prev_checkpoint_hash: prev_hash,
         signatures: vec![],
     };
-    
+
     // Sign it
     let sig = CheckpointSignature {
         validator: sk.address(),
@@ -34,7 +42,7 @@ fn make_checkpoint(
         signature: sk.sign(&checkpoint.signable_bytes()),
     };
     checkpoint.signatures.push(sig);
-    
+
     checkpoint
 }
 
@@ -46,7 +54,7 @@ fn test_genesis_checkpoint_accepted() {
     
     let loader = |_hash: [u8; 32]| -> Option<Checkpoint> { None };
     
-    // Should succeed (GENESIS_CHECKPOINT_HASH is placeholder [0u8; 32])
+    // Should succeed — genesis hash matches GENESIS_CHECKPOINT_HASH constant
     let result = verify_checkpoint_chain(&genesis, loader);
     assert!(result.is_ok(), "Genesis checkpoint should be accepted: {:?}", result);
 }

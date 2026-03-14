@@ -1,17 +1,22 @@
 /// Total supply: 21,000,000 UDAG (stored as smallest unit = 1 sat = 0.00000001 UDAG)
 pub const MAX_SUPPLY_SATS: u64 = 21_000_000 * COIN;
 
-/// 1 UDAG = 100,000,000 satoshis
+/// 1 UDAG = 100,000,000 satoshis (also exported as SATS_PER_UDAG for clarity)
 pub const COIN: u64 = 100_000_000;
+
+/// Alias for COIN — clearer when used in display/conversion contexts.
+pub const SATS_PER_UDAG: u64 = COIN;
+
+/// Convert sats to UDAG as a float for display purposes.
+pub fn sats_to_udag(sats: u64) -> f64 {
+    sats as f64 / SATS_PER_UDAG as f64
+}
 
 /// Initial block reward: 50 UDAG
 pub const INITIAL_REWARD_SATS: u64 = 50 * COIN;
 
 /// Reward halves every 210,000 rounds
 pub const HALVING_INTERVAL: u64 = 210_000;
-
-/// Target round time: 30 seconds (configurable via --round-ms)
-pub const TARGET_BLOCK_TIME_SECS: u64 = 30;
 
 /// Genesis timestamp
 pub const GENESIS_TIMESTAMP: i64 = 1741132800; // 2025-03-05T00:00:00Z
@@ -33,9 +38,6 @@ pub const MIN_FEE_SATS: u64 = 10_000;
 /// 256 bytes is sufficient for IoT sensor data (temperature, humidity, pressure, GPS, timestamp)
 /// while preventing DAG bloat from oversized memos.
 pub const MAX_MEMO_BYTES: usize = 256;
-
-/// Coinbase maturity: coinbase outputs can't be spent for N rounds
-pub const COINBASE_MATURITY: u64 = 100;
 
 /// Network identifier included in all signatures to prevent cross-network replay attacks.
 /// Different for mainnet, testnet, devnet, etc.
@@ -104,11 +106,11 @@ pub const CHECKPOINT_INTERVAL: u64 = 100;
 /// For testnet, this is computed from the current genesis configuration.
 /// For mainnet, this MUST be recomputed after removing faucet.
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-]; // Placeholder - will be computed at runtime on first checkpoint
+    0xd3, 0x5d, 0x13, 0x79, 0x54, 0xca, 0x55, 0xbc,
+    0x2d, 0x1e, 0xe7, 0xc1, 0x29, 0x4a, 0x88, 0x95,
+    0x41, 0x65, 0x76, 0x03, 0x48, 0xc5, 0x46, 0xb2,
+    0x89, 0xa8, 0xa9, 0xf4, 0x8d, 0x1f, 0xac, 0x08,
+]; // Computed from StateEngine::new_with_genesis() via postcard — must recompute for mainnet after faucet removal
 
 /// Compute the epoch number for a given round.
 pub fn epoch_of(round: u64) -> u64 {

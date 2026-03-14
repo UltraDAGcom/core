@@ -121,11 +121,11 @@ impl StateEngine {
         vertex: &DagVertex,
         active_validator_count: u64,
     ) -> Result<(), CoinError> {
-        // Apply to a snapshot first to ensure atomicity
-        let mut snapshot = self.clone();
+        // Apply directly — finalized vertices are BFT-confirmed and must succeed.
+        // If they don't (supply invariant violation), that's a critical bug regardless.
 
         // Process any unstake completions for this round
-        snapshot.process_unstake_completions(vertex.round);
+        self.process_unstake_completions(vertex.round);
 
         let total_fees: u64 = vertex.block.transactions.iter().map(|tx| {
             match tx {
@@ -134,7 +134,7 @@ impl StateEngine {
                 crate::tx::Transaction::Vote(t) => t.fee,
                 crate::tx::Transaction::Stake(_) | crate::tx::Transaction::Unstake(_) => 0,
             }
-        }).sum();
+        }).fold(0u64, |acc, x| acc.saturating_add(x));
         // Use vertex.round as height for block_reward computation.
         // This eliminates the TOCTOU between production time and application time:
         // the validator computes reward from its local state, but state can advance
@@ -145,8 +145,8 @@ impl StateEngine {
         let expected_height = vertex.round;
         let total_round_reward = crate::constants::block_reward(expected_height);
         let proposer = &vertex.block.coinbase.to;
-        let total_stake = snapshot.total_staked();
-        let own_stake = snapshot.stake_of(proposer);
+        let total_stake = self.total_staked();
+        let own_stake = self.stake_of(proposer);
 
         let validator_reward = if total_stake > 0 && own_stake > 0 {
             // Proportional to stake using u128 to avoid overflow
@@ -154,8 +154,8 @@ impl StateEngine {
                 .saturating_mul(own_stake as u128)
                 / total_stake as u128) as u64;
             // Observer penalty: staked but not in the active validator set
-            if !snapshot.active_validator_set.is_empty()
-                && !snapshot.active_validator_set.contains(proposer)
+            if !self.active_validator_set.is_empty()
+                && !self.active_validator_set.contains(proposer)
             {
                 base * crate::constants::OBSERVER_REWARD_PERCENT / 100
             } else {
@@ -171,8 +171,8 @@ impl StateEngine {
         // Supply cap enforcement: cap reward BEFORE coinbase validation
         // so that the validator produces a coinbase matching the capped amount.
         let max_supply = crate::constants::MAX_SUPPLY_SATS;
-        let capped_reward = if snapshot.total_supply.saturating_add(validator_reward) > max_supply {
-            max_supply.saturating_sub(snapshot.total_supply)
+        let capped_reward = if self.total_supply.saturating_add(validator_reward) > max_supply {
+            max_supply.saturating_sub(self.total_supply)
         } else {
             validator_reward
         };
@@ -187,10 +187,10 @@ impl StateEngine {
             });
         }
 
-        snapshot.total_supply = snapshot.total_supply.saturating_add(capped_reward);
+        self.total_supply = self.total_supply.saturating_add(capped_reward);
 
         // Credit proposer: capped block reward + fees
-        snapshot.credit(proposer, capped_reward.saturating_add(total_fees));
+        self.credit(proposer, capped_reward.saturating_add(total_fees));
 
         // Apply transactions
         // In a DAG with multiple validators, the same transaction can appear in
@@ -207,19 +207,27 @@ impl StateEngine {
                 // Undo the fee credit to proposer to maintain supply balance
                 let fee = tx.fee();
                 if fee > 0 {
-                    snapshot.debit(proposer, fee);
+                    if let Err(e) = self.debit(proposer, fee) {
+                        return Err(CoinError::ValidationError(format!(
+                            "Failed to debit proposer fee: {}", e
+                        )));
+                    }
                 }
                 continue;
             }
 
             // Check nonce
-            let expected_nonce = snapshot.nonce(&tx.from());
+            let expected_nonce = self.nonce(&tx.from());
             if tx.nonce() != expected_nonce {
                 // Likely a duplicate tx already applied from another validator's vertex.
                 // Undo the fee credit to proposer (they shouldn't profit from a dup tx).
                 let fee = tx.fee();
                 if fee > 0 {
-                    snapshot.debit(proposer, fee);
+                    if let Err(e) = self.debit(proposer, fee) {
+                        return Err(CoinError::ValidationError(format!(
+                            "Failed to debit proposer fee for duplicate tx: {}", e
+                        )));
+                    }
                 }
                 tracing::warn!(
                     "Skipping duplicate tx in finalized vertex: expected nonce={}, got={}",
@@ -229,14 +237,18 @@ impl StateEngine {
             }
 
             // Check balance
-            let sender_balance = snapshot.balance(&tx.from());
+            let sender_balance = self.balance(&tx.from());
             if sender_balance < tx.total_cost() {
                 // Insufficient balance — undo the fee credit to proposer.
                 let fee = tx.fee();
                 if fee > 0 {
-                    snapshot.debit(proposer, fee);
+                    if let Err(e) = self.debit(proposer, fee) {
+                        return Err(CoinError::ValidationError(format!(
+                            "Failed to debit proposer fee for insufficient balance: {}", e
+                        )));
+                    }
                 }
-                snapshot.increment_nonce(&tx.from());
+                self.increment_nonce(&tx.from());
                 tracing::warn!(
                     "Skipping tx with insufficient balance in finalized vertex: need={}, have={}",
                     tx.total_cost(), sender_balance
@@ -248,10 +260,14 @@ impl StateEngine {
             match tx {
                 crate::tx::Transaction::Transfer(transfer_tx) => {
                     // Debit sender (amount + fee)
-                    snapshot.debit(&transfer_tx.from, transfer_tx.total_cost());
-                    snapshot.increment_nonce(&transfer_tx.from);
+                    if let Err(e) = self.debit(&transfer_tx.from, transfer_tx.total_cost()) {
+                        return Err(CoinError::ValidationError(format!(
+                            "Failed to debit transfer sender: {}", e
+                        )));
+                    }
+                    self.increment_nonce(&transfer_tx.from);
                     // Credit recipient
-                    snapshot.credit(&transfer_tx.to, transfer_tx.amount);
+                    self.credit(&transfer_tx.to, transfer_tx.amount);
                     // Fee already included in coinbase
                 }
                 crate::tx::Transaction::Stake(stake_tx) => {
@@ -259,47 +275,59 @@ impl StateEngine {
                     if stake_tx.amount < crate::tx::stake::MIN_STAKE_SATS {
                         tracing::warn!("Skipping stake tx below minimum in finalized vertex");
                         // Stake txs have zero fee, nothing to undo
-                        snapshot.increment_nonce(&stake_tx.from);
+                        self.increment_nonce(&stake_tx.from);
                         continue;
                     }
                     // Debit liquid balance
-                    snapshot.debit(&stake_tx.from, stake_tx.amount);
+                    if let Err(e) = self.debit(&stake_tx.from, stake_tx.amount) {
+                        return Err(CoinError::ValidationError(format!(
+                            "Failed to debit stake amount: {}", e
+                        )));
+                    }
                     // Credit stake account
-                    let stake = snapshot.stake_accounts.entry(stake_tx.from).or_default();
+                    let stake = self.stake_accounts.entry(stake_tx.from).or_default();
                     stake.staked = stake.staked.saturating_add(stake_tx.amount);
                     stake.unlock_at_round = None;
                     // Increment nonce
-                    snapshot.increment_nonce(&stake_tx.from);
+                    self.increment_nonce(&stake_tx.from);
                 }
                 crate::tx::Transaction::Unstake(unstake_tx) => {
                     // Start cooldown period
-                    let stake = snapshot.stake_accounts.entry(unstake_tx.from).or_default();
+                    let stake = self.stake_accounts.entry(unstake_tx.from).or_default();
                     if stake.staked == 0 {
                         tracing::warn!("Skipping unstake tx with no stake in finalized vertex");
-                        snapshot.increment_nonce(&unstake_tx.from);
+                        self.increment_nonce(&unstake_tx.from);
                         continue;
                     }
                     if stake.unlock_at_round.is_some() {
                         tracing::warn!("Skipping duplicate unstake tx in finalized vertex");
-                        snapshot.increment_nonce(&unstake_tx.from);
+                        self.increment_nonce(&unstake_tx.from);
                         continue;
                     }
                     stake.unlock_at_round = Some(vertex.round.saturating_add(crate::tx::UNSTAKE_COOLDOWN_ROUNDS));
                     // Increment nonce
-                    snapshot.increment_nonce(&unstake_tx.from);
+                    self.increment_nonce(&unstake_tx.from);
                 }
                 crate::tx::Transaction::CreateProposal(proposal_tx) => {
-                    if let Err(e) = snapshot.apply_create_proposal(proposal_tx, vertex.round) {
+                    if let Err(e) = self.apply_create_proposal(proposal_tx, vertex.round) {
                         tracing::warn!("Skipping invalid CreateProposal tx in finalized vertex: {}", e);
-                        snapshot.debit(&proposal_tx.from, proposal_tx.fee);
-                        snapshot.increment_nonce(&proposal_tx.from);
+                        if let Err(debit_err) = self.debit(&proposal_tx.from, proposal_tx.fee) {
+                            return Err(CoinError::ValidationError(format!(
+                                "Failed to debit proposal fee: {}", debit_err
+                            )));
+                        }
+                        self.increment_nonce(&proposal_tx.from);
                     }
                 }
                 crate::tx::Transaction::Vote(vote_tx) => {
-                    if let Err(e) = snapshot.apply_vote(vote_tx, vertex.round) {
+                    if let Err(e) = self.apply_vote(vote_tx, vertex.round) {
                         tracing::warn!("Skipping invalid Vote tx in finalized vertex: {}", e);
-                        snapshot.debit(&vote_tx.from, vote_tx.fee);
-                        snapshot.increment_nonce(&vote_tx.from);
+                        if let Err(debit_err) = self.debit(&vote_tx.from, vote_tx.fee) {
+                            return Err(CoinError::ValidationError(format!(
+                                "Failed to debit vote fee: {}", debit_err
+                            )));
+                        }
+                        self.increment_nonce(&vote_tx.from);
                     }
                 }
             }
@@ -311,31 +339,29 @@ impl StateEngine {
 
         // Epoch boundary: recalculate active validator set
         let new_epoch = crate::constants::epoch_of(vertex.round);
-        if new_epoch > snapshot.current_epoch || snapshot.active_validator_set.is_empty() {
-            snapshot.recalculate_active_set();
-            snapshot.current_epoch = new_epoch;
+        if new_epoch > self.current_epoch || self.active_validator_set.is_empty() {
+            self.recalculate_active_set();
+            self.current_epoch = new_epoch;
         }
 
         // Tick governance to update proposal statuses
-        snapshot.tick_governance(vertex.round);
+        self.tick_governance(vertex.round);
 
         // Supply invariant check — unconditional (catches state corruption in release builds too)
         // sum(liquid balances) + sum(staked) == total_supply
         // Maintained even for skipped txs: when a tx is skipped, its fee is debited from
         // the proposer (undoing the coinbase credit for that fee).
         {
-            let liquid: u64 = snapshot.accounts.values().map(|a| a.balance).sum();
-            let staked: u64 = snapshot.stake_accounts.values().map(|s| s.staked).sum();
-            if liquid.saturating_add(staked) != snapshot.total_supply {
+            let liquid: u64 = self.accounts.values().map(|a| a.balance).fold(0u64, |acc, x| acc.saturating_add(x));
+            let staked: u64 = self.stake_accounts.values().map(|s| s.staked).fold(0u64, |acc, x| acc.saturating_add(x));
+            if liquid.saturating_add(staked) != self.total_supply {
                 return Err(CoinError::ValidationError(format!(
                     "Supply invariant broken: liquid={} staked={} total_supply={}",
-                    liquid, staked, snapshot.total_supply
+                    liquid, staked, self.total_supply
                 )));
             }
         }
 
-        // All transactions valid — commit snapshot
-        *self = snapshot;
         Ok(())
     }
 
@@ -462,8 +488,9 @@ impl StateEngine {
         
         // Log warning if below minimum safe validator count
         if self.active_validator_set.len() < crate::constants::MIN_ACTIVE_VALIDATORS {
+            // Using eprintln since tracing may not be available in this crate
             eprintln!(
-                "WARNING: Active validator count ({}) is below minimum safe threshold ({}) for BFT consensus. System safety cannot be guaranteed.",
+                "WARNING: Active validator count ({}) below minimum {} for BFT consensus",
                 self.active_validator_set.len(),
                 crate::constants::MIN_ACTIVE_VALIDATORS
             );
@@ -497,7 +524,11 @@ impl StateEngine {
             });
         }
         // Debit liquid balance
-        self.debit(&tx.from, tx.amount);
+        if let Err(e) = self.debit(&tx.from, tx.amount) {
+            return Err(CoinError::ValidationError(format!(
+                "Failed to debit stake amount: {}", e
+            )));
+        }
         // Credit stake account
         let stake = self.stake_accounts.entry(tx.from).or_default();
         stake.staked = stake.staked.saturating_add(tx.amount);
@@ -597,7 +628,11 @@ impl StateEngine {
         
         // Internal transfer: faucet → recipient
         // total_supply does NOT change
-        self.debit(&faucet_addr, amount);
+        if let Err(e) = self.debit(&faucet_addr, amount) {
+            return Err(CoinError::ValidationError(format!(
+                "Faucet insufficient balance: {}", e
+            )));
+        }
         self.credit(address, amount);
         
         Ok(())
@@ -608,9 +643,16 @@ impl StateEngine {
         account.balance = account.balance.saturating_add(amount);
     }
 
-    fn debit(&mut self, address: &Address, amount: u64) {
+    fn debit(&mut self, address: &Address, amount: u64) -> Result<(), CoinError> {
         let account = self.accounts.entry(*address).or_default();
+        if account.balance < amount {
+            return Err(CoinError::ValidationError(format!(
+                "Insufficient balance: need {}, have {}",
+                amount, account.balance
+            )));
+        }
         account.balance = account.balance.saturating_sub(amount);
+        Ok(())
     }
 
     fn increment_nonce(&mut self, address: &Address) {
@@ -685,7 +727,9 @@ impl StateEngine {
                 available: balance,
             });
         }
-        self.debit(&tx.from, tx.fee);
+        if let Err(e) = self.debit(&tx.from, tx.fee) {
+            return Err(e);
+        }
 
         // 10. Increment nonce
         self.increment_nonce(&tx.from);
@@ -752,8 +796,14 @@ impl StateEngine {
             return Err(CoinError::AlreadyVoted);
         }
 
-        // 7. Get voter's staked amount — this is the vote weight.
-        // Exclude unstaking addresses: validators in cooldown should not influence governance.
+        // 7. Vote weight = total staked amount.
+        // Design decision: ALL staked addresses can vote (active validators AND observers).
+        // Observers (staked but not in top-21 active set) retain full governance influence
+        // because they have economic skin-in-the-game via their stake. Only addresses in
+        // unstake cooldown (unlock_at_round.is_some()) are excluded, since their stake
+        // is leaving the system.
+        // This follows the standard stake-weighted governance model where voting power
+        // tracks economic commitment, not block-production privilege.
         let vote_weight = self.stake_accounts.get(&tx.from)
             .filter(|s| s.unlock_at_round.is_none())
             .map_or(0, |s| s.staked);
@@ -767,7 +817,9 @@ impl StateEngine {
                 available: balance,
             });
         }
-        self.debit(&tx.from, tx.fee);
+        if let Err(e) = self.debit(&tx.from, tx.fee) {
+            return Err(e);
+        }
 
         // 9. Increment nonce
         self.increment_nonce(&tx.from);
@@ -828,11 +880,12 @@ impl StateEngine {
                                 // Parameter changed successfully — this is deterministic
                                 // across all nodes since they process the same finalized vertices
                             }
-                            Err(_e) => {
+                            Err(e) => {
                                 // Invalid parameter change — proposal passes but effect is rejected.
                                 // This can happen if validation rules changed between proposal
                                 // creation and execution. The proposal still transitions to Executed
                                 // to maintain determinism (all nodes must agree on status).
+                                eprintln!("ParameterChange proposal {} failed to apply: {}", id, e);
                             }
                         }
                     }
@@ -866,6 +919,58 @@ impl StateEngine {
     /// Get the current governance parameters (may differ from constants if changed via proposals).
     pub fn governance_params(&self) -> &crate::governance::GovernanceParams {
         &self.governance_params
+    }
+
+    /// Iterate all accounts (for redb persistence).
+    pub fn all_accounts(&self) -> impl Iterator<Item = (&Address, &AccountState)> {
+        self.accounts.iter()
+    }
+
+    /// Iterate all stake accounts (for redb persistence).
+    pub fn all_stakes(&self) -> impl Iterator<Item = (&Address, &StakeAccount)> {
+        self.stake_accounts.iter()
+    }
+
+    /// Iterate all proposals (for redb persistence).
+    pub fn all_proposals(&self) -> impl Iterator<Item = (&u64, &crate::governance::Proposal)> {
+        self.proposals.iter()
+    }
+
+    /// Iterate all votes (for redb persistence).
+    pub fn all_votes(&self) -> impl Iterator<Item = (&(u64, Address), &bool)> {
+        self.votes.iter()
+    }
+
+    /// Set current epoch (for redb load reconciliation).
+    pub fn set_current_epoch(&mut self, epoch: u64) {
+        self.current_epoch = epoch;
+    }
+
+    /// Construct StateEngine from individual components (for redb loading).
+    pub fn from_parts(
+        accounts: HashMap<Address, AccountState>,
+        stake_accounts: HashMap<Address, StakeAccount>,
+        active_validator_set: Vec<Address>,
+        current_epoch: u64,
+        total_supply: u64,
+        last_finalized_round: Option<u64>,
+        proposals: HashMap<u64, crate::governance::Proposal>,
+        votes: HashMap<(u64, Address), bool>,
+        next_proposal_id: u64,
+        governance_params: crate::governance::GovernanceParams,
+    ) -> Self {
+        Self {
+            accounts,
+            stake_accounts,
+            active_validator_set,
+            current_epoch,
+            total_supply,
+            last_finalized_round,
+            proposals,
+            votes,
+            next_proposal_id,
+            governance_params,
+        }
     }
 
     /// Create a snapshot of the current state (for checkpoints).
@@ -925,43 +1030,20 @@ impl StateEngine {
         self.governance_params = snapshot.governance_params;
     }
 
-    /// Save state to disk
+    /// Save state to redb database (ACID, crash-safe).
     pub fn save(&self, path: &std::path::Path) -> Result<(), crate::persistence::PersistenceError> {
-        let snapshot = self.snapshot();
-        snapshot.save(path)
+        crate::state::db::save_to_redb(self, path)
     }
 
-    /// Load state from disk.
-    /// If the persisted epoch is stale (node was down for multiple epochs),
-    /// recalculates the active validator set to match the actual epoch.
+    /// Load state from redb database.
+    /// If the persisted epoch is stale, recalculates the active validator set.
     pub fn load(path: &std::path::Path) -> Result<Self, crate::persistence::PersistenceError> {
-        let snapshot = crate::state::persistence::StateSnapshot::load(path)?;
-        let mut engine = Self {
-            accounts: snapshot.accounts.into_iter().collect(),
-            stake_accounts: snapshot.stake_accounts.into_iter().collect(),
-            active_validator_set: snapshot.active_validator_set,
-            current_epoch: snapshot.current_epoch,
-            total_supply: snapshot.total_supply,
-            last_finalized_round: snapshot.last_finalized_round,
-            proposals: snapshot.proposals.into_iter().collect(),
-            votes: snapshot.votes.into_iter().collect(),
-            next_proposal_id: snapshot.next_proposal_id,
-            governance_params: snapshot.governance_params,
-        };
-        // Reconcile epoch after loading stale snapshot
-        if let Some(round) = engine.last_finalized_round {
-            let expected_epoch = crate::constants::epoch_of(round);
-            if expected_epoch != engine.current_epoch {
-                engine.recalculate_active_set();
-                engine.current_epoch = expected_epoch;
-            }
-        }
-        Ok(engine)
+        crate::state::db::load_from_redb(path)
     }
 
     /// Check if saved state exists
     pub fn exists(path: &std::path::Path) -> bool {
-        crate::state::persistence::StateSnapshot::exists(path)
+        path.exists()
     }
 }
 
@@ -1006,7 +1088,7 @@ mod tests {
                 Transaction::Transfer(t) => t.fee,
                 _ => 0,
             }
-        }).sum();
+        }).fold(0u64, |acc, x| acc.saturating_add(x));
         let reward = crate::constants::block_reward(height);
         let coinbase = CoinbaseTx {
             to: *proposer,
