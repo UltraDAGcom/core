@@ -38,6 +38,11 @@ impl Block {
     }
 }
 
+/// Compute Merkle root from leaf hashes.
+///
+/// Includes the leaf count in the final hash to prevent CVE-2012-2459
+/// (duplicate trailing leaf attack where `[A,B,C]` and `[A,B,C,C]`
+/// would otherwise produce the same root).
 pub fn merkle_root(leaves: &[[u8; 32]]) -> [u8; 32] {
     if leaves.is_empty() {
         return [0u8; 32];
@@ -46,6 +51,7 @@ pub fn merkle_root(leaves: &[[u8; 32]]) -> [u8; 32] {
         return leaves[0];
     }
 
+    let leaf_count = leaves.len();
     let mut level = leaves.to_vec();
     while level.len() > 1 {
         if !level.len().is_multiple_of(2) {
@@ -63,7 +69,11 @@ pub fn merkle_root(leaves: &[[u8; 32]]) -> [u8; 32] {
             })
             .collect();
     }
-    level[0]
+    // Mix in leaf count to prevent CVE-2012-2459 duplicate-leaf collision
+    let mut final_hasher = blake3::Hasher::new();
+    final_hasher.update(&level[0]);
+    final_hasher.update(&(leaf_count as u64).to_le_bytes());
+    *final_hasher.finalize().as_bytes()
 }
 
 #[cfg(test)]

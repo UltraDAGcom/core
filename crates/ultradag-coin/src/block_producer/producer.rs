@@ -17,14 +17,9 @@ pub fn create_block(
     let mut txs: Vec<Transaction> = mempool.best(constants::MAX_TXS_PER_BLOCK);
     // Sort by (sender, nonce) to ensure valid execution order for sequential nonces
     txs.sort_by(|a, b| a.from().0.cmp(&b.from().0).then(a.nonce().cmp(&b.nonce())));
-    let total_fees: u64 = txs.iter().map(|tx| {
-        match tx {
-            Transaction::Transfer(t) => t.fee,
-            Transaction::CreateProposal(t) => t.fee,
-            Transaction::Vote(t) => t.fee,
-            Transaction::Stake(_) | Transaction::Unstake(_) => 0,
-        }
-    }).fold(0u64, |acc, f| acc.saturating_add(f));
+    let total_fees: u64 = txs.iter()
+        .map(|tx| tx.fee())
+        .fold(0u64, |acc, f| acc.saturating_add(f));
 
     let coinbase = CoinbaseTx {
         to: *validator_address,

@@ -387,6 +387,29 @@ impl StateEngine {
             a.round.cmp(&b.round).then_with(|| a.hash().cmp(&b.hash()))
         });
 
+        // Deterministic equivocation detection: if two vertices from the same
+        // validator appear in the same round, slash the validator. This is the
+        // ONLY place slashing happens — P2P handlers only broadcast evidence.
+        // All nodes process the same sorted finality batch, so slashing is
+        // deterministic and cannot cause state divergence.
+        {
+            let mut seen: std::collections::HashMap<(crate::Address, u64), usize> =
+                std::collections::HashMap::new();
+            for v in &sorted {
+                let key = (v.validator, v.round);
+                *seen.entry(key).or_insert(0) += 1;
+            }
+            for ((validator, round), count) in &seen {
+                if *count > 1 {
+                    tracing::warn!(
+                        "Deterministic slash: validator {} equivocated in round {} ({} vertices)",
+                        validator.to_hex(), round, count
+                    );
+                    self.slash(validator);
+                }
+            }
+        }
+
         if self.total_staked() > 0 {
             // Stake-proportional mode: validator count per round for equal-split fallback
             let mut round_counts: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();

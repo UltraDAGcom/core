@@ -110,35 +110,6 @@ fn insert_orphan(orphans: &mut HashMap<[u8; 32], DagVertex>, hash: [u8; 32], ver
     orphans.insert(hash, vertex);
 }
 
-/// Execute slashing for a single validator: slash stake, remove from finality, log result.
-///
-/// Lock ordering: state (scoped) -> drop -> finality (scoped) -> drop.
-async fn execute_slash(
-    state: &Arc<RwLock<StateEngine>>,
-    finality: &Arc<RwLock<FinalityTracker>>,
-    validator: &Address,
-) {
-    let mut state_w = state.write().await;
-    let stake_before = state_w.stake_of(validator);
-    state_w.slash(validator);
-    let stake_after = state_w.stake_of(validator);
-    let burned = stake_before.saturating_sub(stake_after);
-    drop(state_w);
-
-    {
-        let mut fin_w = finality.write().await;
-        fin_w.remove_validator(validator);
-    }
-
-    warn!(
-        "Slashed validator {}: burned {} UDAG for equivocation (stake: {} -> {})",
-        validator.to_hex(),
-        burned as f64 / ultradag_coin::SATS_PER_UDAG as f64,
-        stake_before as f64 / ultradag_coin::SATS_PER_UDAG as f64,
-        stake_after as f64 / ultradag_coin::SATS_PER_UDAG as f64
-    );
-}
-
 /// Shared finality+state application logic used by DagProposal, DagVertices,
 /// resolve_orphans, and ParentVertices handlers.
 ///
@@ -1053,9 +1024,10 @@ async fn handle_peer(
                             "Detected equivocation from validator {} in round {} (peer {})",
                             validator, round, peer_addr,
                         );
-                        
-                        // Execute slashing immediately
-                        execute_slash(&state, &finality, &validator).await;
+
+                        // Slashing is applied deterministically during finalized vertex
+                        // application in StateEngine, not here. We only broadcast evidence
+                        // so other nodes can detect and record the equivocation.
 
                         let dag_w = dag.read().await;
                         if let Some([hash1, hash2]) = dag_w.get_equivocation_evidence(&validator, round) {
@@ -1251,13 +1223,9 @@ async fn handle_peer(
                         }
                     }
                     drop(dag_w);
-                    
-                    // Execute slashing for all equivocating validators
-                    for validator in &equivocating_validators {
-                        execute_slash(&state, &finality, validator).await;
-                    }
-                    
-                    // Broadcast equivocation evidence after loop
+
+                    // Slashing applied deterministically during finalized vertex
+                    // application — not here. Broadcast evidence so peers record it.
                     for msg in equivocation_msgs {
                         peers.broadcast(&msg, "").await;
                     }
@@ -1334,12 +1302,10 @@ async fn handle_peer(
                         "Marked validator {} as Byzantine due to equivocation in round {} (evidence from {})",
                         validator_addr, vertex1.round, peer_addr
                     );
-                    
-                    // Execute slashing immediately
                     drop(dag_w);
-                    execute_slash(&state, &finality, &validator_addr).await;
-                    
-                    // Broadcast evidence to all other peers
+
+                    // Slashing applied deterministically during finalized vertex
+                    // application — not here. Broadcast evidence so peers record it.
                     let evidence_msg = Message::EquivocationEvidence {
                         vertex1: vertex1.clone(),
                         vertex2: vertex2.clone(),

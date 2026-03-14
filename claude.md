@@ -8,10 +8,13 @@
 
 ## Recent Updates (March 2026)
 
-**Cross-Crate Code Quality Pass (March 14, 2026):**
-- **Fee extraction DRY violation** — 5 inline `match tx { Transfer(t) => t.fee, ... }` blocks in `pool.rs` (3), `block.rs` (1), and `engine.rs` (1) duplicated the logic in `Transaction::fee()`. All replaced with `tx.fee()` calls.
-- **`hex_short` deduplicated** — Identical `fn hex_short(hash: &[u8; 32]) -> String` in `server.rs` and `validator.rs`. Made pub in server.rs, re-exported via `ultradag_network::hex_short`, removed duplicate from validator.rs.
+**Consensus Correctness & Security Pass (March 14, 2026):**
+- **CRITICAL: Slashing made deterministic** — Slashing was triggered via P2P side-channel (`execute_slash` called from DagProposal, DagVertices, and EquivocationEvidence handlers). Different nodes could slash at different points depending on message arrival order, causing `total_supply` divergence and checkpoint co-signing failure. Fix: removed all 3 `execute_slash` calls from P2P handlers (and the function itself). Slashing now happens deterministically in `apply_finalized_vertices()` — detects duplicate (validator, round) pairs in the sorted finality batch and calls `slash()` before vertex application. All nodes process the same sorted batch, so slashing is deterministic. P2P handlers still broadcast evidence for peer awareness.
+- **Merkle tree CVE-2012-2459 mitigation** — `merkle_root()` duplicated the last leaf for odd counts, making `[A,B,C]` and `[A,B,C,C]` produce the same root. Fix: mix leaf count into final hash via `blake3(tree_root || leaf_count_u64_le)`. While not practically exploitable in this system (duplicate tx hashes require identical nonces), this eliminates a theoretical concern. Breaking change — requires clean testnet restart.
+- **Fee extraction DRY** — 6 inline `match tx { Transfer(t) => t.fee, ... }` blocks in `pool.rs` (3), `block.rs` (1), `engine.rs` (1), `producer.rs` (1) replaced with `tx.fee()` calls.
+- **`hex_short` deduplicated** — Identical function in `server.rs` and `validator.rs`. Made pub in server.rs, re-exported via `ultradag_network::hex_short`, removed duplicate.
 - **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+- **Breaking change:** Merkle root computation changed. Clean testnet restart required.
 
 **Node Crate Quality Pass (March 14, 2026):**
 - **MEMORY_CACHE OnceLock bug** — `get_memory_usage()` used `OnceLock<(Option<u64>, Instant)>` which can only be set once. The "30 second refresh" logic was dead code — `OnceLock::set()` silently fails after first `get_or_init()`. Replaced with `tokio::sync::Mutex` for proper refresh. Uses `try_lock()` to avoid blocking RPC on contention.
@@ -671,10 +674,7 @@ When a vertex fails insertion due to missing parents, the node:
   - Observer reward = `block_reward(h) × (own_stake / total_stake) × 20 / 100`
 - **Slashing**: 50% stake burn on equivocation (slashed amount removed from total_supply)
   - **Slash policy**: slash immediately removes from active validator set if stake drops below `MIN_STAKE_SATS`. Security trumps epoch stability — Byzantine actors should not continue earning rewards.
-  - **Implementation**: Slashing executes automatically at 3 detection points:
-    1. `DagProposal` handler: when node locally detects equivocation during vertex insertion
-    2. `DagVertices` sync handler: when equivocation detected during batch sync
-    3. `EquivocationEvidence` message handler: when peer reports evidence
+  - **Implementation**: Slashing is deterministic — applied during `apply_finalized_vertices()` when duplicate (validator, round) pairs are detected in the sorted finality batch. All nodes process the same sorted batch, so slashing is applied at the same logical point. P2P handlers (DagProposal, DagVertices, EquivocationEvidence) only broadcast evidence for peer awareness but do NOT modify state.
   - **Evidence storage**: Equivocation evidence stored permanently in `evidence_store` (survives pruning)
   - **Logging**: Emits clear log with validator address, burned amount, and stake before/after
   - **Current limitation**: No reporter rewards yet — validators aren't economically incentivized to submit evidence they witness. On small testnets this is fine (nodes naturally detect equivocation), but larger networks would benefit from reporter rewards (medium-priority future enhancement).
@@ -1774,6 +1774,10 @@ UltraDAG is offering rewards for security researchers who discover and responsib
     - **Fix:** Replaced all with `tx.fee()` calls.
 114. **`hex_short` duplicated across crates (March 14, 2026)** — Identical function in `server.rs` and `validator.rs` for formatting hash prefixes as hex.
     - **Fix:** Made pub in server.rs, re-exported via `ultradag_network::hex_short`, removed duplicate.
+115. **CRITICAL: Slashing non-deterministic across nodes (March 14, 2026)** — `execute_slash()` was called from 3 P2P handlers (DagProposal, DagVertices, EquivocationEvidence) whenever equivocation was detected. P2P message arrival order is non-deterministic, so different nodes could slash at different points, causing `total_supply` divergence and checkpoint co-signing failure. A fundamental consensus correctness issue.
+    - **Fix:** Removed all 3 `execute_slash` calls and the function itself from server.rs. Slashing now happens deterministically in `apply_finalized_vertices()` — scans sorted finality batch for duplicate (validator, round) pairs and slashes before vertex application. All nodes process the same sorted batch. P2P handlers only broadcast evidence.
+116. **Merkle tree CVE-2012-2459 duplicate-leaf collision (March 14, 2026)** — `merkle_root()` duplicated the last leaf for odd counts. `[A,B,C]` and `[A,B,C,C]` produced the same root. While not practically exploitable (duplicate tx hashes require identical nonces), this is a known vulnerability class.
+    - **Fix:** Mix leaf count into final hash: `blake3(tree_root || leaf_count_u64_le)`. Breaking change — requires clean testnet restart.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.
