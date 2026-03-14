@@ -18,6 +18,9 @@ pub struct PeerRegistry {
     /// Maps writer key (possibly ephemeral port) → canonical listen address.
     /// Used to clean up connected_listen_addrs when a peer is removed by writer key.
     writer_to_listen: Arc<RwLock<HashMap<String, String>>>,
+    /// Addresses currently being connected to (prevents TOCTOU race in try_connect_peer).
+    /// A task sets this before TCP connect and clears it after writer is added or on failure.
+    connecting: Arc<RwLock<HashSet<String>>>,
 }
 
 impl PeerRegistry {
@@ -27,7 +30,21 @@ impl PeerRegistry {
             writers: Arc::new(RwLock::new(HashMap::new())),
             connected_listen_addrs: Arc::new(RwLock::new(HashSet::new())),
             writer_to_listen: Arc::new(RwLock::new(HashMap::new())),
+            connecting: Arc::new(RwLock::new(HashSet::new())),
         }
+    }
+
+    /// Atomically mark an address as "connecting" to prevent duplicate connection attempts.
+    /// Returns true if the address was not already being connected to (caller should proceed).
+    /// Returns false if another task is already connecting (caller should skip).
+    pub async fn start_connecting(&self, addr: &str) -> bool {
+        let mut set = self.connecting.write().await;
+        set.insert(addr.to_string())
+    }
+
+    /// Clear the "connecting" flag for an address after connection attempt completes.
+    pub async fn finish_connecting(&self, addr: &str) {
+        self.connecting.write().await.remove(addr);
     }
 
     pub async fn add_known(&self, addr: String) {

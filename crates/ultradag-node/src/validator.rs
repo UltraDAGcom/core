@@ -467,12 +467,11 @@ pub async fn validator_loop(
                         ultradag_coin::consensus::compute_checkpoint_hash(&prev_cp)
                     }
                     _ => {
-                        // Missing previous checkpoint breaks chain verification.
-                        // This can happen on first checkpoint after node restart or clean deploy.
-                        // Peers will still accept the checkpoint if they can verify signatures,
-                        // but chain verification will fail for new nodes doing fast-sync.
-                        error!("Previous checkpoint at round {} not found — checkpoint chain will be broken. Verify disk integrity.", prev_round);
-                        [0u8; 32]
+                        // Missing previous checkpoint would break chain verification.
+                        // Skip this checkpoint rather than producing one with [0u8; 32]
+                        // that permanently breaks fast-sync for new nodes.
+                        error!("Previous checkpoint at round {} not found — skipping checkpoint production. Verify disk integrity.", prev_round);
+                        continue;
                     }
                 }
             };

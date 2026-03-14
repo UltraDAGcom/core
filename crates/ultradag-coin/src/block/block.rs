@@ -43,7 +43,7 @@ impl Block {
     }
 }
 
-fn merkle_root(leaves: &[[u8; 32]]) -> [u8; 32] {
+pub fn merkle_root(leaves: &[[u8; 32]]) -> [u8; 32] {
     if leaves.is_empty() {
         return [0u8; 32];
     }

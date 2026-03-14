@@ -183,6 +183,13 @@ pub const MIN_DAO_VALIDATORS: usize = 8;
 /// Maximum proposals active simultaneously (prevents state bloat).
 pub const MAX_ACTIVE_PROPOSALS: usize = 20;
 
+/// Maximum number of rounds a vertex can be ahead of the current DAG round.
+/// Rejects vertices more than this many rounds in the future.
+pub const MAX_FUTURE_ROUNDS: u64 = 10;
+
+/// Percentage of stake burned on equivocation (slashing).
+pub const SLASH_PERCENTAGE: u64 = 50;
+
 /// Maximum title length in bytes.
 pub const PROPOSAL_TITLE_MAX_BYTES: usize = 128;
 

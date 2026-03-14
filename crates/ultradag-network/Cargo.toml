@@ -16,6 +16,10 @@ tracing = { workspace = true }
 rand = { workspace = true }
 hostname = "0.4"
 
+[features]
+test-helpers = []
+
 [dev-dependencies]
 chrono = "0.4"
 futures = "0.3"
+ultradag-network = { path = ".", features = ["test-helpers"] }

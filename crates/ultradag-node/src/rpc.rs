@@ -157,16 +157,35 @@ fn status_cache() -> &'static tokio::sync::Mutex<Option<StatusResponse>> {
     STATUS_CACHE.get_or_init(|| tokio::sync::Mutex::new(None))
 }
 
-/// Get current process memory usage in bytes (cached to avoid subprocess spam)
+/// Get current process memory usage in bytes (cached 30s to avoid subprocess spam).
 fn get_memory_usage() -> Option<u64> {
-    use std::sync::OnceLock;
-    use std::time::{Duration, Instant};
-    
-    static MEMORY_CACHE: OnceLock<(Option<u64>, Instant)> = OnceLock::new();
-    
-    let (cached_memory, cached_time) = MEMORY_CACHE.get_or_init(|| {
-        #[cfg(target_os = "linux")]
-        let memory = std::fs::read_to_string("/proc/self/status")
+    use std::time::Instant;
+
+    static MEMORY_CACHE: tokio::sync::Mutex<(Option<u64>, Option<Instant>)> =
+        tokio::sync::Mutex::const_new((None, None));
+
+    // Try non-blocking acquire to avoid stalling RPC on contention
+    let mut cache = match MEMORY_CACHE.try_lock() {
+        Ok(guard) => guard,
+        Err(_) => return None,
+    };
+
+    if let Some(cached_time) = cache.1 {
+        if cached_time.elapsed() < Duration::from_secs(30) {
+            return cache.0;
+        }
+    }
+
+    let memory = read_process_memory();
+    *cache = (memory, Some(Instant::now()));
+    memory
+}
+
+/// Read process RSS from OS-specific source.
+fn read_process_memory() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        std::fs::read_to_string("/proc/self/status")
             .ok()
             .and_then(|content| {
                 content.lines()
@@ -175,37 +194,26 @@ fn get_memory_usage() -> Option<u64> {
                         line.split_whitespace()
                             .nth(1)
                             .and_then(|kb| kb.parse::<u64>().ok())
-                            .map(|kb| kb * 1024) // Convert KB to bytes
+                            .map(|kb| kb * 1024)
                     })
-            });
-        
-        #[cfg(target_os = "macos")]
-        let memory = {
-            use std::process::Command;
-            Command::new("ps")
-                .args(["-o", "rss=", "-p", &std::process::id().to_string()])
-                .output()
-                .ok()
-                .and_then(|output| {
-                    String::from_utf8(output.stdout)
-                        .ok()
-                        .and_then(|s| s.trim().parse::<u64>().ok())
-                        .map(|kb| kb * 1024) // Convert KB to bytes
-                })
-        };
-        
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-        let memory = None;
-        
-        (memory, Instant::now())
-    });
-    
-    // Cache for 30 seconds to avoid subprocess spam
-    if cached_time.elapsed() < Duration::from_secs(30) {
-        *cached_memory
-    } else {
-        // Clear cache and return None (will be refreshed on next call)
-        let _ = MEMORY_CACHE.set((None, Instant::now()));
+            })
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        Command::new("ps")
+            .args(["-o", "rss=", "-p", &std::process::id().to_string()])
+            .output()
+            .ok()
+            .and_then(|output| {
+                String::from_utf8(output.stdout)
+                    .ok()
+                    .and_then(|s| s.trim().parse::<u64>().ok())
+                    .map(|kb| kb * 1024)
+            })
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
         None
     }
 }
@@ -217,8 +225,16 @@ fn get_cpu_usage() -> Option<f32> {
     None
 }
 
-/// Get system uptime in seconds (best-effort, returns None on failure)
+/// Get process uptime in seconds.
 fn get_uptime() -> Option<u64> {
+    static PROCESS_START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    let start = PROCESS_START.get_or_init(std::time::Instant::now);
+    Some(start.elapsed().as_secs())
+}
+
+/// Unused — kept for reference.
+#[allow(dead_code)]
+fn get_system_uptime() -> Option<u64> {
     #[cfg(target_os = "linux")]
     {
         std::fs::read_to_string("/proc/uptime")
@@ -241,7 +257,6 @@ fn get_uptime() -> Option<u64> {
                 String::from_utf8(output.stdout)
                     .ok()
                     .and_then(|s| {
-                        // Parse "{ sec = 1234567890, usec = 0 }" format
                         s.split("sec = ")
                             .nth(1)
                             .and_then(|s| s.split(',').next())

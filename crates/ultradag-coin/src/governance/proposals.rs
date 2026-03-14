@@ -45,19 +45,19 @@ impl Proposal {
     }
 
     /// Check if proposal passed with governance-adjustable thresholds.
+    /// Uses u128 for intermediate calculations to prevent overflow with large staked values.
     pub fn has_passed_with_params(&self, total_staked: u64, params: &GovernanceParams) -> bool {
-        let quorum = total_staked
-            .saturating_mul(params.quorum_numerator)
-            .saturating_add(GOVERNANCE_QUORUM_DENOMINATOR - 1)
-            / GOVERNANCE_QUORUM_DENOMINATOR;
+        // Use u128 to prevent overflow: total_staked * quorum_numerator can exceed u64
+        let quorum = ((total_staked as u128 * params.quorum_numerator as u128
+            + GOVERNANCE_QUORUM_DENOMINATOR as u128 - 1)
+            / GOVERNANCE_QUORUM_DENOMINATOR as u128) as u64;
         let total = self.total_votes();
         if total < quorum {
             return false;
         }
-        let threshold = total
-            .saturating_mul(params.approval_numerator)
-            .saturating_add(GOVERNANCE_APPROVAL_DENOMINATOR - 1)
-            / GOVERNANCE_APPROVAL_DENOMINATOR;
+        let threshold = ((total as u128 * params.approval_numerator as u128
+            + GOVERNANCE_APPROVAL_DENOMINATOR as u128 - 1)
+            / GOVERNANCE_APPROVAL_DENOMINATOR as u128) as u64;
         self.votes_for >= threshold
     }
 

@@ -123,6 +123,10 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
         let gp_bytes = postcard::to_allocvec(engine.governance_params())
             .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
         table.insert("governance_params", gp_bytes.as_slice())?;
+
+        if let Some(cvc) = engine.configured_validator_count() {
+            table.insert("configured_validator_count", cvc.to_le_bytes().as_slice())?;
+        }
     }
 
     txn.commit()?;
@@ -208,6 +212,11 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         }
     }
 
+    let configured_validator_count = {
+        let raw = read_u64(&meta, "configured_validator_count")?;
+        if raw > 0 { Some(raw) } else { None }
+    };
+
     let mut engine = StateEngine::from_parts(
         accounts,
         stake_accounts,
@@ -219,6 +228,7 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         votes,
         next_proposal_id,
         governance_params,
+        configured_validator_count,
     );
 
     // Reconcile epoch after loading

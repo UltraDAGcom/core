@@ -1,5 +1,5 @@
 use crate::address::Address;
-use crate::block::{Block, BlockHeader};
+use crate::block::{Block, BlockHeader, merkle_root};
 use crate::constants;
 use crate::tx::{CoinbaseTx, Mempool, Transaction};
 
@@ -32,12 +32,12 @@ pub fn create_block(
         height,
     };
 
-    // Build merkle root
+    // Build merkle root (uses shared implementation from block module)
     let mut leaves: Vec<[u8; 32]> = vec![coinbase.hash()];
     for tx in &txs {
         leaves.push(tx.hash());
     }
-    let merkle_root = compute_merkle(&leaves);
+    let root = merkle_root(&leaves);
 
     let timestamp = chrono::Utc::now().timestamp();
 
@@ -46,7 +46,7 @@ pub fn create_block(
         height,
         timestamp,
         prev_hash,
-        merkle_root,
+        merkle_root: root,
     };
 
     Block {
@@ -54,28 +54,4 @@ pub fn create_block(
         coinbase,
         transactions: txs,
     }
-}
-
-fn compute_merkle(leaves: &[[u8; 32]]) -> [u8; 32] {
-    if leaves.len() == 1 {
-        return leaves[0];
-    }
-    let mut level = leaves.to_vec();
-    while level.len() > 1 {
-        if !level.len().is_multiple_of(2) {
-            // SAFETY: level.len() > 1 guarantees last() exists
-            let last = level.last().expect("level has at least 1 element");
-            level.push(*last);
-        }
-        level = level
-            .chunks(2)
-            .map(|pair| {
-                let mut h = blake3::Hasher::new();
-                h.update(&pair[0]);
-                h.update(&pair[1]);
-                *h.finalize().as_bytes()
-            })
-            .collect();
-    }
-    level[0]
 }

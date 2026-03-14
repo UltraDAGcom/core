@@ -23,7 +23,8 @@ pub struct DagVertex {
     /// Pre-computed topological level: max(parent.topo_level) + 1.
     /// Used for O(N log N) deterministic ordering without ancestor traversal.
     /// Derived data — not included in hash() or signable_bytes().
-    #[serde(default)]
+    /// Skipped in serialization; recomputed on DAG insert.
+    #[serde(skip)]
     pub topo_level: u64,
 }
 

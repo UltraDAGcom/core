@@ -2459,6 +2459,7 @@ dependencies = [
  "tokio",
  "tracing",
  "ultradag-coin",
+ "ultradag-network",
 ]
 
 [[package]]

@@ -8,6 +8,39 @@
 
 ## Recent Updates (March 2026)
 
+**Node Crate Quality Pass (March 14, 2026):**
+- **MEMORY_CACHE OnceLock bug** — `get_memory_usage()` used `OnceLock<(Option<u64>, Instant)>` which can only be set once. The "30 second refresh" logic was dead code — `OnceLock::set()` silently fails after first `get_or_init()`. Replaced with `tokio::sync::Mutex` for proper refresh. Uses `try_lock()` to avoid blocking RPC on contention.
+- **`get_uptime()` returned system uptime, not process uptime** — Read `/proc/uptime` (Linux) or `kern.boottime` (macOS), returning time since system boot. Replaced with `Instant::now()` captured in `OnceLock` at first call, returning process uptime. Old system uptime logic preserved as `get_system_uptime()`.
+- **Checkpoint chain silently broken on missing predecessor** — When previous checkpoint not found on disk, produced checkpoint with `prev_checkpoint_hash = [0u8; 32]`, permanently breaking the hash chain for fast-sync. Now skips checkpoint production entirely (`continue`) and logs at error level. Chain integrity preserved — other validators with the previous checkpoint will produce valid checkpoints.
+- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+
+**Network Layer Hardening (March 14, 2026):**
+- **Orphan buffer eviction** — When orphan buffer reaches capacity (1000 entries / 50MB), evicts the vertex with the lowest round (oldest, least likely to resolve) instead of silently dropping new orphans. `insert_orphan()` helper used by all 3 insertion sites (DagProposal, DagVertices, ParentVertices).
+- **Vertex size accuracy** — Replaced `estimate_vertex_size()` (500 bytes per tx, underestimated governance txs) with `vertex_byte_size()` using `postcard::to_allocvec` for exact serialized size.
+- **peer_max_round reflects reality** — Changed from `fetch_max()` (monotonic, never decreases) to `store()` in Hello/HelloAck handlers. After clean deploy (network reset), peer_max_round now decreases to match actual network state.
+- **is_self_address deduplicated** — Extracted `is_self_addr(addr, port)` free function. `NodeServer::is_self_address` and `try_connect_peer` both delegate to it, eliminating ~50 lines of duplicated loopback/Fly.io/.internal/hostname checks.
+- **Heartbeat reconnect threshold raised** — `MIN_PEERS_FOR_RECONNECT = 4` (was hardcoded `3`). Must be above the validator production gate (2 peers) to prevent production stalls between heartbeat cycles.
+- **GetRoundHashes rate limited** — Added 10-second per-peer cooldown for `GetRoundHashes` requests. Prevents abuse where a peer floods the node with expensive DAG hash queries.
+- **banned_peers dead code removed** — Field existed on NodeServer but no peer was ever banned (insert never called). Removed field, initialization, and IP ban check from `listen()`.
+- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+
+**Network Crate Quality Pass (March 14, 2026):**
+- **TOCTOU race in `try_connect_peer`** — Two tasks checking `is_listen_addr_connected` simultaneously could both proceed to connect, creating duplicate connections. Added `connecting: HashSet<String>` to PeerRegistry with `start_connecting()`/`finish_connecting()` methods. `try_connect_peer` atomically marks address as connecting before TCP connect, clears on success or failure. All early return paths call `finish_connecting`.
+- **Orphan resolution loop bounded** — `resolve_orphans` while loop had no iteration limit. A malicious peer sending carefully crafted orphan chains could cause unbounded processing. Added `MAX_ORPHAN_RESOLUTION_PASSES = 10` constant to cap iterations per invocation.
+- **GetDagVertices rate limited** — Added 2-second per-peer cooldown for `GetDagVertices` requests in DagVertices handler. Prevents a peer from flooding the node with expensive DAG sync queries.
+- **`send_raw`/`send_raw_len` gated behind feature flag** — Test-only methods on PeerWriter were compiled into production builds. Moved behind `#[cfg(any(test, feature = "test-helpers"))]`. Added `test-helpers` feature to ultradag-network Cargo.toml, activated in `[dev-dependencies]` for integration tests.
+- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+
+**Coin Crate Quality Pass (March 14, 2026):**
+- **CRITICAL: `select_parents` determinism fix** — Sort by `(score, tip_hash)` instead of just `score`. If two tips have the same blake3 first-8-bytes score (collision), the unstable sort was non-deterministic. Added tiebreaker on tip hash for guaranteed consensus-critical determinism.
+- **Governance u128 overflow prevention** — `has_passed_with_params()` now uses u128 for intermediate quorum/threshold calculations. Previously `total_staked.saturating_mul(quorum_numerator)` could silently saturate to u64::MAX with large staked values, producing incorrect quorum calculations.
+- **Equivocation vertices pruned by round** — `equivocation_vertices` (rejected vertices stored for evidence broadcasting) were never pruned — they're not in `self.rounds` so the per-hash removal during pruning never caught them. Added `retain(|_, v| v.round >= new_floor)` after round-based pruning. Prevents unbounded memory growth proportional to chain lifetime.
+- **`topo_level` changed to `#[serde(skip)]`** — Was `#[serde(default)]`, meaning serialized vertices could carry incorrect topo_level values. Since topo_level is always recomputed on DAG insert, `skip` makes the derived nature explicit and saves serialization bytes.
+- **`configured_validator_count` persisted in redb** — Previously set at runtime via `--validators N` but lost on restart. Now saved/loaded via the METADATA table in state.redb. Also added to `from_parts()` constructor parameter list so redb loading restores it.
+- **Duplicate merkle root eliminated** — `block.rs::merkle_root()` made `pub` and re-exported from block module. `producer.rs::compute_merkle()` (identical 20-line duplicate) replaced with call to shared `merkle_root()`.
+- **Magic numbers moved to constants.rs** — `MAX_FUTURE_ROUNDS = 10` (was local const in dag.rs, duplicated in `insert()` and `try_insert()`) and `SLASH_PERCENTAGE = 50` (was local const in engine.rs `slash()`) now centralized in constants.rs for consistency and discoverability.
+- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+
 **Security Vulnerability Report Audit (March 13, 2026):**
 - **External report received with 20 claimed vulnerabilities (VULN-01 through VULN-20)**
 - **Triage result: 3 valid (all previously known/documented), 17 false positives or already mitigated**
@@ -22,7 +55,7 @@
 - **WAL + HWM removed** — `FinalityWal` (wal.rs) and high-water mark (monotonicity.rs) no longer used in production. redb's ACID guarantees replace both. server.rs function parameters reduced from 18 to 17. ~60 lines removed from main.rs startup.
 - **Postcard for P2P messages** — Replaced `serde_json` with `postcard` (zero-copy binary) for `Message::encode()`/`decode()`. ~40% smaller wire format for typical messages.
 - **ValidatorIndex struct** — `BlockDag` now carries `validator_index: ValidatorIndex` for compact bitmap indexing. Append-only, rebuilt on load.
-- **Tests:** 777 passed, 0 failed, 14 ignored (jepsen long-running).
+- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
 
 **Final Hardening Pass (March 13, 2026):**
 - **`/keygen` rate-limited** — Was the only mutation-free endpoint with no rate limit. Added `KEYGEN: 10/min` rate limit. Also added `"warning": "TESTNET ONLY"` to response JSON.
@@ -39,7 +72,7 @@
 - **Orphan buffer `.sum()` overflow fixed** — `orphan_buffer_bytes()` in server.rs used `.sum()`. Changed to `.fold(0usize, saturating_add)`.
 - **`block.rs total_fees()` `.sum()` overflow fixed** — `.sum()` → `.fold(0u64, saturating_add)`.
 - **`futures` and `chrono` moved to dev-dependencies** — Neither crate used in production code (only test code). Moved from `[dependencies]` to `[dev-dependencies]` in ultradag-network.
-- **Tests:** 777 passed, 0 failed, 14 ignored (jepsen long-running).
+- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
 
 **Comprehensive Quality & Security Max Pass (March 13, 2026):**
 - **11 unchecked `.sum()` overflow bugs fixed** — engine.rs (fee summation, supply invariant liquid+staked, test helper), rpc.rs (5 pending_cost calculations in /tx, /faucet, /stake, /proposal, /vote), main.rs (auto-stake pending_cost). All replaced with `.fold(0u64, |acc, x| acc.saturating_add(x))`.
@@ -671,6 +704,8 @@ When a vertex fails insertion due to missing parents, the node:
 - `GOVERNANCE_EXECUTION_DELAY_ROUNDS` = 2,016 rounds — Execution delay after proposal passes (~1.4 hours)
 - `MIN_DAO_VALIDATORS` = 8 — Minimum active validators for DAO governance execution. ParameterChange proposals stay in PassedPending (hibernation) below this threshold. TextProposals execute regardless. Self-healing: DAO reactivates when validator count recovers.
 - `MAX_ACTIVE_PROPOSALS` = 20 — Maximum simultaneous active proposals
+- `MAX_FUTURE_ROUNDS` = 10 — Reject vertices more than 10 rounds ahead of current DAG round
+- `SLASH_PERCENTAGE` = 50 — Percentage of stake burned on equivocation
 - `PROPOSAL_TITLE_MAX_BYTES` = 128 — Maximum proposal title length
 - `PROPOSAL_DESCRIPTION_MAX_BYTES` = 4096 — Maximum proposal description length
 
@@ -977,11 +1012,11 @@ cargo test --workspace
 
 ## Tests
 
-**777 tests passing** (all pass, zero failures, 14 ignored jepsen long-running tests):
+**779 tests passing** (all pass, zero failures, 14 ignored jepsen long-running tests):
 
 Run `cargo test --workspace --release` to verify:
 ```
-test result: ok. 777 passed; 0 failed; 14 ignored
+test result: ok. 779 passed; 0 failed; 14 ignored
 ```
 
 ### Test Breakdown by Crate:
@@ -1694,6 +1729,41 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 95. **DAO activation gate for governance execution (March 14, 2026)** — ParameterChange proposals could execute with as few as 1-2 validators controlling the network. A small group could change protocol parameters before decentralization is achieved.
     - **Fix:** Added `MIN_DAO_VALIDATORS = 8` constant. `dao_is_active()` checks `active_validator_set.len() >= 8`. `tick_governance()` skips ParameterChange execution when DAO is hibernating — proposals stay in `PassedPending` until the network has enough validators. TextProposals execute regardless (informational only, no protocol effect). Self-healing: DAO automatically reactivates when validator count recovers, and automatically hibernates if it drops.
     - **Tests:** 2 new integration tests: `test_dao_hibernation_blocks_parameter_change` (verifies hibernation + reactivation), `test_dao_hibernation_allows_text_proposals`. All 15 governance integration tests pass.
+96. **CRITICAL: `select_parents` non-deterministic on score collision (March 14, 2026)** — `scored_tips.sort_by_key(|(_, score)| *score)` is an unstable sort. If two tips have the same blake3 first-8-bytes score (u64 collision), their relative order is non-deterministic. Different nodes could select different parents, producing different vertices and potentially different DAG structures.
+    - **Fix:** Added tiebreaker: `sort_by(|(tip_a, score_a), (tip_b, score_b)| score_a.cmp(score_b).then_with(|| tip_a.cmp(tip_b)))`.
+    - **Impact:** Consensus-critical — all nodes must produce identical parent selections for the same inputs.
+97. **Governance quorum overflow on large staked values (March 14, 2026)** — `total_staked.saturating_mul(quorum_numerator)` would saturate to u64::MAX when total_staked is large (e.g., 10B sats × 10 = 100B, fine; but near u64::MAX values would silently cap). The resulting quorum would be wrong.
+    - **Fix:** Changed `has_passed_with_params()` to use u128 for intermediate quorum/threshold calculations, then cast back to u64.
+98. **Equivocation vertices never pruned (March 14, 2026)** — `equivocation_vertices` stored rejected vertices for evidence broadcasting but were never cleaned up. They're not in `self.rounds`, so the per-hash removal during `prune_old_rounds_with_depth()` never caught them. Memory grew unbounded proportional to equivocation frequency.
+    - **Fix:** Added `self.equivocation_vertices.retain(|_, v| v.round >= new_floor)` after round-based pruning.
+99. **`topo_level` leaked stale values via serialization (March 14, 2026)** — `#[serde(default)]` allowed serialized vertices to carry incorrect topo_level values. Since topo_level is always recomputed on DAG insert, this was harmless but semantically wrong.
+    - **Fix:** Changed to `#[serde(skip)]` to make the derived nature explicit and save wire bytes.
+100. **`configured_validator_count` lost on restart (March 14, 2026)** — Set at runtime via `--validators N` but never persisted in redb. After restart, pre-staking reward splitting used fallback `active_validator_count` instead of the configured value, potentially changing reward distribution.
+    - **Fix:** Saved in METADATA table as `configured_validator_count`. Loaded by `load_from_redb()`. Added to `from_parts()` constructor parameter list.
+101. **Duplicate merkle root implementations (March 14, 2026)** — `block.rs::merkle_root()` and `producer.rs::compute_merkle()` were identical 20-line functions.
+    - **Fix:** Made `block.rs::merkle_root()` public, exported from block module, removed duplicate from producer.rs.
+102. **Magic numbers scattered across files (March 14, 2026)** — `MAX_FUTURE_ROUNDS = 10` duplicated in `insert()` and `try_insert()` in dag.rs, `SLASH_PERCENTAGE = 50` local to engine.rs `slash()`.
+    - **Fix:** Moved both to `constants.rs`. dag.rs now uses `use crate::constants::MAX_FUTURE_ROUNDS`.
+103. **Network layer: orphan buffer had no eviction (March 14, 2026)** — When orphan buffer reached MAX_ORPHAN_ENTRIES or MAX_ORPHAN_BYTES, new orphans were silently dropped. Incoming vertices for rounds the node needed to catch up on could be lost.
+    - **Fix:** `insert_orphan()` helper evicts the vertex with the lowest round before inserting.
+104. **Network layer: peer_max_round never decreased (March 14, 2026)** — `fetch_max()` is monotonic — after a clean deploy (network reset to round 0), peer_max_round stayed at the pre-reset value, misleading sync decisions.
+    - **Fix:** Changed to `store()` in Hello/HelloAck handlers.
+105. **Network layer: banned_peers was dead code (March 14, 2026)** — Field, initialization, and ban check existed but no code ever added entries. Wasted a mutex lock on every incoming connection.
+    - **Fix:** Removed entirely.
+106. **TOCTOU race in `try_connect_peer` (March 14, 2026)** — Two tasks could simultaneously check `is_listen_addr_connected` (both return false), then both proceed to TCP connect and create duplicate connections to the same peer.
+    - **Fix:** Added `connecting: HashSet<String>` to PeerRegistry with atomic `start_connecting()`/`finish_connecting()` methods. `try_connect_peer` marks address as connecting before TCP connect, clears on all exit paths.
+107. **Orphan resolution loop unbounded (March 14, 2026)** — `resolve_orphans` while loop iterated without limit. Crafted orphan chains could cause unbounded processing per invocation.
+    - **Fix:** Added `MAX_ORPHAN_RESOLUTION_PASSES = 10` cap.
+108. **GetDagVertices no per-peer rate limit (March 14, 2026)** — DagVertices handler sent follow-up `GetDagVertices` requests with no cooldown. A peer responding rapidly could cause a tight request loop.
+    - **Fix:** Added 2-second cooldown via `last_get_dag_vertices: Option<Instant>` tracker.
+109. **`send_raw`/`send_raw_len` in production builds (March 14, 2026)** — Test-only methods on PeerWriter that send arbitrary bytes were compiled into production binary. Could theoretically be called via future code paths.
+    - **Fix:** Gated behind `#[cfg(any(test, feature = "test-helpers"))]` with new `test-helpers` feature flag.
+110. **MEMORY_CACHE never refreshes (March 14, 2026)** — `OnceLock<(Option<u64>, Instant)>` for memory usage caching can only be initialized once. The 30-second refresh logic (`MEMORY_CACHE.set()`) is a no-op after first `get_or_init()`. Memory usage reported by `/status` was frozen at the first-call value forever.
+    - **Fix:** Replaced with `tokio::sync::Mutex` allowing proper mutation. Uses `try_lock()` for non-blocking RPC.
+111. **`get_uptime()` returns system uptime (March 14, 2026)** — Read `/proc/uptime` or `kern.boottime`, returning time since system boot rather than process start. On Fly.io machines that rarely reboot, this could report days when the node process was just restarted.
+    - **Fix:** Process uptime via `Instant::now()` in `OnceLock`.
+112. **Broken checkpoint chain produced silently (March 14, 2026)** — When previous checkpoint not found on disk, `prev_checkpoint_hash` set to `[0u8; 32]` and checkpoint produced anyway. This permanently broke the hash chain for new node fast-sync — `verify_checkpoint_chain()` would reject all subsequent checkpoints.
+    - **Fix:** Skip checkpoint production (`continue`) instead of producing one with broken chain link. Other validators with the previous checkpoint will produce valid checkpoints.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.

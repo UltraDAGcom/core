@@ -68,6 +68,8 @@ impl PeerWriter {
     }
 
     /// Send raw bytes with a 4-byte length prefix (for testing malformed/oversized messages).
+    /// Only available in tests via the `test-helpers` feature.
+    #[cfg(any(test, feature = "test-helpers"))]
     pub async fn send_raw(&self, data: &[u8]) -> std::io::Result<()> {
         let len = (data.len() as u32).to_be_bytes();
         let mut writer = self.writer.lock().await;
@@ -78,6 +80,8 @@ impl PeerWriter {
     }
 
     /// Send a length prefix only (for testing oversized message rejection).
+    /// Only available in tests via the `test-helpers` feature.
+    #[cfg(any(test, feature = "test-helpers"))]
     pub async fn send_raw_len(&self, len: u32) -> std::io::Result<()> {
         let len_bytes = len.to_be_bytes();
         let mut writer = self.writer.lock().await;

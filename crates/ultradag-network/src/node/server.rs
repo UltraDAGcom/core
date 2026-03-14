@@ -32,24 +32,82 @@ const MAX_ORPHAN_ENTRIES: usize = 1000;
 /// Default batch size for DAG vertex sync requests.
 const DAG_SYNC_BATCH_SIZE: u32 = 50;
 
+/// Maximum passes through the orphan buffer in resolve_orphans.
+/// Prevents DoS via long dependency chains causing extended loop execution.
+const MAX_ORPHAN_RESOLUTION_PASSES: usize = 10;
+
 /// Maximum peers to include in a GetPeers response.
 const MAX_PEERS_RESPONSE: usize = 100;
+
+/// Minimum connected peers before heartbeat triggers seed reconnection.
+/// Must be above the validator production gate (MIN_PEERS_FOR_PRODUCTION in validator.rs = 2)
+/// to ensure production doesn't stall waiting for the next heartbeat cycle.
+const MIN_PEERS_FOR_RECONNECT: usize = 4;
+
+/// Check if an address refers to the local node (self-connection).
+/// Single implementation used by NodeServer::is_self_address and try_connect_peer.
+fn is_self_addr(addr: &str, port: u16) -> bool {
+    let loopback_addrs = [
+        format!("127.0.0.1:{}", port),
+        format!("0.0.0.0:{}", port),
+        format!("[::1]:{}", port),
+        format!("[::]:{}", port),
+        format!("localhost:{}", port),
+    ];
+    for self_addr in &loopback_addrs {
+        if addr == self_addr {
+            return true;
+        }
+    }
+
+    // Check Fly.io .internal hostname (e.g. ultradag-node-1.internal:9333)
+    if let Ok(app_name) = std::env::var("FLY_APP_NAME") {
+        let internal_addr = format!("{}.internal:{}", app_name, port);
+        if addr == internal_addr {
+            return true;
+        }
+    }
+
+    // Check system hostname
+    if let Ok(hostname) = hostname::get() {
+        if let Some(hostname_str) = hostname.to_str() {
+            if addr == format!("{}:{}", hostname_str, port) {
+                return true;
+            }
+        }
+    }
+
+    false
+}
 
 /// Round gap threshold to trigger fast-sync instead of incremental sync.
 const FAST_SYNC_GAP_THRESHOLD: u64 = 100;
 
-/// Estimate the byte size of a DagVertex for orphan buffer accounting.
-fn estimate_vertex_size(v: &DagVertex) -> usize {
-    // Each tx: from(32) + to(32) + amount(8) + fee(8) + nonce(8) + pub_key(32) + signature(64) + overhead ≈ 250 bytes
-    // Governance txs (CreateProposal) can be larger due to title+description (up to ~4KB)
-    let tx_size: usize = v.block.transactions.len() * 500; // conservative estimate
-    let parent_size = v.parent_hashes.len() * 32;
-    200 + tx_size + parent_size + 32 + 64 // base + txs + parents + pubkey + signature
+/// Compute the serialized byte size of a DagVertex for orphan buffer accounting.
+/// Uses postcard serialization for exact sizing (handles variable-length governance txs correctly).
+fn vertex_byte_size(v: &DagVertex) -> usize {
+    postcard::to_allocvec(v).map(|b| b.len()).unwrap_or(500)
 }
 
-/// Estimate total byte size of the orphan buffer.
+/// Compute total byte size of the orphan buffer.
 fn orphan_buffer_bytes(orphans: &HashMap<[u8; 32], DagVertex>) -> usize {
-    orphans.values().map(estimate_vertex_size).fold(0usize, |acc, s| acc.saturating_add(s))
+    orphans.values().map(vertex_byte_size).fold(0usize, |acc, s| acc.saturating_add(s))
+}
+
+/// Insert a vertex into the orphan buffer with eviction when full.
+/// When the buffer exceeds MAX_ORPHAN_ENTRIES or MAX_ORPHAN_BYTES, evicts the
+/// vertex with the lowest round (oldest, least likely to ever resolve).
+fn insert_orphan(orphans: &mut HashMap<[u8; 32], DagVertex>, hash: [u8; 32], vertex: DagVertex) {
+    if orphans.len() >= MAX_ORPHAN_ENTRIES || orphan_buffer_bytes(orphans) >= MAX_ORPHAN_BYTES {
+        // Evict the vertex with the lowest round number
+        if let Some(evict_hash) = orphans.iter()
+            .min_by_key(|(_, v)| v.round)
+            .map(|(h, _)| *h)
+        {
+            orphans.remove(&evict_hash);
+        }
+    }
+    orphans.insert(hash, vertex);
 }
 
 /// Execute slashing for a single validator: slash stake, remove from finality, log result.
@@ -185,8 +243,6 @@ pub struct NodeServer {
     pub data_dir: PathBuf,
     /// Validator secret key for co-signing checkpoints (None for observer nodes).
     pub validator_sk: Option<SecretKey>,
-    /// Peers banned for sending too many rejected vertices. Maps IP → unban time.
-    pub banned_peers: Arc<Mutex<HashMap<String, Instant>>>,
     /// Seed/bootstrap addresses for reconnection after peer loss.
     pub seed_addrs: Arc<Vec<String>>,
     /// Metrics for checkpoint production and synchronization.
@@ -220,7 +276,6 @@ impl NodeServer {
             sync_complete: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             data_dir: PathBuf::from("."),
             validator_sk: None,
-            banned_peers: Arc::new(Mutex::new(HashMap::new())),
             seed_addrs: Arc::new(Vec::new()),
             checkpoint_metrics: Arc::new(crate::CheckpointMetrics::new()),
             pruning_depth: 1000,
@@ -260,38 +315,7 @@ impl NodeServer {
     /// Compares against known local addresses: loopback, 0.0.0.0, and the
     /// Fly.io `.internal` hostname derived from FLY_APP_NAME.
     pub fn is_self_address(&self, addr: &str) -> bool {
-        // Check loopback and wildcard variants
-        let loopback_addrs = [
-            format!("127.0.0.1:{}", self.port),
-            format!("0.0.0.0:{}", self.port),
-            format!("[::1]:{}", self.port),
-            format!("[::]:{}", self.port),
-            format!("localhost:{}", self.port),
-        ];
-        for self_addr in &loopback_addrs {
-            if addr == self_addr {
-                return true;
-            }
-        }
-
-        // Check Fly.io .internal hostname (e.g. ultradag-node-1.internal:9333)
-        if let Ok(app_name) = std::env::var("FLY_APP_NAME") {
-            let internal_addr = format!("{}.internal:{}", app_name, self.port);
-            if addr == internal_addr {
-                return true;
-            }
-        }
-
-        // Check system hostname
-        if let Ok(hostname) = hostname::get() {
-            if let Some(hostname_str) = hostname.to_str() {
-                if addr == format!("{}:{}", hostname_str, self.port) {
-                    return true;
-                }
-            }
-        }
-
-        false
+        is_self_addr(addr, self.port)
     }
 
     /// Start listening for incoming connections.
@@ -354,17 +378,6 @@ impl NodeServer {
                         // Existing connection is dead — remove it and accept the new one
                         info!("Replacing dead connection {} with new connection from {}", existing, addr_str);
                         self.peers.remove_peer(&existing).await;
-                    }
-                }
-            }
-
-            // Check if this IP is banned
-            {
-                let banned = self.banned_peers.lock().await;
-                if let Some(&until) = banned.get(&remote_ip) {
-                    if Instant::now() < until {
-                        drop(stream);
-                        continue;
                     }
                 }
             }
@@ -467,7 +480,7 @@ impl NodeServer {
 
                 // Reconnect to seeds if peer count is low
                 let peer_count = peers.connected_count().await;
-                if peer_count < 3 && !seed_addrs.is_empty() {
+                if peer_count < MIN_PEERS_FOR_RECONNECT && !seed_addrs.is_empty() {
                     info!("Heartbeat: low peer count ({}), reconnecting to seeds...", peer_count);
                     for addr in seed_addrs.iter() {
                         let state = state.clone();
@@ -616,7 +629,9 @@ async fn resolve_orphans(
     _round_notify: &Arc<Notify>,
 ) {
     let mut resolved = true;
-    while resolved {
+    let mut passes = 0;
+    while resolved && passes < MAX_ORPHAN_RESOLUTION_PASSES {
+        passes += 1;
         resolved = false;
         let candidates: Vec<([u8; 32], DagVertex)> = {
             let orph = orphans.lock().await;
@@ -679,36 +694,10 @@ async fn try_connect_peer(
     let checkpoint_metrics = ctx.checkpoint_metrics;
     let sync_complete = ctx.sync_complete;
     let peer_max_round = ctx.peer_max_round;
-    // Don't connect to ourselves — check loopback, wildcard, .internal hostname
-    let loopback_addrs = [
-        format!("127.0.0.1:{}", listen_port),
-        format!("0.0.0.0:{}", listen_port),
-        format!("[::1]:{}", listen_port),
-        format!("[::]:{}", listen_port),
-        format!("localhost:{}", listen_port),
-    ];
-    for self_addr in &loopback_addrs {
-        if addr == *self_addr {
-            info!("Skipping self-connection to {}", addr);
-            return;
-        }
-    }
-    // Check Fly.io .internal hostname
-    if let Ok(app_name) = std::env::var("FLY_APP_NAME") {
-        let internal_addr = format!("{}.internal:{}", app_name, listen_port);
-        if addr == internal_addr {
-            info!("Skipping self-connection to {}", addr);
-            return;
-        }
-    }
-    // Check system hostname
-    if let Ok(hostname) = hostname::get() {
-        if let Some(hostname_str) = hostname.to_str() {
-            if addr == format!("{}:{}", hostname_str, listen_port) {
-                info!("Skipping self-connection to {}", addr);
-                return;
-            }
-        }
+    // Don't connect to ourselves
+    if is_self_addr(&addr, listen_port) {
+        info!("Skipping self-connection to {}", addr);
+        return;
     }
 
     // Check if already at max peers
@@ -726,12 +715,19 @@ async fn try_connect_peer(
         return;
     }
 
+    // Atomically mark as connecting to prevent TOCTOU race
+    // (another task could start connecting between our checks and TCP connect)
+    if !peers.start_connecting(&addr).await {
+        return; // Another task is already connecting to this address
+    }
+
     // Resolve DNS to IP and check for self-connection or duplicate
     if let Ok(mut resolved) = tokio::net::lookup_host(&addr).await {
         if let Some(socket_addr) = resolved.next() {
             // Self-connection check: if DNS resolves to loopback with our port
             if socket_addr.ip().is_loopback() && socket_addr.port() == listen_port {
                 info!("Skipping self-connection to {}", addr);
+                peers.finish_connecting(&addr).await;
                 return;
             }
             // Duplicate connection check
@@ -739,6 +735,7 @@ async fn try_connect_peer(
             let existing = peers.connected_addrs().await;
             for existing_addr in &existing {
                 if existing_addr.contains(&resolved_ip) {
+                    peers.finish_connecting(&addr).await;
                     return; // Already connected to this IP
                 }
             }
@@ -753,6 +750,7 @@ async fn try_connect_peer(
                 if let Ok(local) = stream.local_addr() {
                     if remote.ip() == local.ip() && remote.port() == listen_port {
                         info!("Skipping self-connection to {}", addr);
+                        peers.finish_connecting(&addr).await;
                         return;
                     }
                 }
@@ -761,6 +759,7 @@ async fn try_connect_peer(
                 for existing_addr in &existing {
                     if existing_addr.contains(&remote_ip) {
                         info!("Peer discovery: skipping {} — already connected to IP {}", addr, remote_ip);
+                        peers.finish_connecting(&addr).await;
                         return;
                     }
                 }
@@ -769,10 +768,12 @@ async fn try_connect_peer(
             // Re-check: another task may have connected in the meantime
             if peers.is_listen_addr_connected(&addr).await {
                 drop(stream);
+                peers.finish_connecting(&addr).await;
                 return;
             }
 
             info!("Peer discovery: connected to {}", addr);
+            peers.finish_connecting(&addr).await;
             peers.add_known(addr.clone()).await;
             peers.add_connected_listen_addr(addr.clone()).await;
 
@@ -832,6 +833,7 @@ async fn try_connect_peer(
             });
         }
         Err(e) => {
+            peers.finish_connecting(&addr).await;
             warn!("Peer discovery: failed to connect to {}: {}", addr, e);
         }
     }
@@ -877,6 +879,8 @@ async fn handle_peer(
 
     let peer_addr = reader.addr.clone();
     let mut allowlist_rejections: u32 = 0;
+    let mut last_round_hash_request: Option<Instant> = None;
+    let mut last_get_dag_vertices: Option<Instant> = None;
 
     loop {
         let msg = reader.recv().await?;
@@ -901,8 +905,12 @@ async fn handle_peer(
                     })
                     .await?;
 
-                // Track highest known peer round for sync progress detection
-                peer_max_round.fetch_max(height, std::sync::atomic::Ordering::Relaxed);
+                // Track current network round from this peer.
+                // Uses store() not fetch_max() so the value reflects the actual current
+                // network state. After a clean deploy (network reset), peers report low
+                // rounds and peer_max_round must decrease accordingly; fetch_max would
+                // keep the stale high value forever.
+                peer_max_round.store(height, std::sync::atomic::Ordering::Relaxed);
 
                 // If peer is ahead, sync from them
                 if height > our_round {
@@ -956,8 +964,8 @@ async fn handle_peer(
                         peer_addr, version, PROTOCOL_VERSION);
                     return Ok(());
                 }
-                // Track highest known peer round for sync progress detection
-                peer_max_round.fetch_max(height, std::sync::atomic::Ordering::Relaxed);
+                // Track current network round (see Hello handler for rationale on store vs fetch_max)
+                peer_max_round.store(height, std::sync::atomic::Ordering::Relaxed);
 
                 let our_round = dag.read().await.current_round();
                 if height > our_round {
@@ -1074,9 +1082,7 @@ async fn handle_peer(
                         // Buffer as orphan and request missing parents from peer
                         {
                             let mut orph = orphans.lock().await;
-                            if orph.len() < MAX_ORPHAN_ENTRIES && orphan_buffer_bytes(&orph) < MAX_ORPHAN_BYTES {
-                                orph.insert(vertex_hash, vertex);
-                            }
+                            insert_orphan(&mut orph, vertex_hash, vertex);
                         }
                         // Request the missing parent vertices (cap at 32)
                         let hashes: Vec<[u8; 32]> = missing.into_iter().take(32).collect();
@@ -1113,6 +1119,15 @@ async fn handle_peer(
             }
 
             Message::GetDagVertices { from_round, max_count } => {
+                // Rate limit: at most one GetDagVertices per 2s per peer
+                let now = Instant::now();
+                if let Some(last) = last_get_dag_vertices {
+                    if now.duration_since(last) < Duration::from_secs(2) {
+                        continue;
+                    }
+                }
+                last_get_dag_vertices = Some(now);
+
                 // Use try_read to avoid blocking if DAG is locked by validator/sync
                 let Some(dag_r) = dag.try_read().ok() else {
                     warn!("GetDagVertices: DAG lock contended, skipping for {}", peer_addr);
@@ -1138,6 +1153,15 @@ async fn handle_peer(
             }
 
             Message::GetRoundHashes { from_round, to_round } => {
+                // Rate limit: at most one GetRoundHashes per 10s per peer
+                let now = Instant::now();
+                if let Some(last) = last_round_hash_request {
+                    if now.duration_since(last) < Duration::from_secs(10) {
+                        continue;
+                    }
+                }
+                last_round_hash_request = Some(now);
+
                 let Some(dag_r) = dag.try_read().ok() else {
                     continue; // DAG locked, skip — will be retried next cycle
                 };
@@ -1242,9 +1266,7 @@ async fn handle_peer(
                 if !failed_vertices.is_empty() {
                     let mut orph = orphans.lock().await;
                     for (hash, vertex) in failed_vertices {
-                        if orph.len() < MAX_ORPHAN_ENTRIES && orphan_buffer_bytes(&orph) < MAX_ORPHAN_BYTES {
-                            orph.insert(hash, vertex);
-                        }
+                        insert_orphan(&mut orph, hash, vertex);
                     }
                 }
                 // Request missing parent vertices from the peer
@@ -1367,9 +1389,7 @@ async fn handle_peer(
                         Err(DagInsertError::MissingParents(missing)) => {
                             all_missing.extend(&missing);
                             let mut orph = orphans.lock().await;
-                            if orph.len() < MAX_ORPHAN_ENTRIES && orphan_buffer_bytes(&orph) < MAX_ORPHAN_BYTES {
-                                orph.insert(hash, vertex);
-                            }
+                            insert_orphan(&mut orph, hash, vertex);
                         }
                         _ => {}
                     }

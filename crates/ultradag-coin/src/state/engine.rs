@@ -73,6 +73,10 @@ impl StateEngine {
         self.configured_validator_count = Some(count);
     }
 
+    pub fn configured_validator_count(&self) -> Option<u64> {
+        self.configured_validator_count
+    }
+
     /// Create a new StateEngine with genesis pre-funding.
     /// All nodes must call this to start with identical initial state.
     pub fn new_with_genesis() -> Self {
@@ -632,9 +636,8 @@ impl StateEngine {
     /// boundary. Security trumps epoch stability — the active set is an optimization
     /// for predictability, not a shield for Byzantine actors.
     pub fn slash(&mut self, addr: &Address) {
-        const SLASH_PERCENTAGE: u64 = 50;
         if let Some(stake) = self.stake_accounts.get_mut(addr) {
-            let slash_amount = stake.staked.saturating_mul(SLASH_PERCENTAGE) / 100;
+            let slash_amount = stake.staked.saturating_mul(crate::constants::SLASH_PERCENTAGE) / 100;
             stake.staked = stake.staked.saturating_sub(slash_amount);
             // Slashed amount is burned (not credited anywhere)
             self.total_supply = self.total_supply.saturating_sub(slash_amount);
@@ -1013,6 +1016,7 @@ impl StateEngine {
         votes: HashMap<(u64, Address), bool>,
         next_proposal_id: u64,
         governance_params: crate::governance::GovernanceParams,
+        configured_validator_count: Option<u64>,
     ) -> Self {
         Self {
             accounts,
@@ -1025,7 +1029,7 @@ impl StateEngine {
             votes,
             next_proposal_id,
             governance_params,
-            configured_validator_count: None,
+            configured_validator_count,
         }
     }
 

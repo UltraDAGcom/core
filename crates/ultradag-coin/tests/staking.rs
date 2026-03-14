@@ -705,6 +705,7 @@ fn test_24_stale_epoch_on_load_triggers_recalculation() {
         tampered.all_votes().map(|(k, v)| (*k, *v)).collect(),
         tampered.next_proposal_id(),
         tampered.governance_params().clone(),
+        tampered.configured_validator_count(),
     );
     tampered_state.save(&state_path).unwrap();
 

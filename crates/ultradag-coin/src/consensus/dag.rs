@@ -176,7 +176,7 @@ impl BlockDag {
 
         // CRITICAL: Reject vertices claiming rounds too far in the future
         // Prevents memory exhaustion from future-round flooding
-        const MAX_FUTURE_ROUNDS: u64 = 10;
+        use crate::constants::MAX_FUTURE_ROUNDS;
         if vertex.round > self.current_round + MAX_FUTURE_ROUNDS {
             return false;
         }
@@ -283,7 +283,7 @@ impl BlockDag {
         }
 
         // Reject vertices claiming rounds too far in the future
-        const MAX_FUTURE_ROUNDS: u64 = 10;
+        use crate::constants::MAX_FUTURE_ROUNDS;
         if vertex.round > self.current_round + MAX_FUTURE_ROUNDS {
             return Ok(false);
         }
@@ -379,8 +379,11 @@ impl BlockDag {
             })
             .collect();
         
-        // Sort by score (deterministic) and take top K
-        scored_tips.sort_by_key(|(_, score)| *score);
+        // Sort by score with tiebreaker on tip hash for determinism
+        // (blake3 collisions in first 8 bytes are unlikely but possible)
+        scored_tips.sort_by(|(tip_a, score_a), (tip_b, score_b)| {
+            score_a.cmp(score_b).then_with(|| tip_a.cmp(tip_b))
+        });
         scored_tips.truncate(k);
         
         scored_tips.into_iter().map(|(tip, _)| tip).collect()
@@ -684,9 +687,14 @@ impl BlockDag {
             }
         }
         
+        // Prune equivocation vertices from rounds below the new floor.
+        // These are rejected vertices stored for evidence broadcasting — they're NOT
+        // in self.rounds, so the per-hash removal above never catches them.
+        self.equivocation_vertices.retain(|_, v| v.round >= new_floor);
+
         // Update pruning floor
         self.pruning_floor = new_floor;
-        
+
         pruned_count
     }
 
