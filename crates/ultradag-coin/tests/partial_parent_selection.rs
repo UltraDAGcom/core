@@ -49,7 +49,7 @@ fn select_parents_returns_all_when_below_k() {
         dag.insert(v);
     }
     
-    let selected = dag.select_parents(&proposer, K_PARENTS);
+    let selected = dag.select_parents(&proposer, 1, K_PARENTS);
     assert_eq!(selected.len(), 10, "Should return all tips when below K");
 }
 
@@ -65,7 +65,7 @@ fn select_parents_returns_k_when_above_k() {
         dag.insert(v);
     }
     
-    let selected = dag.select_parents(&proposer, K_PARENTS);
+    let selected = dag.select_parents(&proposer, 1, K_PARENTS);
     assert_eq!(selected.len(), K_PARENTS, "Should return exactly K parents when above K");
 }
 
@@ -81,8 +81,8 @@ fn select_parents_is_deterministic() {
         dag.insert(v);
     }
     
-    let selected1 = dag.select_parents(&proposer, K_PARENTS);
-    let selected2 = dag.select_parents(&proposer, K_PARENTS);
+    let selected1 = dag.select_parents(&proposer, 1, K_PARENTS);
+    let selected2 = dag.select_parents(&proposer, 1, K_PARENTS);
     
     assert_eq!(selected1, selected2, "Parent selection should be deterministic");
 }
@@ -100,8 +100,8 @@ fn select_parents_differs_by_proposer() {
         dag.insert(v);
     }
     
-    let selected1 = dag.select_parents(&proposer1, K_PARENTS);
-    let selected2 = dag.select_parents(&proposer2, K_PARENTS);
+    let selected1 = dag.select_parents(&proposer1, 1, K_PARENTS);
+    let selected2 = dag.select_parents(&proposer2, 1, K_PARENTS);
     
     assert_ne!(selected1, selected2, "Different proposers should select different parents");
 }
@@ -128,24 +128,39 @@ fn finality_works_with_partial_parents() {
     
     // Round 1: Each validator selects K_PARENTS from round 0
     for (i, sk) in validators.iter().enumerate() {
-        let parents = dag.select_parents(&sk.address(), K_PARENTS);
+        let parents = dag.select_parents(&sk.address(), 0, K_PARENTS);
         assert!(parents.len() <= K_PARENTS, "Should not exceed K_PARENTS");
-        
+
         let v = make_vertex(100 + i as u64, 1, parents, sk);
         dag.insert(v);
     }
-    
+
+    // Round 2: Each validator selects K_PARENTS from round 1
+    // More rounds = more descendant propagation = finality can be reached
+    for (i, sk) in validators.iter().enumerate() {
+        let parents = dag.select_parents(&sk.address(), 1, K_PARENTS);
+        let v = make_vertex(200 + i as u64, 2, parents, sk);
+        dag.insert(v);
+    }
+
+    // Round 3: Another round for full descendant propagation
+    for (i, sk) in validators.iter().enumerate() {
+        let parents = dag.select_parents(&sk.address(), 2, K_PARENTS);
+        let v = make_vertex(300 + i as u64, 3, parents, sk);
+        dag.insert(v);
+    }
+
     // Check finality: round 0 vertices should finalize
     // Threshold for 100 validators: ceil(2*100/3) = 67
     let threshold = finality.finality_threshold();
     assert_eq!(threshold, 67, "Threshold should be 67 for 100 validators");
-    
+
     // Count how many round 0 vertices are finalized
     let newly_finalized = finality.find_newly_finalized(&dag);
-    
-    // With partial parents, not all round 0 vertices may finalize immediately
-    // But the DAG should still be well-connected enough for finality to progress
-    assert!(!newly_finalized.is_empty(), "Some vertices should finalize with partial parents");
+
+    // With K=32 partial parents and 3 rounds of propagation,
+    // descendants should reach enough validators for finality
+    assert!(!newly_finalized.is_empty(), "Some vertices should finalize with partial parents after 3 rounds");
 }
 
 #[test]
@@ -163,14 +178,14 @@ fn dag_stays_connected_with_partial_parents() {
     
     // Round 1: Each validator selects K_PARENTS from round 0
     for (i, sk) in validators.iter().enumerate() {
-        let parents = dag.select_parents(&sk.address(), K_PARENTS);
+        let parents = dag.select_parents(&sk.address(), 0, K_PARENTS);
         let v = make_vertex(100 + i as u64, 1, parents, sk);
         dag.insert(v);
     }
-    
+
     // Round 2: Each validator selects K_PARENTS from round 1
     for (i, sk) in validators.iter().enumerate() {
-        let parents = dag.select_parents(&sk.address(), K_PARENTS);
+        let parents = dag.select_parents(&sk.address(), 1, K_PARENTS);
         let v = make_vertex(200 + i as u64, 2, parents, sk);
         dag.insert(v);
     }
@@ -217,8 +232,8 @@ fn partial_parents_removes_64_validator_ceiling() {
     // (tips change as we insert, so we need to capture them first)
     let mut round1_vertices = Vec::new();
     for (i, sk) in validators.iter().enumerate() {
-        let parents = dag.select_parents(&sk.address(), K_PARENTS);
-        assert_eq!(parents.len(), K_PARENTS, "Should select exactly K_PARENTS from 200 tips");
+        let parents = dag.select_parents(&sk.address(), 0, K_PARENTS);
+        assert_eq!(parents.len(), K_PARENTS, "Should select exactly K_PARENTS from 200 vertices");
         
         let v = make_vertex(200 + i as u64, 1, parents, sk);
         round1_vertices.push(v);
@@ -254,7 +269,7 @@ fn partial_parents_maintains_parent_diversity() {
     
     // Round 1: Each validator selects K_PARENTS from round 0
     for (i, sk) in validators.iter().enumerate() {
-        let parents = dag.select_parents(&sk.address(), K_PARENTS);
+        let parents = dag.select_parents(&sk.address(), 0, K_PARENTS);
         for parent in &parents {
             referenced.insert(*parent);
         }

@@ -79,7 +79,7 @@ pub async fn validator_loop(
         // A new node at round 0 producing vertices while peers are at round 1500+
         // creates orphans, triggers allowlist bans, and wastes bandwidth.
         if !server.sync_complete.load(Ordering::Relaxed) {
-            if timer_fired && consecutive_skips.is_multiple_of(6) {
+            if timer_fired && consecutive_skips % 6 == 0 {
                 let our_round = server.dag.read().await.current_round();
                 info!("Waiting for initial sync to complete (current round: {})", our_round);
             }
@@ -97,7 +97,7 @@ pub async fn validator_loop(
             if peer_count < 2 {
                 if timer_fired {
                     consecutive_skips += 1;
-                    if consecutive_skips.is_multiple_of(6) {
+                    if consecutive_skips % 6 == 0 {
                         warn!("Waiting for peers ({} connected, need ≥2) — skip #{}", peer_count, consecutive_skips);
                     }
                 }
@@ -194,39 +194,12 @@ pub async fn validator_loop(
             }
         }
 
-        // Get parent references: use K_PARENTS partial selection from previous round.
-        // This enables unlimited validator scaling by keeping parent count bounded at K
-        // regardless of the number of validators N. Follows Narwhal's approach.
-        // The DAG stays well-connected through deterministic cross-references, and finality
-        // math still works because descendants propagate through the partial parent graph.
-        // Peers may not have all prev-round vertices yet — orphan resolution via
-        // GetParents handles this automatically.
+        // Get parent references: use BlockDag::select_parents() for deterministic
+        // K_PARENTS partial selection from the previous round's vertices.
         let dag_tips = {
             let dag = server.dag.read().await;
             let prev_round = dag_round.saturating_sub(1);
-            let mut parents: Vec<[u8; 32]> = dag.vertices_in_round(prev_round)
-                .iter()
-                .map(|v| v.hash())
-                .collect();
-            
-            // Use partial parent selection if we have more than K_PARENTS vertices
-            if parents.len() > ultradag_coin::consensus::dag::K_PARENTS {
-                // Deterministic selection: blake3(validator || parent_hash) for uniform scoring.
-                // All nodes must use identical algorithm for consensus.
-                let mut scored: Vec<([u8; 32], [u8; 32])> = parents
-                    .iter()
-                    .map(|parent| {
-                        let mut h = blake3::Hasher::new();
-                        h.update(&validator.0);
-                        h.update(parent);
-                        (*parent, *h.finalize().as_bytes())
-                    })
-                    .collect();
-                scored.sort_by_key(|(_, s)| *s);
-                scored.truncate(ultradag_coin::consensus::dag::K_PARENTS);
-                parents = scored.into_iter().map(|(p, _)| p).collect();
-            }
-            
+            let parents = dag.select_parents(&validator, prev_round, ultradag_coin::consensus::dag::K_PARENTS);
             if parents.is_empty() {
                 vec![[0u8; 32]] // Genesis
             } else {
@@ -447,6 +420,19 @@ pub async fn validator_loop(
             let checkpoint_start = tokio::time::Instant::now();
 
             let state_r = server.state.read().await;
+            // Verify state hasn't advanced past checkpoint_round due to concurrent
+            // P2P handlers (apply_finality_and_state). If it has, the snapshot would
+            // reflect a later round's state, producing an incorrect state_root that
+            // peers will reject during co-signing.
+            let state_fin = state_r.last_finalized_round().unwrap_or(0);
+            if state_fin != checkpoint_round {
+                drop(state_r);
+                warn!(
+                    "Skipping checkpoint at round {}: state already at finalized round {} (race with P2P handler)",
+                    checkpoint_round, state_fin
+                );
+                continue;
+            }
             let state_snapshot = state_r.snapshot();
             let state_root = ultradag_coin::consensus::compute_state_root(&state_snapshot);
             let total_supply = state_r.total_supply();
@@ -633,8 +619,8 @@ pub async fn validator_loop(
 
         // Periodic persistence: save state every 10 rounds
         if dag_round % 10 == 0 {
-            let dag_path = data_dir.join("dag.json");
-            let finality_path = data_dir.join("finality.json");
+            let dag_path = data_dir.join("dag.bin");
+            let finality_path = data_dir.join("finality.bin");
             let state_path = data_dir.join("state.redb");
             let mempool_path = data_dir.join("mempool.json");
 

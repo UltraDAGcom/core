@@ -72,7 +72,7 @@ fn test_11_state_behind_dag_recovery() {
     state_partial.save(&tmp.join("state.redb")).unwrap();
 
     // Save full DAG
-    dag.save(&tmp.join("dag.json")).unwrap();
+    dag.save(&tmp.join("dag.bin")).unwrap();
 
     // Load the round-10 state
     let mut loaded_state = StateEngine::load(&tmp.join("state.redb")).unwrap();

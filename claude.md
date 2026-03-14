@@ -19,6 +19,24 @@
 - **Faucet mainnet compile-time guard** — Added `#[cfg(feature = "mainnet")]` assertion that rejects the test `FAUCET_SEED = [0xFA; 32]`. `mainnet` feature flag added to ultradag-coin Cargo.toml. Prevents accidentally shipping the deterministic faucet keypair to mainnet.
 - **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
 
+**Correctness & Stability Pass (March 14, 2026):**
+- **`is_multiple_of` replaced with `%`** — 4 uses of nightly-only `is_multiple_of()` API replaced with stable `% N == 0` equivalents in block.rs, constants.rs, validator.rs. Prevents compile failure on stable Rust.
+- **`try_insert` silent rejections fixed** — Added `FutureRound` and `FutureTimestamp` error variants to `DagInsertError`. Previously returned `Ok(false)` (indistinguishable from "already exists"), preventing retries when local clock was temporarily wrong. P2P handlers log at debug level and continue.
+- **Checkpoint state race condition fixed** — Checkpoint production in validator.rs now verifies `state.last_finalized_round() == checkpoint_round` while holding the state read lock. If state advanced (concurrent P2P apply_finality_and_state), checkpoint production is skipped. Prevents state_root mismatch in checkpoints.
+- **`select_parents` dead code eliminated** — `BlockDag::select_parents()` now uses `vertices_in_round(round)` instead of `tips()` (which was the root cause of Bug #5, finality lag 250+). Validator loop calls `dag.select_parents()` instead of duplicating the inline parent selection code. Signature changed to `select_parents(&self, proposer, round, k)`.
+- **`get_equivocation_evidence` survives pruning** — Now falls back to permanent `evidence_store` when `equivocation_evidence` (prunable) doesn't have the entry. Enables evidence re-broadcast after pruning.
+- **File extensions fixed** — `dag.json`/`finality.json` renamed to `dag.bin`/`finality.bin` (files use postcard binary, not JSON). Updated across main.rs, validator.rs, docker-entrypoint.sh, and all test files.
+- **Tests:** 779 passed, 0 failed, 14 ignored (jepsen long-running).
+
+**Block Explorer Update (March 14, 2026):**
+- **Transaction search** — Explorer search now tries `/tx/{hash}` for 64-hex queries. Shows status (pending/finalized), round, vertex link, and validator for finalized transactions.
+- **Vertex lookup** — Search also tries `/vertex/{hash}`. Shows round, validator, coinbase reward/height, parent count, and embedded transactions table with type/from/fee.
+- **Finality status** — Stats grid now shows "Finalized Round" with color-coded finality lag (green ≤3, yellow ≤10, red >10). Round table and detail views show dynamic Finalized/Pending badges based on `last_finalized_round`.
+- **Smart search** — 64-hex queries try tx → vertex → address in order, showing the first match. Clear error messages when nothing found.
+- **Vertex hashes clickable** — In round detail view, vertex hashes now link to vertex detail view (previously only copyable).
+- **Fixed broken element IDs** — `dag-finalized` and `active-accounts` IDs now match between HTML and JS (were `account-count` / `total-vertices` before, causing silent failures).
+- **5th node added** — `NODES` array includes `ultradag-node-5.fly.dev`.
+
 **Consensus Correctness & Security Pass (March 14, 2026):**
 - **CRITICAL: Slashing made deterministic** — Slashing was triggered via P2P side-channel (`execute_slash` called from DagProposal, DagVertices, and EquivocationEvidence handlers). Different nodes could slash at different points depending on message arrival order, causing `total_supply` divergence and checkpoint co-signing failure. Fix: removed all 3 `execute_slash` calls from P2P handlers (and the function itself). Slashing now happens deterministically in `apply_finalized_vertices()` — detects duplicate (validator, round) pairs in the sorted finality batch and calls `slash()` before vertex application. All nodes process the same sorted batch, so slashing is deterministic. P2P handlers still broadcast evidence for peer awareness.
 - **Merkle tree CVE-2012-2459 mitigation** — `merkle_root()` duplicated the last leaf for odd counts, making `[A,B,C]` and `[A,B,C,C]` produce the same root. Fix: mix leaf count into final hash via `blake3(tree_root || leaf_count_u64_le)`. While not practically exploitable in this system (duplicate tx hashes require identical nonces), this eliminates a theoretical concern. Breaking change — requires clean testnet restart.
@@ -566,6 +584,8 @@ site/
   dashboard.html          # Web dashboard SPA (faucet, wallet, explorer, mempool, staking, governance)
   docs.html               # Documentation (API reference, SDK quickstart, node guide, staking, architecture)
   testnet.html            # Live testnet status monitor (5 nodes, auto-refresh, per-node cards)
+  explorer.html           # Block explorer SPA (search tx/vertex/address/round, finality status)
+  explorer.js             # Explorer JavaScript (API fetching, detail views, auto-refresh)
   consensus-viz.html      # Interactive DAG-BFT consensus simulator
   whitepaper.html         # Whitepaper page
 formal/
@@ -1823,6 +1843,19 @@ UltraDAG is offering rewards for security researchers who discover and responsib
     - **Fix:** Added `voters` array to `/proposal/{id}` response with each voter's address, vote direction, and stake weight. Added `votes_for_proposal()` method to StateEngine.
 122. **Faucet keypair has no mainnet guard (March 14, 2026)** — `FAUCET_SEED = [0xFA; 32]` is deterministic and public. Anyone can derive the faucet key. No compile-time check prevents this from shipping to mainnet (unlike DEV_ADDRESS_SEED which has an assertion).
     - **Fix:** Added `#[cfg(feature = "mainnet")]` compile-time assertion rejecting the test seed. `mainnet` feature flag added to ultradag-coin Cargo.toml.
+
+123. **`is_multiple_of` nightly-only API (March 14, 2026)** — `is_multiple_of()` for unsigned integers is unstable (feature `unsigned_is_multiple_of`). Used in 3 files (block.rs, constants.rs, validator.rs). Would fail to compile on stable Rust.
+    - **Fix:** Replaced all 4 occurrences with `% N == 0` equivalents.
+124. **`try_insert` silent rejection indistinguishable from duplicate (March 14, 2026)** — Future-round and future-timestamp vertices returned `Ok(false)`, same as "already exists". Callers couldn't distinguish rejection from deduplication, preventing retry after clock correction.
+    - **Fix:** Added `FutureRound` and `FutureTimestamp` variants to `DagInsertError`. P2P handlers log at debug level.
+125. **Checkpoint state race condition (March 14, 2026)** — Checkpoint production read state snapshot without verifying it matched the checkpoint round. P2P `apply_finality_and_state` running concurrently could advance state between snapshot read and checkpoint construction, causing state_root mismatch.
+    - **Fix:** Verify `state.last_finalized_round() == checkpoint_round` while holding the lock. Skip if mismatched.
+126. **`select_parents` was dead code using wrong source (March 14, 2026)** — `BlockDag::select_parents()` used `tips()` (root cause of Bug #5, finality lag 250+). Validator loop had inline copy using correct `vertices_in_round()`. Two implementations of parent selection with different behavior.
+    - **Fix:** Updated `select_parents(proposer, round, k)` to use `vertices_in_round(round)`. Validator loop now calls `dag.select_parents()`. ~25 lines of inline code removed.
+127. **`get_equivocation_evidence` fails after pruning (March 14, 2026)** — Only checked `equivocation_evidence` (prunable HashMap), not `evidence_store` (permanent). After pruning, evidence lookups returned None even though permanent evidence existed, preventing evidence re-broadcast.
+    - **Fix:** Falls back to `evidence_store` when prunable map doesn't have the entry.
+128. **Persistence file extensions misleading (March 14, 2026)** — `dag.json` and `finality.json` used postcard binary format, not JSON. Misleading for operators, could cause manual editing attempts.
+    - **Fix:** Renamed to `dag.bin`/`finality.bin` across all code, tests, and docker-entrypoint.sh.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.

@@ -97,8 +97,8 @@ fn default_data_dir() -> String {
 
 /// Save all node state to disk.
 async fn save_state(server: &NodeServer, data_dir: &std::path::Path) {
-    let dag_path = data_dir.join("dag.json");
-    let finality_path = data_dir.join("finality.json");
+    let dag_path = data_dir.join("dag.bin");
+    let finality_path = data_dir.join("finality.bin");
     let state_path = data_dir.join("state.redb");
     let mempool_path = data_dir.join("mempool.json");
 
@@ -131,8 +131,8 @@ async fn save_state(server: &NodeServer, data_dir: &std::path::Path) {
 
 /// Load all node state from disk if available.
 async fn load_state(server: &NodeServer, data_dir: &std::path::Path) {
-    let dag_path = data_dir.join("dag.json");
-    let finality_path = data_dir.join("finality.json");
+    let dag_path = data_dir.join("dag.bin");
+    let finality_path = data_dir.join("finality.bin");
     let state_path = data_dir.join("state.redb");
     let mempool_path = data_dir.join("mempool.json");
 

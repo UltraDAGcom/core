@@ -208,8 +208,8 @@ fn test_mempool_persistence() {
 #[test]
 fn test_complete_node_state_persistence() {
     let temp_dir = std::env::temp_dir();
-    let dag_path = temp_dir.join("test_node_dag.json");
-    let finality_path = temp_dir.join("test_node_finality.json");
+    let dag_path = temp_dir.join("test_node_dag.bin");
+    let finality_path = temp_dir.join("test_node_finality.bin");
     let state_path = temp_dir.join("test_node_state.json");
     let mempool_path = temp_dir.join("test_node_mempool.json");
     

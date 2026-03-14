@@ -251,11 +251,11 @@ fn crash_recovery_state_behind_dag() {
         let v = make_vertex(&sk, r, r, vec![], vec![]);
         dag.insert(v);
     }
-    dag.save(&tmp.join("dag.json")).unwrap();
+    dag.save(&tmp.join("dag.bin")).unwrap();
 
     // Load both back
     let loaded_state = StateEngine::load(&tmp.join("state.redb")).unwrap();
-    let loaded_dag = BlockDag::load(&tmp.join("dag.json")).unwrap();
+    let loaded_dag = BlockDag::load(&tmp.join("dag.bin")).unwrap();
 
     // State is behind DAG — state at round 5, DAG at round 9
     assert_eq!(loaded_state.last_finalized_round(), Some(5));
@@ -288,10 +288,10 @@ fn state_ahead_of_dag_detected() {
         let v = make_vertex(&sk, r, r, vec![], vec![]);
         dag.insert(v);
     }
-    dag.save(&tmp.join("dag.json")).unwrap();
+    dag.save(&tmp.join("dag.bin")).unwrap();
 
     let loaded_state = StateEngine::load(&tmp.join("state.redb")).unwrap();
-    let loaded_dag = BlockDag::load(&tmp.join("dag.json")).unwrap();
+    let loaded_dag = BlockDag::load(&tmp.join("dag.bin")).unwrap();
 
     // State is ahead — this scenario doesn't crash, just results in stale DAG
     // Peer sync will fill in the missing DAG vertices
@@ -301,12 +301,12 @@ fn state_ahead_of_dag_detected() {
     std::fs::remove_dir_all(&tmp).ok();
 }
 
-/// Test 5: Corrupt dag.json — verified does not panic
+/// Test 5: Corrupt dag.bin — verified does not panic
 #[test]
-fn corrupt_dag_json_does_not_panic() {
+fn corrupt_dag_bin_does_not_panic() {
     let tmp = std::env::temp_dir().join("ultradag_test_corrupt");
     std::fs::create_dir_all(&tmp).unwrap();
-    let path = tmp.join("dag.json");
+    let path = tmp.join("dag.bin");
 
     std::fs::write(&path, "{ invalid json!!!").unwrap();
 

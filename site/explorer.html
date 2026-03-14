@@ -13,7 +13,7 @@
   gtag("config", "G-PDWW4HQM2K");
 </script>
 
-<meta name="description" content="UltraDAG Block Explorer - Search rounds, transactions, and addresses on the UltraDAG network">
+<meta name="description" content="UltraDAG Block Explorer - Search transactions, vertices, rounds, and addresses on the UltraDAG network">
 <meta property="og:title" content="Explorer — UltraDAG">
 <meta property="og:description" content="Advanced block explorer for UltraDAG network with real-time data">
 <meta property="og:type" content="website">
@@ -331,7 +331,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 <div class="container">
   
   <div class="header">
-    <p>Search rounds, transactions, and addresses</p>
+    <p>Search transactions, vertices, rounds, and addresses</p>
     <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-top:24px">
       <div id="network-health"></div>
       <button id="auto-refresh-btn" onclick="toggleAutoRefresh()" style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.25);color:var(--white);padding:6px 14px;border-radius:3px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.06em;transition:all .2s ease;font-weight:500" onmouseover="this.style.background='rgba(52,211,153,0.15)';this.style.borderColor='rgba(52,211,153,0.4)';this.style.boxShadow='0 0 12px rgba(52,211,153,0.15)';this.style.transform='translateY(-1px)'" onmouseout="this.style.background='rgba(52,211,153,0.08)';this.style.borderColor='rgba(52,211,153,0.25)';this.style.boxShadow='none';this.style.transform='translateY(0)'">🔄 Auto-refresh ON</button>
@@ -342,11 +342,11 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <!-- SEARCH -->
   <div class="search-section">
     <div class="search-box">
-      <input type="text" class="search-input" id="search-input" placeholder="Search by Round Number or Address (64 hex chars)...">
+      <input type="text" class="search-input" id="search-input" placeholder="Search by round, tx hash, vertex hash, or address (64 hex)...">
       <button class="search-btn" id="search-btn">Search</button>
     </div>
     <div class="search-hint">
-      <span>Try: Round 1 • Address (64 hex) • Press <kbd style="background:var(--bg3);padding:2px 6px;border-radius:2px;font-size:10px;border:1px solid var(--border)">Ctrl+K</kbd> to focus search</span>
+      <span>Try: Round number • Tx hash • Vertex hash • Address (64 hex) • <kbd style="background:var(--bg3);padding:2px 6px;border-radius:2px;font-size:10px;border:1px solid var(--border)">Ctrl+K</kbd> to focus</span>
       <button onclick="showShortcuts()" style="background:rgba(61,155,233,0.08);border:1px solid rgba(61,155,233,0.25);color:var(--white);padding:4px 10px;border-radius:3px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;margin-left:12px;transition:all .2s ease;font-weight:500" onmouseover="this.style.background='rgba(61,155,233,0.15)';this.style.borderColor='rgba(61,155,233,0.4)';this.style.boxShadow='0 0 12px rgba(61,155,233,0.15)';this.style.transform='translateY(-1px)'" onmouseout="this.style.background='rgba(61,155,233,0.08)';this.style.borderColor='rgba(61,155,233,0.25)';this.style.boxShadow='none';this.style.transform='translateY(0)'">⌨️ Shortcuts</button>
     </div>
   </div>
@@ -356,12 +356,12 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <div class="stat-card">
       <div class="stat-label">Latest Round</div>
       <div class="stat-value" id="latest-round" style="transition:color 0.3s">—</div>
-      <div class="stat-sub">DAG rounds finalized</div>
+      <div class="stat-sub">Current DAG round</div>
     </div>
     <div class="stat-card">
-      <div class="stat-label">Total Vertices</div>
-      <div class="stat-value" id="total-vertices" style="transition:color 0.3s">—</div>
-      <div class="stat-sub">In DAG structure</div>
+      <div class="stat-label">Finalized Round</div>
+      <div class="stat-value" id="dag-finalized" style="transition:color 0.3s">—</div>
+      <div class="stat-sub" id="finality-lag-sub">Finality lag: —</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Total Supply</div>
@@ -370,7 +370,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     </div>
     <div class="stat-card">
       <div class="stat-label">Active Accounts</div>
-      <div class="stat-value" id="account-count">—</div>
+      <div class="stat-value" id="active-accounts">—</div>
       <div class="stat-sub">With balance > 0</div>
     </div>
   </div>

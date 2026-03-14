@@ -5,7 +5,8 @@ const NODES = [
   'https://ultradag-node-1.fly.dev',
   'https://ultradag-node-2.fly.dev',
   'https://ultradag-node-3.fly.dev',
-  'https://ultradag-node-4.fly.dev'
+  'https://ultradag-node-4.fly.dev',
+  'https://ultradag-node-5.fly.dev'
 ];
 let API_URL = NODES[0]; // Will be updated to best node
 
@@ -94,8 +95,14 @@ async function fetchStatus() {
       
       // Update UI elements
       document.getElementById('latest-round').textContent = data.dag_round.toLocaleString();
-      document.getElementById('dag-finalized').textContent = (data.last_finalized_round || 0).toLocaleString();
-      document.getElementById('total-vertices').textContent = data.dag_vertices?.toLocaleString() || '--';
+      const finalized = data.last_finalized_round || 0;
+      document.getElementById('dag-finalized').textContent = finalized.toLocaleString();
+      const lag = data.dag_round - finalized;
+      const lagSub = document.getElementById('finality-lag-sub');
+      if (lagSub) {
+        lagSub.textContent = `Finality lag: ${lag}`;
+        lagSub.style.color = lag <= 3 ? 'var(--success)' : lag <= 10 ? 'var(--warning)' : 'var(--danger)';
+      }
       document.getElementById('total-supply').textContent = formatUdag(data.total_supply || 0);
       document.getElementById('active-accounts').textContent = data.active_accounts?.toLocaleString() || '--';
       
@@ -107,7 +114,6 @@ async function fetchStatus() {
       // Show offline state
       document.getElementById('latest-round').textContent = '--';
       document.getElementById('dag-finalized').textContent = '--';
-      document.getElementById('total-vertices').textContent = '--';
       document.getElementById('total-supply').textContent = '--';
       document.getElementById('active-accounts').textContent = '--';
       updateNetworkHealth(null);
@@ -167,6 +173,30 @@ async function fetchRound(roundNumber) {
   }
 }
 
+// Fetch transaction by hash
+async function fetchTransaction(hash) {
+  try {
+    const response = await fetch(`${API_URL}/tx/${hash}`);
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.error(`Failed to fetch tx ${hash}:`, error);
+    return null;
+  }
+}
+
+// Fetch vertex by hash
+async function fetchVertex(hash) {
+  try {
+    const response = await fetch(`${API_URL}/vertex/${hash}`);
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (error) {
+    console.error(`Failed to fetch vertex ${hash}:`, error);
+    return null;
+  }
+}
+
 // Fetch address balance
 async function fetchAddress(address) {
   try {
@@ -208,12 +238,18 @@ async function loadRounds() {
     return;
   }
   
+  const lastFinalized = parseInt(document.getElementById('dag-finalized')?.textContent?.replace(/,/g, '') || '0');
+
   tbody.innerHTML = rounds.map(({ round, data }) => {
     const vertexCount = data.length;
     const txCount = data.reduce((sum, v) => sum + v.tx_count, 0);
     const validators = new Set(data.map(v => v.validator)).size;
     const totalRewards = data.reduce((sum, v) => sum + v.reward, 0);
-    
+    const isFinalized = round <= lastFinalized;
+    const statusBadge = isFinalized
+      ? '<span class="badge badge-success">Finalized</span>'
+      : '<span class="badge badge-warning">Pending</span>';
+
     return `
       <tr onclick="viewRound(${round})" style="cursor:pointer">
         <td><strong style="color:var(--accent)">${round}</strong></td>
@@ -221,7 +257,7 @@ async function loadRounds() {
         <td>${txCount}</td>
         <td>${validators}</td>
         <td>${formatUdag(totalRewards)} UDAG</td>
-        <td><span class="badge badge-success">Finalized</span></td>
+        <td>${statusBadge}</td>
       </tr>
     `;
   }).join('');
@@ -293,32 +329,38 @@ window.viewRound = async function(roundNumber) {
   const txCount = roundData.reduce((sum, v) => sum + v.tx_count, 0);
   const validators = new Set(roundData.map(v => v.validator));
   const totalRewards = roundData.reduce((sum, v) => sum + v.reward, 0);
-  
+
+  const lastFinalized = parseInt(document.getElementById('dag-finalized')?.textContent?.replace(/,/g, '') || '0');
+  const isFinalized = roundNumber <= lastFinalized;
+  const statusBadge = isFinalized
+    ? '<span class="badge badge-success">Finalized</span>'
+    : '<span class="badge badge-warning">Pending</span>';
+
   let html = `
     <div class="detail-card">
       <div class="detail-header">
         <div class="detail-title">Round ${roundNumber}</div>
         <button onclick="closeDetail()" style="background:var(--bg3);border:1px solid var(--border);color:var(--subtle);padding:8px 16px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--subtle)'">Close</button>
       </div>
-      
+
       <div class="detail-grid">
         <div class="detail-label">Round Number</div>
         <div class="detail-value">${roundNumber}</div>
-        
+
         <div class="detail-label">Vertices</div>
         <div class="detail-value">${vertexCount}</div>
-        
+
         <div class="detail-label">Transactions</div>
         <div class="detail-value">${txCount}</div>
-        
+
         <div class="detail-label">Validators</div>
         <div class="detail-value">${validators.size}</div>
-        
+
         <div class="detail-label">Total Rewards</div>
         <div class="detail-value">${formatUdag(totalRewards)} UDAG (${totalRewards.toLocaleString()} sats)</div>
-        
+
         <div class="detail-label">Status</div>
-        <div class="detail-value"><span class="badge badge-success">Finalized</span></div>
+        <div class="detail-value">${statusBadge}</div>
       </div>
     </div>
     
@@ -339,7 +381,8 @@ window.viewRound = async function(roundNumber) {
             ${roundData.map(v => `
               <tr>
                 <td class="hash">
-                  <span style="cursor:pointer" onclick="copyToClipboard('${v.hash}')" title="Click to copy full hash">${shortHash(v.hash)}</span>
+                  <span style="cursor:pointer" onclick="performSearchFor('${v.hash}')" title="View vertex details">${shortHash(v.hash)}</span>
+                  <span style="cursor:pointer;margin-left:4px;opacity:0.5;font-size:11px" onclick="event.stopPropagation();copyToClipboard('${v.hash}')" title="Copy hash">📋</span>
                 </td>
                 <td class="hash">
                   <a href="#address-${v.validator}" onclick="event.preventDefault();viewAddress('${v.validator}')" title="View address details">${shortAddress(v.validator)}</a>
@@ -407,6 +450,140 @@ window.viewAddress = async function(address) {
   detailView.innerHTML = html;
 };
 
+// View transaction detail
+function viewTransactionDetail(hash, data) {
+  const detailView = document.getElementById('detail-view');
+  detailView.style.display = 'block';
+
+  const statusBadge = data.status === 'finalized'
+    ? '<span class="badge badge-success">Finalized</span>'
+    : '<span class="badge badge-warning">Pending</span>';
+
+  let locationHtml = '';
+  if (data.status === 'finalized' && data.round !== undefined) {
+    locationHtml = `
+      <div class="detail-label">Round</div>
+      <div class="detail-value"><a href="#" onclick="event.preventDefault();viewRound(${data.round})" style="color:var(--accent)">${data.round}</a></div>
+
+      <div class="detail-label">Vertex</div>
+      <div class="detail-value">
+        <span class="hash" style="cursor:pointer" onclick="performSearchFor('${data.vertex_hash}')" title="View vertex">${shortHash(data.vertex_hash)}</span>
+        <span style="cursor:pointer;margin-left:8px;opacity:0.5;font-size:11px" onclick="copyToClipboard('${data.vertex_hash}')" title="Copy hash">📋</span>
+      </div>
+
+      <div class="detail-label">Validator</div>
+      <div class="detail-value">
+        <a href="#" onclick="event.preventDefault();viewAddress('${data.validator}')" style="color:var(--accent)">${shortAddress(data.validator)}</a>
+        <span style="cursor:pointer;margin-left:8px;opacity:0.5;font-size:11px" onclick="copyToClipboard('${data.validator}')" title="Copy address">📋</span>
+      </div>
+    `;
+  }
+
+  detailView.innerHTML = `
+    <div class="detail-card">
+      <div class="detail-header">
+        <div class="detail-title">Transaction</div>
+        <button onclick="closeDetail()" style="background:var(--bg3);border:1px solid var(--border);color:var(--subtle);padding:8px 16px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--subtle)'">Close</button>
+      </div>
+      <div class="detail-grid">
+        <div class="detail-label">Hash</div>
+        <div class="detail-value" style="display:flex;align-items:center;gap:12px">
+          <span class="hash">${hash}</span>
+          <button onclick="copyToClipboard('${hash}')" style="background:var(--bg3);border:1px solid var(--border);color:var(--subtle);padding:4px 12px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--subtle)'">Copy</button>
+        </div>
+
+        <div class="detail-label">Status</div>
+        <div class="detail-value">${statusBadge}</div>
+
+        ${locationHtml}
+      </div>
+    </div>
+  `;
+  detailView.scrollIntoView({ behavior: 'smooth' });
+}
+
+// View vertex detail
+function viewVertexDetail(hash, data) {
+  const detailView = document.getElementById('detail-view');
+  detailView.style.display = 'block';
+
+  const lastFinalized = parseInt(document.getElementById('dag-finalized')?.textContent?.replace(/,/g, '') || '0');
+  const isFinalized = data.round <= lastFinalized;
+  const statusBadge = isFinalized
+    ? '<span class="badge badge-success">Finalized</span>'
+    : '<span class="badge badge-warning">Pending</span>';
+
+  // Transactions from API: [{hash, type, from, fee, nonce}, ...]
+  const txRows = (data.transactions || []).map(tx => {
+    const txHash = tx.hash || '—';
+    const txType = tx.type || 'unknown';
+    const fromAddr = tx.from || '—';
+    return `<tr>
+      <td class="hash"><span style="cursor:pointer" onclick="performSearchFor('${txHash}')" title="View tx">${shortHash(txHash)}</span></td>
+      <td><span class="badge badge-info">${txType}</span></td>
+      <td class="hash"><a href="#" onclick="event.preventDefault();viewAddress('${fromAddr}')" style="color:var(--accent)">${shortAddress(fromAddr)}</a></td>
+      <td>${formatUdag(tx.fee || 0)} UDAG</td>
+    </tr>`;
+  }).join('');
+
+  // Coinbase info
+  const coinbase = data.coinbase || {};
+
+  detailView.innerHTML = `
+    <div class="detail-card">
+      <div class="detail-header">
+        <div class="detail-title">Vertex</div>
+        <button onclick="closeDetail()" style="background:var(--bg3);border:1px solid var(--border);color:var(--subtle);padding:8px 16px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--subtle)'">Close</button>
+      </div>
+      <div class="detail-grid">
+        <div class="detail-label">Hash</div>
+        <div class="detail-value" style="display:flex;align-items:center;gap:12px">
+          <span class="hash">${hash}</span>
+          <button onclick="copyToClipboard('${hash}')" style="background:var(--bg3);border:1px solid var(--border);color:var(--subtle);padding:4px 12px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--subtle)'">Copy</button>
+        </div>
+
+        <div class="detail-label">Status</div>
+        <div class="detail-value">${statusBadge}</div>
+
+        <div class="detail-label">Round</div>
+        <div class="detail-value"><a href="#" onclick="event.preventDefault();viewRound(${data.round})" style="color:var(--accent)">${data.round}</a></div>
+
+        <div class="detail-label">Validator</div>
+        <div class="detail-value">
+          <a href="#" onclick="event.preventDefault();viewAddress('${data.validator}')" style="color:var(--accent)">${shortAddress(data.validator)}</a>
+          <span style="cursor:pointer;margin-left:8px;opacity:0.5;font-size:11px" onclick="copyToClipboard('${data.validator}')" title="Copy address">📋</span>
+        </div>
+
+        <div class="detail-label">Coinbase Reward</div>
+        <div class="detail-value">${formatUdag(coinbase.amount || 0)} UDAG <span style="color:var(--muted)">(height ${coinbase.height || 0})</span></div>
+
+        <div class="detail-label">Parents</div>
+        <div class="detail-value">${data.parent_count || 0}</div>
+
+        <div class="detail-label">Transactions</div>
+        <div class="detail-value">${(data.transactions || []).length}</div>
+      </div>
+    </div>
+    ${txRows.length > 0 ? `
+    <div class="detail-card">
+      <h3 style="font-family:'Cormorant',serif;font-size:24px;color:var(--white);margin-bottom:24px">Transactions</h3>
+      <div class="table-container">
+        <table class="table">
+          <thead><tr><th>Hash</th><th>Type</th><th>From</th><th>Fee</th></tr></thead>
+          <tbody>${txRows}</tbody>
+        </table>
+      </div>
+    </div>` : ''}
+  `;
+  detailView.scrollIntoView({ behavior: 'smooth' });
+}
+
+// Helper to search for a hash from within detail views
+window.performSearchFor = function(hash) {
+  document.getElementById('search-input').value = hash;
+  performSearch();
+};
+
 // Close detail view
 window.closeDetail = function() {
   document.getElementById('detail-view').style.display = 'none';
@@ -470,24 +647,49 @@ window.showShortcuts = function() {
 async function performSearch() {
   const query = document.getElementById('search-input').value.trim();
   if (!query) return;
-  
+
   // Check if it's a round number
   if (/^\d+$/.test(query)) {
     const roundNum = parseInt(query);
     await viewRound(roundNum);
     return;
   }
-  
-  // Check if it's a hex address (64 chars)
+
+  // Check if it's a 64-char hex string (could be tx hash, vertex hash, or address)
   if (/^[0-9a-fA-F]{64}$/.test(query)) {
-    await viewAddress(query.toLowerCase());
+    const hex = query.toLowerCase();
+    const detailView = document.getElementById('detail-view');
+    detailView.style.display = 'block';
+    detailView.innerHTML = '<div class="loading">Searching for transaction, vertex, or address</div>';
+    detailView.scrollIntoView({ behavior: 'smooth' });
+
+    // Try tx first, then vertex, then address
+    const txData = await fetchTransaction(hex);
+    if (txData) {
+      viewTransactionDetail(hex, txData);
+      return;
+    }
+
+    const vertexData = await fetchVertex(hex);
+    if (vertexData) {
+      viewVertexDetail(hex, vertexData);
+      return;
+    }
+
+    const addrData = await fetchAddress(hex);
+    if (addrData) {
+      await viewAddress(hex);
+      return;
+    }
+
+    detailView.innerHTML = '<div class="error">Not found. No transaction, vertex, or address matches this hash.</div>';
     return;
   }
-  
+
   // Otherwise show error
   const detailView = document.getElementById('detail-view');
   detailView.style.display = 'block';
-  detailView.innerHTML = '<div class="error">Invalid search query. Please enter a round number or address (64 hex characters).</div>';
+  detailView.innerHTML = '<div class="error">Invalid search query. Enter a round number or 64-character hex hash (tx, vertex, or address).</div>';
   detailView.scrollIntoView({ behavior: 'smooth' });
 }
 

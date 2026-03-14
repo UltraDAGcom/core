@@ -169,7 +169,7 @@ fn test_reject_vertex_with_timestamp_too_far_in_future() {
     vertex.signature = sk.sign(&vertex.signable_bytes());
     
     let result = dag.try_insert(vertex);
-    assert_eq!(result, Ok(false));
+    assert!(result.is_err(), "Future timestamp vertex should be rejected");
 }
 
 #[test]

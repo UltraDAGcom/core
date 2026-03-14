@@ -235,8 +235,7 @@ impl NodeServer {
             state: Arc::new(RwLock::new(StateEngine::new_with_genesis())),
             mempool: Arc::new(RwLock::new(Mempool::new())),
             dag: Arc::new(RwLock::new(BlockDag::new())),
-            // min_validators=1 for testnet - allows finality with any number of active validators
-            // For mainnet, should be 4 (MIN_ACTIVE_VALIDATORS) to enforce BFT safety
+            // min_validators=1 for testnet flexibility. Mainnet: FinalityTracker::new(4)
             finality: Arc::new(RwLock::new(FinalityTracker::new(1))),
             peers: PeerRegistry::new(),
             vertex_tx,
@@ -1046,6 +1045,14 @@ async fn handle_peer(
                         warn!("Rejected vertex from {} with too many parents (>{MAX_PARENTS})", peer_addr);
                         continue;
                     }
+                    Err(DagInsertError::FutureRound) => {
+                        debug!("Skipped vertex from {} round={}: future round", peer_addr, round);
+                        continue;
+                    }
+                    Err(DagInsertError::FutureTimestamp) => {
+                        debug!("Skipped vertex from {} round={}: future timestamp", peer_addr, round);
+                        continue;
+                    }
                     Err(DagInsertError::MissingParents(missing)) => {
                         warn!(
                             "Orphaned vertex {} round={} from {} — missing {} parents, buffering",
@@ -1202,6 +1209,9 @@ async fn handle_peer(
                             }
                             Err(DagInsertError::TooManyParents) => {
                                 // Silently reject
+                            }
+                            Err(DagInsertError::FutureRound) | Err(DagInsertError::FutureTimestamp) => {
+                                debug!("Skipped sync vertex from {} round={}: future round/timestamp", peer_addr, vertex.round);
                             }
                             Err(DagInsertError::Equivocation { .. }) => {
                                 warn!(

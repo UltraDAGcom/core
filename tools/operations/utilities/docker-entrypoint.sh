@@ -7,7 +7,8 @@ set -e
 if [ "${CLEAN_STATE:-}" = "true" ] || [ "${CLEAN_STATE:-}" = "1" ]; then
   echo "CLEAN_STATE: removing persisted state files..."
   # Remove DAG/state data and checkpoints, but keep validator.key
-  rm -f "${DATA_DIR:-/data}/dag.json" "${DATA_DIR:-/data}/finality.json" \
+  rm -f "${DATA_DIR:-/data}/dag.bin" "${DATA_DIR:-/data}/finality.bin" \
+        "${DATA_DIR:-/data}/dag.json" "${DATA_DIR:-/data}/finality.json" \
         "${DATA_DIR:-/data}/state.redb" "${DATA_DIR:-/data}/mempool.json" \
         "${DATA_DIR:-/data}/state.json" \
         "${DATA_DIR:-/data}/high_water_mark.json" "${DATA_DIR:-/data}/high_water_mark.bin" \

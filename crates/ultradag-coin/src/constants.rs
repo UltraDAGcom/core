@@ -120,7 +120,7 @@ pub fn epoch_of(round: u64) -> u64 {
 
 /// Check if a round is an epoch boundary (start of new epoch).
 pub fn is_epoch_boundary(round: u64) -> bool {
-    round.is_multiple_of(EPOCH_LENGTH_ROUNDS)
+    round % EPOCH_LENGTH_ROUNDS == 0
 }
 
 /// Deterministic seed for the testnet faucet keypair.

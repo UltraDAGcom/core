@@ -55,6 +55,10 @@ pub enum DagInsertError {
     MissingParents(Vec<[u8; 32]>),
     /// Vertex has too many parent references.
     TooManyParents,
+    /// Vertex claims a round too far in the future (beyond MAX_FUTURE_ROUNDS).
+    FutureRound,
+    /// Vertex has a timestamp too far in the future (beyond 5 minutes).
+    FutureTimestamp,
 }
 
 /// Maximum number of parent references allowed per DagVertex.
@@ -285,7 +289,7 @@ impl BlockDag {
         // Reject vertices claiming rounds too far in the future
         use crate::constants::MAX_FUTURE_ROUNDS;
         if vertex.round > self.current_round + MAX_FUTURE_ROUNDS {
-            return Ok(false);
+            return Err(DagInsertError::FutureRound);
         }
 
         // Reject vertices with timestamps too far in the future
@@ -294,7 +298,7 @@ impl BlockDag {
             .unwrap_or_default()
             .as_secs() as i64;
         if !vertex.verify_timestamp(now) {
-            return Ok(false); // Timestamp too far in future
+            return Err(DagInsertError::FutureTimestamp);
         }
 
         // Equivocation: same validator, same round, different vertex (O(1) via secondary index)
@@ -357,36 +361,34 @@ impl BlockDag {
     /// 
     /// This enables unlimited validator scaling by keeping parent count bounded at K
     /// regardless of the number of validators N. Follows Narwhal's approach.
-    pub fn select_parents(&self, proposer: &Address, k: usize) -> Vec<[u8; 32]> {
-        let tips = self.tips();
-        
-        // If we have K or fewer tips, use all of them
-        if tips.len() <= k {
-            return tips;
-        }
-        
-        // Deterministic sampling: hash(proposer || tip) with blake3 for proper mixing.
-        // Using the first 8 bytes of the hash as a u64 score gives uniform distribution.
-        let mut scored_tips: Vec<([u8; 32], u64)> = tips
+    /// Select up to `k` parent hashes from the given round using deterministic
+    /// blake3-based scoring. Uses `vertices_in_round(round)` — NOT `tips()` —
+    /// to create a dense DAG with cross-links for fast finality.
+    pub fn select_parents(&self, proposer: &Address, round: u64, k: usize) -> Vec<[u8; 32]> {
+        let candidates: Vec<[u8; 32]> = self.vertices_in_round(round)
             .iter()
-            .map(|tip| {
-                let mut input = [0u8; 64];
-                input[..32].copy_from_slice(&proposer.0);
-                input[32..].copy_from_slice(tip);
-                let hash = blake3::hash(&input);
-                let score = u64::from_le_bytes(hash.as_bytes()[..8].try_into().unwrap());
-                (*tip, score)
+            .map(|v| v.hash())
+            .collect();
+
+        if candidates.len() <= k {
+            return candidates;
+        }
+
+        // Deterministic sampling: blake3(proposer || candidate) for uniform scoring.
+        // Sort by full 32-byte hash for guaranteed determinism (no collisions).
+        let mut scored: Vec<([u8; 32], [u8; 32])> = candidates
+            .iter()
+            .map(|c| {
+                let mut h = blake3::Hasher::new();
+                h.update(&proposer.0);
+                h.update(c);
+                (*c, *h.finalize().as_bytes())
             })
             .collect();
-        
-        // Sort by score with tiebreaker on tip hash for determinism
-        // (blake3 collisions in first 8 bytes are unlikely but possible)
-        scored_tips.sort_by(|(tip_a, score_a), (tip_b, score_b)| {
-            score_a.cmp(score_b).then_with(|| tip_a.cmp(tip_b))
-        });
-        scored_tips.truncate(k);
-        
-        scored_tips.into_iter().map(|(tip, _)| tip).collect()
+        scored.sort_by_key(|(_, s)| *s);
+        scored.truncate(k);
+
+        scored.into_iter().map(|(c, _)| c).collect()
     }
 
     /// Get all vertices in a given round.
@@ -568,8 +570,20 @@ impl BlockDag {
     }
 
     /// Get equivocation evidence for a validator in a specific round.
+    /// Checks both the prunable `equivocation_evidence` map and the permanent `evidence_store`.
     pub fn get_equivocation_evidence(&self, validator: &Address, round: u64) -> Option<[[u8; 32]; 2]> {
-        self.equivocation_evidence.get(&(*validator, round)).copied()
+        if let Some(hashes) = self.equivocation_evidence.get(&(*validator, round)) {
+            return Some(*hashes);
+        }
+        // Fallback: check permanent evidence_store (survives pruning)
+        if let Some(evidences) = self.evidence_store.get(validator) {
+            for ev in evidences {
+                if ev.round == round {
+                    return Some([ev.vertex_hash_1, ev.vertex_hash_2]);
+                }
+            }
+        }
+        None
     }
 
     /// Get permanent equivocation evidence for a validator (survives pruning).
@@ -1084,7 +1098,7 @@ mod tests {
 
         // Should be rejected (>5 minutes in future)
         let result = dag.try_insert(vertex);
-        assert_eq!(result, Ok(false), "Vertex with timestamp 10 minutes in future should be rejected");
+        assert_eq!(result, Err(DagInsertError::FutureTimestamp), "Vertex with timestamp 10 minutes in future should be rejected");
 
         // Create vertex with timestamp 200 seconds (3.3 minutes) in the future
         let mut vertex2 = make_vertex_with(2, 1, vec![], &sk);

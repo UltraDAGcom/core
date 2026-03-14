@@ -105,12 +105,10 @@ if [ -n "$NETWORK_URL" ]; then
                 fi
                 
                 # Check DAG state
-                DAG_FILE="$DATA_DIR/dag.json"
+                DAG_FILE="$DATA_DIR/dag.bin"
                 if [ -f "$DAG_FILE" ]; then
-                    DAG_ROUND=$(jq -r '.current_round' "$DAG_FILE" 2>/dev/null)
-                    if [ -n "$DAG_ROUND" ] && [ "$DAG_ROUND" != "null" ]; then
-                        echo "   Local DAG round: $DAG_ROUND"
-                    fi
+                    # dag.bin is postcard binary — cannot parse with jq
+                    echo "   DAG state file exists (binary format)"
                 fi
             else
                 echo "   No local state directory (fresh start)"

@@ -192,6 +192,12 @@ fn test_byzantine_equivocator_detected_and_rejected() {
             ultradag_coin::consensus::dag::DagInsertError::TooManyParents => {
                 panic!("Unexpected TooManyParents error");
             }
+            ultradag_coin::consensus::dag::DagInsertError::FutureRound => {
+                panic!("Unexpected FutureRound error");
+            }
+            ultradag_coin::consensus::dag::DagInsertError::FutureTimestamp => {
+                panic!("Unexpected FutureTimestamp error");
+            }
         }
     }
     

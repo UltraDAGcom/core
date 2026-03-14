@@ -146,7 +146,7 @@ fn test_unfinalized_vertices_never_pruned() {
 fn test_pruning_floor_persists_across_save_load() {
     let temp_dir = std::env::temp_dir().join(format!("ultradag_test_{}", std::process::id()));
     std::fs::create_dir_all(&temp_dir).unwrap();
-    let dag_path = temp_dir.join("dag.json");
+    let dag_path = temp_dir.join("dag.bin");
     
     let mut dag = BlockDag::new();
     let mut finality = FinalityTracker::new(3);
