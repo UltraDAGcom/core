@@ -888,12 +888,12 @@ async fn handle_request(
                 return Ok(error_response(StatusCode::BAD_REQUEST, "amount must be greater than 0"));
             }
 
-            // Cap faucet amount at 100 UDAG per request
-            const MAX_FAUCET_SATS: u64 = 100 * ultradag_coin::COIN; // 100 UDAG
+            // Cap faucet amount at 50,000 UDAG per request
+            const MAX_FAUCET_SATS: u64 = 50000 * ultradag_coin::COIN; // 50,000 UDAG
             if faucet_req.amount > MAX_FAUCET_SATS {
                 return Ok(error_response(
                     StatusCode::BAD_REQUEST,
-                    &format!("faucet amount exceeds maximum of 100 UDAG ({} sats)", MAX_FAUCET_SATS),
+                    &format!("faucet amount exceeds maximum of 50,000 UDAG ({} sats)", MAX_FAUCET_SATS),
                 ));
             }
 
