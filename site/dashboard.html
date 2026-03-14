@@ -820,6 +820,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 <div class="tab-bar-mobile">
   <div class="tab-mob active" data-tab="keystore">Keystore</div>
   <div class="tab-mob" data-tab="portfolio">Portfolio</div>
+  <div class="tab-mob" data-tab="stake">Stake</div>
   <div class="tab-mob" data-tab="send">Send</div>
   <div class="tab-mob" data-tab="dag">Explorer</div>
   <div class="tab-mob" data-tab="validator">Validator</div>
@@ -852,6 +853,10 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <div class="nav-item" data-tab="portfolio">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
       Portfolio
+    </div>
+    <div class="nav-item" data-tab="stake">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      Stake
     </div>
     <div class="nav-item" data-tab="send">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -958,6 +963,112 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
         <div class="card">
           <div class="card-head"><span class="card-title">Wallet Breakdown</span></div>
           <div id="portfolio-wallets"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STAKE -->
+    <div class="tab-panel" id="panel-stake">
+      <div id="stake-offline" class="empty" style="padding:80px">
+        <div class="empty-icon">&#x25CE;</div>
+        <div class="empty-text">Connect to a node to manage staking</div>
+      </div>
+
+      <div id="stake-content" style="display:none">
+        <div class="page-header">
+          <div>
+            <div class="page-eyebrow">Staking</div>
+            <div class="page-title">Stake <em>UDAG</em></div>
+            <div class="page-sub">Earn rewards by securing the network</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" onclick="loadStakingStatus()">Refresh</button>
+          </div>
+        </div>
+
+        <!-- Staking Info -->
+        <div class="card card-blue" style="margin-bottom:16px">
+          <div class="stat" style="text-align:center;padding:24px">
+            <div class="stat-label">Minimum Stake</div>
+            <div class="stat-val blue" style="font-size:36px;margin-top:8px">10,000 <span style="font-size:16px;color:var(--subtle)">UDAG</span></div>
+            <div class="stat-sub" style="margin-top:8px">Become a validator and earn rewards</div>
+          </div>
+        </div>
+
+        <!-- Your Staking Positions -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Your Staking Positions</span>
+            <span class="badge" id="stake-count">0</span>
+          </div>
+          <div id="staking-positions">
+            <div class="empty">No staking positions yet</div>
+          </div>
+        </div>
+
+        <!-- Stake New Position -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Stake UDAG</span>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <label class="label">Select Wallet</label>
+              <select class="select" id="stake-wallet">
+                <option>No wallets available</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="label">Amount to Stake</label>
+              <input class="input" id="stake-amount" type="number" placeholder="10000" min="10000" step="1">
+              <div class="help">Minimum: 10,000 UDAG • Available: <span id="stake-available">0</span> UDAG</div>
+            </div>
+
+            <div class="field">
+              <label class="label">Reward Information</label>
+              <div class="help">
+                • Validators earn stake-weighted rewards<br>
+                • Rewards distributed per round (5s)<br>
+                • Higher stake = higher rewards<br>
+                • Unstaking requires 2,016 rounds (~2.8 hours)
+              </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="stakeUDAG()">Stake UDAG</button>
+          </div>
+        </div>
+
+        <!-- Unstake -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Unstake UDAG</span>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <label class="label">Select Staked Position</label>
+              <select class="select" id="unstake-position">
+                <option>No staked positions</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="label">Amount to Unstake</label>
+              <input class="input" id="unstake-amount" type="number" placeholder="0" min="0" step="1">
+              <div class="help">Available to unstake: <span id="unstake-available">0</span> UDAG</div>
+            </div>
+
+            <div class="field">
+              <label class="label">Unstaking Information</label>
+              <div class="help">
+                • Funds will be available after 2,016 rounds<br>
+                • You continue earning rewards during cooldown<br>
+                • Can cancel unstake anytime before completion
+              </div>
+            </div>
+
+            <button class="btn btn-secondary" onclick="unstakeUDAG()">Unstake UDAG</button>
+          </div>
         </div>
       </div>
     </div>
@@ -2725,6 +2836,258 @@ function populateCouncilWallets() {
 }
 
 // ========================================
+// STAKING
+// ========================================
+
+async function loadStakingStatus() {
+  if (!connected) return;
+  
+  try {
+    // Show content, hide offline message
+    document.getElementById('stake-offline').style.display = 'none';
+    document.getElementById('stake-content').style.display = 'block';
+    
+    // Populate wallet selects and load staking positions
+    populateStakeWallets();
+    await loadStakingPositions();
+    
+  } catch (e) {
+    console.error('Failed to load staking status:', e);
+    document.getElementById('stake-offline').style.display = 'block';
+    document.getElementById('stake-content').style.display = 'none';
+  }
+}
+
+function populateStakeWallets() {
+  if (!keystore) return;
+  
+  const stakeSelect = document.getElementById('stake-wallet');
+  stakeSelect.innerHTML = keystore.wallets.map((w, i) => 
+    `<option value="${i}">${w.name} (${formatUdag(w.balance || 0)} UDAG)</option>`
+  ).join('');
+  
+  // Update available balance when wallet changes
+  stakeSelect.addEventListener('change', updateStakeAvailable);
+  updateStakeAvailable();
+}
+
+function updateStakeAvailable() {
+  const select = document.getElementById('stake-wallet');
+  const wallet = keystore.wallets[select.selectedIndex];
+  const availableSpan = document.getElementById('stake-available');
+  
+  if (wallet) {
+    availableSpan.textContent = formatUdag(wallet.balance || 0);
+  } else {
+    availableSpan.textContent = '0';
+  }
+}
+
+async function loadStakingPositions() {
+  if (!keystore || !connected) return;
+  
+  const positions = [];
+  
+  for (const wallet of keystore.wallets) {
+    try {
+      const res = await fetch(nodeUrl + '/balance/' + wallet.address);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.staked > 0) {
+          positions.push({
+            wallet: wallet,
+            staked: data.staked,
+            unlock_at_round: data.unlock_at_round,
+            nonce: data.nonce
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load staking position for wallet:', wallet.address, e);
+    }
+  }
+  
+  renderStakingPositions(positions);
+  updateUnstakeSelect(positions);
+}
+
+function renderStakingPositions(positions) {
+  const container = document.getElementById('staking-positions');
+  const countBadge = document.getElementById('stake-count');
+  
+  countBadge.textContent = positions.length;
+  
+  if (positions.length === 0) {
+    container.innerHTML = '<div class="empty">No staking positions yet</div>';
+    return;
+  }
+  
+  container.innerHTML = positions.map(pos => {
+    const isUnstaking = pos.unlock_at_round !== null;
+    const status = isUnstaking ? 'Unstaking' : 'Active';
+    const statusColor = isUnstaking ? 'orange' : 'green';
+    
+    return `
+      <div class="staking-position" style="display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid var(--border)">
+        <div>
+          <div class="position-wallet" style="font-weight:600">${pos.wallet.name}</div>
+          <div class="position-amount" style="margin-top:4px">${formatUdag(pos.staked)} UDAG</div>
+          ${isUnstaking ? `<div class="position-unlock" style="font-size:11px;color:var(--subtle)">Unlocks at round ${pos.unlock_at_round}</div>` : ''}
+        </div>
+        <div style="text-align:right">
+          <div class="position-status" style="font-size:11px;color:${statusColor}">${status}</div>
+          <div class="position-nonce" style="font-size:10px;color:var(--subtle)">Nonce: ${pos.nonce}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateUnstakeSelect(positions) {
+  const select = document.getElementById('unstake-position');
+  
+  if (positions.length === 0) {
+    select.innerHTML = '<option>No staked positions</option>';
+    return;
+  }
+  
+  select.innerHTML = positions.map((pos, i) => 
+    `<option value="${i}">${pos.wallet.name} (${formatUdag(pos.staked)} UDAG)</option>`
+  ).join('');
+  
+  // Update available amount when position changes
+  select.addEventListener('change', () => updateUnstakeAvailable(positions));
+  updateUnstakeAvailable(positions);
+}
+
+function updateUnstakeAvailable(positions) {
+  const select = document.getElementById('unstake-position');
+  const position = positions[select.selectedIndex];
+  const availableSpan = document.getElementById('unstake-available');
+  
+  if (position) {
+    availableSpan.textContent = formatUdag(position.staked);
+    document.getElementById('unstake-amount').max = position.staked;
+  } else {
+    availableSpan.textContent = '0';
+    document.getElementById('unstake-amount').max = 0;
+  }
+}
+
+async function stakeUDAG() {
+  if (!keystore || !connected) {
+    toast('Connect to a node and unlock keystore first', 'err');
+    return;
+  }
+  
+  const walletSelect = document.getElementById('stake-wallet');
+  const amountInput = document.getElementById('stake-amount');
+  const selectedWallet = keystore.wallets[walletSelect.selectedIndex];
+  const amountSats = parseFloat(amountInput.value) * 100000000; // Convert UDAG to sats
+  
+  if (!selectedWallet) {
+    toast('Please select a wallet', 'err');
+    return;
+  }
+  
+  if (!amountSats || amountSats < 100000000000) { // 10,000 UDAG minimum
+    toast('Minimum stake is 10,000 UDAG', 'err');
+    return;
+  }
+  
+  if (amountSats > selectedWallet.balance) {
+    toast('Insufficient balance', 'err');
+    return;
+  }
+  
+  try {
+    const payload = {
+      secret_key: selectedWallet.secret_key,
+      amount: Math.floor(amountSats),
+      nonce: selectedWallet.nonce || 0
+    };
+    
+    const res = await fetch(nodeUrl + '/stake', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Staking failed');
+    }
+    
+    const data = await res.json();
+    toast('Staking successful!', 'ok');
+    
+    // Clear form
+    amountInput.value = '';
+    
+    // Refresh positions and portfolio
+    await loadStakingPositions();
+    refreshPortfolio();
+    
+  } catch (e) {
+    toast(e.message || 'Failed to stake', 'err');
+  }
+}
+
+async function unstakeUDAG() {
+  if (!keystore || !connected) {
+    toast('Connect to a node and unlock keystore first', 'err');
+    return;
+  }
+  
+  const positionSelect = document.getElementById('unstake-position');
+  const amountInput = document.getElementById('unstake-amount');
+  const selectedWallet = keystore.wallets[positionSelect.selectedIndex];
+  const amountSats = parseFloat(amountInput.value) * 100000000; // Convert UDAG to sats
+  
+  if (!selectedWallet) {
+    toast('Please select a staked position', 'err');
+    return;
+  }
+  
+  if (!amountSats || amountSats <= 0) {
+    toast('Please enter a valid amount', 'err');
+    return;
+  }
+  
+  try {
+    const payload = {
+      secret_key: selectedWallet.secret_key,
+      amount: Math.floor(amountSats),
+      nonce: selectedWallet.nonce || 0
+    };
+    
+    const res = await fetch(nodeUrl + '/unstake', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Unstaking failed');
+    }
+    
+    const data = await res.json();
+    toast('Unstaking initiated!', 'ok');
+    
+    // Clear form
+    amountInput.value = '';
+    
+    // Refresh positions and portfolio
+    await loadStakingPositions();
+    refreshPortfolio();
+    
+  } catch (e) {
+    toast(e.message || 'Failed to unstake', 'err');
+  }
+}
+
+// ========================================
 // NODE CONNECTION
 // ========================================
 
@@ -2884,6 +3247,7 @@ function switchTab(tab) {
   });
   if (tab === 'portfolio' && keystore && connected) refreshPortfolio();
   if (tab === 'send' && keystore) { populateSendSelects(); updateSendInfo(); }
+  if (tab === 'stake' && connected) { loadStakingStatus(); }
   if (tab === 'dag' && connected) { loadMempool(); loadFinalizedRounds(); }
   if (tab === 'validator' && keystore) checkValidatorStatus();
   if (tab === 'governance' && connected) {
