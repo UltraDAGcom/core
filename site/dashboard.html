@@ -1048,7 +1048,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
                   Select a wallet above
                 </div>
               </div>
-              <button class="btn btn-primary btn-full" id="faucet-btn" onclick="requestFaucet()" disabled>Request 100 UDAG</button>
+              <button class="btn btn-primary btn-full" id="faucet-btn" onclick="requestFaucet()" disabled>Request 50,000 UDAG</button>
               <div id="faucet-status" style="margin-top:12px;font-family:'DM Mono',monospace;font-size:11px;text-align:center"></div>
             </div>
           </div>
@@ -1221,7 +1221,10 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
             <div class="page-title">Gover<em>nance</em></div>
             <div class="page-sub">Stake-weighted on-chain voting</div>
           </div>
-          <button class="btn btn-sm" onclick="loadGovernance()">Refresh</button>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" onclick="populateProposalWallets()">Refresh Balances</button>
+            <button class="btn btn-sm" onclick="loadGovernance()">Refresh</button>
+          </div>
         </div>
 
         <!-- Stats strip -->
@@ -1717,7 +1720,7 @@ async function requestFaucet() {
     const res = await fetch(nodeUrl + '/faucet', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address: w.address, amount: 10000000000 })
+      body: JSON.stringify({ address: w.address, amount: 5000000000000 })
     });
     
     if (!res.ok) {
@@ -1728,6 +1731,13 @@ async function requestFaucet() {
     const data = await res.json();
     status.innerHTML = `<span style="color:var(--green)">✓ Success! Sent ${formatUdag(data.amount)} UDAG</span>`;
     toast('Faucet request successful!');
+    
+    // Refresh balances across all tabs
+    if (keystore) {
+      refreshPortfolio();
+      populateProposalWallets();
+      updateMyVotingPower();
+    }
     
     // Refresh balance after 3 seconds
     setTimeout(() => {
@@ -2627,7 +2637,10 @@ function switchTab(tab) {
   if (tab === 'send' && keystore) { populateSendSelects(); updateSendInfo(); }
   if (tab === 'dag' && connected) { loadMempool(); loadFinalizedRounds(); }
   if (tab === 'validator' && keystore) checkValidatorStatus();
-  if (tab === 'governance' && connected) loadGovernance();
+  if (tab === 'governance' && connected) {
+    populateProposalWallets();
+    loadGovernance();
+  }
 }
 
 document.querySelectorAll('.nav-item, .tab-mob').forEach(el => {
