@@ -36,7 +36,7 @@ macro_rules! write_lock_or_503 {
 }
 
 use ultradag_coin::{Address, Mempool, SecretKey, Signature, StateEngine, Transaction, TransferTx, StakeTx, UnstakeTx, MIN_STAKE_SATS};
-use ultradag_coin::governance::{CreateProposalTx, VoteTx, ProposalType};
+use ultradag_coin::governance::{CreateProposalTx, VoteTx, ProposalType, CouncilAction, CouncilSeatCategory};
 use ultradag_network::{Message, NodeServer};
 use crate::rate_limit::{RateLimiter, limits};
 
@@ -336,6 +336,15 @@ struct ProposalRequest {
     parameter_name: Option<String>,
     #[serde(default)]
     parameter_value: Option<String>,
+    /// Council membership: "add" or "remove"
+    #[serde(default)]
+    council_action: Option<String>,
+    /// Council membership: target address (hex)
+    #[serde(default)]
+    council_address: Option<String>,
+    /// Council membership: seat category (technical, business, legal, academic, community, foundation)
+    #[serde(default)]
+    council_category: Option<String>,
     #[serde(default)]
     fee: Option<u64>,
 }
@@ -1269,7 +1278,32 @@ async fn handle_request(
                     };
                     ProposalType::ParameterChange { param, new_value: value }
                 }
-                _ => return Ok(error_response(StatusCode::BAD_REQUEST, "proposal_type must be 'text' or 'parameter'")),
+                "council_membership" => {
+                    let Some(action_str) = prop_req.council_action else {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "council_action required ('add' or 'remove')"));
+                    };
+                    let action = match action_str.as_str() {
+                        "add" => CouncilAction::Add,
+                        "remove" => CouncilAction::Remove,
+                        _ => return Ok(error_response(StatusCode::BAD_REQUEST, "council_action must be 'add' or 'remove'")),
+                    };
+                    let Some(addr_hex) = prop_req.council_address else {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "council_address required (hex address of candidate)"));
+                    };
+                    let Some(address) = Address::from_hex(&addr_hex) else {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "invalid council_address hex"));
+                    };
+                    let Some(cat_str) = prop_req.council_category else {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "council_category required (technical, business, legal, academic, community, foundation)"));
+                    };
+                    let Some(category) = CouncilSeatCategory::from_str(&cat_str) else {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            "invalid council_category: must be technical, business, legal, academic, community, or foundation"));
+                    };
+                    ProposalType::CouncilMembership { action, address, category }
+                }
+                _ => return Ok(error_response(StatusCode::BAD_REQUEST,
+                    "proposal_type must be 'text', 'parameter', or 'council_membership'")),
             };
 
             let fee = prop_req.fee.unwrap_or(ultradag_coin::constants::MIN_FEE_SATS);
@@ -1289,13 +1323,10 @@ async fn handle_request(
                             total_needed, fee, pending, balance)));
                 }
 
-                // Check proposer has sufficient stake
-                let proposer_stake = state.stake_of(&sender);
-                let min_stake = state.governance_params().min_stake_to_propose;
-                if proposer_stake < min_stake {
-                    return Ok(error_response(StatusCode::BAD_REQUEST,
-                        &format!("insufficient stake to propose: need {} UDAG staked, have {} UDAG staked",
-                            min_stake / 100_000_000, proposer_stake / ultradag_coin::SATS_PER_UDAG)));
+                // Only council members can create proposals
+                if !state.is_council_member(&sender) {
+                    return Ok(error_response(StatusCode::FORBIDDEN,
+                        "only Council of 21 members can create proposals"));
                 }
 
                 // Check active proposal count limit
@@ -1388,6 +1419,12 @@ async fn handle_request(
                         &format!("voting is not open for this proposal (status: {:?})", proposal.status)));
                 }
 
+                // Only council members can vote
+                if !state.is_council_member(&sender) {
+                    return Ok(error_response(StatusCode::FORBIDDEN,
+                        "only Council of 21 members can vote on proposals"));
+                }
+
                 // Check if voter already voted on this proposal
                 if state.get_vote(vote_req.proposal_id, &sender).is_some() {
                     return Ok(error_response(StatusCode::BAD_REQUEST, "already voted on this proposal"));
@@ -1454,9 +1491,47 @@ async fn handle_request(
                     "max_active_proposals": gp.max_active_proposals,
                     "min_fee_sats": gp.min_fee_sats,
                     "observer_reward_percent": gp.observer_reward_percent,
+                    "council_emission_percent": gp.council_emission_percent,
                     "governable_params": ultradag_coin::governance::GovernanceParams::param_names(),
                 }),
             )
+        }
+
+        (&Method::GET, ["council"]) => {
+            let state = read_lock_or_503!(server.state);
+            let members: Vec<serde_json::Value> = state.council_members()
+                .map(|(addr, cat)| serde_json::json!({
+                    "address": addr.to_hex(),
+                    "category": cat.name(),
+                }))
+                .collect();
+            let mut seats_available = serde_json::Map::new();
+            for cat in CouncilSeatCategory::all() {
+                let filled = state.council_members()
+                    .filter(|(_, c)| *c == cat)
+                    .count();
+                seats_available.insert(
+                    cat.name().to_lowercase(),
+                    serde_json::json!({
+                        "filled": filled,
+                        "max": cat.max_seats(),
+                        "available": cat.max_seats().saturating_sub(filled),
+                    }),
+                );
+            }
+            let (per_member, total_emission) = state.compute_council_emission(
+                state.last_finalized_round().unwrap_or(0)
+            );
+            json_response(StatusCode::OK, &serde_json::json!({
+                "member_count": members.len(),
+                "max_members": ultradag_coin::constants::COUNCIL_MAX_MEMBERS,
+                "emission_percent": state.governance_params().council_emission_percent,
+                "per_member_reward_sats": per_member,
+                "per_member_reward_udag": per_member as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                "total_emission_sats": total_emission,
+                "members": members,
+                "seats": seats_available,
+            }))
         }
 
         (&Method::GET, ["proposals"]) => {
@@ -1495,12 +1570,16 @@ async fn handle_request(
             // Include individual voter breakdown with vote weights
             let voters: Vec<serde_json::Value> = state.votes_for_proposal(id)
                 .iter()
-                .map(|(addr, vote, weight)| serde_json::json!({
-                    "address": addr.to_hex(),
-                    "vote": if *vote { "yes" } else { "no" },
-                    "weight": weight,
-                    "weight_udag": *weight as f64 / ultradag_coin::SATS_PER_UDAG as f64,
-                }))
+                .map(|(addr, vote, _weight)| {
+                    let category = state.council_seat_category(addr)
+                        .map(|c| c.name())
+                        .unwrap_or("former member");
+                    serde_json::json!({
+                        "address": addr.to_hex(),
+                        "vote": if *vote { "yes" } else { "no" },
+                        "category": category,
+                    })
+                })
                 .collect();
             json_response(StatusCode::OK, &serde_json::json!({
                 "id": p.id,
@@ -1511,12 +1590,9 @@ async fn handle_request(
                 "voting_starts": p.voting_starts,
                 "voting_ends": p.voting_ends,
                 "votes_for": p.votes_for,
-                "votes_for_udag": p.votes_for as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                 "votes_against": p.votes_against,
-                "votes_against_udag": p.votes_against as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                 "status": p.status,
-                "snapshot_total_stake": p.snapshot_total_stake,
-                "snapshot_total_stake_udag": p.snapshot_total_stake as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                "snapshot_council_size": p.snapshot_total_stake,
                 "voters": voters,
             }))
         }

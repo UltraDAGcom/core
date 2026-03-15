@@ -1337,7 +1337,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
           <div>
             <div class="page-eyebrow">DAO Governance</div>
             <div class="page-title">Gover<em>nance</em></div>
-            <div class="page-sub">Stake-weighted on-chain voting</div>
+            <div class="page-sub">Council of 21 on-chain governance · 1 vote per seat</div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-sm" onclick="populateProposalWallets()">Refresh Balances</button>
@@ -1358,7 +1358,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
           <div class="stat">
             <div class="stat-label">Your Voting Power</div>
             <div class="stat-val green" id="gov-my-power">--</div>
-            <div class="stat-sub">UDAG</div>
+            <div class="stat-sub" id="gov-my-power-sub"></div>
           </div>
           <div class="stat">
             <div class="stat-label">Quorum Threshold</div>
@@ -1393,6 +1393,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
                 <select class="input" id="proposal-type" onchange="updateProposalForm()">
                   <option value="text">Text Proposal</option>
                   <option value="parameter">Parameter Change</option>
+                  <option value="council_membership">Council Membership</option>
                 </select>
               </div>
               <div class="field">
@@ -1413,10 +1414,29 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
                   <input class="input" id="proposal-param-value" placeholder="New parameter value">
                 </div>
               </div>
-              <div class="field">
-                <label class="label">Voting Period (blocks)</label>
-                <input class="input" type="number" id="proposal-duration" value="1000" min="100">
-                <div class="help">Minimum 100 blocks (~17 minutes at 10s/block)</div>
+              <div id="council-membership-fields" style="display:none">
+                <div class="field">
+                  <label class="label">Action</label>
+                  <select class="input" id="proposal-council-action">
+                    <option value="add">Add Member</option>
+                    <option value="remove">Remove Member</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="label">Target Address</label>
+                  <input class="input" id="proposal-council-address" placeholder="64-character hex address of candidate">
+                </div>
+                <div class="field">
+                  <label class="label">Seat Category</label>
+                  <select class="input" id="proposal-council-category">
+                    <option value="technical">Technical</option>
+                    <option value="business">Business</option>
+                    <option value="legal">Legal</option>
+                    <option value="academic">Academic</option>
+                    <option value="community">Community</option>
+                    <option value="foundation">Foundation</option>
+                  </select>
+                </div>
               </div>
               <div class="field">
                 <label class="label">Submitting Wallet</label>
@@ -1454,71 +1474,139 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
           <div>
             <div class="page-eyebrow">Council of 21</div>
             <div class="page-title">Council <em>Governance</em></div>
-            <div class="page-sub">Exclusive voting rights • Open staking rewards</div>
+            <div class="page-sub">1-vote-per-seat governance · 10% emission rewards · 6 seat categories</div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-sm" onclick="loadCouncilStatus()">Refresh</button>
           </div>
         </div>
 
-        <!-- Council Members -->
-        <div class="card">
+        <!-- Council Stats -->
+        <div class="g4" style="margin-bottom:24px">
+          <div class="stat">
+            <div class="stat-label">Council Members</div>
+            <div class="stat-val accent" id="council-member-count">--</div>
+            <div class="stat-sub">of 21 seats</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Your Status</div>
+            <div class="stat-val" id="council-your-status">--</div>
+            <div class="stat-sub" id="council-your-category"></div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Emission Reward</div>
+            <div class="stat-val green" id="council-emission-reward">--</div>
+            <div class="stat-sub">UDAG / round / member</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Open Seats</div>
+            <div class="stat-val" id="council-open-seats">--</div>
+            <div class="stat-sub">available</div>
+          </div>
+        </div>
+
+        <!-- Seat Availability -->
+        <div class="card" style="margin-bottom:24px">
           <div class="card-head">
-            <span class="card-title">Current Council Members</span>
+            <span class="card-title">Seat Categories</span>
             <span class="badge" id="council-count">0/21</span>
+          </div>
+          <div id="council-seats-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1px;background:var(--border)">
+            <div class="empty">Loading seat data...</div>
+          </div>
+        </div>
+
+        <!-- Council Members -->
+        <div class="card" style="margin-bottom:24px">
+          <div class="card-head">
+            <span class="card-title">Current Members</span>
           </div>
           <div id="council-members-list">
             <div class="empty">Loading council members...</div>
           </div>
         </div>
 
-        <!-- Council Application -->
-        <div class="card">
+        <!-- Propose New Member (council members only) -->
+        <div class="card" id="council-propose-card" style="margin-bottom:24px">
           <div class="card-head">
-            <span class="card-title">Apply to Council</span>
+            <span class="card-title">Propose Council Membership</span>
           </div>
           <div class="card-body">
-            <div class="field">
-              <label class="label">Council Membership Requirements</label>
-              <div class="help">
-                • Minimum stake: 100,000 UDAG (for governance rights)<br>
-                • Panama Foundation membership<br>
-                • Professional background (developer, lawyer, etc.)<br><br>
-                <strong>Note:</strong> Anyone can stake 10,000 UDAG for rewards,<br>
-                but only council members can vote on governance.
+            <div id="council-propose-locked">
+              <div class="empty">
+                <div class="empty-icon">&#x1f512;</div>
+                <div class="empty-text">Only council members can propose new members.<br>Unlock keystore to check your status.</div>
               </div>
             </div>
-            
-            <div class="field">
-              <label class="label">Select Wallet</label>
-              <select class="select" id="council-wallet">
-                <option>No wallets available</option>
-              </select>
+            <div id="council-propose-form" style="display:none">
+              <div class="field">
+                <label class="label">Action</label>
+                <select class="input" id="council-propose-action" onchange="updateCouncilProposalForm()">
+                  <option value="add">Add Member</option>
+                  <option value="remove">Remove Member</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="label">Candidate Address</label>
+                <input class="input" id="council-propose-address" placeholder="64-character hex address">
+                <div class="help">The address to add to or remove from the council</div>
+              </div>
+              <div class="field" id="council-category-field">
+                <label class="label">Seat Category</label>
+                <select class="input" id="council-propose-category">
+                  <option value="technical">Technical (7 seats)</option>
+                  <option value="business">Business (4 seats)</option>
+                  <option value="legal">Legal (3 seats)</option>
+                  <option value="academic">Academic (3 seats)</option>
+                  <option value="community">Community (2 seats)</option>
+                  <option value="foundation">Foundation (2 seats)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="label">Title</label>
+                <input class="input" id="council-propose-title" placeholder="e.g. Add Alice (Core Developer) to Technical seat" maxlength="128">
+              </div>
+              <div class="field">
+                <label class="label">Description</label>
+                <textarea class="textarea" id="council-propose-description" placeholder="Explain why this person should be added/removed. Include qualifications, contributions, or reasons." rows="4" maxlength="4096"></textarea>
+              </div>
+              <div class="field">
+                <label class="label">Submitting Wallet</label>
+                <select class="input" id="council-propose-wallet">
+                  <option>No wallets available</option>
+                </select>
+                <div class="help">Must be a council member address</div>
+              </div>
+              <button class="btn btn-primary" onclick="submitCouncilProposal()">Submit Membership Proposal</button>
             </div>
-
-            <div class="field">
-              <label class="label">Foundation Membership ID</label>
-              <input class="input" id="foundation-token" placeholder="Panama Foundation membership ID">
-              <div class="help">Your Panama Foundation membership verification ID</div>
-            </div>
-
-            <div class="field">
-              <label class="label">Professional Background</label>
-              <textarea class="textarea" id="professional-bg" placeholder="Describe your professional background (developer, lawyer, researcher, etc.)"></textarea>
-              <div class="help">Help us understand your expertise and qualifications</div>
-            </div>
-
-            <button class="btn btn-primary" onclick="applyToCouncil()">Submit Council Application</button>
           </div>
         </div>
 
-        <!-- Your Council Status -->
-        <div class="card" id="your-council-status" style="display:none">
+        <!-- How to Join -->
+        <div class="card" id="council-how-to-join">
           <div class="card-head">
-            <span class="card-title">Your Council Status</span>
+            <span class="card-title">How to Join the Council</span>
           </div>
-          <div class="card-body" id="council-status-content">
-            <!-- Status will be populated here -->
+          <div class="card-body">
+            <div style="font-family:'Cormorant',serif;font-size:16px;line-height:1.8;color:var(--subtle)">
+              <p style="margin-bottom:16px">The Council of 21 is a governance body with <strong style="color:var(--white)">no stake requirement</strong>. Seats are allocated by category based on expertise:</p>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:20px;font-family:'DM Mono',monospace;font-size:12px">
+                <div><span style="color:var(--accent)">Technical</span> — 7 seats (developers, cryptographers)</div>
+                <div><span style="color:var(--green)">Business</span> — 4 seats (partnerships, growth)</div>
+                <div><span style="color:var(--yellow)">Legal</span> — 3 seats (compliance, regulation)</div>
+                <div><span style="color:#60a5fa">Academic</span> — 3 seats (researchers, professors)</div>
+                <div><span style="color:#f472b6">Community</span> — 2 seats (advocates, ambassadors)</div>
+                <div><span style="color:#c084fc">Foundation</span> — 2 seats (Panama Foundation)</div>
+              </div>
+              <p style="margin-bottom:12px"><strong style="color:var(--white)">To apply:</strong></p>
+              <ol style="padding-left:20px;font-family:'DM Mono',monospace;font-size:12px;line-height:2">
+                <li>Connect with an existing council member and share your qualifications</li>
+                <li>The council member submits a CouncilMembership proposal on your behalf</li>
+                <li>Council votes (10% quorum, 66% approval required)</li>
+                <li>If approved, your address is added after the execution delay</li>
+              </ol>
+              <p style="margin-top:16px;font-size:14px;color:var(--dim)">Council members earn 10% of block emission rewards, distributed equally. Each member gets 1 vote on all governance proposals.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -2370,7 +2458,7 @@ function renderGovernanceUI() {
   
   document.getElementById('gov-active-count').textContent = activeProposals.length;
   
-  // Backend uses votes_for and votes_against (not yes_votes/no_votes)
+  // Council-based voting: each vote = 1 (not stake-weighted)
   const totalVotes = proposals.reduce((sum, p) => sum + (p.votes_for || 0) + (p.votes_against || 0), 0);
   document.getElementById('gov-total-votes').textContent = totalVotes;
   
@@ -2384,21 +2472,37 @@ function renderGovernanceUI() {
 }
 
 async function updateMyVotingPower() {
+  const powerEl = document.getElementById('gov-my-power');
+  const subEl = document.getElementById('gov-my-power-sub');
+
   if (!keystore || !connected) {
-    document.getElementById('gov-my-power').textContent = '--';
+    powerEl.textContent = '--';
+    subEl.textContent = '';
     return;
   }
-  
-  let totalPower = 0;
-  for (const w of keystore.wallets) {
-    try {
-      const res = await fetch(nodeUrl + '/balance/' + w.address);
+
+  // Check council membership via /council endpoint
+  try {
+    const res = await fetch(nodeUrl + '/council');
+    if (res.ok) {
       const data = await res.json();
-      totalPower += data.balance;
-    } catch {}
+      const walletAddresses = keystore.wallets.map(w => w.address);
+      const myMembership = (data.members || []).find(m => walletAddresses.includes(m.address));
+
+      if (myMembership) {
+        powerEl.textContent = '1';
+        powerEl.style.color = 'var(--green)';
+        subEl.textContent = myMembership.category + ' seat';
+      } else {
+        powerEl.textContent = '0';
+        powerEl.style.color = 'var(--dim)';
+        subEl.textContent = 'not a council member';
+      }
+    }
+  } catch {
+    powerEl.textContent = '--';
+    subEl.textContent = '';
   }
-  
-  document.getElementById('gov-my-power').textContent = formatUdag(totalPower);
 }
 
 function renderActiveProposals(activeProposals) {
@@ -2422,7 +2526,7 @@ function renderActiveProposals(activeProposals) {
           <div>
             <div style="font-family:'Cormorant',serif;font-size:20px;font-weight:300;color:var(--white);margin-bottom:4px">${esc(p.title)}</div>
             <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:0.04em;text-transform:uppercase">
-              Proposal #${p.id} · ${typeof p.proposal_type === 'string' ? p.proposal_type : 'ParameterChange'} · Ends round ${p.voting_ends}
+              Proposal #${p.id} · ${typeof p.proposal_type === 'string' ? p.proposal_type : (p.proposal_type.ParameterChange ? 'Parameter Change' : p.proposal_type.CouncilMembership ? 'Council Membership' : 'Unknown')} · Ends round ${p.voting_ends}
             </div>
           </div>
           <div style="font-family:'DM Mono',monospace;font-size:11px;padding:4px 10px;background:var(--accent-dim);border:1px solid rgba(139,92,246,0.3);color:var(--accent);letter-spacing:0.06em;text-transform:uppercase">
@@ -2438,6 +2542,16 @@ function renderActiveProposals(activeProposals) {
             <div style="color:var(--white)"><strong>${esc(p.proposal_type.ParameterChange.param || '')}</strong> → ${esc(p.proposal_type.ParameterChange.new_value || '')}</div>
           </div>
         ` : ''}
+        ${typeof p.proposal_type === 'object' && p.proposal_type.CouncilMembership ? `
+          <div style="background:var(--bg3);border:1px solid var(--border);padding:12px;margin-bottom:16px;font-family:'DM Mono',monospace;font-size:12px">
+            <div style="color:var(--dim);margin-bottom:4px">Council Membership:</div>
+            <div style="color:var(--white)">
+              <strong>${p.proposal_type.CouncilMembership.action === 'Add' ? 'Add' : 'Remove'}</strong>
+              ${p.proposal_type.CouncilMembership.address ? p.proposal_type.CouncilMembership.address.slice(0,12) + '...' : ''}
+              ${p.proposal_type.CouncilMembership.category ? `<span style="color:${SEAT_COLORS[(p.proposal_type.CouncilMembership.category || '').toLowerCase()] || 'var(--subtle)'}"> (${esc(p.proposal_type.CouncilMembership.category)})</span>` : ''}
+            </div>
+          </div>
+        ` : ''}
         <div style="margin-bottom:12px">
           <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-family:'DM Mono',monospace;font-size:11px">
             <span style="color:var(--green)">YES ${yesPercent}%</span>
@@ -2448,8 +2562,8 @@ function renderActiveProposals(activeProposals) {
             <div style="width:${noPercent}%;background:var(--red);transition:width 0.3s"></div>
           </div>
           <div style="display:flex;justify-content:space-between;margin-top:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--dim)">
-            <span>${formatUdag(p.votes_for || 0)} UDAG</span>
-            <span>${formatUdag(p.votes_against || 0)} UDAG</span>
+            <span>${p.votes_for || 0} vote${(p.votes_for || 0) !== 1 ? 's' : ''}</span>
+            <span>${p.votes_against || 0} vote${(p.votes_against || 0) !== 1 ? 's' : ''}</span>
           </div>
         </div>
         ${myVote ? `
@@ -2500,7 +2614,7 @@ function renderProposalHistory(pastProposals) {
           </div>
         </div>
         <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:0.04em;text-transform:uppercase;margin-bottom:12px">
-          Proposal #${p.id} · ${p.proposal_type}
+          Proposal #${p.id} · ${typeof p.proposal_type === 'string' ? p.proposal_type : (p.proposal_type.ParameterChange ? 'Parameter Change' : p.proposal_type.CouncilMembership ? 'Council Membership' : 'Unknown')}
         </div>
         <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-family:'DM Mono',monospace;font-size:11px">
           <span style="color:var(--green)">YES ${yesPercent}%</span>
@@ -2520,37 +2634,43 @@ async function castVote(proposalId, vote) {
     toast('Unlock keystore to vote', 'err');
     return;
   }
-  
+
   if (!keystore.wallets.length) {
     toast('No wallets in keystore', 'err');
     return;
   }
-  
-  const wallet = keystore.wallets[0];
-  
+
+  // Use first council member wallet
+  let wallet = null;
+  if (councilData) {
+    const memberAddrs = (councilData.members || []).map(m => m.address);
+    wallet = keystore.wallets.find(w => memberAddrs.includes(w.address));
+  }
+  if (!wallet) wallet = keystore.wallets[0];
+
   try {
     const res = await fetch(nodeUrl + '/vote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        proposal_id: proposalId,
+        proposal_id: parseInt(proposalId),
         vote: vote,
-        voter_secret: wallet.secret_key
+        secret_key: wallet.secret_key
       })
     });
-    
+
     const data = await res.json();
-    
+
     if (data.error) {
       toast('Vote failed: ' + data.error, 'err');
       return;
     }
-    
-    myVotes.set(proposalId, vote ? 'yes' : 'no');
+
+    myVotes.set(String(proposalId), vote ? 'yes' : 'no');
     saveVotesToStorage();
-    
+
     toast('Vote cast successfully', 'ok');
-    
+
     setTimeout(() => loadGovernance(), 1000);
   } catch (err) {
     toast('Vote failed: ' + err.message, 'err');
@@ -2596,14 +2716,29 @@ async function submitProposal() {
   if (proposalType === 'parameter') {
     const paramName = document.getElementById('proposal-param-name').value.trim();
     const paramValue = document.getElementById('proposal-param-value').value.trim();
-    
+
     if (!paramName || !paramValue) {
       toast('Parameter name and value required', 'err');
       return;
     }
-    
+
     payload.parameter_name = paramName;
     payload.parameter_value = paramValue;
+  }
+
+  if (proposalType === 'council_membership') {
+    const councilAction = document.getElementById('proposal-council-action').value;
+    const councilAddress = document.getElementById('proposal-council-address').value.trim();
+    const councilCategory = document.getElementById('proposal-council-category').value;
+
+    if (!councilAddress || councilAddress.length !== 64) {
+      toast('Enter a valid 64-character hex address', 'err');
+      return;
+    }
+
+    payload.council_action = councilAction;
+    payload.council_address = councilAddress;
+    payload.council_category = councilCategory;
   }
   
   try {
@@ -2636,6 +2771,7 @@ async function submitProposal() {
 function updateProposalForm() {
   const type = document.getElementById('proposal-type').value;
   document.getElementById('param-fields').style.display = type === 'parameter' ? '' : 'none';
+  document.getElementById('council-membership-fields').style.display = type === 'council_membership' ? '' : 'none';
 }
 
 async function populateProposalWallets() {
@@ -2679,22 +2815,57 @@ function updateGovBadge(count) {
 // COUNCIL OF 21
 // ========================================
 
+const SEAT_COLORS = {
+  technical: 'var(--accent)',
+  business: 'var(--green)',
+  legal: 'var(--yellow)',
+  academic: '#60a5fa',
+  community: '#f472b6',
+  foundation: '#c084fc'
+};
+
+let councilData = null;
+
 async function loadCouncilStatus() {
   if (!connected) return;
-  
+
   try {
-    const res = await fetch(nodeUrl + '/council/status');
-    if (!res.ok) throw new Error('Failed to load council status');
-    
-    const data = await res.json();
-    renderCouncilMembers(data.members);
-    renderCouncilApplication(data.application_status);
-    updateCouncilCount(data.members.length);
-    
-    // Show content, hide offline message
+    const res = await fetch(nodeUrl + '/council');
+    if (!res.ok) throw new Error('Failed to load council data');
+
+    councilData = await res.json();
+
+    // Update stats
+    document.getElementById('council-member-count').textContent = councilData.member_count;
+    document.getElementById('council-count').textContent = `${councilData.member_count}/${councilData.max_members}`;
+    document.getElementById('council-emission-reward').textContent =
+      councilData.per_member_reward_udag ? councilData.per_member_reward_udag.toFixed(4) : '0';
+
+    // Count open seats
+    let openSeats = 0;
+    if (councilData.seats) {
+      for (const cat of Object.values(councilData.seats)) {
+        openSeats += cat.available || 0;
+      }
+    }
+    document.getElementById('council-open-seats').textContent = openSeats;
+
+    // Check if current wallet is a council member
+    updateCouncilYourStatus();
+
+    // Render seat grid
+    renderSeatGrid(councilData.seats);
+
+    // Render members
+    renderCouncilMembers(councilData.members);
+
+    // Update proposal form visibility
+    updateCouncilProposalAccess();
+
+    // Show content
     document.getElementById('council-offline').style.display = 'none';
     document.getElementById('council-content').style.display = 'block';
-    
+
   } catch (e) {
     console.error('Failed to load council status:', e);
     document.getElementById('council-offline').style.display = 'block';
@@ -2702,139 +2873,238 @@ async function loadCouncilStatus() {
   }
 }
 
+function updateCouncilYourStatus() {
+  const statusEl = document.getElementById('council-your-status');
+  const catEl = document.getElementById('council-your-category');
+
+  if (!keystore || !councilData) {
+    statusEl.textContent = '--';
+    catEl.textContent = '';
+    return;
+  }
+
+  const walletAddresses = keystore.wallets.map(w => w.address);
+  const myMembership = (councilData.members || []).find(m => walletAddresses.includes(m.address));
+
+  if (myMembership) {
+    statusEl.textContent = 'Member';
+    statusEl.style.color = 'var(--green)';
+    catEl.textContent = myMembership.category;
+    catEl.style.color = SEAT_COLORS[myMembership.category.toLowerCase()] || 'var(--subtle)';
+  } else {
+    statusEl.textContent = 'Not a member';
+    statusEl.style.color = 'var(--dim)';
+    catEl.textContent = '';
+  }
+}
+
+function renderSeatGrid(seats) {
+  const el = document.getElementById('council-seats-grid');
+  if (!seats) {
+    el.innerHTML = '<div class="empty">No seat data</div>';
+    return;
+  }
+
+  const categories = ['technical', 'business', 'legal', 'academic', 'community', 'foundation'];
+  const labels = { technical: 'Technical', business: 'Business', legal: 'Legal', academic: 'Academic', community: 'Community', foundation: 'Foundation' };
+
+  el.innerHTML = categories.map(cat => {
+    const s = seats[cat] || { filled: 0, max: 0, available: 0 };
+    const color = SEAT_COLORS[cat];
+    const pct = s.max > 0 ? (s.filled / s.max * 100) : 0;
+
+    // Render individual seat dots
+    let dots = '';
+    for (let i = 0; i < s.max; i++) {
+      const filled = i < s.filled;
+      dots += `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;margin:2px;${filled ? `background:${color}` : `border:1px solid ${color};opacity:0.3`}"></span>`;
+    }
+
+    return `
+      <div style="background:var(--bg2);padding:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-family:'DM Mono',monospace;font-size:11px;color:${color};text-transform:uppercase;letter-spacing:0.06em">${labels[cat]}</span>
+          <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--dim)">${s.filled}/${s.max}</span>
+        </div>
+        <div style="margin-bottom:8px">${dots}</div>
+        <div style="height:3px;background:var(--bg3);border-radius:2px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${color};transition:width 0.3s"></div>
+        </div>
+        ${s.available > 0 ? `<div style="font-family:'DM Mono',monospace;font-size:10px;color:${color};margin-top:6px">${s.available} seat${s.available > 1 ? 's' : ''} open</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
 function renderCouncilMembers(members) {
   const el = document.getElementById('council-members-list');
-  
+
   if (!members || members.length === 0) {
-    el.innerHTML = '<div class="empty">No council members yet</div>';
+    el.innerHTML = '<div class="empty"><div class="empty-sub">No council members yet. The first members must be added via genesis or direct state modification.</div></div>';
     return;
   }
-  
-  el.innerHTML = members.map(member => `
-    <div class="council-member" style="display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid var(--border)">
-      <div>
-        <div class="member-address" style="font-family:monospace;font-size:12px;color:var(--subtle)">${member.address}</div>
-        <div class="member-stake" style="margin-top:4px">${formatUdag(member.stake)} UDAG</div>
-      </div>
-      <div style="text-align:right">
-        <div class="member-role" style="font-size:11px;color:var(--accent)">${member.role || 'Council Member'}</div>
-        <div class="member-status" style="font-size:10px;color:var(--subtle)">Active</div>
-      </div>
-    </div>
-  `).join('');
-}
 
-function renderCouncilApplication(status) {
-  const statusEl = document.getElementById('your-council-status');
-  const statusContent = document.getElementById('council-status-content');
-  
-  if (!status) {
-    statusEl.style.display = 'none';
-    return;
+  // Group by category
+  const grouped = {};
+  for (const m of members) {
+    const cat = (m.category || 'unknown').toLowerCase();
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(m);
   }
-  
-  statusEl.style.display = 'block';
-  statusContent.innerHTML = `
-    <div style="padding:16px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <span style="font-weight:600">Application Status</span>
-        <span class="badge ${status.status}">${status.status}</span>
-      </div>
-      <div style="font-size:12px;color:var(--subtle)">
-        Submitted: ${new Date(status.submitted_at).toLocaleString()}<br>
-        ${status.reviewed_at ? `Reviewed: ${new Date(status.reviewed_at).toLocaleString()}` : ''}
-        ${status.notes ? `<br><br>Notes: ${status.notes}` : ''}
-      </div>
-    </div>
-  `;
-}
 
-function updateCouncilCount(count) {
-  document.getElementById('council-count').textContent = `${count}/21`;
-}
+  const categories = ['technical', 'business', 'legal', 'academic', 'community', 'foundation'];
+  const labels = { technical: 'Technical', business: 'Business', legal: 'Legal', academic: 'Academic', community: 'Community', foundation: 'Foundation' };
 
-async function applyToCouncil() {
-  if (!keystore || !connected) {
-    toast('Connect to a node and unlock keystore first', 'err');
-    return;
-  }
-  
-  const walletSelect = document.getElementById('council-wallet');
-  const selectedWallet = keystore.wallets[walletSelect.selectedIndex];
-  const foundationToken = document.getElementById('foundation-token').value.trim();
-  const professionalBg = document.getElementById('professional-bg').value.trim();
-  
-  if (!selectedWallet) {
-    toast('Please select a wallet', 'err');
-    return;
-  }
-  
-  if (!foundationToken) {
-    toast('Please provide your Panama Foundation membership ID', 'err');
-    return;
-  }
-  
-  if (!professionalBg) {
-    toast('Please describe your professional background', 'err');
-    return;
-  }
-  
-  // Check if wallet has sufficient stake
-  try {
-    const balanceRes = await fetch(nodeUrl + '/balance/' + selectedWallet.address);
-    const balanceData = await balanceRes.json();
-    
-    if (balanceData.balance < 10000000000000) {
-      toast('Insufficient stake: 100,000 UDAG required to join council', 'err');
-      return;
+  let html = '';
+  for (const cat of categories) {
+    const catMembers = grouped[cat.toLowerCase()] || grouped[cat.charAt(0).toUpperCase() + cat.slice(1)] || [];
+    if (catMembers.length === 0) continue;
+
+    const color = SEAT_COLORS[cat];
+    html += `<div style="padding:8px 16px;background:var(--bg3);font-family:'DM Mono',monospace;font-size:10px;color:${color};text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid var(--border)">${labels[cat]} (${catMembers.length})</div>`;
+
+    for (const m of catMembers) {
+      const shortAddr = m.address.slice(0, 12) + '...' + m.address.slice(-8);
+      html += `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)">
+          <div>
+            <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--white);cursor:pointer" onclick="navigator.clipboard.writeText('${esc(m.address)}');toast('Address copied','ok')" title="${esc(m.address)}">${shortAddr}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-family:'DM Mono',monospace;font-size:10px;padding:3px 8px;border:1px solid ${color}33;color:${color};letter-spacing:0.04em;text-transform:uppercase">${esc(m.category)}</span>
+            <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--green)">1 vote</span>
+          </div>
+        </div>
+      `;
     }
-  } catch (e) {
-    toast('Failed to check wallet balance', 'err');
+  }
+
+  el.innerHTML = html || '<div class="empty">No council members</div>';
+}
+
+function updateCouncilProposalAccess() {
+  const lockedEl = document.getElementById('council-propose-locked');
+  const formEl = document.getElementById('council-propose-form');
+
+  if (!keystore || !councilData) {
+    lockedEl.style.display = 'block';
+    formEl.style.display = 'none';
     return;
   }
-  
+
+  const walletAddresses = keystore.wallets.map(w => w.address);
+  const isMember = (councilData.members || []).some(m => walletAddresses.includes(m.address));
+
+  if (isMember) {
+    lockedEl.style.display = 'none';
+    formEl.style.display = 'block';
+    populateCouncilProposalWallets();
+  } else {
+    lockedEl.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">&#x1f512;</div>
+        <div class="empty-text">Only existing council members can propose new members.<br>
+        <span style="font-size:12px;color:var(--dim)">Contact a council member to be nominated.</span></div>
+      </div>
+    `;
+    lockedEl.style.display = 'block';
+    formEl.style.display = 'none';
+  }
+}
+
+function updateCouncilProposalForm() {
+  const action = document.getElementById('council-propose-action').value;
+  document.getElementById('council-category-field').style.display = action === 'add' ? '' : 'none';
+}
+
+async function populateCouncilProposalWallets() {
+  if (!keystore) return;
+  const el = document.getElementById('council-propose-wallet');
+
+  const walletOptions = [];
+  for (let i = 0; i < keystore.wallets.length; i++) {
+    const w = keystore.wallets[i];
+    // Only show wallets that are council members
+    const isMember = (councilData?.members || []).some(m => m.address === w.address);
+    if (isMember) {
+      walletOptions.push(`<option value="${i}">${esc(w.name)} (Council Member)</option>`);
+    }
+  }
+
+  el.innerHTML = walletOptions.join('') || '<option>No council member wallets</option>';
+}
+
+async function submitCouncilProposal() {
+  if (!keystore || !connected) {
+    toast('Unlock keystore and connect to node', 'err');
+    return;
+  }
+
+  const walletIdx = parseInt(document.getElementById('council-propose-wallet').value);
+  if (isNaN(walletIdx) || !keystore.wallets[walletIdx]) {
+    toast('Select a council member wallet', 'err');
+    return;
+  }
+
+  const wallet = keystore.wallets[walletIdx];
+  const action = document.getElementById('council-propose-action').value;
+  const address = document.getElementById('council-propose-address').value.trim();
+  const category = document.getElementById('council-propose-category').value;
+  const title = document.getElementById('council-propose-title').value.trim();
+  const description = document.getElementById('council-propose-description').value.trim();
+
+  if (!address || address.length !== 64) {
+    toast('Enter a valid 64-character hex address', 'err');
+    return;
+  }
+
+  if (!title) {
+    toast('Title is required', 'err');
+    return;
+  }
+
+  if (!description) {
+    toast('Description is required', 'err');
+    return;
+  }
+
   const payload = {
-    applicant_address: selectedWallet.address,
-    foundation_token_id: foundationToken,
-    professional_background: professionalBg,
-    stake_amount: 10000000000000
+    secret_key: wallet.secret_key,
+    title: title,
+    description: description,
+    proposal_type: 'council_membership',
+    council_action: action,
+    council_address: address,
+    council_category: category,
+    fee: 100000
   };
-  
+
   try {
-    const res = await fetch(nodeUrl + '/council/apply', {
+    const res = await fetch(nodeUrl + '/proposal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error || 'Application failed');
-    }
-    
-    const data = await res.json();
-    toast('Council application submitted successfully!', 'ok');
-    
-    // Clear form
-    document.getElementById('foundation-token').value = '';
-    document.getElementById('professional-bg').value = '';
-    
-    // Refresh status
-    loadCouncilStatus();
-    
-  } catch (e) {
-    toast(e.message || 'Failed to submit application', 'err');
-  }
-}
 
-// Populate council wallet select
-function populateCouncilWallets() {
-  if (!keystore) return;
-  
-  const select = document.getElementById('council-wallet');
-  select.innerHTML = keystore.wallets.map((w, i) => 
-    `<option value="${i}">${w.name} (${formatUdag(w.balance || 0)} UDAG)</option>`
-  ).join('');
+    const data = await res.json();
+
+    if (data.error) {
+      toast('Proposal failed: ' + data.error, 'err');
+      return;
+    }
+
+    toast('Council membership proposal submitted!', 'ok');
+
+    // Clear form
+    document.getElementById('council-propose-address').value = '';
+    document.getElementById('council-propose-title').value = '';
+    document.getElementById('council-propose-description').value = '';
+
+    // Refresh both council and governance
+    setTimeout(() => { loadCouncilStatus(); loadGovernance(); }, 1000);
+  } catch (err) {
+    toast('Proposal failed: ' + err.message, 'err');
+  }
 }
 
 // ========================================
@@ -3148,6 +3418,8 @@ async function connectNode() {
     document.getElementById('gov-offline').style.display = 'none';
     document.getElementById('gov-content').style.display = '';
     loadGovernance();
+    // Pre-load council data for governance voting power check
+    loadCouncilStatus();
   } else {
     connected = false;
     updateConnectionUI(false);
@@ -3257,7 +3529,6 @@ function switchTab(tab) {
     loadGovernance();
   }
   if (tab === 'council' && connected) {
-    populateCouncilWallets();
     loadCouncilStatus();
   }
 }
