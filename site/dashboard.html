@@ -988,19 +988,12 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
           </div>
         </div>
 
-        <!-- Staking Info -->
+        <!-- Staking Rewards Summary -->
         <div class="card card-blue" style="margin-bottom:16px">
           <div class="stat" style="text-align:center;padding:24px">
-            <div class="stat-label">Staking Options</div>
-            <div style="display:flex;gap:24px;justify-content:center;margin-top:12px;flex-wrap:wrap">
-              <div>
-                <div class="stat-val blue" style="font-size:28px">10,000 <span style="font-size:14px;color:var(--subtle)">UDAG</span></div>
-                <div class="stat-sub">Run a validator node</div>
-              </div>
-              <div style="border-left:1px solid var(--border);padding-left:24px">
-                <div class="stat-val blue" style="font-size:28px">100 <span style="font-size:14px;color:var(--subtle)">UDAG</span></div>
-                <div class="stat-sub">Delegate to a validator</div>
-              </div>
+            <div class="stat-label">Your Staking Rewards</div>
+            <div id="rewards-summary" style="margin-top:12px">
+              <div class="empty" style="font-size:13px">Stake or delegate to see estimated rewards</div>
             </div>
           </div>
         </div>
@@ -3439,10 +3432,143 @@ async function loadStakingStatus() {
     await loadValidatorList();
     await populateDelegateWallets();
 
+    // Compute and display rewards estimate
+    await updateRewardsSummary();
+
   } catch (e) {
     console.error('Failed to load staking status:', e);
     document.getElementById('stake-offline').style.display = 'block';
     document.getElementById('stake-content').style.display = 'none';
+  }
+}
+
+// Matches Rust block_reward() in constants.rs
+function blockRewardSats(height) {
+  const INITIAL_REWARD = 100000000; // 1 UDAG in sats
+  const HALVING_INTERVAL = 10500000;
+  const halvings = Math.floor(height / HALVING_INTERVAL);
+  if (halvings >= 64) return 0;
+  return Math.floor(INITIAL_REWARD / Math.pow(2, halvings));
+}
+
+async function updateRewardsSummary() {
+  if (!keystore || !connected) return;
+  const container = document.getElementById('rewards-summary');
+  if (!container) return;
+
+  try {
+    // Get network state
+    const statusRes = await fetch(nodeUrl + '/status');
+    const status = await statusRes.json();
+    const validatorsRes = await fetch(nodeUrl + '/validators');
+    const valData = await validatorsRes.json();
+
+    // Sum user's total staked + delegated across all wallets
+    let totalUserStaked = 0;
+    let totalUserDelegated = 0;
+    let userIsActiveValidator = false;
+
+    for (const w of keystore.wallets) {
+      try {
+        const balRes = await fetch(nodeUrl + '/balance/' + w.address);
+        if (balRes.ok) {
+          const bal = await balRes.json();
+          if (bal.staked > 0) totalUserStaked += bal.staked;
+          if (bal.delegated > 0) totalUserDelegated += bal.delegated;
+        }
+        // Check if any wallet is an active validator
+        if (valData.validators) {
+          for (const v of valData.validators) {
+            if (v.address === w.address) userIsActiveValidator = true;
+          }
+        }
+      } catch (e) { /* skip */ }
+    }
+
+    const totalUserCommitted = totalUserStaked + totalUserDelegated;
+    if (totalUserCommitted === 0) {
+      container.innerHTML = '<div class="empty" style="font-size:13px">Stake or delegate to see estimated rewards</div>';
+      return;
+    }
+
+    // Calculate total network effective stake
+    const totalNetworkStake = status.total_staked || 0;
+    const totalNetworkDelegated = valData.total_delegated || 0;
+    const totalEffective = totalNetworkStake + totalNetworkDelegated;
+    if (totalEffective === 0) {
+      container.innerHTML = '<div class="empty" style="font-size:13px">No network stake yet</div>';
+      return;
+    }
+
+    // Current block reward
+    const height = status.last_finalized_round || 0;
+    const rewardPerRound = blockRewardSats(height); // sats per round total
+    const roundsPerDay = 86400 / 5; // 17,280
+    const roundsPerYear = roundsPerDay * 365;
+
+    // Compute user's reward share
+    // Staked (active validator): full proportional share
+    // Staked (observer): 20% of proportional share
+    // Delegated: proportional share minus validator commission
+    let dailyRewardSats = 0;
+    let rewardLabel = '';
+
+    if (totalUserStaked > 0) {
+      const proportion = totalUserStaked / totalEffective;
+      const perRound = rewardPerRound * proportion;
+      if (userIsActiveValidator) {
+        dailyRewardSats += perRound * roundsPerDay;
+        rewardLabel = 'Active validator';
+      } else {
+        dailyRewardSats += perRound * roundsPerDay * 0.20;
+        rewardLabel = 'Observer (20% rate)';
+      }
+    }
+
+    if (totalUserDelegated > 0) {
+      // Find the validator this user delegates to and get commission
+      let commission = 10; // default
+      for (const w of keystore.wallets) {
+        try {
+          const delRes = await fetch(nodeUrl + '/delegation/' + w.address);
+          if (delRes.ok) {
+            const del = await delRes.json();
+            if (del.validator && del.delegated_amount > 0) {
+              // Find this validator's commission
+              const val = (valData.validators || []).find(v => v.address === del.validator);
+              if (val) commission = val.commission_percent || 10;
+            }
+          }
+        } catch (e) { /* skip */ }
+      }
+      const proportion = totalUserDelegated / totalEffective;
+      const perRound = rewardPerRound * proportion * (1 - commission / 100);
+      dailyRewardSats += perRound * roundsPerDay;
+      if (rewardLabel) rewardLabel += ' + delegator';
+      else rewardLabel = 'Delegator (' + commission + '% commission)';
+    }
+
+    const dailyUdag = dailyRewardSats / 100000000;
+    const yearlyUdag = dailyUdag * 365;
+    const roiPercent = (yearlyUdag / (totalUserCommitted / 100000000)) * 100;
+
+    container.innerHTML = `
+      <div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap">
+        <div>
+          <div class="stat-val blue" style="font-size:28px">${dailyUdag.toFixed(4)} <span style="font-size:14px;color:var(--subtle)">UDAG/day</span></div>
+          <div class="stat-sub">Estimated daily rewards</div>
+        </div>
+        <div style="border-left:1px solid var(--border);padding-left:24px">
+          <div class="stat-val blue" style="font-size:28px">${roiPercent.toFixed(1)}<span style="font-size:14px;color:var(--subtle)">% APR</span></div>
+          <div class="stat-sub">Estimated annual return</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--subtle)">
+        ${rewardLabel} • ${formatUdag(totalUserCommitted)} UDAG committed • Based on current network state
+      </div>
+    `;
+  } catch (e) {
+    console.error('Failed to compute rewards:', e);
   }
 }
 
@@ -4023,6 +4149,7 @@ function startFinalityPolling(target) {
       await loadStakingPositions();
       await loadDelegationPositions();
       await populateStakeWallets();
+      await updateRewardsSummary();
       refreshPortfolio();
     }
     if (finalityPollTarget === 'governance' || finalityPollTarget === 'both') {
