@@ -436,6 +436,47 @@ with reward = 0 after 64 halvings. Each finalized vertex's coinbase transaction 
 
 **Supply cap enforcement.** If `total_supply + reward > MAX_SUPPLY_SATS`, the reward is reduced to `MAX_SUPPLY_SATS - total_supply`. This guarantees the 21 million supply cap is never exceeded.
 
+### 10.1 Delegated Staking
+
+Delegated staking allows passive token holders to earn rewards without running a validator node. Delegators lock UDAG behind an active validator, increasing that validator's effective stake while sharing in the rewards.
+
+**Parameters:**
+
+| Parameter | Value |
+|-----------|-------|
+| Minimum delegation | 100 UDAG |
+| Commission range | 0-100% (set by validator, default 10%) |
+| Undelegation cooldown | 2,016 rounds (~2.8 hours at 5s rounds) |
+
+**Effective Stake.** A validator's effective stake is the sum of their own stake and all delegated stake:
+
+```
+effective_stake(v) = own_stake(v) + sum(delegations_to(v))
+```
+
+Effective stake is used for active set ranking (top 21 by effective stake) and reward calculation. This means a validator with modest own stake can enter the active set if they attract sufficient delegations.
+
+**Reward Distribution.** When a validator earns a block reward, it is split between the validator and their delegators:
+
+```
+validator_share = reward * commission_rate
+delegator_share = (reward - validator_share) * (delegation / total_delegated_to_validator)
+```
+
+The validator retains their commission percentage, and the remainder is distributed proportionally among delegators based on their delegation amounts.
+
+**Slashing Cascades.** If a validator equivocates, the 50% slash applies to all delegated stake as well. Delegators bear the same slashing risk as the validator they delegate to. This incentivizes delegators to choose reliable validators and creates a natural reputation system.
+
+**Undelegation.** Undelegation follows the same cooldown as unstaking (2,016 rounds). During cooldown, delegated funds do not earn rewards and do not count toward the validator's effective stake.
+
+**Supply Invariant.** With delegated staking, the supply invariant becomes:
+
+```
+sum(liquid_balances) + sum(staked) + sum(delegated) + treasury == total_supply
+```
+
+This invariant is checked unconditionally after every state mutation.
+
 ---
 
 ## 11. Network Protocol

@@ -16,10 +16,11 @@
 7. [Account & Balance](#account--balance)
 8. [Transactions](#transactions)
 9. [Staking](#staking)
-10. [Governance](#governance)
-11. [Network & Peers](#network--peers)
-12. [Metrics & Monitoring](#metrics--monitoring)
-13. [Utilities](#utilities)
+10. [Delegated Staking](#delegated-staking)
+11. [Governance](#governance)
+12. [Network & Peers](#network--peers)
+13. [Metrics & Monitoring](#metrics--monitoring)
+14. [Utilities](#utilities)
 
 ---
 
@@ -62,6 +63,9 @@ The API implements per-IP rate limiting to prevent abuse:
 | `/faucet` | 1 request | 1 minute |
 | `/stake` | 10 requests | 1 minute |
 | `/unstake` | 10 requests | 1 minute |
+| `/delegate` | 5 requests | 1 minute |
+| `/undelegate` | 5 requests | 1 minute |
+| `/set-commission` | 5 requests | 1 minute |
 | `/proposal` | 5 requests | 1 minute |
 | `/vote` | 20 requests | 1 minute |
 | All others | 100 requests | 1 minute |
@@ -245,13 +249,17 @@ Get account balance and nonce.
 {
   "address": "a1b2c3...",
   "balance": 1000000000000,
-  "nonce": 5
+  "nonce": 5,
+  "delegated": 10000000000,
+  "delegated_udag": 100.0
 }
 ```
 
 **Fields:**
 - `balance` - Balance in satoshis (1 UDAG = 10^8 sats)
 - `nonce` - Current transaction nonce (next tx must use this value)
+- `delegated` - Amount currently delegated to a validator in satoshis (0 if not delegating)
+- `delegated_udag` - Same amount in UDAG for display convenience
 
 **Example:**
 ```bash
@@ -528,9 +536,22 @@ Get staking information for an address.
   "address": "a1b2c3d4e5f6...",
   "staked_amount": 10000000000,
   "is_active_validator": true,
-  "unstaking": []
+  "unstaking": [],
+  "commission_percent": 10,
+  "effective_stake": 15000000000,
+  "effective_stake_udag": 150.0,
+  "delegator_count": 3
 }
 ```
+
+**Fields:**
+- `staked_amount` - Own stake in satoshis
+- `is_active_validator` - Whether address is in the active validator set
+- `unstaking` - Pending unstake operations with cooldown info
+- `commission_percent` - Validator's commission rate on delegator rewards (0-100, default 10)
+- `effective_stake` - Own stake + total delegated stake in satoshis (used for reward calculation and active set ranking)
+- `effective_stake_udag` - Same amount in UDAG for display convenience
+- `delegator_count` - Number of addresses currently delegating to this validator
 
 **Example:**
 ```bash
@@ -549,14 +570,248 @@ Get list of active validators.
   {
     "address": "a1b2c3d4e5f6...",
     "stake": 10000000000,
-    "is_active": true
+    "is_active": true,
+    "effective_stake": 15000000000,
+    "delegator_count": 3,
+    "commission_percent": 10
   }
 ]
 ```
 
+**Fields:**
+- `stake` - Validator's own stake in satoshis
+- `is_active` - Whether validator is in the active set
+- `effective_stake` - Own stake + total delegated stake in satoshis
+- `delegator_count` - Number of delegators
+- `commission_percent` - Commission rate on delegator rewards (0-100)
+
 **Example:**
 ```bash
 curl http://localhost:10333/validators | jq .
+```
+
+---
+
+## Delegated Staking
+
+Delegated staking allows UDAG holders to delegate their tokens to an existing validator without running a node. Delegators earn a share of the validator's rewards (minus the validator's commission). Delegation increases the validator's effective stake, improving their ranking for the active validator set.
+
+### POST /delegate
+
+Delegate UDAG to a validator. The delegated amount is locked and counts toward the validator's effective stake. Rewards are distributed proportionally, minus the validator's commission rate.
+
+**Testnet-gated:** Returns HTTP 410 GONE in mainnet mode. Use `/tx/submit` with a pre-signed `DelegateTx` instead.
+
+**Request Body:**
+```json
+{
+  "secret_key": "0123456789abcdef...",
+  "validator": "a1b2c3d4e5f6...",
+  "amount": 10000000000
+}
+```
+
+**Fields:**
+- `secret_key` - Delegator's Ed25519 secret key (64 hex chars)
+- `validator` - Validator address to delegate to (64 hex chars)
+- `amount` - Amount to delegate in satoshis
+
+**Minimum Delegation:** 100 UDAG (10,000,000,000 satoshis / `MIN_DELEGATION_SATS`)
+
+**Response (Success):**
+```json
+{
+  "tx_hash": "abc123...",
+  "delegated_to": "a1b2c3d4e5f6...",
+  "amount_sats": 10000000000,
+  "amount_udag": 100.0
+}
+```
+
+**Error Cases:**
+- Insufficient balance: `{"error": "insufficient balance"}`
+- Below minimum: `{"error": "amount below MIN_DELEGATION_SATS (100 UDAG)"}`
+- Already delegating: `{"error": "already delegating to a validator, undelegate first"}`
+- Validator not found: `{"error": "validator not found or not staked"}`
+
+**Rate Limit:** 5 requests per minute
+
+**Example:**
+```bash
+curl -X POST http://localhost:10333/delegate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "secret_key": "0123...",
+    "validator": "a1b2...",
+    "amount": 10000000000
+  }'
+```
+
+---
+
+### POST /undelegate
+
+Begin undelegation cooldown. After the cooldown period, delegated tokens are returned to the delegator's liquid balance. During cooldown, the tokens no longer count toward the validator's effective stake.
+
+**Testnet-gated:** Returns HTTP 410 GONE in mainnet mode. Use `/tx/submit` with a pre-signed `UndelegateTx` instead.
+
+**Request Body:**
+```json
+{
+  "secret_key": "0123456789abcdef..."
+}
+```
+
+**Cooldown Period:** 2,016 rounds (~2.8 hours at 5s rounds) — same as unstaking cooldown.
+
+**Response (Success):**
+```json
+{
+  "tx_hash": "abc123...",
+  "unlock_at_round": 212016
+}
+```
+
+**Error Cases:**
+- Not delegating: `{"error": "not currently delegating"}`
+- Already undelegating: `{"error": "already undelegating"}`
+
+**Rate Limit:** 5 requests per minute
+
+**Example:**
+```bash
+curl -X POST http://localhost:10333/undelegate \
+  -H "Content-Type: application/json" \
+  -d '{"secret_key": "0123..."}'
+```
+
+---
+
+### POST /set-commission
+
+Set the commission rate for a validator. The commission is the percentage of delegator rewards retained by the validator. Changes take effect immediately for future reward distributions.
+
+**Testnet-gated:** Returns HTTP 410 GONE in mainnet mode. Use `/tx/submit` with a pre-signed `SetCommissionTx` instead.
+
+**Request Body:**
+```json
+{
+  "secret_key": "0123456789abcdef...",
+  "commission_percent": 15
+}
+```
+
+**Fields:**
+- `secret_key` - Validator's Ed25519 secret key (64 hex chars)
+- `commission_percent` - Commission rate as integer percentage (0-100)
+
+**Default Commission:** 10%
+
+**Response (Success):**
+```json
+{
+  "tx_hash": "abc123...",
+  "commission_percent": 15
+}
+```
+
+**Error Cases:**
+- Not a staked validator: `{"error": "must be a staked validator to set commission"}`
+- Invalid range: `{"error": "commission_percent must be between 0 and 100"}`
+
+**Rate Limit:** 5 requests per minute
+
+**Example:**
+```bash
+curl -X POST http://localhost:10333/set-commission \
+  -H "Content-Type: application/json" \
+  -d '{
+    "secret_key": "0123...",
+    "commission_percent": 15
+  }'
+```
+
+---
+
+### GET /delegation/{address}
+
+Get delegation information for a specific address.
+
+**Parameters:**
+- `address` (path) - 64-character hex address of the delegator
+
+**Response:**
+```json
+{
+  "address": "f6e5d4c3b2a1...",
+  "delegated_amount": 10000000000,
+  "delegated_udag": 100.0,
+  "validator": "a1b2c3d4e5f6...",
+  "unlock_at_round": null,
+  "is_undelegating": false
+}
+```
+
+**Fields:**
+- `delegated_amount` - Delegated amount in satoshis
+- `delegated_udag` - Same amount in UDAG for display convenience
+- `validator` - Address of the validator being delegated to
+- `unlock_at_round` - Round at which undelegation completes (null if not undelegating)
+- `is_undelegating` - Whether the delegator is in undelegation cooldown
+
+**Error Cases:**
+- Not delegating: HTTP 404 `{"error": "address is not delegating"}`
+
+**Example:**
+```bash
+curl http://localhost:10333/delegation/f6e5d4c3b2a1... | jq .
+```
+
+---
+
+### GET /validator/{address}/delegators
+
+Get all delegators for a specific validator, including delegation amounts, commission rate, and effective stake breakdown.
+
+**Parameters:**
+- `address` (path) - 64-character hex address of the validator
+
+**Response:**
+```json
+{
+  "validator": "a1b2c3d4e5f6...",
+  "commission_percent": 10,
+  "own_stake_sats": 1000000000000,
+  "total_delegated_sats": 5000000000000,
+  "effective_stake_sats": 6000000000000,
+  "delegators": [
+    {
+      "address": "f6e5d4c3b2a1...",
+      "amount_sats": 1000000000000,
+      "amount_udag": 10000.0
+    },
+    {
+      "address": "1a2b3c4d5e6f...",
+      "amount_sats": 4000000000000,
+      "amount_udag": 40000.0
+    }
+  ]
+}
+```
+
+**Fields:**
+- `commission_percent` - Validator's commission rate on delegator rewards
+- `own_stake_sats` - Validator's own staked amount
+- `total_delegated_sats` - Sum of all delegated amounts
+- `effective_stake_sats` - Own stake + total delegated (used for active set ranking and reward calculation)
+- `delegators` - Array of delegator entries with address and amount
+
+**Error Cases:**
+- Validator not found or not staked: HTTP 404 `{"error": "validator not found"}`
+
+**Example:**
+```bash
+curl http://localhost:10333/validator/a1b2c3d4e5f6.../delegators | jq .
 ```
 
 ---

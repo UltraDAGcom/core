@@ -369,6 +369,7 @@ li strong { color: var(--white); font-weight: 500; }
             <h4>Validators</h4>
             <ul>
               <li><a href="#staking">Staking & Validation</a></li>
+              <li><a href="#delegation">Delegated Staking</a></li>
               <li><a href="#governance">Governance</a></li>
               <li><a href="#monitoring">Metrics & Monitoring</a></li>
             </ul>
@@ -439,6 +440,7 @@ li strong { color: var(--white); font-weight: 500; }
     <div class="toc-group">
       <span class="toc-group-label">Validation</span>
       <a href="#staking" class="toc-link">Staking & Validation</a>
+      <a href="#delegation" class="toc-link">Delegated Staking</a>
       <a href="#governance" class="toc-link">Governance</a>
       <a href="#monitoring" class="toc-link">Metrics & Monitoring</a>
     </div>
@@ -511,7 +513,9 @@ li strong { color: var(--white); font-weight: 500; }
   <span class="str">"address"</span>: <span class="str">"a1b2c3..."</span>,
   <span class="str">"balance_udag"</span>: <span class="str">"1000.50000000"</span>,
   <span class="str">"balance_sats"</span>: <span class="num">100050000000</span>,
-  <span class="str">"nonce"</span>: <span class="num">5</span>
+  <span class="str">"nonce"</span>: <span class="num">5</span>,
+  <span class="str">"delegated"</span>: <span class="num">50000000000</span>,
+  <span class="str">"delegated_udag"</span>: <span class="str">"500.00000000"</span>
 }</pre>
         </div>
 
@@ -548,6 +552,9 @@ li strong { color: var(--white); font-weight: 500; }
     {
       <span class="str">"address"</span>: <span class="str">"b7f3a1..."</span>,
       <span class="str">"stake"</span>: <span class="num">1000000000000</span>,
+      <span class="str">"effective_stake"</span>: <span class="num">2500000000000</span>,
+      <span class="str">"delegator_count"</span>: <span class="num">12</span>,
+      <span class="str">"commission_percent"</span>: <span class="num">10</span>,
       <span class="str">"is_active"</span>: <span class="kw">true</span>
     }
   ],
@@ -581,6 +588,83 @@ li strong { color: var(--white); font-weight: 500; }
           <pre>{
   <span class="str">"secret_key"</span>: <span class="str">"a1b2c3d4..."</span>,
   <span class="str">"amount"</span>: <span class="num">1000000000000</span>
+}</pre>
+        </div>
+
+        <h3>POST /delegate</h3>
+        <p>Delegate UDAG to a validator. Minimum delegation: <strong>100 UDAG</strong>. Rate limit: 5/min.</p>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">request &mdash; json</span>
+          </div>
+          <pre>{
+  <span class="str">"secret_key"</span>: <span class="str">"a1b2c3d4..."</span>,
+  <span class="str">"validator"</span>: <span class="str">"b7f3a1..."</span>,
+  <span class="str">"amount"</span>: <span class="num">10000000000</span>
+}</pre>
+        </div>
+
+        <h3>POST /undelegate</h3>
+        <p>Begin undelegation cooldown (<strong>2,016 rounds</strong>, ~2.8 hours). Rate limit: 5/min.</p>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">request &mdash; json</span>
+          </div>
+          <pre>{
+  <span class="str">"secret_key"</span>: <span class="str">"a1b2c3d4..."</span>
+}</pre>
+        </div>
+
+        <h3>POST /set-commission</h3>
+        <p>Set validator commission rate on delegated rewards (0-100%). Rate limit: 5/min.</p>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">request &mdash; json</span>
+          </div>
+          <pre>{
+  <span class="str">"secret_key"</span>: <span class="str">"a1b2c3d4..."</span>,
+  <span class="str">"commission_percent"</span>: <span class="num">15</span>
+}</pre>
+        </div>
+
+        <h3>GET /delegation/:address</h3>
+        <p>Query delegation status for an address.</p>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">response &mdash; json</span>
+          </div>
+          <pre>{
+  <span class="str">"address"</span>: <span class="str">"a1b2c3..."</span>,
+  <span class="str">"delegated_amount"</span>: <span class="num">10000000000</span>,
+  <span class="str">"delegated_udag"</span>: <span class="str">"100.00000000"</span>,
+  <span class="str">"validator"</span>: <span class="str">"b7f3a1..."</span>,
+  <span class="str">"unlock_at_round"</span>: <span class="kw">null</span>
+}</pre>
+        </div>
+
+        <h3>GET /validator/:address/delegators</h3>
+        <p>List all delegators for a validator.</p>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">response &mdash; json</span>
+          </div>
+          <pre>{
+  <span class="str">"validator"</span>: <span class="str">"b7f3a1..."</span>,
+  <span class="str">"commission_percent"</span>: <span class="num">10</span>,
+  <span class="str">"delegators"</span>: [
+    {
+      <span class="str">"address"</span>: <span class="str">"a1b2c3..."</span>,
+      <span class="str">"amount"</span>: <span class="num">10000000000</span>,
+      <span class="str">"amount_udag"</span>: <span class="str">"100.00000000"</span>
+    }
+  ],
+  <span class="str">"total_delegated"</span>: <span class="num">150000000000</span>,
+  <span class="str">"delegator_count"</span>: <span class="num">12</span>
 }</pre>
         </div>
 
@@ -815,8 +899,8 @@ tx, _ := client.SendTx(keypair, recipient, <span class="num">50_000_000</span>, 
       <!-- Staking -->
       <section class="doc-section" id="staking">
         <div class="doc-section-header"><h2>Staking & Validation</h2></div>
-        <p>To become a validator, you must stake at least <strong>10,000 UDAG</strong>.</p>
-        
+        <p>To become a validator, you must stake at least <strong>10,000 UDAG</strong>. The top 21 stakers by <strong>effective stake</strong> (own stake + delegations) become active validators.</p>
+
         <h3>Stake Transaction</h3>
         <div class="terminal">
           <div class="terminal-header">
@@ -824,14 +908,147 @@ tx, _ := client.SendTx(keypair, recipient, <span class="num">50_000_000</span>, 
             <span class="terminal-title">stake &mdash; transaction</span>
           </div>
           <pre>{
-  "type": "stake",
-  "amount": "10000.00000000",
-  "validator_pubkey": "0x..."
+  <span class="str">"type"</span>: <span class="str">"stake"</span>,
+  <span class="str">"from"</span>: <span class="str">"a1b2c3..."</span>,
+  <span class="str">"amount"</span>: <span class="num">1000000000000</span>,
+  <span class="str">"nonce"</span>: <span class="num">0</span>,
+  <span class="str">"pub_key"</span>: <span class="str">"..."</span>,
+  <span class="str">"signature"</span>: <span class="str">"..."</span>
 }</pre>
         </div>
 
         <h3>Unstaking</h3>
-        <p>Unstaking has a cooldown period of <strong>2,016 rounds</strong> (~1 week at 5s rounds).</p>
+        <p>Unstaking has a cooldown period of <strong>2,016 rounds</strong> (~2.8 hours at 5s rounds). During cooldown, your stake does not earn rewards and has zero governance vote weight.</p>
+
+        <h3>Effective Stake</h3>
+        <p>A validator's <strong>effective stake</strong> is their own stake plus all UDAG delegated to them. This combined total determines their position in the active validator set (top 21) and their proportional share of block rewards.</p>
+
+        <h3>Commission</h3>
+        <p>Validators can set a <strong>commission rate</strong> (0-100%) on delegated rewards using the <span class="inline-code">POST /set-commission</span> endpoint. The default rate is <strong>10%</strong>. The validator earns their commission percentage on the rewards generated by delegated stake, while delegators receive the remainder.</p>
+
+        <h3>Slashing</h3>
+        <p>Equivocating validators (producing two vertices in the same round) are slashed <strong>50%</strong> of their stake. Delegated stake is also slashed 50% — delegators bear slashing risk for the validators they choose.</p>
+
+        <h3>Supply Invariant</h3>
+        <p>The protocol enforces: <span class="inline-code">liquid + staked + delegated + treasury == total_supply</span></p>
+      </section>
+
+      <!-- Delegated Staking -->
+      <section class="doc-section" id="delegation">
+        <div class="doc-section-header"><h2>Delegated Staking</h2></div>
+        <p>Delegated staking allows any UDAG holder to earn rewards without running a validator node. You delegate your tokens to a validator who produces blocks on your behalf, sharing the rewards minus their commission.</p>
+
+        <h3>How It Works</h3>
+        <ul>
+          <li><strong>Delegate:</strong> Lock UDAG to a chosen validator (minimum <strong>100 UDAG</strong>)</li>
+          <li><strong>Earn:</strong> Receive proportional block rewards minus the validator's commission</li>
+          <li><strong>Undelegate:</strong> Begin cooldown period (2,016 rounds, ~2.8 hours), then funds return to liquid balance</li>
+        </ul>
+
+        <h3>DelegateTx</h3>
+        <p>Delegate UDAG to a validator. Locks tokens from your liquid balance.</p>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">delegate &mdash; transaction</span>
+          </div>
+          <pre>{
+  <span class="str">"type"</span>: <span class="str">"delegate"</span>,
+  <span class="str">"from"</span>: <span class="str">"a1b2c3..."</span>,
+  <span class="str">"validator"</span>: <span class="str">"b7f3a1..."</span>,
+  <span class="str">"amount"</span>: <span class="num">10000000000</span>,
+  <span class="str">"nonce"</span>: <span class="num">3</span>,
+  <span class="str">"pub_key"</span>: <span class="str">"..."</span>,
+  <span class="str">"signature"</span>: <span class="str">"Ed25519(NETWORK_ID || delegate || from || validator || amount || nonce)"</span>
+}</pre>
+        </div>
+
+        <h3>UndelegateTx</h3>
+        <p>Begin undelegation cooldown. After <strong>2,016 rounds</strong> (~2.8 hours), delegated tokens return to liquid balance.</p>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">undelegate &mdash; transaction</span>
+          </div>
+          <pre>{
+  <span class="str">"type"</span>: <span class="str">"undelegate"</span>,
+  <span class="str">"from"</span>: <span class="str">"a1b2c3..."</span>,
+  <span class="str">"nonce"</span>: <span class="num">4</span>,
+  <span class="str">"pub_key"</span>: <span class="str">"..."</span>,
+  <span class="str">"signature"</span>: <span class="str">"Ed25519(NETWORK_ID || undelegate || from || nonce)"</span>
+}</pre>
+        </div>
+
+        <h3>SetCommissionTx</h3>
+        <p>Validators set their commission rate on delegated rewards. Range: 0-100%, default: 10%.</p>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">set-commission &mdash; transaction</span>
+          </div>
+          <pre>{
+  <span class="str">"type"</span>: <span class="str">"set_commission"</span>,
+  <span class="str">"from"</span>: <span class="str">"b7f3a1..."</span>,
+  <span class="str">"commission_percent"</span>: <span class="num">15</span>,
+  <span class="str">"nonce"</span>: <span class="num">7</span>,
+  <span class="str">"pub_key"</span>: <span class="str">"..."</span>,
+  <span class="str">"signature"</span>: <span class="str">"Ed25519(NETWORK_ID || set_commission || from || commission_percent || nonce)"</span>
+}</pre>
+        </div>
+
+        <h3>DelegationAccount</h3>
+        <p>Each delegator has a <span class="inline-code">DelegationAccount</span> tracking their delegation state:</p>
+        <div class="terminal">
+          <div class="terminal-header">
+            <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+            <span class="terminal-title">DelegationAccount &mdash; struct</span>
+          </div>
+          <pre>{
+  <span class="str">"delegated_amount"</span>: <span class="num">10000000000</span>,   <span class="cm">// sats delegated</span>
+  <span class="str">"validator"</span>: <span class="str">"b7f3a1..."</span>,          <span class="cm">// target validator</span>
+  <span class="str">"unlock_at_round"</span>: <span class="kw">null</span>            <span class="cm">// set during undelegation</span>
+}</pre>
+        </div>
+
+        <h3>Reward Distribution</h3>
+        <p>When a validator produces a vertex, block rewards are distributed based on <strong>effective stake</strong> (own stake + delegations). The reward flow for delegated tokens:</p>
+        <ul>
+          <li>Total reward for the validator's effective stake is calculated proportionally</li>
+          <li>The validator keeps their <strong>commission %</strong> of the delegated portion</li>
+          <li>Each delegator receives <strong>(1 - commission%) &times; their proportional share</strong></li>
+        </ul>
+
+        <h3>Example</h3>
+        <p>A validator has 10,000 UDAG own stake and 40,000 UDAG delegated (effective: 50,000 UDAG), with 10% commission. For a 0.2 UDAG block reward allocated to their effective stake:</p>
+        <ul>
+          <li>Delegated portion of reward: 0.16 UDAG (40,000/50,000)</li>
+          <li>Validator commission: 0.016 UDAG (10% of 0.16)</li>
+          <li>Delegators receive: 0.144 UDAG (split proportionally among delegators)</li>
+          <li>Validator total: 0.04 (own) + 0.016 (commission) = 0.056 UDAG</li>
+        </ul>
+
+        <h3>Slashing Risk</h3>
+        <p>If the validator you delegate to is slashed for equivocation, your delegated stake is also slashed 50%. Choose validators carefully based on their track record and infrastructure reliability.</p>
+
+        <h3>Constants</h3>
+        <ul>
+          <li><span class="inline-code">MIN_DELEGATION_SATS</span> = 10,000,000,000 sats (<strong>100 UDAG</strong>)</li>
+          <li><span class="inline-code">DEFAULT_COMMISSION_PERCENT</span> = <strong>10</strong></li>
+          <li><span class="inline-code">MAX_COMMISSION_PERCENT</span> = <strong>100</strong></li>
+          <li><span class="inline-code">UNSTAKE_COOLDOWN_ROUNDS</span> = <strong>2,016</strong> (~2.8 hours at 5s rounds)</li>
+        </ul>
+
+        <h3>RPC Endpoints</h3>
+        <ul>
+          <li><span class="inline-code">POST /delegate</span> — Delegate UDAG to a validator (5/min rate limit)</li>
+          <li><span class="inline-code">POST /undelegate</span> — Begin undelegation cooldown (5/min rate limit)</li>
+          <li><span class="inline-code">POST /set-commission</span> — Set validator commission rate (5/min rate limit)</li>
+          <li><span class="inline-code">GET /delegation/:address</span> — Query delegation status</li>
+          <li><span class="inline-code">GET /validator/:address/delegators</span> — List all delegators for a validator</li>
+          <li><span class="inline-code">GET /balance/:address</span> — Now includes <span class="inline-code">delegated</span> and <span class="inline-code">delegated_udag</span></li>
+          <li><span class="inline-code">GET /stake/:address</span> — Now includes <span class="inline-code">commission_percent</span>, <span class="inline-code">effective_stake</span>, <span class="inline-code">delegator_count</span></li>
+          <li><span class="inline-code">GET /validators</span> — Now includes <span class="inline-code">effective_stake</span>, <span class="inline-code">delegator_count</span>, <span class="inline-code">commission_percent</span> per validator</li>
+        </ul>
       </section>
 
       <!-- Governance -->
@@ -877,21 +1094,35 @@ ultradag_mempool_size 5</pre>
       <!-- Transactions -->
       <section class="doc-section" id="transactions">
         <div class="doc-section-header"><h2>Transaction Format</h2></div>
-        <p>All transactions are Ed25519-signed with the following structure:</p>
+        <p>All transactions are Ed25519-signed. UltraDAG supports 8 transaction types:</p>
+
+        <h3>Transfer</h3>
         <div class="terminal">
           <div class="terminal-header">
             <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
-            <span class="terminal-title">transaction &mdash; format</span>
+            <span class="terminal-title">transfer &mdash; format</span>
           </div>
           <pre>{
-  "from": "Blake3(pubkey)",
-  "to": "recipient_address",
-  "amount": "satoshis",
-  "fee": "satoshis",
-  "nonce": "account_nonce",
-  "signature": "Ed25519(NETWORK_ID || from || to || amount || fee || nonce)"
+  <span class="str">"from"</span>: <span class="str">"Blake3(pubkey)"</span>,
+  <span class="str">"to"</span>: <span class="str">"recipient_address"</span>,
+  <span class="str">"amount"</span>: <span class="str">"satoshis"</span>,
+  <span class="str">"fee"</span>: <span class="str">"satoshis"</span>,
+  <span class="str">"nonce"</span>: <span class="str">"account_nonce"</span>,
+  <span class="str">"signature"</span>: <span class="str">"Ed25519(NETWORK_ID || transfer || from || to || amount || fee || nonce)"</span>
 }</pre>
         </div>
+
+        <h3>Stake / Unstake</h3>
+        <p><strong>StakeTx</strong> locks UDAG as validator stake (min 10,000 UDAG). <strong>UnstakeTx</strong> begins cooldown.</p>
+
+        <h3>Delegate / Undelegate</h3>
+        <p><strong>DelegateTx</strong> delegates UDAG to a validator (min 100 UDAG). <strong>UndelegateTx</strong> begins undelegation cooldown (2,016 rounds). See <a href="#delegation" style="color:var(--accent)">Delegated Staking</a>.</p>
+
+        <h3>SetCommission</h3>
+        <p><strong>SetCommissionTx</strong> sets the validator's commission rate (0-100%) on delegated rewards.</p>
+
+        <h3>CreateProposal / Vote</h3>
+        <p>Governance transactions for on-chain proposals and voting.</p>
       </section>
 
       <!-- Checkpoints -->

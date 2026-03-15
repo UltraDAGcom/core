@@ -665,7 +665,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
       <div class="feature reveal reveal-delay-2">
         <div class="feature-icon">Economics</div>
         <h3>Bitcoin-Style Tokenomics</h3>
-        <p>21M max supply, halving every 210K rounds, stake-proportional rewards. Predictable supply unlike unclear inflation models in Helium/IOTA. Deflationary slashing for Byzantine behavior.</p>
+        <p>21M max supply, halving every 210K rounds, stake-proportional rewards. Delegate to validators for passive earnings, no node required. Deflationary slashing for Byzantine behavior.</p>
       </div>
       <div class="feature reveal">
         <div class="feature-icon">Verified</div>
@@ -718,6 +718,14 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
         <div class="token-value">~2.8h</div>
         <div class="token-label">Unstake cooldown</div>
       </div>
+      <div class="token-card reveal">
+        <div class="token-value">100</div>
+        <div class="token-label">Min delegation (UDAG)</div>
+      </div>
+      <div class="token-card reveal reveal-delay-1">
+        <div class="token-value">10%</div>
+        <div class="token-label">Default commission</div>
+      </div>
     </div>
 
     <!-- Genesis Allocation Disclosure -->
@@ -727,7 +735,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
         <strong style="color:var(--bright);">5% of total supply (1,050,000 UDAG)</strong> allocated to protocol development at genesis. No VC funding. No presale. This is the only non-mined allocation. Developer address is deterministic and auditable from block 0.
       </p>
       <p style="font-family:'Cormorant',serif;font-size:15px;font-weight:300;color:var(--subtle);line-height:1.7;margin:16px 0 0;border-top:1px solid var(--border2);padding-top:16px;">
-        <strong>Reward Distribution:</strong> Validators earn proportional rewards based on stake. Before staking activation, validators receive equal block rewards per round (pre-staking fallback), allowing new validators to earn and stake immediately.
+        <strong>Reward Distribution:</strong> Validators earn proportional rewards based on effective stake (own + delegated). Delegators earn passive rewards minus validator commission (default 10%). Before staking activation, validators receive equal block rewards per round (pre-staking fallback).
       </p>
     </div>
   </div>

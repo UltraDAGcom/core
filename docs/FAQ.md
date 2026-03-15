@@ -301,6 +301,36 @@ Unstake: 0.05 UDAG → Remaining: 0.05 UDAG ❌ (below minimum)
 - Ensure proper failover mechanisms
 - Monitor for clock drift
 
+### Delegation
+
+#### What is delegated staking?
+
+Delegated staking lets you delegate your UDAG to an existing validator and earn passive rewards without running a node yourself. Your delegated tokens contribute to the validator's total stake, increasing their share of block rewards. You receive a proportional cut of those rewards, minus the validator's commission.
+
+#### What is the minimum delegation?
+
+**Minimum Delegation:** 100 UDAG (`MIN_DELEGATION_SATS`)
+
+#### How do delegation rewards work?
+
+Rewards are distributed proportionally to your delegation amount relative to the validator's total delegated stake. The validator takes a commission (default 10%) from your delegation rewards before distribution. For example, if a validator earns 1 UDAG in delegation rewards and you represent 50% of their delegated stake, you receive 0.45 UDAG (0.50 UDAG minus 10% commission).
+
+#### What is validator commission?
+
+Validator commission is the percentage a validator takes from rewards earned by their delegators. The default commission rate is 10%, and validators can set it up to 100%. Commission rates are visible on the `/validators` endpoint so you can compare before delegating.
+
+#### Can my delegated stake be slashed?
+
+**Yes.** If the validator you delegate to commits equivocation (producing two different vertices in the same round), 50% of your delegated stake is burned along with the validator's own stake. Choose your validator carefully and monitor their performance.
+
+#### How do I undelegate?
+
+Send an `UndelegateTx` via the `/undelegate` endpoint. There is a cooldown period of 2,016 rounds (~2.8 hours at 5s rounds) before your funds are returned to your liquid balance. During cooldown, you earn no delegation rewards.
+
+#### Can I delegate to multiple validators?
+
+**No.** Each address can only delegate to one validator at a time. If you want to diversify across multiple validators, use separate wallets (each with its own keypair) and delegate each to a different validator.
+
 ---
 
 ## Governance

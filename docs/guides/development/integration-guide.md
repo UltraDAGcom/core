@@ -502,6 +502,148 @@ async function estimateFee() {
 }
 ```
 
+### Delegation
+
+UltraDAG supports delegated staking, allowing users to delegate UDAG to validators and earn passive rewards without running a node.
+
+**Delegate to a Validator:**
+
+```bash
+curl -X POST http://localhost:10333/delegate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "secret_key": "YOUR_SECRET_KEY",
+    "validator": "VALIDATOR_ADDRESS",
+    "amount": 10000000000
+  }'
+```
+
+```python
+import requests
+
+response = requests.post("http://localhost:10333/delegate", json={
+    "secret_key": "YOUR_SECRET_KEY",
+    "validator": "VALIDATOR_ADDRESS",
+    "amount": 10000000000  # 100 UDAG
+})
+print(response.json())
+```
+
+```javascript
+const response = await fetch('http://localhost:10333/delegate', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    secret_key: 'YOUR_SECRET_KEY',
+    validator: 'VALIDATOR_ADDRESS',
+    amount: 10000000000 // 100 UDAG
+  })
+});
+const result = await response.json();
+```
+
+**Check Delegation Status:**
+
+```bash
+curl http://localhost:10333/delegation/YOUR_ADDRESS
+```
+
+**Response:**
+```json
+{
+  "delegator": "YOUR_ADDRESS",
+  "validator": "VALIDATOR_ADDRESS",
+  "amount": 10000000000,
+  "amount_udag": 100.0
+}
+```
+
+**List a Validator's Delegators:**
+
+```bash
+curl http://localhost:10333/validator/VALIDATOR_ADDRESS/delegators
+```
+
+**Response:**
+```json
+{
+  "validator": "VALIDATOR_ADDRESS",
+  "delegators": [
+    {
+      "address": "DELEGATOR_1",
+      "amount": 10000000000,
+      "amount_udag": 100.0
+    },
+    {
+      "address": "DELEGATOR_2",
+      "amount": 50000000000,
+      "amount_udag": 500.0
+    }
+  ],
+  "total_delegated": 60000000000,
+  "total_delegated_udag": 600.0
+}
+```
+
+**Undelegate:**
+
+```bash
+curl -X POST http://localhost:10333/undelegate \
+  -H "Content-Type: application/json" \
+  -d '{"secret_key": "YOUR_SECRET_KEY"}'
+```
+
+```python
+response = requests.post("http://localhost:10333/undelegate", json={
+    "secret_key": "YOUR_SECRET_KEY"
+})
+print(response.json())
+# Funds return after 2,016 rounds (~2.8 hours) cooldown
+```
+
+```javascript
+const response = await fetch('http://localhost:10333/undelegate', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ secret_key: 'YOUR_SECRET_KEY' })
+});
+const result = await response.json();
+// Funds return after 2,016 rounds (~2.8 hours) cooldown
+```
+
+**Set Validator Commission:**
+
+Validators can set their commission rate (percentage taken from delegator rewards):
+
+```bash
+curl -X POST http://localhost:10333/set-commission \
+  -H "Content-Type: application/json" \
+  -d '{
+    "secret_key": "VALIDATOR_SECRET_KEY",
+    "commission_percent": 15
+  }'
+```
+
+```python
+response = requests.post("http://localhost:10333/set-commission", json={
+    "secret_key": "VALIDATOR_SECRET_KEY",
+    "commission_percent": 15  # 15%, default is 10%, max 100%
+})
+print(response.json())
+```
+
+```javascript
+const response = await fetch('http://localhost:10333/set-commission', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    secret_key: 'VALIDATOR_SECRET_KEY',
+    commission_percent: 15 // 15%, default is 10%, max 100%
+  })
+});
+const result = await response.json();
+```
+
 ---
 
 ## DApp Development
