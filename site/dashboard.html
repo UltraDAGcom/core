@@ -3446,7 +3446,7 @@ function renderStakingPositions(positions) {
   }
   
   container.innerHTML = positions.map(pos => {
-    const isUnstaking = pos.unlock_at_round !== null;
+    const isUnstaking = pos.unlock_at_round != null; // loose == catches both null and undefined
     const status = isUnstaking ? 'Unstaking' : 'Active';
     const statusColor = isUnstaking ? 'orange' : 'green';
     
