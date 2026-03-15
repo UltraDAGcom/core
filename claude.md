@@ -8,6 +8,34 @@
 
 ## Recent Updates (March 2026)
 
+**Per-Round Protocol Reward Distribution (March 16, 2026):**
+- **BREAKING: Coinbase = fees only** — Vertex coinbase no longer contains block rewards. Rewards distributed by the protocol per round via `distribute_round_rewards()`, not per vertex.
+- **Passive staking works** — All stakers earn proportionally without running a node. Active vertex producers get 100% of share; passive stakers get 20% (observer rate). This is the standard DPoS model.
+- **`distribute_round_rewards(round, producers)`** — New method on StateEngine. Called once per finalized round in `apply_finalized_vertices()`. Distributes `block_reward(round)` to all stakers proportionally, splits between own-stake and delegated portions with commission, mints council emission.
+- **Validator loop** — `validator_reward = 0` (fees only). `compute_validator_reward()` retained but no longer used for coinbase.
+- **Supply invariant preserved** — `liquid + staked + delegated + treasury == total_supply` still checked per vertex.
+- **All 805 tests passing**, 0 failed, 14 ignored (jepsen).
+- **Breaking change** — Requires clean testnet restart (different state progression).
+
+**Delegated Staking (March 15, 2026):**
+- **DelegateTx** — Users delegate UDAG to validators and earn passive rewards without running a node. Minimum 100 UDAG (`MIN_DELEGATION_SATS`).
+- **UndelegateTx** — Begin undelegation cooldown (same `UNSTAKE_COOLDOWN_ROUNDS` = 2,016 rounds ≈ 2.8 hours).
+- **SetCommissionTx** — Validators set commission rate (0-100%, default 10%). Commission is the validator's cut of delegated rewards.
+- **DelegationAccount** struct — `delegated_amount`, `validator` (target Address), `unlock_at_round` (Option). Stored in `delegation_accounts: HashMap<Address, DelegationAccount>` on StateEngine.
+- **StakeAccount** now has `commission_percent: u8` field (default 10, set via SetCommissionTx).
+- **Effective stake** = validator's own stake + all delegations to them. Used for active set ranking (`recalculate_active_set`) and reward calculation (`compute_validator_reward`).
+- **Reward distribution** — Validator earns `commission%` on delegated rewards. Delegators earn `(1 - commission%) × proportional_share`. Distributed during `apply_vertex_with_validators()`.
+- **Slashing cascades** — If validator equivocates (50% slash), all delegated stake to that validator is also slashed 50%. Delegators bear slashing risk.
+- **Supply invariant** updated — `liquid + staked + delegated + treasury == total_supply`.
+- **New RPC endpoints** — POST `/delegate`, `/undelegate`, `/set-commission` (testnet-gated). GET `/delegation/:address`, `/validator/:address/delegators`.
+- **Updated RPC endpoints** — `/balance` includes `delegated`/`delegated_udag`. `/stake/:address` includes `commission_percent`, `effective_stake`, `delegator_count`. `/validators` includes `effective_stake`, `delegator_count`, `commission_percent`.
+- **Rate limits** — DELEGATE, UNDELEGATE, SET_COMMISSION: 5/min each.
+- **Persistence** — DELEGATIONS table in redb, STAKES table migrated to `stakes_v2` (postcard serialization for commission_percent). Delegation accounts in StateSnapshot.
+- **Fee-exempt** — DelegateTx, UndelegateTx, SetCommissionTx have zero fee (same as Stake/Unstake).
+- **Dashboard** — Staking tab has "Your Delegations" card, "Delegate to Validator" form, "Undelegate" form with finality-aware auto-refresh.
+- **Breaking change** — New Transaction variants, new redb table, updated GENESIS_CHECKPOINT_HASH. Clean testnet restart required.
+- **Tests** — 805 tests pass, 0 failed, 14 ignored (jepsen).
+
 **Council of 21 Governance Model — Full Overhaul (March 15, 2026):**
 - **No stake requirement** — Council members don't need UDAG stake to govern. Seats are earned through expertise and DAO proposal, not purchased with tokens. Council members earn emission rewards instead.
 - **Seat categories** — `CouncilSeatCategory` enum: Technical(7), Business(4), Legal(3), Academic(3), Community(2), Foundation(2) = 21 seats. Each category has a fixed maximum enforced by `add_council_member()`.
@@ -167,7 +195,7 @@
 
 **Architecture Improvements (March 13, 2026):**
 - **BitVec for descendant validator tracking** — Replaced `HashMap<[u8;32], HashSet<Address>>` with `HashMap<[u8;32], BitVec>` using `ValidatorIndex` for bidirectional `Address ↔ usize` mapping. 256x memory reduction at scale (125 bytes per vertex at 1000 validators vs ~32KB with HashSet). O(1) finality checks preserved via `count_ones()`.
-- **redb for state persistence** — Replaced custom JSON state snapshots + WAL + HWM with pure-Rust `redb` embedded ACID database (~200KB binary impact). StateEngine persisted via 6 tables (accounts, stakes, proposals, votes, metadata, active_validators). Atomic write via temp file + rename. `StateEngine::from_parts()` constructor decouples persistence format from engine internals.
+- **redb for state persistence** — Replaced custom JSON state snapshots + WAL + HWM with pure-Rust `redb` embedded ACID database (~200KB binary impact). StateEngine persisted via 7 tables (accounts, stakes_v2, delegations, proposals, votes, metadata, active_validators). Atomic write via temp file + rename. `StateEngine::from_parts()` constructor decouples persistence format from engine internals.
 - **WAL + HWM removed** — `FinalityWal` (wal.rs) and high-water mark (monotonicity.rs) no longer used in production. redb's ACID guarantees replace both. server.rs function parameters reduced from 18 to 17. ~60 lines removed from main.rs startup.
 - **Postcard for P2P messages** — Replaced `serde_json` with `postcard` (zero-copy binary) for `Message::encode()`/`decode()`. ~40% smaller wire format for typical messages.
 - **ValidatorIndex struct** — `BlockDag` now carries `validator_index: ValidatorIndex` for compact bitmap indexing. Append-only, rebuilt on load.
@@ -624,7 +652,7 @@ Three crates, strict layering:
 
 | Layer | Crate | Purpose |
 |-------|-------|---------|
-| 0 — Coin | `ultradag-coin` | Ed25519 keys, DAG-BFT consensus, StateEngine (DAG-driven ledger), staking, account-based state |
+| 0 — Coin | `ultradag-coin` | Ed25519 keys, DAG-BFT consensus, StateEngine (DAG-driven ledger), staking, delegation, account-based state |
 | 1 — Network | `ultradag-network` | TCP P2P: peer discovery, DAG vertex relay, state synchronization |
 | 2 — Node | `ultradag-node` | Full node binary (round-based validator + networking + HTTP RPC) |
 
@@ -671,16 +699,20 @@ formal/
 - `ValidatorSet` — tracks known validators, computes BFT quorum threshold (ceil(2n/3)), supports `configured_validators` and permissioned allowlist
 - `Checkpoint` — signed snapshot for fast-sync: `state_root`, `dag_tip`, `total_supply`, validator signatures. Requires quorum (⌈2n/3⌉) signatures to be accepted.
 - `EquivocationEvidence` — permanent record of Byzantine behavior: validator, round, two conflicting vertex hashes, detection round. Survives DAG pruning.
-- `StateEngine` — Derives account state from finalized DAG vertices, manages staking/unstaking/slashing
-- `StakeAccount` — tracks staked amount and unstake cooldown per address
+- `StateEngine` — Derives account state from finalized DAG vertices, manages staking/unstaking/slashing/delegation
+- `StakeAccount` — tracks staked amount, unstake cooldown, and commission_percent per validator address
+- `DelegationAccount` — tracks delegated_amount, target validator, and unlock_at_round per delegator address
 - `Block` — header + coinbase + transactions (now only exists inside DagVertex)
 - `BlockHeader` — version, height, timestamp, prev_hash, merkle_root (no difficulty, no nonce)
 - `Address` — 32-byte Blake3 hash of Ed25519 public key
 - `SecretKey` — Ed25519 signing key (32-byte seed); `from_bytes()`, `to_bytes()`, `verifying_key()`
 - `Signature` — Ed25519 signature (64 bytes), hex-serialized for JSON
-- `Transaction` — from, to, amount, fee, nonce (account nonce for replay protection), pub_key, signature
+- `Transaction` — enum: Transfer, Stake, Unstake, CreateProposal, Vote, Delegate, Undelegate, SetCommission
 - `StakeTx` — from, amount, nonce, pub_key, signature — locks UDAG as validator stake
 - `UnstakeTx` — from, nonce, pub_key, signature — begins unstake cooldown
+- `DelegateTx` — from, validator, amount, nonce, pub_key, signature — delegates UDAG to a validator for passive rewards
+- `UndelegateTx` — from, nonce, pub_key, signature — begins undelegation cooldown
+- `SetCommissionTx` — from, commission_percent (u8), nonce, pub_key, signature — validator sets commission rate
 - `GovernanceParams` — runtime-adjustable governance parameters: min_fee_sats, min_stake_to_propose, quorum_numerator, approval_numerator, voting_period_rounds, execution_delay_rounds, max_active_proposals, observer_reward_percent, council_emission_percent. Modified via ParameterChange proposal execution. Persisted in StateSnapshot.
 - `CouncilSeatCategory` — enum: Technical(7), Business(4), Legal(3), Academic(3), Community(2), Foundation(2). Fixed seat limits per category.
 
@@ -717,12 +749,13 @@ formal/
 
 ### State module layout (`ultradag-coin/src/state/`):
 - `engine.rs` — `StateEngine`: derives account state from finalized DAG vertices
-  - Tracks balances, nonces, total supply, stake accounts
+  - Tracks balances, nonces, total supply, stake accounts, delegation accounts
   - Applies finalized vertices atomically with supply invariant check
   - Validates transactions against current state
   - Stake-proportional block rewards when staking is active; equal-split fallback pre-staking
   - Staking: `apply_stake_tx()`, `apply_unstake_tx()`, `process_unstake_completions()`, `slash()`
-  - Supply invariant: `sum(liquid balances) + sum(staked) == total_supply`
+  - Delegation: `apply_delegate_tx()`, `apply_undelegate_tx()`, `apply_set_commission_tx()`, `distribute_delegation_rewards()`, `effective_stake_of()`, `delegators_of()`
+  - Supply invariant: `sum(liquid balances) + sum(staked) + sum(delegated) + treasury == total_supply`
 
 ### Single consensus path (DAG-BFT only):
 1. **DAG vertex production**: Validator produces vertex every round -> references all DAG tips -> signs with Ed25519
@@ -764,12 +797,16 @@ When a vertex fails insertion due to missing parents, the node:
 - **Developer allocation**: 1,050,000 UDAG (5% of max supply) — `SecretKey::from_bytes([0xDE; 32])`
 - Both credited in `StateEngine::new_with_genesis()`
 
-### Emission Model (Stake-Proportional)
-- **With staking active**: each validator's reward = `block_reward(height) × (own_stake / total_stake)`
-- **Pre-staking fallback**: `block_reward(height) / configured_validators` per vertex (equal split among N validators)
-- `create_block()` takes `validator_reward` parameter; validator computes its share before block production
+### Emission Model (Per-Round Protocol Distribution)
+- **Rewards distributed per round, not per vertex** — `distribute_round_rewards()` called once per finalized round in `apply_finalized_vertices()`. All stakers earn proportionally without needing to run a node.
+- **Coinbase = fees only** — vertex coinbase contains only collected transaction fees (no block reward). Block rewards are minted and credited by the protocol, not by the vertex producer.
+- **Active validators** (stakers who produce vertices): earn 100% of their proportional share of `block_reward(round)`
+- **Passive stakers** (staked but not producing vertices): earn 20% of proportional share (`OBSERVER_REWARD_PERCENT`)
+- **Delegators**: earn proportionally through their validator's effective stake, minus commission
+- **Council emission**: council members receive `COUNCIL_EMISSION_PERCENT` share of each round's reward
+- **Pre-staking fallback**: `block_reward(height) / configured_validators` split equally among vertex producers
 - Remainder from integer division is implicitly burned (sum of rewards <= block_reward)
-- Supply cap enforced: reward capped at `MAX_SUPPLY_SATS - total_supply`
+- Supply cap enforced: total minted per round capped at `MAX_SUPPLY_SATS - total_supply`
 
 ### Staking & Validator Cap
 - **Minimum stake**: `MIN_STAKE_SATS` = 10,000 UDAG (updated from 1,000)
@@ -781,8 +818,9 @@ When a vertex fails insertion due to missing parents, the node:
   - `is_epoch_boundary(round)` = round % 210,000 == 0
   - Top 21 stakers by amount become active validators; set frozen between epoch boundaries
   - `recalculate_active_set()` sorts by (stake desc, address asc) for determinism, then truncates to 21
-- **Observer rewards**: staked but not in active set earn 20% of normal reward (`OBSERVER_REWARD_PERCENT` = 20)
-  - Observer reward = `block_reward(h) × (own_stake / total_stake) × 20 / 100`
+- **Passive staking rewards**: ANY staker earns rewards proportionally without running a node. Active vertex producers earn 100% of proportional share; passive stakers earn 20% (`OBSERVER_REWARD_PERCENT`). This is the standard DPoS model — stake and earn.
+  - Passive reward = `block_reward(h) × (effective_stake / total_effective_stake) × 20 / 100`
+  - Active reward = `block_reward(h) × (effective_stake / total_effective_stake)`
 - **Slashing**: 50% stake burn on equivocation (slashed amount removed from total_supply)
   - **Slash policy**: slash immediately removes from active validator set if stake drops below `MIN_STAKE_SATS`. Security trumps epoch stability — Byzantine actors should not continue earning rewards.
   - **Implementation**: Slashing is deterministic — applied during `apply_finalized_vertices()` when duplicate (validator, round) pairs are detected in the sorted finality batch. All nodes process the same sorted batch, so slashing is applied at the same logical point. P2P handlers (DagProposal, DagVertices, EquivocationEvidence) only broadcast evidence for peer awareness but do NOT modify state.
@@ -791,6 +829,19 @@ When a vertex fails insertion due to missing parents, the node:
   - **Current limitation**: No reporter rewards yet — validators aren't economically incentivized to submit evidence they witness. On small testnets this is fine (nodes naturally detect equivocation), but larger networks would benefit from reporter rewards (medium-priority future enhancement).
 - **Stale epoch recovery**: on `StateEngine::load()`, if persisted `current_epoch` doesn't match `epoch_of(last_finalized_round)`, active set is recalculated
 - Ed25519 signatures on all staking transactions with NETWORK_ID prefix
+
+### Delegated Staking
+- **DelegateTx**: locks UDAG from liquid balance into delegation to a validator. Minimum `MIN_DELEGATION_SATS` = 100 UDAG.
+- **UndelegateTx**: begins cooldown period (same `UNSTAKE_COOLDOWN_ROUNDS` = 2,016 rounds ≈ 2.8 hours)
+- **SetCommissionTx**: validators set commission rate (0-100%, default `DEFAULT_COMMISSION_PERCENT` = 10)
+- **One delegation per address**: each address can delegate to exactly one validator. Use multiple wallets for diversification.
+- **Effective stake**: `validator_own_stake + sum(delegations_to_validator)`. Used for active set ranking and reward proportioning.
+- **Active set**: `recalculate_active_set()` sorts by effective stake (not just own stake), so validators with more delegations rank higher.
+- **Commission**: validator keeps `commission_percent%` of rewards generated by delegated stake. Delegators earn the remainder proportionally.
+- **Slashing cascade**: if a validator is slashed (50% burn for equivocation), all delegated stake to that validator is also slashed 50%. Delegators bear slashing risk of their chosen validator.
+- **Undelegation cooldown**: same as unstaking — funds locked for 2,016 rounds after UndelegateTx. Processed by `process_unstake_completions()`.
+- **Fee-exempt**: DelegateTx, UndelegateTx, SetCommissionTx have zero fee (same treatment as Stake/Unstake in mempool).
+- **Constants**: `MIN_DELEGATION_SATS` = 100 UDAG, `DEFAULT_COMMISSION_PERCENT` = 10, `MAX_COMMISSION_PERCENT` = 100
 
 ### Cryptography
 - Signatures: Ed25519 (ed25519-dalek). Address = blake3(ed25519_pubkey). Transactions carry pub_key for verification.
@@ -829,6 +880,9 @@ When a vertex fails insertion due to missing parents, the node:
 - `COUNCIL_FOUNDATION_MEMBERSHIP_REQUIRED` = true — Panama Foundation membership flag (placeholder)
 - `CouncilSeatCategory` — Technical(7), Business(4), Legal(3), Academic(3), Community(2), Foundation(2) = 21 seats
 - `NETWORK_ID` = `b"ultradag-testnet-v1"` (testnet) / `b"ultradag-mainnet-v1"` (mainnet) — `#[cfg(feature = "mainnet")]` selects variant
+- `MIN_DELEGATION_SATS` = 100 UDAG (10,000,000,000 sats) — Minimum delegation amount. Keeps delegations meaningful and reduces state bloat.
+- `DEFAULT_COMMISSION_PERCENT` = 10 — Default validator commission on delegated rewards
+- `MAX_COMMISSION_PERCENT` = 100 — Maximum validator commission (can take all delegated rewards)
 - `MEMPOOL_TX_TTL_SECS` = 3600 — Transaction time-to-live in mempool (1 hour). Expired transactions evicted every 50 rounds.
 
 ## ultradag-network Architecture
@@ -988,7 +1042,7 @@ if last_finalized_round > 0 && last_finalized_round % CHECKPOINT_INTERVAL == 0 {
 
 **State Database (redb):**
 - Pure-Rust embedded ACID database replaces JSON snapshots + WAL + HWM
-- 6 tables: ACCOUNTS `[u8;32] → (u64,u64)`, STAKES `[u8;32] → (u64,u64)`, PROPOSALS `u64 → &[u8]`, VOTES `&[u8] → u8`, METADATA `&str → &[u8]`, ACTIVE_VALIDATORS `u64 → &[u8;32]`
+- 7 tables: ACCOUNTS `[u8;32] → (u64,u64)`, STAKES_V2 `[u8;32] → &[u8]` (postcard, includes commission_percent), DELEGATIONS `[u8;32] → &[u8]` (postcard DelegationAccount), PROPOSALS `u64 → &[u8]`, VOTES `&[u8] → u8`, METADATA `&str → &[u8]`, ACTIVE_VALIDATORS `u64 → &[u8;32]`
 - Atomic write: creates fresh DB in `.redb.tmp`, writes all tables in single transaction, renames to `state.redb`
 - `save_to_redb()` / `load_from_redb()` in `crates/ultradag-coin/src/state/db.rs`
 - `StateEngine::from_parts()` constructor decouples persistence format from engine internals
@@ -1051,6 +1105,11 @@ Default port: P2P port + 1000 (e.g., P2P 9333 → RPC 10333).
 | `/tx/:hash` | GET | Transaction status: pending (mempool), finalized (with round/vertex), or 404 |
 | `/vertex/:hash` | GET | Vertex details by hash: round, validator, parents, coinbase, transactions |
 | `/tx/submit` | POST | Submit pre-signed transaction (JSON `Transaction`). Enables client-side signing. |
+| `/delegate` | POST | Delegate UDAG to validator: `{secret_key, validator, amount}`. Min 100 UDAG. |
+| `/undelegate` | POST | Begin undelegation: `{secret_key}`. Starts cooldown period. |
+| `/set-commission` | POST | Set validator commission: `{secret_key, commission_percent}`. 0-100%. |
+| `/delegation/:address` | GET | Delegation info: delegated amount, target validator, undelegating status |
+| `/validator/:address/delegators` | GET | List delegators: address, amount, total delegated, effective stake |
 
 All responses are JSON with CORS headers for browser wallet access.
 
@@ -1067,7 +1126,7 @@ Four official SDKs wrap the node's HTTP RPC API, each with local Ed25519 keygen 
 
 ### SDK Features (all languages):
 - **Local crypto**: Ed25519 keypair generation, signing, Blake3 address derivation (no RPC needed)
-- **All RPC endpoints**: status, balance, send tx, faucet, stake/unstake, governance (proposals, votes), peers, validators, mempool, rounds
+- **All RPC endpoints**: status, balance, send tx, faucet, stake/unstake, delegate/undelegate, set-commission, governance (proposals, votes), peers, validators, mempool, rounds
 - **Type-safe responses**: Typed structs/classes for all API responses
 - **Error handling**: Custom error types with HTTP status and message
 - **Unit conversion**: `sats_to_udag()` / `udag_to_sats()` helpers (1 UDAG = 100,000,000 sats)
@@ -1138,15 +1197,15 @@ cargo test --workspace
 
 ## Tests
 
-**787 tests passing** (all pass, zero failures, 14 ignored jepsen long-running tests):
+**805 tests passing** (all pass, zero failures, 14 ignored jepsen long-running tests):
 
 Run `cargo test --workspace --release` to verify:
 ```
-test result: ok. 787 passed; 0 failed; 14 ignored
+test result: ok. 805 passed; 0 failed; 14 ignored
 ```
 
 ### Test Breakdown by Crate:
-- **ultradag-coin**: 150 unit tests + 399 integration tests
+- **ultradag-coin**: 168 unit tests + 399 integration tests (includes 7 delegation tx unit tests)
 - **ultradag-network**: 25 unit tests + 12 integration tests + 49 fault injection tests
 - **ultradag-sdk**: 2 doc tests
 
@@ -1348,7 +1407,7 @@ let dag_round = {
 - **Future round limit**: Reject vertices >10 rounds ahead (MAX_FUTURE_ROUNDS=10).
 - **Timestamp validation**: Reject vertices with timestamps >5 minutes in future.
 - **Coinbase validation**: Verify coinbase amount = validator_reward + total_fees.
-- **Supply invariant**: Debug assertion that sum(liquid + staked) == total_supply.
+- **Supply invariant**: Debug assertion that sum(liquid + staked + delegated) + treasury == total_supply.
 - **Deterministic finality**: BTreeSet instead of HashSet for iteration order.
 - **Message size limit**: 4MB maximum before deserialization.
 - **Mempool limit**: 10,000 transactions with fee-based eviction.
@@ -1514,7 +1573,7 @@ machine still has the env var until you do a second deploy without `--clean`.
 - Fly P2P seeds: `.internal` DNS (private WireGuard, not public IPv4 TCP proxy)
 
 ### Rate Limiting Features Active
-- **Per-IP rate limits:** `/tx` (10/min), `/faucet` (1/10min), `/stake` (5/min), `/unstake` (5/min), `/proposal` (5/min), `/vote` (10/min), Global (100/min)
+- **Per-IP rate limits:** `/tx` (10/min), `/faucet` (1/10min), `/stake` (5/min), `/unstake` (5/min), `/delegate` (5/min), `/undelegate` (5/min), `/set-commission` (5/min), `/proposal` (5/min), `/vote` (10/min), Global (100/min)
 - **Fly.io proxy awareness:** Real client IP extracted from `Fly-Client-IP` / `X-Forwarded-For` headers
 - **Connection limits:** Max 1,000 concurrent, 10 per IP
 - **Request size limits:** 1MB max body size
@@ -2112,7 +2171,7 @@ TLA+ specification of UltraDAG's DAG-BFT consensus, derived directly from the Ru
 - [x] **Governance execution** — ParameterChange proposals now apply changes to runtime `GovernanceParams` via `apply_change()` with validation bounds. 7 integration tests verify execution, persistence, and downstream effects.
 - [ ] **Change NETWORK_ID** — Update from `ultradag-testnet-v1` to `ultradag-mainnet-v1`
 - [ ] **Verify genesis parameters** — Confirm MAX_SUPPLY_SATS, INITIAL_REWARD_SATS, HALVING_INTERVAL
-- [ ] **Verify staking parameters** — Confirm MIN_STAKE_SATS, UNSTAKE_COOLDOWN_ROUNDS, MAX_ACTIVE_VALIDATORS
+- [ ] **Verify staking parameters** — Confirm MIN_STAKE_SATS, UNSTAKE_COOLDOWN_ROUNDS, MAX_ACTIVE_VALIDATORS, MIN_DELEGATION_SATS, DEFAULT_COMMISSION_PERCENT
 - [x] **DAG pruning** — Implemented (PRUNING_HORIZON = 1000 rounds, --pruning-depth, --archive flags)
 - [x] **Snapshot mechanism** — Checkpoint + fast-sync implemented (CheckpointProposal, CheckpointSync)
 - [x] **Minimum fee enforcement** — MIN_FEE_SATS = 10,000 sats (0.0001 UDAG). Zero-fee transactions rejected at mempool and RPC layer. Cost to spam 10K-tx mempool: 1 UDAG.

@@ -225,15 +225,11 @@ pub async fn validator_loop(
             dag_round, height, mempool_snap.len(), dag_tips.len(),
         );
 
-        // Compute per-validator reward using the shared compute_validator_reward()
-        // in StateEngine — single source of truth, prevents drift between production
-        // and validation (the most fragile coupling in the codebase).
-        let validator_reward = {
-            let state = server.state.read().await;
-            let configured = server.finality.read().await
-                .validator_set().configured_validators().unwrap_or(1) as u64;
-            state.compute_validator_reward(&validator, height, configured)
-        };
+        // Block rewards are distributed per-round by the protocol via
+        // distribute_round_rewards() — NOT via coinbase. Coinbase contains
+        // only collected transaction fees. This enables passive staking:
+        // all stakers earn proportionally without running a node.
+        let validator_reward = 0u64;
 
         // Create block with transactions from mempool
         // The "prev_hash" is just the first parent for merkle purposes

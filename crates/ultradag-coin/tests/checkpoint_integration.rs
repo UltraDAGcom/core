@@ -19,13 +19,9 @@ fn make_vertex_with_count(nonce: u64, round: u64, parents: Vec<[u8; 32]>, sk: &S
         prev_hash: [0u8; 32],
         merkle_root: [0u8; 32],
     };
-    let total_reward = ultradag_coin::block_reward(round);
-    // Deduct council emission (10%) when using new_with_genesis (which bootstraps a council member)
-    let validator_pool = total_reward.saturating_mul(90) / 100;
-    let reward = validator_pool / validator_count.max(1);
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: reward,
+        amount: 0,
         height: round,
     };
     let mut block = Block {

@@ -31,7 +31,7 @@ fn make_vertex(
         },
         coinbase: CoinbaseTx {
             to: validator,
-            amount: 5_000_000_000,
+            amount: 0,
             height: unique_id,
         },
         transactions: vec![],

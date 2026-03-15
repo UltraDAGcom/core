@@ -35,7 +35,7 @@ fn make_stake_tx(sk: &SecretKey, amount: u64, nonce: u64) -> StakeTx {
 fn make_vertex(sk: &SecretKey, round: u64, parents: Vec<[u8; 32]>) -> DagVertex {
     let validator = sk.address();
     let mempool = Mempool::new();
-    let block = create_block([0u8; 32], round, &validator, &mempool, INITIAL_REWARD_SATS);
+    let block = create_block([0u8; 32], round, &validator, &mempool, 0);
     let mut vertex = DagVertex::new(
         block,
         parents,
@@ -155,7 +155,7 @@ fn test_reject_vertex_with_timestamp_too_far_in_future() {
     
     let validator = sk.address();
     let mempool = Mempool::new();
-    let mut block = create_block([0u8; 32], 1, &validator, &mempool, INITIAL_REWARD_SATS);
+    let mut block = create_block([0u8; 32], 1, &validator, &mempool, 0);
     block.header.timestamp = now + 600; // 10 minutes in future
     
     let mut vertex = DagVertex::new(

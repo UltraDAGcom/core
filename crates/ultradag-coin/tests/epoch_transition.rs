@@ -17,7 +17,7 @@ fn make_stake_tx(sk: &SecretKey, amount: u64, nonce: u64) -> StakeTx {
     tx
 }
 
-fn make_vertex(sk: &SecretKey, round: u64, height: u64, reward: u64) -> DagVertex {
+fn make_vertex(sk: &SecretKey, round: u64, height: u64, _reward: u64) -> DagVertex {
     let proposer = sk.address();
     let block = Block {
         header: BlockHeader {
@@ -29,7 +29,7 @@ fn make_vertex(sk: &SecretKey, round: u64, height: u64, reward: u64) -> DagVerte
         },
         coinbase: CoinbaseTx {
             to: proposer,
-            amount: reward,
+            amount: 0,
             height,
         },
         transactions: vec![],

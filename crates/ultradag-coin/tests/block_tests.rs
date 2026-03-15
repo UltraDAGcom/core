@@ -9,7 +9,7 @@ fn test_block_hash_deterministic() {
     
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 0,
     };
     let header = BlockHeader {
@@ -50,7 +50,7 @@ fn test_block_with_transactions() {
     
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 0,
     };
     let header = BlockHeader {
@@ -92,12 +92,12 @@ fn test_coinbase_tx() {
     
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 100,
     };
     
     assert_eq!(coinbase.to, sk.address());
-    assert_eq!(coinbase.amount, 5_000_000_000);
+    assert_eq!(coinbase.amount, 0);
     assert_eq!(coinbase.height, 100);
 }
 
@@ -108,7 +108,7 @@ fn test_block_different_heights() {
     for height in 0..10 {
         let coinbase = CoinbaseTx {
             to: sk.address(),
-            amount: 5_000_000_000,
+            amount: 0,
             height,
         };
         let header = BlockHeader {
@@ -135,7 +135,7 @@ fn test_block_hash_changes_with_content() {
     
     let coinbase1 = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 0,
     };
     let header1 = BlockHeader {
@@ -153,7 +153,7 @@ fn test_block_hash_changes_with_content() {
     
     let coinbase2 = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 1,
     };
     let header2 = BlockHeader {
@@ -204,7 +204,7 @@ fn test_block_with_multiple_transactions() {
     
     let coinbase = CoinbaseTx {
         to: sk1.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 0,
     };
     let header = BlockHeader {

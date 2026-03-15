@@ -14,7 +14,7 @@ fn make_vertex(nonce: u64, round: u64, parents: Vec<[u8; 32]>, sk: &SecretKey) -
     };
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: round,
     };
     let mut block = Block {

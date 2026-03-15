@@ -18,7 +18,7 @@ fn make_vertex(uid: u64, round: u64, parents: Vec<[u8; 32]>, sk: &SecretKey) -> 
             prev_hash: parents.first().copied().unwrap_or([0u8; 32]),
             merkle_root: [0u8; 32],
         },
-        coinbase: CoinbaseTx { to: validator, amount: 5_000_000_000, height: uid },
+        coinbase: CoinbaseTx { to: validator, amount: 0, height: uid },
         transactions: vec![],
     };
     let mut v = DagVertex::new(

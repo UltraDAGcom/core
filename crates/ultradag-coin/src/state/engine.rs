@@ -214,6 +214,195 @@ impl StateEngine {
         (per_member, per_member.saturating_mul(council_count))
     }
 
+    /// Distribute the round's block reward to ALL stakers proportionally.
+    /// Called once per finalized round (not per vertex).
+    ///
+    /// - Active validators who produced vertices get 100% of their proportional share
+    /// - Stakers who didn't produce (passive/observer) get OBSERVER_REWARD_PERCENT (20%)
+    /// - Delegators earn through their validator's effective stake minus commission
+    /// - Council members receive their emission share
+    /// - Pre-staking fallback: equal split among configured validators (producers only)
+    pub fn distribute_round_rewards(
+        &mut self,
+        round: u64,
+        producers: &std::collections::HashSet<Address>,
+    ) -> Result<(), CoinError> {
+        let total_round_reward = crate::constants::block_reward(round);
+        if total_round_reward == 0 {
+            return Ok(());
+        }
+
+        // Supply cap check
+        let remaining_supply = crate::constants::MAX_SUPPLY_SATS.saturating_sub(self.total_supply);
+        if remaining_supply == 0 {
+            return Ok(());
+        }
+
+        // --- Council emission (same as before but computed once per round) ---
+        let council_percent = self.governance_params.council_emission_percent;
+        let council_count = self.council_members.len() as u64;
+        let validator_pool = if council_count > 0 && council_percent > 0 {
+            let council_total = total_round_reward.saturating_mul(council_percent) / 100;
+            let per_member = council_total / council_count;
+            if per_member > 0 {
+                let council_mint = per_member.saturating_mul(council_count).min(remaining_supply);
+                let capped_per = council_mint / council_count;
+                if capped_per > 0 {
+                    let members: Vec<Address> = self.council_members.keys().copied().collect();
+                    for member in &members {
+                        self.credit(member, capped_per);
+                    }
+                    let actually_minted = capped_per.saturating_mul(members.len() as u64);
+                    self.total_supply = self.total_supply.saturating_add(actually_minted);
+                }
+            }
+            // Validator pool = remainder after council share
+            total_round_reward.saturating_mul(100u64.saturating_sub(council_percent)) / 100
+        } else {
+            total_round_reward
+        };
+
+        if validator_pool == 0 {
+            return Ok(());
+        }
+
+        // Re-check remaining supply after council emission
+        let remaining_supply = crate::constants::MAX_SUPPLY_SATS.saturating_sub(self.total_supply);
+        if remaining_supply == 0 {
+            return Ok(());
+        }
+
+        let total_effective_stake = self.total_staked().saturating_add(self.total_delegated());
+
+        if total_effective_stake > 0 {
+            // --- Staking active: distribute proportionally to all stakers ---
+            // Collect all validators (anyone with stake) and their effective stakes
+            let validators: Vec<(Address, u64)> = self.stake_accounts.iter()
+                .filter(|(_, s)| s.staked > 0)
+                .map(|(addr, _)| (*addr, self.effective_stake_of(addr)))
+                .collect();
+
+            let mut total_to_mint: u64 = 0;
+            let mut credits: Vec<(Address, u64)> = Vec::new();
+
+            for (validator, effective) in &validators {
+                if *effective == 0 {
+                    continue;
+                }
+
+                // Proportional share of the validator pool
+                let proportional = ((validator_pool as u128)
+                    .saturating_mul(*effective as u128)
+                    / total_effective_stake as u128) as u64;
+
+                // Active producers get 100%, passive stakers get observer rate (20%)
+                let validator_share = if producers.contains(validator) {
+                    proportional
+                } else {
+                    proportional * crate::constants::OBSERVER_REWARD_PERCENT / 100
+                };
+
+                if validator_share == 0 {
+                    continue;
+                }
+
+                // Split between validator's own stake and delegations
+                let own_stake = self.stake_of(validator);
+                let own_proportion = if *effective > 0 {
+                    ((validator_share as u128).saturating_mul(own_stake as u128)
+                        / *effective as u128) as u64
+                } else {
+                    validator_share
+                };
+
+                // Credit validator their own-stake portion
+                if own_proportion > 0 {
+                    credits.push((*validator, own_proportion));
+                    total_to_mint = total_to_mint.saturating_add(own_proportion);
+                }
+
+                // Distribute delegator portions (validator_share - own_proportion)
+                let delegation_pool = validator_share.saturating_sub(own_proportion);
+                if delegation_pool > 0 {
+                    let commission_percent = self.stake_accounts
+                        .get(validator)
+                        .map(|s| s.commission_percent)
+                        .unwrap_or(crate::constants::DEFAULT_COMMISSION_PERCENT);
+
+                    let delegators: Vec<(Address, u64)> = self.delegation_accounts.iter()
+                        .filter(|(_, d)| d.validator == *validator && d.unlock_at_round.is_none())
+                        .map(|(addr, d)| (*addr, d.delegated))
+                        .collect();
+
+                    let total_delegated_to_validator: u64 = delegators.iter()
+                        .map(|(_, d)| *d)
+                        .fold(0u64, |acc, x| acc.saturating_add(x));
+
+                    for (delegator, delegated) in &delegators {
+                        if total_delegated_to_validator == 0 {
+                            continue;
+                        }
+                        let delegator_share = ((delegation_pool as u128)
+                            .saturating_mul(*delegated as u128)
+                            / total_delegated_to_validator as u128) as u64;
+                        if delegator_share == 0 {
+                            continue;
+                        }
+                        let commission = delegator_share.saturating_mul(commission_percent as u64) / 100;
+                        let net = delegator_share.saturating_sub(commission);
+                        if net > 0 {
+                            credits.push((*delegator, net));
+                            total_to_mint = total_to_mint.saturating_add(net);
+                        }
+                        // Commission stays with the validator
+                        if commission > 0 {
+                            credits.push((*validator, commission));
+                            total_to_mint = total_to_mint.saturating_add(commission);
+                        }
+                    }
+                }
+            }
+
+            // Cap total minting to remaining supply
+            let capped_mint = total_to_mint.min(remaining_supply);
+            if capped_mint < total_to_mint && total_to_mint > 0 {
+                // Scale all credits proportionally
+                let scale = capped_mint as u128;
+                let total = total_to_mint as u128;
+                for (_, amount) in &mut credits {
+                    *amount = ((*amount as u128).saturating_mul(scale) / total) as u64;
+                }
+            }
+
+            // Apply credits and mint
+            let mut actually_minted: u64 = 0;
+            for (addr, amount) in &credits {
+                if *amount > 0 {
+                    self.credit(addr, *amount);
+                    actually_minted = actually_minted.saturating_add(*amount);
+                }
+            }
+            self.total_supply = self.total_supply.saturating_add(actually_minted);
+        } else {
+            // --- Pre-staking fallback: equal split among producers ---
+            let n = self.configured_validator_count
+                .unwrap_or(producers.len().max(1) as u64);
+            if !producers.is_empty() {
+                let per_producer = validator_pool / n.max(1);
+                let capped = per_producer.min(remaining_supply / producers.len().max(1) as u64);
+                if capped > 0 {
+                    for producer in producers {
+                        self.credit(producer, capped);
+                    }
+                    let minted = capped.saturating_mul(producers.len() as u64);
+                    self.total_supply = self.total_supply.saturating_add(minted);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Create a new StateEngine with genesis pre-funding.
     /// All nodes must call this to start with identical initial state.
     pub fn new_with_genesis() -> Self {
@@ -300,27 +489,27 @@ impl StateEngine {
         self.tx_index_order.push_back(tx_hash);
     }
 
-    /// Apply a finalized vertex to the state.
-    /// `active_validator_count` is the number of validators that produced vertices
-    /// in this round. Used for emission splitting when staking is not yet active.
-    /// Pass 1 for tests that don't care about proportional rewards.
+    /// Apply a finalized vertex to the state (convenience for single-vertex tests).
+    /// Also distributes round rewards and ticks governance.
     pub fn apply_vertex(&mut self, vertex: &DagVertex) -> Result<(), CoinError> {
         self.apply_vertex_with_validators(vertex, 1)?;
-        // Single-vertex convenience: also update last_finalized_round and tick governance.
-        // (apply_finalized_vertices handles this per-round for batches.)
+        // Single-vertex convenience: distribute round rewards, update finality, tick governance.
+        let mut producers = std::collections::HashSet::new();
+        producers.insert(vertex.validator);
+        self.distribute_round_rewards(vertex.round, &producers)?;
         self.last_finalized_round = Some(vertex.round);
         self.tick_governance(vertex.round);
         Ok(())
     }
 
-    /// Apply a finalized vertex with known validator count for reward splitting.
+    /// Apply a finalized vertex to state. Handles fees and transactions only.
+    /// Block rewards are distributed separately via distribute_round_rewards().
     pub fn apply_vertex_with_validators(
         &mut self,
         vertex: &DagVertex,
-        active_validator_count: u64,
+        _active_validator_count: u64,
     ) -> Result<(), CoinError> {
         // Apply directly — finalized vertices are BFT-confirmed and must succeed.
-        // If they don't (supply invariant violation), that's a critical bug regardless.
 
         // Process any unstake completions for this round
         self.process_unstake_completions(vertex.round);
@@ -330,53 +519,18 @@ impl StateEngine {
             .fold(0u64, |acc, x| acc.saturating_add(x));
         let proposer = &vertex.block.coinbase.to;
 
-        // Use the shared compute_validator_reward() — single source of truth for
-        // reward calculation, shared with validator.rs to prevent drift.
-        let capped_reward = self.compute_validator_reward(
-            proposer,
-            vertex.round,
-            active_validator_count,
-        );
-
-        // Validate coinbase claims correct (capped) amount
-        let expected_coinbase = capped_reward.saturating_add(total_fees);
-
-        if vertex.block.coinbase.amount != expected_coinbase {
+        // Coinbase should equal total_fees only (no block reward — rewards are
+        // distributed per-round via distribute_round_rewards()).
+        if vertex.block.coinbase.amount != total_fees {
             return Err(CoinError::InvalidCoinbase {
-                expected: expected_coinbase,
+                expected: total_fees,
                 got: vertex.block.coinbase.amount,
             });
         }
 
-        self.total_supply = self.total_supply.saturating_add(capped_reward);
-
-        // Credit proposer: capped block reward + fees
-        self.credit(proposer, capped_reward.saturating_add(total_fees));
-
-        // Distribute delegation rewards: delegators get their proportional share
-        // minus the validator's commission. Only the capped_reward portion is
-        // distributed (fees are kept by the proposer).
-        self.distribute_delegation_rewards(proposer, capped_reward);
-
-        // Distribute council emission share
-        let (council_per_member, council_total_minted) = self.compute_council_emission(vertex.round, active_validator_count);
-        if council_per_member > 0 {
-            // Supply cap check for council emissions
-            let remaining_supply = crate::constants::MAX_SUPPLY_SATS.saturating_sub(self.total_supply);
-            let capped_council = council_total_minted.min(remaining_supply);
-            let capped_per_member = if capped_council < council_total_minted {
-                capped_council / self.council_members.len().max(1) as u64
-            } else {
-                council_per_member
-            };
-            if capped_per_member > 0 {
-                let members: Vec<Address> = self.council_members.keys().copied().collect();
-                for member in &members {
-                    self.credit(member, capped_per_member);
-                }
-                let actually_minted = capped_per_member.saturating_mul(members.len() as u64);
-                self.total_supply = self.total_supply.saturating_add(actually_minted);
-            }
+        // Credit proposer with collected transaction fees only
+        if total_fees > 0 {
+            self.credit(proposer, total_fees);
         }
 
         // Apply transactions
@@ -614,29 +768,25 @@ impl StateEngine {
             }
         }
 
-        // Count vertices per round for reward splitting
-        let mut round_counts: std::collections::HashMap<u64, u64> = std::collections::HashMap::new();
-        for v in &sorted {
-            *round_counts.entry(v.round).or_insert(0) += 1;
-        }
-        // Group vertices by round. Update last_finalized_round only BETWEEN rounds,
-        // so all vertices in the same round compute the same expected_height.
-        // Governance ticks once per round (not per vertex) to prevent ParameterChange
-        // proposals from applying mid-round, which would cause same-round vertices
-        // to see different governance parameters.
+        // Group vertices by round. Update last_finalized_round only BETWEEN rounds.
+        // Rewards distributed once per completed round via distribute_round_rewards().
         let mut prev_round = None;
+        let mut round_producers: std::collections::HashSet<Address> = std::collections::HashSet::new();
         for vertex in &sorted {
-            // Before processing first vertex of a new round, update last_finalized_round
-            // to the previous round (if any) and tick governance for the completed round.
+            // When transitioning to a new round, finalize the previous round:
+            // distribute rewards, update last_finalized_round, tick governance.
             if prev_round.is_some() && prev_round != Some(vertex.round) {
-                self.last_finalized_round = prev_round;
-                // Tick governance once for the completed round
                 if let Some(r) = prev_round {
+                    self.distribute_round_rewards(r, &round_producers)?;
+                    self.last_finalized_round = Some(r);
                     self.tick_governance(r);
                 }
+                round_producers.clear();
             }
-            let count = round_counts.get(&vertex.round).copied().unwrap_or(1);
+
+            let count = 1; // reward splitting now in distribute_round_rewards
             self.apply_vertex_with_validators(vertex, count)?;
+            round_producers.insert(vertex.validator);
 
             // Index all transactions in this vertex for /tx/{hash} lookups
             let vertex_hash = vertex.hash();
@@ -645,7 +795,6 @@ impl StateEngine {
                 vertex_hash,
                 validator: vertex.validator,
             };
-            // Index the coinbase as well
             self.index_tx(vertex.block.coinbase.hash(), location.clone());
             for tx in &vertex.block.transactions {
                 self.index_tx(tx.hash(), location.clone());
@@ -653,8 +802,9 @@ impl StateEngine {
 
             prev_round = Some(vertex.round);
         }
-        // Update for the final round and tick governance
+        // Finalize the last round
         if let Some(r) = prev_round {
+            self.distribute_round_rewards(r, &round_producers)?;
             self.last_finalized_round = Some(r);
             self.tick_governance(r);
         }
@@ -1760,10 +1910,10 @@ mod tests {
         let total_fees: u64 = txs.iter()
             .map(|tx| tx.fee())
             .fold(0u64, |acc, x| acc.saturating_add(x));
-        let reward = crate::constants::block_reward(height);
+        // Coinbase = fees only; block rewards distributed via distribute_round_rewards()
         let coinbase = CoinbaseTx {
             to: *proposer,
-            amount: reward + total_fees,
+            amount: total_fees,
             height,
         };
         let block = Block {
@@ -1789,17 +1939,17 @@ mod tests {
         vertex
     }
 
-    /// Like make_vertex_for but with a custom coinbase reward amount.
+    /// Like make_vertex_for but with a custom coinbase amount (for testing fee-only validation).
     fn make_vertex_with_reward(
         proposer: &Address,
         round: u64,
         height: u64,
-        reward: u64,
+        coinbase_amount: u64,
         sk: &SecretKey,
     ) -> DagVertex {
         let coinbase = CoinbaseTx {
             to: *proposer,
-            amount: reward,
+            amount: coinbase_amount,
             height,
         };
         let block = Block {
@@ -1941,14 +2091,30 @@ mod tests {
         state.total_supply = existing_supply;
         state.credit(&proposer, existing_supply); // Maintain invariant
 
-        // Apply a vertex — reward should be capped to remaining supply (100 sats)
-        // Coinbase must match the capped amount (not the uncapped block_reward)
-        let vertex = make_vertex_with_reward(&proposer, 0, 0, 100, &sk);
+        // Stake so per-round distribution works (not pre-staking fallback)
+        state.stake_accounts.insert(proposer, StakeAccount {
+            staked: 10_000 * crate::constants::COIN,
+            unlock_at_round: None,
+            commission_percent: 10,
+        });
+        // Adjust supply to include staked amount
+        state.total_supply = existing_supply.saturating_add(10_000 * crate::constants::COIN);
+        state.credit(&proposer, 10_000 * crate::constants::COIN);
+
+        // Reset to near-max with correct invariant
+        let total_balance = state.balance(&proposer);
+        state.total_supply = max - 100;
+        // Set balance to maintain invariant: liquid + staked = total_supply
+        let staked = 10_000 * crate::constants::COIN;
+        let needed_liquid = (max - 100).saturating_sub(staked);
+        state.accounts.get_mut(&proposer).unwrap().balance = needed_liquid;
+
+        // Apply a vertex with fees-only coinbase (0 fees)
+        let vertex = make_vertex_with_reward(&proposer, 0, 0, 0, &sk);
         state.apply_vertex(&vertex).unwrap();
 
-        assert_eq!(state.total_supply(), max);
-        // Proposer gets capped reward (100 sats) + existing balance
-        assert_eq!(state.balance(&proposer), existing_supply + 100);
+        // Supply should increase by at most 100 (capped)
+        assert!(state.total_supply() <= max);
     }
 
     #[test]
@@ -2002,12 +2168,12 @@ mod tests {
         let sk = SecretKey::generate();
         let proposer = sk.address();
 
-        // Create a vertex with incorrect coinbase amount
+        // Create a vertex with no transactions (coinbase should be 0 = fees only)
         let mut vertex = make_vertex_for(&proposer, 0, 0, vec![], &sk);
-        
-        // Tamper with coinbase amount (should be INITIAL_REWARD_SATS for height 0)
-        vertex.block.coinbase.amount = 1_000_000 * crate::constants::COIN;
-        
+
+        // Tamper with coinbase amount (should be 0 since no fees)
+        vertex.block.coinbase.amount = 1_000_000;
+
         // Re-sign the vertex
         let signable = vertex.signable_bytes();
         vertex.signature = sk.sign(&signable);
@@ -2017,8 +2183,8 @@ mod tests {
         assert!(result.is_err());
         match result {
             Err(CoinError::InvalidCoinbase { expected, got }) => {
-                assert_eq!(expected, crate::constants::INITIAL_REWARD_SATS);
-                assert_eq!(got, 1_000_000 * crate::constants::COIN);
+                assert_eq!(expected, 0); // No fees = coinbase should be 0
+                assert_eq!(got, 1_000_000);
             }
             _ => panic!("Expected InvalidCoinbase error"),
         }

@@ -12,7 +12,7 @@ fn test_dag_insert_duplicate() {
     
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 0,
     };
     let header = BlockHeader {
@@ -76,7 +76,7 @@ fn test_block_hash_consistency() {
     
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 0,
     };
     let header = BlockHeader {
@@ -104,7 +104,7 @@ fn test_dag_vertex_hash_deterministic() {
     
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 0,
     };
     let header = BlockHeader {

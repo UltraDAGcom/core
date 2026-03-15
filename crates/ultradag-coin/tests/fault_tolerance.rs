@@ -16,11 +16,10 @@ fn make_vertex(
 ) -> DagVertex {
     let proposer = sk.address();
     let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
-    let reward = ultradag_coin::constants::block_reward(height);
-    
+
     let coinbase = CoinbaseTx {
         to: proposer,
-        amount: reward + total_fees,
+        amount: total_fees,
         height,
     };
     

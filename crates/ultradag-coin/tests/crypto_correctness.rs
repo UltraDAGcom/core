@@ -294,11 +294,9 @@ fn make_test_vertex(
     parent_hashes: Vec<[u8; 32]>,
 ) -> DagVertex {
     let proposer = sk.address();
-    let reward = ultradag_coin::constants::block_reward(height);
-    
     let coinbase = CoinbaseTx {
         to: proposer,
-        amount: reward,
+        amount: 0,
         height,
     };
     
@@ -369,10 +367,9 @@ fn vertex_signed_bytes_include_critical_fields() {
     
     // Manually create vertex with transaction and proper merkle_root
     let proposer = sk.address();
-    let reward = ultradag_coin::constants::block_reward(10);
     let coinbase = CoinbaseTx {
         to: proposer,
-        amount: reward + tx.fee(),
+        amount: tx.fee(),
         height: 10,
     };
     let mut block_with_tx = Block {

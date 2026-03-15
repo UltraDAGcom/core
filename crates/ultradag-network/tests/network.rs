@@ -43,7 +43,7 @@ fn make_real_vertex(sk: &SecretKey, round: u64) -> DagVertex {
             prev_hash: [0u8; 32],
             merkle_root: [0u8; 32],
         },
-        coinbase: CoinbaseTx { to: validator, amount: 5_000_000_000, height: round },
+        coinbase: CoinbaseTx { to: validator, amount: 0, height: round },
         transactions: vec![],
     };
     let mut v = DagVertex::new(

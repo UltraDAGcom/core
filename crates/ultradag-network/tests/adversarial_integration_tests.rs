@@ -43,16 +43,14 @@ impl AdversarialNode {
 }
 
 /// Create a vertex with the correct coinbase amount for state application.
-/// Uses `block_reward(round) / validators_in_round` for pre-staking mode.
+/// Coinbase only contains fees (none here). Block rewards distributed separately.
 fn make_correct_vertex(
     round: u64,
     parents: Vec<[u8; 32]>,
     sk: &SecretKey,
-    validators_in_round: u64,
+    _validators_in_round: u64,
 ) -> DagVertex {
     let validator = sk.address();
-    let total_reward = ultradag_coin::constants::block_reward(round);
-    let reward = total_reward / validators_in_round.max(1);
 
     let block = Block {
         header: BlockHeader {
@@ -62,7 +60,7 @@ fn make_correct_vertex(
             prev_hash: parents.first().copied().unwrap_or([0u8; 32]),
             merkle_root: [0u8; 32],
         },
-        coinbase: CoinbaseTx { to: validator, amount: reward, height: round },
+        coinbase: CoinbaseTx { to: validator, amount: 0, height: round },
         transactions: vec![],
     };
     let mut v = DagVertex::new(
@@ -345,8 +343,6 @@ async fn test_equivocation_slash_identical_across_nodes() {
     // Vertex B: different vertex (different timestamp → different hash)
     let vertex_b = {
         let validator = equivocator_sk.address();
-        let total_reward = ultradag_coin::constants::block_reward(5);
-        let reward = total_reward / 4;
         let block = Block {
             header: BlockHeader {
                 version: 1,
@@ -355,7 +351,7 @@ async fn test_equivocation_slash_identical_across_nodes() {
                 prev_hash: parents.first().copied().unwrap_or([0u8; 32]),
                 merkle_root: [0u8; 32],
             },
-            coinbase: CoinbaseTx { to: validator, amount: reward, height: 5 },
+            coinbase: CoinbaseTx { to: validator, amount: 0, height: 5 },
             transactions: vec![],
         };
         let mut v = DagVertex::new(

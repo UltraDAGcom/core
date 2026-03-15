@@ -49,10 +49,9 @@ fn make_vertex(
     sk: &SecretKey,
 ) -> DagVertex {
     let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
-    let reward = constants::block_reward(height);
     let coinbase = CoinbaseTx {
         to: *proposer,
-        amount: reward + total_fees,
+        amount: total_fees,
         height,
     };
     let block = Block {
@@ -78,9 +77,9 @@ fn make_vertex(
     vertex
 }
 
-/// Like `make_vertex` but accepts an explicit coinbase reward instead of computing
-/// it from `block_reward(height)`. Use this when the engine has council members
-/// that reduce the validator share (e.g. `new_with_genesis()` adds one Foundation seat).
+/// Like `make_vertex` but accepts an explicit validator_reward parameter (unused now
+/// that coinbase only contains fees — block rewards are distributed separately via
+/// `distribute_round_rewards()`). Kept for API compatibility with existing call sites.
 fn make_vertex_with_reward(
     proposer: &Address,
     round: u64,
@@ -88,12 +87,12 @@ fn make_vertex_with_reward(
     parents: Vec<[u8; 32]>,
     txs: Vec<Transaction>,
     sk: &SecretKey,
-    validator_reward: u64,
+    _validator_reward: u64,
 ) -> DagVertex {
     let total_fees: u64 = txs.iter().map(|tx| tx.fee()).fold(0u64, |a, x| a.saturating_add(x));
     let coinbase = CoinbaseTx {
         to: *proposer,
-        amount: validator_reward.saturating_add(total_fees),
+        amount: total_fees,
         height,
     };
     let block = Block {

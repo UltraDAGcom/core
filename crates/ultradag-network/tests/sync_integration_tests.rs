@@ -47,7 +47,7 @@ fn test_dag_proposal_with_multiple_parents() {
     
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 1,
     };
     let header = BlockHeader {
@@ -102,7 +102,7 @@ fn test_dag_vertices_response() {
     
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 0,
     };
     let header = BlockHeader {
@@ -257,7 +257,7 @@ fn test_dag_vertex_with_transactions() {
     
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 0,
     };
     let header = BlockHeader {
@@ -292,7 +292,7 @@ fn test_message_size_limits() {
     
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 0,
     };
     let header = BlockHeader {
@@ -330,7 +330,7 @@ fn test_orphan_vertex_handling() {
     
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 5,
     };
     let header = BlockHeader {
@@ -382,7 +382,7 @@ fn test_multiple_dag_vertices_batch() {
     for i in 0..5 {
         let coinbase = CoinbaseTx {
             to: sk.address(),
-            amount: 5_000_000_000,
+            amount: 0,
             height: i,
         };
         let header = BlockHeader {

@@ -33,24 +33,22 @@ fn make_vertex(
     make_vertex_with_reward_pct(proposer_sk, round, height, txs, parents, 100)
 }
 
-/// Like `make_vertex` but the coinbase uses `council_pct`% of `block_reward` for the
-/// validator reward (the remaining goes to council emissions). Use 90 when calling
-/// `apply_vertex` on a state created by `new_with_genesis()`, which bootstraps 1
-/// council member at 10% emission.
+/// Like `make_vertex` but previously included a validator_pct of block_reward in the
+/// coinbase. Now coinbase only contains transaction fees — block rewards are distributed
+/// separately via `distribute_round_rewards()`.
 fn make_vertex_with_reward_pct(
     proposer_sk: &SecretKey,
     round: u64,
     height: u64,
     txs: Vec<Transaction>,
     parents: Vec<[u8; 32]>,
-    validator_pct: u64, // percentage of block_reward going to the validator (0–100)
+    _validator_pct: u64, // no longer used — coinbase is fees-only
 ) -> DagVertex {
     let proposer = proposer_sk.address();
     let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
-    let reward = block_reward(height) * validator_pct / 100;
     let coinbase = ultradag_coin::CoinbaseTx {
         to: proposer,
-        amount: reward + total_fees,
+        amount: total_fees,
         height,
     };
     let block = ultradag_coin::Block {

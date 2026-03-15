@@ -9,7 +9,7 @@ use std::path::PathBuf;
 fn make_test_vertex(sk: &SecretKey, round: u64, nonce: u64) -> DagVertex {
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: round,
     };
     let header = BlockHeader {

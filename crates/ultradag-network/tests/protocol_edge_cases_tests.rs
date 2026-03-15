@@ -56,7 +56,7 @@ fn test_new_block_message() {
     
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 0,
     };
     let header = BlockHeader {
@@ -109,7 +109,7 @@ fn test_blocks_response_message() {
     for i in 0..3 {
         let coinbase = CoinbaseTx {
             to: sk.address(),
-            amount: 5_000_000_000,
+            amount: 0,
             height: i,
         };
         let header = BlockHeader {
@@ -172,7 +172,7 @@ fn test_equivocation_evidence_message() {
     
     let coinbase1 = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 0,
     };
     let header1 = BlockHeader {
@@ -199,7 +199,7 @@ fn test_equivocation_evidence_message() {
     
     let coinbase2 = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 0,
     };
     let header2 = BlockHeader {
@@ -267,7 +267,7 @@ fn test_parent_vertices_message() {
     for i in 0..2 {
         let coinbase = CoinbaseTx {
             to: sk.address(),
-            amount: 5_000_000_000,
+            amount: 0,
             height: i,
         };
         let header = BlockHeader {
@@ -353,7 +353,7 @@ fn test_checkpoint_sync_message() {
     
     let coinbase = CoinbaseTx {
         to: sk.address(),
-        amount: 5_000_000_000,
+        amount: 0,
         height: 0,
     };
     let header = BlockHeader {

@@ -35,11 +35,10 @@ fn make_vertex_unique(
 ) -> DagVertex {
     use ultradag_coin::{Block, CoinbaseTx};
 
-    // Calculate correct coinbase amount: block_reward + total_fees
-    let block_reward = ultradag_coin::constants::block_reward(unique_id);
+    // Coinbase only contains transaction fees (no block reward — rewards distributed separately)
     let coinbase = CoinbaseTx {
         to: validator.address(),
-        amount: block_reward, // No fees in this test, so just block_reward
+        amount: 0, // No fees in this test
         height: unique_id,
     };
 

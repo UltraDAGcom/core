@@ -28,3 +28,4 @@ sdk/go/ultradag/testdata/
 
 # TLA+ state files (can be very large)
 formal/states/
+.windsurf/
