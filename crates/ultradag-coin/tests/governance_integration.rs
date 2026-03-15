@@ -679,3 +679,412 @@ fn test_non_council_member_cannot_propose() {
     let result = state.apply_create_proposal(&proposal_tx, 100);
     assert!(result.is_err(), "Non-council member should not be able to create proposals");
 }
+
+// --- CouncilMembership Proposal Lifecycle Tests ---
+
+use ultradag_coin::governance::CouncilAction;
+use ultradag_coin::Address;
+
+/// Helper: set up a state with a passing CouncilMembership proposal.
+/// Returns (state, voting_ends) with proposal at id=0 in Active status.
+fn setup_passing_council_membership_proposal(
+    action: CouncilAction,
+    target_address: Address,
+    category: CouncilSeatCategory,
+) -> (StateEngine, u64) {
+    let mut state = StateEngine::new_with_genesis();
+
+    // Create proposer as council member
+    let proposer = SecretKey::generate();
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
+
+    let proposal_tx = make_proposal_tx(
+        &proposer, 0, "Council Membership", "Add or remove council member",
+        ProposalType::CouncilMembership {
+            action,
+            address: target_address,
+            category,
+        },
+        10_000, 0,
+    );
+    state.apply_create_proposal(&proposal_tx, 100).unwrap();
+
+    // Create 2 voters as council members — with 3 total council members and 1-per-seat voting,
+    // 2 YES votes out of 3 members is well above 10% quorum and 66% approval
+    let voter1 = SecretKey::generate();
+    let voter2 = SecretKey::generate();
+    fund_and_seat_council(&mut state, &voter1, CouncilSeatCategory::Business);
+    fund_and_seat_council(&mut state, &voter2, CouncilSeatCategory::Legal);
+
+    // Both vote YES
+    let v1 = make_vote_tx(&voter1, 0, true, 10_000, 0);
+    let v2 = make_vote_tx(&voter2, 0, true, 10_000, 0);
+    state.apply_vote(&v1, 150).unwrap();
+    state.apply_vote(&v2, 200).unwrap();
+
+    let voting_ends = state.proposal(0).unwrap().voting_ends;
+    (state, voting_ends)
+}
+
+/// Helper: advance a proposal from Active -> PassedPending -> Executed via tick_governance.
+fn execute_proposal(state: &mut StateEngine, proposal_id: u64, voting_ends: u64) {
+    // Tick past voting end — proposal transitions to PassedPending
+    state.tick_governance(voting_ends + 1);
+    let execute_at = match state.proposal(proposal_id).unwrap().status {
+        ultradag_coin::governance::ProposalStatus::PassedPending { execute_at_round } => execute_at_round,
+        ref s => panic!("Expected PassedPending, got {:?}", s),
+    };
+    // Tick at execution round — proposal transitions to Executed
+    state.tick_governance(execute_at);
+}
+
+#[test]
+fn test_council_membership_add_via_proposal() {
+    // Create a new address to be added as council member
+    let new_member = SecretKey::generate();
+    let new_addr = new_member.address();
+
+    let (mut state, voting_ends) = setup_passing_council_membership_proposal(
+        CouncilAction::Add,
+        new_addr,
+        CouncilSeatCategory::Academic,
+    );
+
+    // Before execution, new_addr should NOT be a council member
+    assert!(!state.is_council_member(&new_addr), "Should not be council member before execution");
+
+    // Execute the proposal
+    execute_proposal(&mut state, 0, voting_ends);
+
+    // Verify proposal is Executed
+    assert_eq!(
+        state.proposal(0).unwrap().status,
+        ultradag_coin::governance::ProposalStatus::Executed,
+    );
+
+    // Verify member was added
+    assert!(state.is_council_member(&new_addr), "Should be council member after execution");
+    assert_eq!(
+        state.council_seat_category(&new_addr),
+        Some(CouncilSeatCategory::Academic),
+    );
+}
+
+#[test]
+fn test_council_membership_remove_via_proposal() {
+    // Create member to be removed
+    let target = SecretKey::generate();
+    let target_addr = target.address();
+
+    let (mut state, voting_ends) = setup_passing_council_membership_proposal(
+        CouncilAction::Remove,
+        target_addr,
+        CouncilSeatCategory::Academic, // category in proposal (used for Add, ignored for Remove)
+    );
+
+    // Manually add the target as a council member before execution
+    state.add_council_member(target_addr, CouncilSeatCategory::Academic).unwrap();
+    assert!(state.is_council_member(&target_addr), "Should be council member before removal");
+
+    // Execute the proposal
+    execute_proposal(&mut state, 0, voting_ends);
+
+    // Verify proposal is Executed
+    assert_eq!(
+        state.proposal(0).unwrap().status,
+        ultradag_coin::governance::ProposalStatus::Executed,
+    );
+
+    // Verify member was removed
+    assert!(!state.is_council_member(&target_addr), "Should not be council member after removal");
+}
+
+#[test]
+fn test_council_membership_add_category_full() {
+    // Fill all Technical(7) seats, then propose an 8th
+    let eighth_member = SecretKey::generate();
+    let eighth_addr = eighth_member.address();
+
+    let (mut state, voting_ends) = setup_passing_council_membership_proposal(
+        CouncilAction::Add,
+        eighth_addr,
+        CouncilSeatCategory::Technical,
+    );
+
+    // The proposer already occupies 1 Technical seat (from setup_passing_council_membership_proposal).
+    // Fill the remaining 6 Technical seats (total = 7, which is max).
+    for _ in 0..6 {
+        let filler = SecretKey::generate();
+        state.add_council_member(filler.address(), CouncilSeatCategory::Technical).unwrap();
+    }
+
+    // Verify Technical is full (7 seats)
+    let tech_count = state.council_members()
+        .filter(|(_, cat)| **cat == CouncilSeatCategory::Technical)
+        .count();
+    assert_eq!(tech_count, 7, "All 7 Technical seats should be filled");
+
+    // Execute the proposal — should transition to Executed but add_council_member fails gracefully
+    execute_proposal(&mut state, 0, voting_ends);
+
+    assert_eq!(
+        state.proposal(0).unwrap().status,
+        ultradag_coin::governance::ProposalStatus::Executed,
+    );
+
+    // The 8th member should NOT have been added (category full)
+    assert!(!state.is_council_member(&eighth_addr), "8th Technical member should not be added (category full)");
+}
+
+#[test]
+fn test_council_membership_add_at_capacity() {
+    // Fill all 21 council seats, then propose a 22nd
+    let extra_member = SecretKey::generate();
+    let extra_addr = extra_member.address();
+
+    let (mut state, voting_ends) = setup_passing_council_membership_proposal(
+        CouncilAction::Add,
+        extra_addr,
+        CouncilSeatCategory::Community,
+    );
+
+    // setup_passing_council_membership_proposal already created 3 members:
+    // 1 Technical (proposer), 1 Business (voter1), 1 Legal (voter2)
+    // Fill remaining seats to reach 21
+    // Technical: 1 filled, max 7, add 6 more
+    for _ in 0..6 {
+        let sk = SecretKey::generate();
+        state.add_council_member(sk.address(), CouncilSeatCategory::Technical).unwrap();
+    }
+    // Business: 1 filled, max 4, add 3 more
+    for _ in 0..3 {
+        let sk = SecretKey::generate();
+        state.add_council_member(sk.address(), CouncilSeatCategory::Business).unwrap();
+    }
+    // Legal: 1 filled, max 3, add 2 more
+    for _ in 0..2 {
+        let sk = SecretKey::generate();
+        state.add_council_member(sk.address(), CouncilSeatCategory::Legal).unwrap();
+    }
+    // Academic: 0 filled, max 3, add 3
+    for _ in 0..3 {
+        let sk = SecretKey::generate();
+        state.add_council_member(sk.address(), CouncilSeatCategory::Academic).unwrap();
+    }
+    // Community: 0 filled, max 2, add 2
+    for _ in 0..2 {
+        let sk = SecretKey::generate();
+        state.add_council_member(sk.address(), CouncilSeatCategory::Community).unwrap();
+    }
+    // Foundation: 0 filled, max 2, add 2
+    for _ in 0..2 {
+        let sk = SecretKey::generate();
+        state.add_council_member(sk.address(), CouncilSeatCategory::Foundation).unwrap();
+    }
+
+    assert_eq!(state.council_member_count(), 21, "Council should be at full capacity");
+
+    // Execute the proposal — should transition to Executed but add fails (at capacity)
+    execute_proposal(&mut state, 0, voting_ends);
+
+    assert_eq!(
+        state.proposal(0).unwrap().status,
+        ultradag_coin::governance::ProposalStatus::Executed,
+    );
+
+    // The extra member should NOT have been added
+    assert!(!state.is_council_member(&extra_addr), "22nd member should not be added (council at capacity)");
+    assert_eq!(state.council_member_count(), 21, "Council should still be at 21");
+}
+
+#[test]
+fn test_removed_member_loses_governance_rights() {
+    let mut state = StateEngine::new_with_genesis();
+
+    // Create and seat a member
+    let member = SecretKey::generate();
+    fund_and_seat_council(&mut state, &member, CouncilSeatCategory::Technical);
+    assert!(state.is_council_member(&member.address()));
+
+    // Remove the member directly (simulating post-execution state)
+    state.remove_council_member(&member.address());
+    assert!(!state.is_council_member(&member.address()));
+
+    // Verify removed member cannot create proposals
+    let proposal_tx = make_proposal_tx(
+        &member, 0, "Proposal After Removal", "Should fail",
+        ProposalType::TextProposal, 10_000, 0,
+    );
+    let result = state.apply_create_proposal(&proposal_tx, 100);
+    assert!(result.is_err(), "Removed member should not be able to create proposals");
+
+    // Set up a proposal from another council member so the removed member can try to vote
+    let active_member = SecretKey::generate();
+    fund_and_seat_council(&mut state, &active_member, CouncilSeatCategory::Business);
+
+    let proposal_tx2 = make_proposal_tx(
+        &active_member, 0, "Valid Proposal", "From active member",
+        ProposalType::TextProposal, 10_000, 0,
+    );
+    state.apply_create_proposal(&proposal_tx2, 200).unwrap();
+
+    // Verify removed member cannot vote
+    let vote_tx = make_vote_tx(&member, 0, true, 10_000, 0);
+    let result = state.apply_vote(&vote_tx, 250);
+    assert!(result.is_err(), "Removed member should not be able to vote");
+}
+
+#[test]
+fn test_council_membership_new_member_gets_emission() {
+    let mut state = StateEngine::new_with_genesis();
+
+    // Start with 2 council members
+    let member1 = SecretKey::generate();
+    let member2 = SecretKey::generate();
+    fund_and_seat_council(&mut state, &member1, CouncilSeatCategory::Technical);
+    fund_and_seat_council(&mut state, &member2, CouncilSeatCategory::Business);
+
+    // Emission with 2 members
+    let (per_member_before, total_before) = state.compute_council_emission(100);
+    assert!(per_member_before > 0, "Should have non-zero emission");
+    assert_eq!(total_before, per_member_before * 2, "Total should be per_member * 2");
+
+    // Add a 3rd member
+    let member3 = SecretKey::generate();
+    state.add_council_member(member3.address(), CouncilSeatCategory::Legal).unwrap();
+
+    // Emission with 3 members — per_member should decrease, total should stay roughly the same
+    let (per_member_after, total_after) = state.compute_council_emission(100);
+    assert!(per_member_after > 0, "Should have non-zero emission");
+    assert!(per_member_after < per_member_before, "Per-member emission should decrease with more members");
+    assert_eq!(total_after, per_member_after * 3, "Total should be per_member * 3");
+}
+
+#[test]
+fn test_council_membership_executes_regardless_of_dao_hibernation() {
+    // CouncilMembership proposals should execute even with <8 active validators (DAO hibernating)
+    let new_member = SecretKey::generate();
+    let new_addr = new_member.address();
+
+    let (mut state, voting_ends) = setup_passing_council_membership_proposal(
+        CouncilAction::Add,
+        new_addr,
+        CouncilSeatCategory::Academic,
+    );
+
+    // Ensure DAO is NOT active (no stakers)
+    state.recalculate_active_set();
+    assert!(!state.dao_is_active(), "DAO should be hibernating with 0 stakers");
+
+    // Execute the proposal — CouncilMembership should still execute
+    execute_proposal(&mut state, 0, voting_ends);
+
+    assert_eq!(
+        state.proposal(0).unwrap().status,
+        ultradag_coin::governance::ProposalStatus::Executed,
+        "CouncilMembership proposal should execute regardless of DAO hibernation",
+    );
+
+    // Verify member was actually added
+    assert!(state.is_council_member(&new_addr), "Member should be added even with DAO hibernating");
+}
+
+#[test]
+fn test_non_council_cannot_propose_membership() {
+    let mut state = StateEngine::new_with_genesis();
+
+    // Create address that is NOT a council member, but has funds
+    let non_member = SecretKey::generate();
+    state.faucet_credit(&non_member.address(), 1_000_000_000).unwrap();
+
+    let target = SecretKey::generate();
+
+    // Try to create CouncilMembership proposal (should fail — not a council member)
+    let proposal_tx = make_proposal_tx(
+        &non_member, 0, "Add My Friend", "Should be rejected",
+        ProposalType::CouncilMembership {
+            action: CouncilAction::Add,
+            address: target.address(),
+            category: CouncilSeatCategory::Community,
+        },
+        10_000, 0,
+    );
+
+    let result = state.apply_create_proposal(&proposal_tx, 100);
+    assert!(result.is_err(), "Non-council member should not be able to propose council membership changes");
+}
+
+#[test]
+fn test_council_membership_quorum_uses_snapshot() {
+    let mut state = StateEngine::new_with_genesis();
+
+    // Create 5 council members
+    let proposer = SecretKey::generate();
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
+
+    let voter1 = SecretKey::generate();
+    let voter2 = SecretKey::generate();
+    let member4 = SecretKey::generate();
+    let member5 = SecretKey::generate();
+
+    fund_and_seat_council(&mut state, &voter1, CouncilSeatCategory::Business);
+    fund_and_seat_council(&mut state, &voter2, CouncilSeatCategory::Legal);
+    fund_and_seat_council(&mut state, &member4, CouncilSeatCategory::Academic);
+    fund_and_seat_council(&mut state, &member5, CouncilSeatCategory::Community);
+
+    assert_eq!(state.council_member_count(), 5);
+
+    // Create proposal — snapshot_total_stake should capture council size = 5
+    let new_member = SecretKey::generate();
+    let proposal_tx = make_proposal_tx(
+        &proposer, 0, "Add Member", "Test quorum snapshot",
+        ProposalType::CouncilMembership {
+            action: CouncilAction::Add,
+            address: new_member.address(),
+            category: CouncilSeatCategory::Foundation,
+        },
+        10_000, 0,
+    );
+    state.apply_create_proposal(&proposal_tx, 100).unwrap();
+
+    // Verify snapshot captured council size of 5
+    let proposal = state.proposal(0).unwrap();
+    assert_eq!(proposal.snapshot_total_stake, 5, "Snapshot should capture council size at proposal creation");
+
+    // Remove 2 council members AFTER proposal creation
+    state.remove_council_member(&member4.address());
+    state.remove_council_member(&member5.address());
+    assert_eq!(state.council_member_count(), 3, "Should have 3 members after removal");
+
+    // Vote YES from voter1 (1 vote out of snapshot=5)
+    // Quorum = ceil(5 * 10 / 100) = 1, so 1 vote meets quorum
+    // Approval = 1/1 = 100% >= 66%
+    let v1 = make_vote_tx(&voter1, 0, true, 10_000, 0);
+    state.apply_vote(&v1, 150).unwrap();
+
+    let voting_ends = state.proposal(0).unwrap().voting_ends;
+
+    // Tick past voting — the quorum should use snapshot of 5, not current 3
+    state.tick_governance(voting_ends + 1);
+
+    let proposal = state.proposal(0).unwrap();
+    // With snapshot=5, quorum=ceil(5*10/100)=1, we have 1 vote, so it passes
+    assert!(
+        matches!(proposal.status, ultradag_coin::governance::ProposalStatus::PassedPending { .. }),
+        "Proposal should pass using snapshot quorum of 5 (not current 3). Got: {:?}",
+        proposal.status,
+    );
+
+    // Execute the proposal
+    let execute_at = match proposal.status {
+        ultradag_coin::governance::ProposalStatus::PassedPending { execute_at_round } => execute_at_round,
+        _ => panic!("Expected PassedPending"),
+    };
+    state.tick_governance(execute_at);
+
+    assert_eq!(
+        state.proposal(0).unwrap().status,
+        ultradag_coin::governance::ProposalStatus::Executed,
+    );
+    assert!(state.is_council_member(&new_member.address()), "New member should be added after execution");
+}
