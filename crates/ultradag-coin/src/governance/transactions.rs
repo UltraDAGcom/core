@@ -49,6 +49,11 @@ impl CreateProposalTx {
                 buf.extend_from_slice(&address.0);
                 buf.extend_from_slice(category.name().as_bytes());
             }
+            ProposalType::TreasurySpend { recipient, amount } => {
+                buf.push(3);
+                buf.extend_from_slice(&recipient.0);
+                buf.extend_from_slice(&amount.to_le_bytes());
+            }
         }
 
         buf.extend_from_slice(&self.fee.to_le_bytes());
@@ -79,6 +84,11 @@ impl CreateProposalTx {
                 }]);
                 hasher.update(&address.0);
                 hasher.update(category.name().as_bytes());
+            }
+            ProposalType::TreasurySpend { recipient, amount } => {
+                hasher.update(&[3]);
+                hasher.update(&recipient.0);
+                hasher.update(&amount.to_le_bytes());
             }
         }
         hasher.update(&self.fee.to_le_bytes());

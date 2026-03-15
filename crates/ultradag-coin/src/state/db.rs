@@ -13,6 +13,7 @@ const PROPOSALS: TableDefinition<u64, &[u8]> = TableDefinition::new("proposals")
 const VOTES: TableDefinition<&[u8], u8> = TableDefinition::new("votes");
 const METADATA: TableDefinition<&str, &[u8]> = TableDefinition::new("metadata");
 const ACTIVE_VALIDATORS: TableDefinition<u64, &[u8; 32]> = TableDefinition::new("active_validators");
+const COUNCIL_MEMBERS: TableDefinition<&[u8; 32], u8> = TableDefinition::new("council_members");
 
 impl From<redb::Error> for PersistenceError {
     fn from(e: redb::Error) -> Self {
@@ -109,6 +110,15 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
         }
     }
 
+    // Council members
+    {
+        let mut table = txn.open_table(COUNCIL_MEMBERS)?;
+        for (addr, category) in engine.council_members() {
+            let cat_byte = council_category_to_u8(category);
+            table.insert(&addr.0, cat_byte)?;
+        }
+    }
+
     // Metadata
     {
         let mut table = txn.open_table(METADATA)?;
@@ -127,6 +137,8 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
         if let Some(cvc) = engine.configured_validator_count() {
             table.insert("configured_validator_count", cvc.to_le_bytes().as_slice())?;
         }
+
+        table.insert("treasury_balance", engine.treasury_balance().to_le_bytes().as_slice())?;
 
         // Compute and store state root for integrity verification on reload.
         // This catches silent corruption from disk errors, partial writes, or bugs.
@@ -223,6 +235,19 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         if raw > 0 { Some(raw) } else { None }
     };
 
+    let treasury_balance = read_u64(&meta, "treasury_balance")?;
+
+    // Council members
+    let mut council_members = std::collections::HashMap::new();
+    let cm_table = txn.open_table(COUNCIL_MEMBERS)?;
+    for entry in cm_table.iter()? {
+        let (k, v) = entry?;
+        let addr = Address(*k.value());
+        if let Some(category) = u8_to_council_category(v.value()) {
+            council_members.insert(addr, category);
+        }
+    }
+
     let mut engine = StateEngine::from_parts(
         accounts,
         stake_accounts,
@@ -235,6 +260,8 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         next_proposal_id,
         governance_params,
         configured_validator_count,
+        council_members,
+        treasury_balance,
     );
 
     // Verify state integrity: recompute state root and compare against stored value.
@@ -277,6 +304,31 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
     }
 
     Ok(engine)
+}
+
+fn council_category_to_u8(cat: &crate::governance::CouncilSeatCategory) -> u8 {
+    use crate::governance::CouncilSeatCategory::*;
+    match cat {
+        Technical => 0,
+        Business => 1,
+        Legal => 2,
+        Academic => 3,
+        Community => 4,
+        Foundation => 5,
+    }
+}
+
+fn u8_to_council_category(val: u8) -> Option<crate::governance::CouncilSeatCategory> {
+    use crate::governance::CouncilSeatCategory::*;
+    match val {
+        0 => Some(Technical),
+        1 => Some(Business),
+        2 => Some(Legal),
+        3 => Some(Academic),
+        4 => Some(Community),
+        5 => Some(Foundation),
+        _ => None,
+    }
 }
 
 fn read_u64(table: &redb::ReadOnlyTable<&str, &[u8]>, key: &str) -> Result<u64, PersistenceError> {

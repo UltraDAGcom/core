@@ -30,9 +30,24 @@ fn make_vertex(
     txs: Vec<Transaction>,
     parents: Vec<[u8; 32]>,
 ) -> DagVertex {
+    make_vertex_with_reward_pct(proposer_sk, round, height, txs, parents, 100)
+}
+
+/// Like `make_vertex` but the coinbase uses `council_pct`% of `block_reward` for the
+/// validator reward (the remaining goes to council emissions). Use 90 when calling
+/// `apply_vertex` on a state created by `new_with_genesis()`, which bootstraps 1
+/// council member at 10% emission.
+fn make_vertex_with_reward_pct(
+    proposer_sk: &SecretKey,
+    round: u64,
+    height: u64,
+    txs: Vec<Transaction>,
+    parents: Vec<[u8; 32]>,
+    validator_pct: u64, // percentage of block_reward going to the validator (0–100)
+) -> DagVertex {
     let proposer = proposer_sk.address();
     let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
-    let reward = block_reward(height);
+    let reward = block_reward(height) * validator_pct / 100;
     let coinbase = ultradag_coin::CoinbaseTx {
         to: proposer,
         amount: reward + total_fees,
@@ -184,10 +199,12 @@ fn no_overflow_genesis_plus_rounds() {
     let mut state = StateEngine::new_with_genesis();
     let validators: Vec<_> = (0..4).map(|_| SecretKey::generate()).collect();
 
-    // 1000 rounds with 4 validators
+    // 1000 rounds with 4 validators.
+    // new_with_genesis() bootstraps 1 council member (dev_addr) at 10% emission,
+    // so validator coinbase = 90% of block_reward.
     for round in 0u64..1000 {
         let sk = &validators[(round % 4) as usize];
-        let vertex = make_vertex(sk, round, round, vec![], vec![]);
+        let vertex = make_vertex_with_reward_pct(sk, round, round, vec![], vec![], 90);
         state.apply_vertex(&vertex).unwrap();
     }
 
@@ -195,10 +212,11 @@ fn no_overflow_genesis_plus_rounds() {
     // 1000 rounds * INITIAL_REWARD_SATS = 1000 * 10^8 = 10^11
     // Total ~ 1.05 * 10^14, well within u64
     assert!(state.total_supply() < u64::MAX);
-    let sum: u64 = (0..4).map(|i| state.balance(&validators[i].address())).sum::<u64>()
+    // Supply invariant: liquid balances + treasury == total_supply
+    let liquid_sum: u64 = (0..4).map(|i| state.balance(&validators[i].address())).sum::<u64>()
         + state.balance(&faucet_keypair().address())
         + state.balance(&ultradag_coin::dev_address());
-    assert_eq!(sum, state.total_supply());
+    assert_eq!(liquid_sum + state.treasury_balance(), state.total_supply());
 }
 
 /// Fee sum is computed from vertex block, not from modified state
@@ -209,8 +227,9 @@ fn fee_sum_computed_before_tx_application() {
     let sender_sk = SecretKey::generate();
     let receiver = SecretKey::generate().address();
 
-    // Give sender 10 UDAG
-    let v0 = make_vertex(&proposer_sk, 0, 0, vec![], vec![]);
+    // new_with_genesis() bootstraps 1 council member (dev address) at 10% emission,
+    // so validators receive 90% of block_reward.
+    let v0 = make_vertex_with_reward_pct(&proposer_sk, 0, 0, vec![], vec![], 90);
     state.apply_vertex(&v0).unwrap();
 
     let send_amount = 1_000_000;
@@ -218,11 +237,11 @@ fn fee_sum_computed_before_tx_application() {
     state.faucet_credit(&sender_sk.address(), send_amount + fee).unwrap();
 
     let tx = make_signed_tx(&sender_sk, receiver, send_amount, fee, 0);
-    let v1 = make_vertex(&proposer_sk, 1, 1, vec![tx], vec![]);
+    let v1 = make_vertex_with_reward_pct(&proposer_sk, 1, 1, vec![tx], vec![], 90);
     state.apply_vertex(&v1).unwrap();
 
-    // Proposer should get block_reward(1) + fee
-    let expected_proposer = block_reward(0) + block_reward(1) + fee;
+    // Proposer should get 90% of block_reward(0) + 90% of block_reward(1) + fee
+    let expected_proposer = block_reward(0) * 90 / 100 + block_reward(1) * 90 / 100 + fee;
     assert_eq!(state.balance(&proposer_sk.address()), expected_proposer);
 }
 
@@ -556,8 +575,9 @@ fn faucet_depletion_graceful_error() {
     let faucet_addr = faucet_sk.address();
     let receiver = SecretKey::generate().address();
 
-    // Give proposer some balance for coinbase
-    let v0 = make_vertex(&proposer_sk, 0, 0, vec![], vec![]);
+    // Give proposer some balance for coinbase.
+    // new_with_genesis() bootstraps 1 council member so validators get 90% of block_reward.
+    let v0 = make_vertex_with_reward_pct(&proposer_sk, 0, 0, vec![], vec![], 90);
     state.apply_vertex(&v0).unwrap();
 
     let faucet_balance = state.balance(&faucet_addr);
@@ -566,7 +586,7 @@ fn faucet_depletion_graceful_error() {
     // Try to send more than faucet balance — tx is skipped gracefully
     // in finalized vertices (nonce advanced, balance unchanged)
     let tx = make_signed_tx(&faucet_sk, receiver, faucet_balance + 1, 0, 0);
-    let v1 = make_vertex(&proposer_sk, 1, 1, vec![tx], vec![]);
+    let v1 = make_vertex_with_reward_pct(&proposer_sk, 1, 1, vec![tx], vec![], 90);
     let result = state.apply_vertex(&v1);
     assert!(result.is_ok(), "Finalized vertex with bad tx should succeed (tx skipped)");
 
@@ -662,8 +682,9 @@ fn duplicate_tx_in_vertex_same_nonce() {
     let tx2 = make_signed_tx(&sender_sk, receiver, 2_000, 100, 0); // Same nonce!
 
     // Second tx has same nonce=0, so after tx1 is applied (nonce becomes 1),
-    // tx2 is skipped gracefully (nonce mismatch in finalized vertex)
-    let v = make_vertex(&proposer_sk, 0, 0, vec![tx1, tx2], vec![]);
+    // tx2 is skipped gracefully (nonce mismatch in finalized vertex).
+    // new_with_genesis() bootstraps 1 council member so validators get 90% of block_reward.
+    let v = make_vertex_with_reward_pct(&proposer_sk, 0, 0, vec![tx1, tx2], vec![], 90);
     let result = state.apply_vertex(&v);
     assert!(result.is_ok(), "Finalized vertex with duplicate nonce should succeed (second tx skipped)");
 
@@ -682,18 +703,20 @@ fn supply_invariant_genesis_plus_500_rounds() {
     let faucet_addr = faucet_keypair().address();
     let dev_addr = ultradag_coin::dev_address();
 
+    // new_with_genesis() bootstraps 1 council member (dev_addr) at 10% emission,
+    // so validator coinbase = 90% of block_reward.
     for round in 0u64..500 {
         let sk = &validators[(round % 4) as usize];
-        let vertex = make_vertex(sk, round, round, vec![], vec![]);
+        let vertex = make_vertex_with_reward_pct(sk, round, round, vec![], vec![], 90);
         state.apply_vertex(&vertex).unwrap();
     }
 
-    // Verify supply invariant: sum(all balances) == total_supply
+    // Verify supply invariant: sum(liquid balances) + treasury == total_supply
     let mut sum = state.balance(&faucet_addr) + state.balance(&dev_addr);
     for sk in &validators {
         sum += state.balance(&sk.address());
     }
-    assert_eq!(sum, state.total_supply());
+    assert_eq!(sum + state.treasury_balance(), state.total_supply());
 }
 
 #[test]

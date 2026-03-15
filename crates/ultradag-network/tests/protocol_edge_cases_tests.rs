@@ -390,6 +390,7 @@ fn test_checkpoint_sync_message() {
         next_proposal_id: 0,
         governance_params: Default::default(),
         council_members: vec![],
+        treasury_balance: 0,
     };
 
     let msg = Message::CheckpointSync {

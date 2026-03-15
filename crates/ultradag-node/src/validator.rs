@@ -181,6 +181,12 @@ pub async fn validator_loop(
             let active = state.active_validators();
             if !active.is_empty() && !active.contains(&validator) {
                 // Staking is active but we're not in the active set — observe only
+                if timer_fired {
+                    consecutive_skips += 1;
+                    if consecutive_skips % 12 == 1 {
+                        warn!("Not in active validator set ({} active validators) — observing only. Skip #{}", active.len(), consecutive_skips);
+                    }
+                }
                 continue;
             }
         }

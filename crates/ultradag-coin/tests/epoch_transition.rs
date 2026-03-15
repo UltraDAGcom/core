@@ -123,23 +123,25 @@ fn no_sync_when_staking_inactive() {
 fn epoch_just_changed_detects_boundary() {
     let mut state = StateEngine::new_with_genesis();
     let sk = SecretKey::generate();
-    let reward = block_reward(0);
+    // new_with_genesis() bootstraps 1 council member (dev address) at 10% emission,
+    // so the validator receives 90% of block_reward.
+    let validator_reward = |h: u64| block_reward(h) * 90 / 100;
 
     // Apply vertex at round 0
-    let v = make_vertex(&sk, 0, 0, reward);
+    let v = make_vertex(&sk, 0, 0, validator_reward(0));
     state.apply_vertex(&v).unwrap();
     assert!(!state.epoch_just_changed(None));
 
     // Simulate approaching epoch boundary
     // Set last_finalized_round to EPOCH_LENGTH_ROUNDS - 1
     let prev_round = Some(EPOCH_LENGTH_ROUNDS - 2);
-    let v2 = make_vertex(&sk, EPOCH_LENGTH_ROUNDS - 1, EPOCH_LENGTH_ROUNDS - 1, block_reward(EPOCH_LENGTH_ROUNDS - 1));
+    let v2 = make_vertex(&sk, EPOCH_LENGTH_ROUNDS - 1, EPOCH_LENGTH_ROUNDS - 1, validator_reward(EPOCH_LENGTH_ROUNDS - 1));
     state.apply_vertex(&v2).unwrap();
     assert!(!state.epoch_just_changed(prev_round));
 
     // Cross the boundary
     let prev_round2 = state.last_finalized_round();
-    let v3 = make_vertex(&sk, EPOCH_LENGTH_ROUNDS, EPOCH_LENGTH_ROUNDS, block_reward(EPOCH_LENGTH_ROUNDS));
+    let v3 = make_vertex(&sk, EPOCH_LENGTH_ROUNDS, EPOCH_LENGTH_ROUNDS, validator_reward(EPOCH_LENGTH_ROUNDS));
     state.apply_vertex(&v3).unwrap();
     assert!(state.epoch_just_changed(prev_round2));
     assert_eq!(state.current_epoch(), 1);

@@ -70,6 +70,9 @@ pub struct StateEngine {
     /// Must match the --validators CLI flag AND `ValidatorSet::configured_validators`
     /// (which uses `usize` for quorum math). Both are set together in main.rs.
     configured_validator_count: Option<u64>,
+    /// DAO treasury balance in sats. Funded at genesis (10% of max supply).
+    /// Spent via TreasurySpend proposals approved by the Council of 21.
+    treasury_balance: u64,
     /// Bounded index of finalized transaction hashes → their location in the DAG.
     /// Enables `/tx/{hash}` lookups without scanning the full DAG.
     /// FIFO eviction when exceeding MAX_TX_INDEX_SIZE.
@@ -86,10 +89,11 @@ impl StateEngine {
             total_supply: 0,
             last_finalized_round: None,
             active_validator_set: Vec::new(),
-            current_epoch: 0,
+            current_epoch: u64::MAX, // sentinel: epoch never initialized
             proposals: HashMap::new(),
             votes: HashMap::new(),
             council_members: HashMap::new(),
+            treasury_balance: 0,
             next_proposal_id: 0,
             governance_params: crate::governance::GovernanceParams::default(),
             configured_validator_count: None,
@@ -169,7 +173,12 @@ impl StateEngine {
 
     /// Compute the total council emission for a single vertex at the given round.
     /// Returns (per_member_amount, total_council_amount).
-    pub fn compute_council_emission(&self, round: u64) -> (u64, u64) {
+    /// Compute council emission per vertex.
+    ///
+    /// Since council emission is paid once per vertex (not per round), we divide
+    /// the per-round council budget by `active_validator_count` so that the total
+    /// council emission across all vertices in a round equals `block_reward * council_percent / 100`.
+    pub fn compute_council_emission(&self, round: u64, active_validator_count: u64) -> (u64, u64) {
         let council_count = self.council_members.len() as u64;
         let council_percent = self.governance_params.council_emission_percent;
         if council_count == 0 || council_percent == 0 {
@@ -177,7 +186,9 @@ impl StateEngine {
         }
         let total_round_reward = crate::constants::block_reward(round);
         let council_total = total_round_reward.saturating_mul(council_percent) / 100;
-        let per_member = council_total / council_count;
+        // Divide by validator count so N vertices per round = correct total council emission
+        let per_vertex_total = council_total / active_validator_count.max(1);
+        let per_member = per_vertex_total / council_count;
         (per_member, per_member.saturating_mul(council_count))
     }
 
@@ -197,15 +208,29 @@ impl StateEngine {
         let dev_addr = crate::constants::dev_address();
         engine.credit(&dev_addr, crate::constants::DEV_ALLOCATION_SATS);
 
-        // total_supply tracks all credited amounts
+        // DAO Treasury (10% of max supply) — controlled by Council of 21 via TreasurySpend proposals.
+        // Treasury is NOT an account — it's a separate balance field on StateEngine.
+        engine.treasury_balance = crate::constants::TREASURY_ALLOCATION_SATS;
+
+        // Bootstrap council: dev address gets the first Foundation seat.
+        // Without this, no one can create proposals (catch-22).
+        // The dev/foundation member can then propose additional council members.
+        let _ = engine.add_council_member(
+            dev_addr,
+            crate::governance::CouncilSeatCategory::Foundation,
+        );
+
+        // total_supply tracks all credited amounts + treasury
         #[cfg(not(feature = "mainnet"))]
         {
             engine.total_supply = crate::constants::FAUCET_PREFUND_SATS
-                + crate::constants::DEV_ALLOCATION_SATS;
+                + crate::constants::DEV_ALLOCATION_SATS
+                + crate::constants::TREASURY_ALLOCATION_SATS;
         }
         #[cfg(feature = "mainnet")]
         {
-            engine.total_supply = crate::constants::DEV_ALLOCATION_SATS;
+            engine.total_supply = crate::constants::DEV_ALLOCATION_SATS
+                + crate::constants::TREASURY_ALLOCATION_SATS;
         }
 
         engine
@@ -307,7 +332,7 @@ impl StateEngine {
         self.credit(proposer, capped_reward.saturating_add(total_fees));
 
         // Distribute council emission share
-        let (council_per_member, council_total_minted) = self.compute_council_emission(vertex.round);
+        let (council_per_member, council_total_minted) = self.compute_council_emission(vertex.round, active_validator_count);
         if council_per_member > 0 {
             // Supply cap check for council emissions
             let remaining_supply = crate::constants::MAX_SUPPLY_SATS.saturating_sub(self.total_supply);
@@ -468,8 +493,17 @@ impl StateEngine {
         // compute the same expected_height for coinbase validation.
 
         // Epoch boundary: recalculate active validator set
+        // Uses `!=` instead of `>` because current_epoch is initialized to u64::MAX
+        // (sentinel for "never initialized"). On the first vertex, epoch_of(0)=0
+        // which != u64::MAX, triggering the initial recalculation. Subsequent vertices
+        // in the same epoch won't trigger because epoch_of(round) == current_epoch.
+        //
+        // IMPORTANT: Do NOT use `|| self.active_validator_set.is_empty()` here.
+        // That caused a fatal bug where the first staker immediately became the only
+        // active validator, locking out all configured node validators and halting
+        // the network. Active set changes must only happen at epoch boundaries.
         let new_epoch = crate::constants::epoch_of(vertex.round);
-        if new_epoch > self.current_epoch || self.active_validator_set.is_empty() {
+        if new_epoch != self.current_epoch {
             self.recalculate_active_set();
             self.current_epoch = new_epoch;
         }
@@ -480,16 +514,17 @@ impl StateEngine {
         // before remaining vertices in the same round are processed.
 
         // Supply invariant check — unconditional (catches state corruption in release builds too)
-        // sum(liquid balances) + sum(staked) == total_supply
+        // sum(liquid balances) + sum(staked) + treasury == total_supply
         // Maintained even for skipped txs: when a tx is skipped, its fee is debited from
         // the proposer (undoing the coinbase credit for that fee).
         {
             let liquid: u64 = self.accounts.values().map(|a| a.balance).fold(0u64, |acc, x| acc.saturating_add(x));
             let staked: u64 = self.stake_accounts.values().map(|s| s.staked).fold(0u64, |acc, x| acc.saturating_add(x));
-            if liquid.saturating_add(staked) != self.total_supply {
+            let total = liquid.saturating_add(staked).saturating_add(self.treasury_balance);
+            if total != self.total_supply {
                 return Err(CoinError::ValidationError(format!(
-                    "Supply invariant broken: liquid={} staked={} total_supply={}",
-                    liquid, staked, self.total_supply
+                    "Supply invariant broken: liquid={} staked={} treasury={} total_supply={}",
+                    liquid, staked, self.treasury_balance, self.total_supply
                 )));
             }
         }
@@ -737,6 +772,11 @@ impl StateEngine {
         self.council_members.len()
     }
 
+    /// Get the current DAO treasury balance in sats.
+    pub fn treasury_balance(&self) -> u64 {
+        self.treasury_balance
+    }
+
     /// Apply a StakeTx: debit liquid balance, credit stake account.
     pub fn apply_stake_tx(&mut self, tx: &StakeTx) -> Result<(), CoinError> {
         if !tx.verify_signature() {
@@ -929,9 +969,16 @@ impl StateEngine {
         }
 
         // 4. Only council members can create proposals
-        if !self.is_council_member(&tx.from) {
+        //    Exception: anyone can self-nominate via CouncilMembership { action: Add } where
+        //    the candidate address matches the proposer (decentralized council application).
+        let is_self_nomination = matches!(
+            &tx.proposal_type,
+            crate::governance::ProposalType::CouncilMembership { action: crate::governance::CouncilAction::Add, address, .. }
+            if *address == tx.from
+        );
+        if !self.is_council_member(&tx.from) && !is_self_nomination {
             return Err(CoinError::ValidationError(
-                "Only Council of 21 members can create proposals".to_string(),
+                "Only Council of 21 members can create proposals (anyone can self-nominate for council)".to_string(),
             ));
         }
 
@@ -1117,12 +1164,16 @@ impl StateEngine {
                     // unless MIN_DAO_VALIDATORS are active. The proposal stays in
                     // PassedPending (hibernation) until the network is healthy enough.
                     // TextProposals and CouncilMembership execute regardless.
-                    if matches!(&proposal.proposal_type, crate::governance::ProposalType::ParameterChange { .. }) {
+                    if matches!(&proposal.proposal_type,
+                        crate::governance::ProposalType::ParameterChange { .. } |
+                        crate::governance::ProposalType::TreasurySpend { .. }
+                    ) {
                         if !self.dao_is_active() {
                             // DAO hibernating — skip execution, leave as PassedPending
                             continue;
                         }
                     }
+                    // Collect for execution attempt — final status determined below
                     to_update.push((*id, crate::governance::ProposalStatus::Executed));
                 }
                 _ => {}
@@ -1139,14 +1190,17 @@ impl StateEngine {
             }
         }
 
-        // Apply execution effects
+        // Apply execution effects — track failures to override status
+        let mut failed: std::collections::HashMap<u64, String> = std::collections::HashMap::new();
         for (id, proposal_type) in effects {
             match proposal_type {
                 crate::governance::ProposalType::ParameterChange { ref param, ref new_value } => {
                     match self.governance_params.apply_change(param, new_value) {
                         Ok(()) => {}
                         Err(e) => {
-                            eprintln!("ParameterChange proposal {} failed to apply: {}", id, e);
+                            let reason = format!("ParameterChange failed: {}", e);
+                            eprintln!("Proposal {} execution failed: {}", id, reason);
+                            failed.insert(id, reason);
                         }
                     }
                 }
@@ -1154,24 +1208,49 @@ impl StateEngine {
                     match action {
                         crate::governance::CouncilAction::Add => {
                             if let Err(e) = self.add_council_member(address, category) {
-                                eprintln!("CouncilMembership Add proposal {} failed: {}", id, e);
+                                let reason = format!("CouncilMembership Add failed: {}", e);
+                                eprintln!("Proposal {} execution failed: {}", id, reason);
+                                failed.insert(id, reason);
                             }
                         }
                         crate::governance::CouncilAction::Remove => {
                             if !self.remove_council_member(&address) {
-                                eprintln!("CouncilMembership Remove proposal {} failed: not on council", id);
+                                let reason = "CouncilMembership Remove failed: not on council".to_string();
+                                eprintln!("Proposal {} execution failed: {}", id, reason);
+                                failed.insert(id, reason);
                             }
                         }
+                    }
+                }
+                crate::governance::ProposalType::TreasurySpend { recipient, amount } => {
+                    if amount > self.treasury_balance {
+                        let reason = format!(
+                            "Insufficient treasury: requested {} sats but only {} sats available",
+                            amount, self.treasury_balance
+                        );
+                        eprintln!("Proposal {} execution failed: {}", id, reason);
+                        failed.insert(id, reason);
+                    } else {
+                        self.treasury_balance = self.treasury_balance.saturating_sub(amount);
+                        self.credit(&recipient, amount);
+                        eprintln!(
+                            "TreasurySpend proposal {} executed: {} sats to {}. Treasury remaining: {} sats",
+                            id, amount, recipient.to_hex(), self.treasury_balance
+                        );
                     }
                 }
                 crate::governance::ProposalType::TextProposal => {}
             }
         }
 
-        // Update proposal statuses
+        // Update proposal statuses — override with Failed where execution didn't succeed
         for (id, status) in to_update {
             if let Some(p) = self.proposals.get_mut(&id) {
-                p.status = status;
+                if let Some(reason) = failed.remove(&id) {
+                    p.status = crate::governance::ProposalStatus::Failed { reason };
+                } else {
+                    p.status = status;
+                }
             }
         }
     }
@@ -1192,11 +1271,13 @@ impl StateEngine {
     }
 
     /// Get all votes for a proposal with voter addresses and vote weights.
+    /// Council of 21: each member has weight 1 (1-vote-per-seat).
     pub fn votes_for_proposal(&self, proposal_id: u64) -> Vec<(Address, bool, u64)> {
         self.votes.iter()
             .filter(|((pid, _), _)| *pid == proposal_id)
             .map(|((_, voter), &vote)| {
-                let weight = self.stake_of(voter);
+                // Council model: 1 vote per seat
+                let weight = 1u64; // Council of 21: 1-vote-per-seat, equal weight
                 (*voter, vote, weight)
             })
             .collect()
@@ -1250,6 +1331,8 @@ impl StateEngine {
         next_proposal_id: u64,
         governance_params: crate::governance::GovernanceParams,
         configured_validator_count: Option<u64>,
+        council_members: HashMap<Address, crate::governance::CouncilSeatCategory>,
+        treasury_balance: u64,
     ) -> Self {
         Self {
             accounts,
@@ -1263,7 +1346,8 @@ impl StateEngine {
             next_proposal_id,
             governance_params,
             configured_validator_count,
-            council_members: HashMap::new(),
+            council_members,
+            treasury_balance,
             tx_index: HashMap::new(),
             tx_index_order: VecDeque::new(),
         }
@@ -1296,6 +1380,7 @@ impl StateEngine {
             next_proposal_id: self.next_proposal_id,
             governance_params: self.governance_params.clone(),
             council_members: council,
+            treasury_balance: self.treasury_balance,
         }
     }
 
@@ -1314,6 +1399,7 @@ impl StateEngine {
             governance_params: snapshot.governance_params,
             configured_validator_count: None,
             council_members: snapshot.council_members.into_iter().collect(),
+            treasury_balance: snapshot.treasury_balance,
             tx_index: HashMap::new(),
             tx_index_order: VecDeque::new(),
         }
@@ -1332,6 +1418,7 @@ impl StateEngine {
         self.next_proposal_id = snapshot.next_proposal_id;
         self.governance_params = snapshot.governance_params;
         self.council_members = snapshot.council_members.into_iter().collect();
+        self.treasury_balance = snapshot.treasury_balance;
     }
 
     /// Save state to redb database (ACID, crash-safe).
@@ -1680,23 +1767,25 @@ mod tests {
 
     #[test]
     fn supply_invariant_holds_after_100_rounds() {
-        let mut state = StateEngine::new_with_genesis();
+        let mut state = StateEngine::new();
         let validators: Vec<_> = (0..4).map(|_| SecretKey::generate()).collect();
-        
+
         // Apply 100 rounds - each round the supply invariant is checked in apply_vertex
         for round in 0..100 {
             let proposer_idx = round % 4;
             let proposer = &validators[proposer_idx as usize];
-            
+
             let vertex = make_vertex_for(&proposer.address(), round, round, vec![], proposer);
             state.apply_vertex(&vertex).unwrap();
-            
-            // Verify invariant manually (also checked in debug builds inside apply_vertex)
-            let sum: u64 = state.accounts.values().map(|a| a.balance).sum();
+
+            // Verify invariant manually (also checked in apply_vertex)
+            let liquid: u64 = state.accounts.values().map(|a| a.balance).fold(0u64, |acc, x| acc.saturating_add(x));
+            let staked: u64 = state.stake_accounts.values().map(|s| s.staked).fold(0u64, |acc, x| acc.saturating_add(x));
+            let total = liquid.saturating_add(staked).saturating_add(state.treasury_balance());
             assert_eq!(
-                sum, state.total_supply,
-                "Supply invariant broken at round {}: sum={} supply={}",
-                round, sum, state.total_supply
+                total, state.total_supply,
+                "Supply invariant broken at round {}: liquid={} staked={} treasury={} supply={}",
+                round, liquid, staked, state.treasury_balance(), state.total_supply
             );
         }
     }

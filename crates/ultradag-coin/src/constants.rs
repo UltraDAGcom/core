@@ -69,6 +69,11 @@ pub const NETWORK_ID: &[u8] = b"ultradag-mainnet-v1";
 /// Total: 1,050,000 UDAG (5% of 21,000,000 UDAG max supply).
 pub const DEV_ALLOCATION_SATS: u64 = 1_050_000 * COIN;
 
+/// DAO Treasury allocation: 10% of total supply allocated at genesis.
+/// Controlled by Council of 21 via TreasurySpend proposals.
+/// Total: 2,100,000 UDAG (10% of 21,000,000 UDAG max supply).
+pub const TREASURY_ALLOCATION_SATS: u64 = 2_100_000 * COIN;
+
 /// Developer allocation address seed for TESTNET.
 /// This seed is: "ultradag-dev-addr-testnet-v1\0\0\0\0" encoded as bytes.
 /// MAINNET REQUIREMENT: Replace with offline-generated keypair before mainnet launch.
@@ -148,11 +153,11 @@ pub const CHECKPOINT_INTERVAL: u64 = 100;
 /// Run `cargo test --features mainnet test_compute_mainnet_genesis_hash` to recompute.
 #[cfg(not(feature = "mainnet"))]
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
-    0xda, 0x93, 0xae, 0x89, 0x67, 0x05, 0xa7, 0x5b,
-    0x6f, 0x47, 0xb9, 0x76, 0x8a, 0x72, 0x3c, 0x3b,
-    0x87, 0xa2, 0x28, 0x60, 0x6a, 0x07, 0x99, 0xff,
-    0xbe, 0xc8, 0x5b, 0xd7, 0x48, 0xcb, 0xb2, 0x40,
-]; // Testnet: computed from genesis with faucet + dev allocation + council_members
+    0x8f, 0xda, 0x26, 0x9e, 0x0c, 0x8f, 0x34, 0x9c,
+    0xd0, 0xd7, 0x78, 0x65, 0x49, 0x32, 0xdd, 0xc3,
+    0xd1, 0x19, 0xa7, 0xa6, 0xf5, 0x27, 0x14, 0x29,
+    0x0b, 0xc9, 0x14, 0x16, 0xf7, 0x7b, 0x3b, 0x69,
+]; // Testnet: computed from genesis with faucet + dev allocation + treasury + council_members
 
 /// Mainnet genesis checkpoint hash — computed from genesis WITHOUT faucet.
 /// To compute: `cargo test test_compute_genesis_hash -- --nocapture`

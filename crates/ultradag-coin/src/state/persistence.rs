@@ -29,6 +29,9 @@ pub struct StateSnapshot {
     /// Council of 21 members with seat categories.
     #[serde(default)]
     pub council_members: Vec<(crate::address::Address, crate::governance::CouncilSeatCategory)>,
+    /// DAO treasury balance in sats. Controlled by Council of 21 via TreasurySpend proposals.
+    #[serde(default)]
+    pub treasury_balance: u64,
 }
 
 impl StateSnapshot {

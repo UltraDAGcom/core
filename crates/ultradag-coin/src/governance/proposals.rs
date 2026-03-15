@@ -15,6 +15,11 @@ pub enum ProposalType {
         address: Address,
         category: CouncilSeatCategory,
     },
+    /// Spend from the DAO treasury. Council votes to send funds to a recipient.
+    TreasurySpend {
+        recipient: Address,
+        amount: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -22,6 +27,8 @@ pub enum ProposalStatus {
     Active,
     PassedPending { execute_at_round: u64 },
     Executed,
+    /// Proposal passed governance vote but execution failed (e.g., insufficient treasury balance).
+    Failed { reason: String },
     Rejected,
     Cancelled,
 }

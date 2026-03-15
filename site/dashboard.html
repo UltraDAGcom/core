@@ -1394,6 +1394,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
                   <option value="text">Text Proposal</option>
                   <option value="parameter">Parameter Change</option>
                   <option value="council_membership">Council Membership</option>
+                  <option value="treasury_spend">Treasury Spend</option>
                 </select>
               </div>
               <div class="field">
@@ -1438,6 +1439,17 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
                   </select>
                 </div>
               </div>
+              <div id="treasury-spend-fields" style="display:none">
+                <div class="field">
+                  <label class="label">Recipient Address</label>
+                  <input class="input" id="proposal-treasury-recipient" placeholder="64-character hex address of recipient">
+                </div>
+                <div class="field">
+                  <label class="label">Amount (UDAG)</label>
+                  <input class="input" type="number" id="proposal-treasury-amount" placeholder="e.g. 1000" min="0.00000001" step="any">
+                  <div class="help" id="treasury-balance-hint">Treasury balance: loading...</div>
+                </div>
+              </div>
               <div class="field">
                 <label class="label">Submitting Wallet</label>
                 <select class="input" id="proposal-wallet">
@@ -1477,7 +1489,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
             <div class="page-sub">1-vote-per-seat governance · 10% emission rewards · 6 seat categories</div>
           </div>
           <div style="display:flex;gap:8px">
-            <button class="btn btn-sm" onclick="loadCouncilStatus()">Refresh</button>
+            <button class="btn btn-sm" onclick="loadCouncilStatus(); loadTreasury()">Refresh</button>
           </div>
         </div>
 
@@ -1526,6 +1538,46 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
           </div>
         </div>
 
+        <!-- Self-Nominate for Council (anyone) -->
+        <div class="card" id="council-apply-card" style="margin-bottom:24px;display:none">
+          <div class="card-head">
+            <span class="card-title">Apply for Council Seat</span>
+          </div>
+          <div class="card-body">
+            <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--subtle);margin-bottom:16px;line-height:1.8">
+              Self-nominate for a council seat. Your application becomes a governance proposal that the existing council votes on.
+              No stake required — you only need to pay the transaction fee.
+            </div>
+            <div class="field">
+              <label class="label">Seat Category</label>
+              <select class="input" id="council-apply-category">
+                <option value="technical">Technical (7 seats)</option>
+                <option value="business">Business (4 seats)</option>
+                <option value="legal">Legal (3 seats)</option>
+                <option value="academic">Academic (3 seats)</option>
+                <option value="community">Community (2 seats)</option>
+                <option value="foundation">Foundation (2 seats)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="label">Title</label>
+              <input class="input" id="council-apply-title" placeholder="e.g. Self-nomination: Core Developer for Technical seat" maxlength="128">
+            </div>
+            <div class="field">
+              <label class="label">Description</label>
+              <textarea class="textarea" id="council-apply-description" placeholder="Explain your qualifications, experience, and why you'd be a good council member. Include any relevant links or credentials." rows="4" maxlength="4096"></textarea>
+            </div>
+            <div class="field">
+              <label class="label">Wallet</label>
+              <select class="input" id="council-apply-wallet">
+                <option>No wallets available</option>
+              </select>
+              <div class="help">Your wallet address will be the nominated council address</div>
+            </div>
+            <button class="btn btn-primary" onclick="submitSelfNomination()">Submit Application</button>
+          </div>
+        </div>
+
         <!-- Propose New Member (council members only) -->
         <div class="card" id="council-propose-card" style="margin-bottom:24px">
           <div class="card-head">
@@ -1534,8 +1586,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
           <div class="card-body">
             <div id="council-propose-locked">
               <div class="empty">
-                <div class="empty-icon">&#x1f512;</div>
-                <div class="empty-text">Only council members can propose new members.<br>Unlock keystore to check your status.</div>
+                <div class="empty-text" style="font-size:12px;color:var(--dim)">Council members: use this form to propose adding or removing members.</div>
               </div>
             </div>
             <div id="council-propose-form" style="display:none">
@@ -1582,6 +1633,32 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
           </div>
         </div>
 
+        <!-- DAO Treasury -->
+        <div class="card" style="margin-bottom:24px">
+          <div class="card-head">
+            <span class="card-title">DAO Treasury</span>
+            <span class="badge" id="treasury-badge">--</span>
+          </div>
+          <div class="card-body">
+            <div class="g4" style="margin-bottom:16px">
+              <div class="stat">
+                <div class="stat-label">Balance</div>
+                <div class="stat-val green" id="treasury-balance-display">--</div>
+                <div class="stat-sub">UDAG</div>
+              </div>
+              <div class="stat">
+                <div class="stat-label">Pending Spends</div>
+                <div class="stat-val" id="treasury-pending-count">0</div>
+                <div class="stat-sub">proposals</div>
+              </div>
+            </div>
+            <div id="treasury-pending-list"></div>
+            <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--dim);margin-top:12px">
+              10% of max supply (2,100,000 UDAG) allocated at genesis. Controlled by Council of 21 via TreasurySpend proposals.
+            </div>
+          </div>
+        </div>
+
         <!-- How to Join -->
         <div class="card" id="council-how-to-join">
           <div class="card-head">
@@ -1600,11 +1677,12 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
               </div>
               <p style="margin-bottom:12px"><strong style="color:var(--white)">To apply:</strong></p>
               <ol style="padding-left:20px;font-family:'DM Mono',monospace;font-size:12px;line-height:2">
-                <li>Connect with an existing council member and share your qualifications</li>
-                <li>The council member submits a CouncilMembership proposal on your behalf</li>
-                <li>Council votes (10% quorum, 66% approval required)</li>
-                <li>If approved, your address is added after the execution delay</li>
+                <li>Use the <strong style="color:var(--white)">"Apply for Council Seat"</strong> form above to self-nominate</li>
+                <li>Your application creates an on-chain governance proposal</li>
+                <li>The existing council votes on your application (10% quorum, 66% approval)</li>
+                <li>If approved, your address is added after the execution delay (~1.4 hours)</li>
               </ol>
+              <p style="margin-top:12px;font-size:12px;color:var(--dim)">Alternatively, an existing council member can nominate you directly.</p>
               <p style="margin-top:16px;font-size:14px;color:var(--dim)">Council members earn 10% of block emission rewards, distributed equally. Each member gets 1 vote on all governance proposals.</p>
             </div>
           </div>
@@ -1900,9 +1978,9 @@ async function refreshPortfolio() {
       html += `
         <div class="wallet-row" style="cursor:default">
           <div>
-            <div class="wallet-name">${esc(w.name)}</div>
+            <div class="wallet-name">${esc(w.name)}${data.is_council_member ? ' <span style="font-size:9px;color:var(--accent);border:1px solid rgba(139,92,246,0.3);padding:1px 5px;letter-spacing:0.04em">COUNCIL</span>' : ''}</div>
             <div class="wallet-addr">${w.address.slice(0,14)}...${w.address.slice(-6)}</div>
-            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--dim);margin-top:2px;letter-spacing:0.04em;text-transform:uppercase">nonce: ${data.nonce}</div>
+            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--dim);margin-top:2px;letter-spacing:0.04em;text-transform:uppercase">nonce: ${data.nonce}${data.staked > 0 ? ' · staked: ' + formatUdag(data.staked) + ' UDAG' : ''}</div>
           </div>
           <div style="text-align:right">
             <div class="wallet-bal">${formatUdag(data.balance)}</div>
@@ -2030,7 +2108,7 @@ async function requestFaucet() {
     // Refresh balance after 3 seconds
     setTimeout(() => {
       if (selectedWallet === parseInt(sel.value)) {
-        loadWalletBalance();
+        renderWalletDetail();
       }
     }, 3000);
     
@@ -2518,7 +2596,10 @@ function renderActiveProposals(activeProposals) {
     const yesPercent = totalVotes > 0 ? ((p.votes_for || 0) / totalVotes * 100).toFixed(1) : 0;
     const noPercent = totalVotes > 0 ? ((p.votes_against || 0) / totalVotes * 100).toFixed(1) : 0;
     const myVote = myVotes.get(p.id);
-    const canVote = keystore && connected;
+    const walletAddrs = keystore ? keystore.wallets.map(w => (w.address || '').toLowerCase()) : [];
+    const memberAddrs = councilData ? (councilData.members || []).map(m => (m.address || '').toLowerCase()) : [];
+    // If council data not loaded yet, allow (backend validates); if loaded, check membership
+    const canVote = keystore && connected && (!councilData || walletAddrs.some(a => memberAddrs.includes(a)));
     
     return `
       <div class="card-body" style="border-bottom:1px solid var(--border)">
@@ -2526,7 +2607,7 @@ function renderActiveProposals(activeProposals) {
           <div>
             <div style="font-family:'Cormorant',serif;font-size:20px;font-weight:300;color:var(--white);margin-bottom:4px">${esc(p.title)}</div>
             <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:0.04em;text-transform:uppercase">
-              Proposal #${p.id} · ${typeof p.proposal_type === 'string' ? p.proposal_type : (p.proposal_type.ParameterChange ? 'Parameter Change' : p.proposal_type.CouncilMembership ? 'Council Membership' : 'Unknown')} · Ends round ${p.voting_ends}
+              Proposal #${p.id} · ${typeof p.proposal_type === 'string' ? p.proposal_type : (p.proposal_type.ParameterChange ? 'Parameter Change' : p.proposal_type.CouncilMembership ? 'Council Membership' : p.proposal_type.TreasurySpend ? 'Treasury Spend' : 'Unknown')} · Ends round ${p.voting_ends}
             </div>
           </div>
           <div style="font-family:'DM Mono',monospace;font-size:11px;padding:4px 10px;background:var(--accent-dim);border:1px solid rgba(139,92,246,0.3);color:var(--accent);letter-spacing:0.06em;text-transform:uppercase">
@@ -2550,6 +2631,13 @@ function renderActiveProposals(activeProposals) {
               ${p.proposal_type.CouncilMembership.address ? p.proposal_type.CouncilMembership.address.slice(0,12) + '...' : ''}
               ${p.proposal_type.CouncilMembership.category ? `<span style="color:${SEAT_COLORS[(p.proposal_type.CouncilMembership.category || '').toLowerCase()] || 'var(--subtle)'}"> (${esc(p.proposal_type.CouncilMembership.category)})</span>` : ''}
             </div>
+          </div>
+        ` : ''}
+        ${p.treasury_amount_sats ? `
+          <div style="background:var(--bg3);border:1px solid var(--border);padding:12px;margin-bottom:16px;font-family:'DM Mono',monospace;font-size:12px">
+            <div style="color:var(--dim);margin-bottom:4px">Treasury Spend:</div>
+            <div style="color:var(--green)"><strong>${(p.treasury_amount_udag || 0).toLocaleString()} UDAG</strong> (${(p.treasury_amount_sats || 0).toLocaleString()} sats)</div>
+            <div style="color:var(--subtle);margin-top:4px">To: ${p.treasury_recipient ? p.treasury_recipient.slice(0,16) + '...' : 'unknown'}</div>
           </div>
         ` : ''}
         <div style="margin-bottom:12px">
@@ -2577,7 +2665,7 @@ function renderActiveProposals(activeProposals) {
           </div>
         ` : `
           <div style="padding:10px;background:var(--bg3);border:1px solid var(--border);font-family:'DM Mono',monospace;font-size:11px;color:var(--dim);text-align:center;letter-spacing:0.04em">
-            Unlock keystore to vote
+            ${keystore && connected ? 'Council membership required to vote' : 'Unlock keystore to vote'}
           </div>
         `}
       </div>
@@ -2598,12 +2686,13 @@ function renderProposalHistory(pastProposals) {
     const yesPercent = totalVotes > 0 ? ((p.votes_for || 0) / totalVotes * 100).toFixed(1) : 0;
     const noPercent = totalVotes > 0 ? ((p.votes_against || 0) / totalVotes * 100).toFixed(1) : 0;
     
-    // Backend returns 'Executed', 'Rejected', or {PassedPending: {execute_at_round: N}}
+    // Backend returns 'Executed', 'Rejected', {PassedPending: {execute_at_round: N}}, or {Failed: {reason: "..."}}
     let statusColor = 'var(--dim)';
-    let statusText = typeof p.status === 'string' ? p.status : 'PassedPending';
+    let statusText = typeof p.status === 'string' ? p.status : 'Unknown';
     if (p.status === 'Executed') statusColor = 'var(--green)';
     else if (p.status === 'Rejected') statusColor = 'var(--red)';
-    else if (typeof p.status === 'object' && p.status.PassedPending) statusColor = 'var(--yellow)';
+    else if (typeof p.status === 'object' && p.status.PassedPending) { statusColor = 'var(--yellow)'; statusText = 'Pending'; }
+    else if (typeof p.status === 'object' && p.status.Failed) { statusColor = 'var(--red)'; statusText = 'Failed'; }
     
     return `
       <div class="card-body" style="border-bottom:1px solid var(--border)">
@@ -2614,7 +2703,7 @@ function renderProposalHistory(pastProposals) {
           </div>
         </div>
         <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:0.04em;text-transform:uppercase;margin-bottom:12px">
-          Proposal #${p.id} · ${typeof p.proposal_type === 'string' ? p.proposal_type : (p.proposal_type.ParameterChange ? 'Parameter Change' : p.proposal_type.CouncilMembership ? 'Council Membership' : 'Unknown')}
+          Proposal #${p.id} · ${typeof p.proposal_type === 'string' ? p.proposal_type : (p.proposal_type.ParameterChange ? 'Parameter Change' : p.proposal_type.CouncilMembership ? 'Council Membership' : p.proposal_type.TreasurySpend ? 'Treasury Spend' : 'Unknown')}
         </div>
         <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-family:'DM Mono',monospace;font-size:11px">
           <span style="color:var(--green)">YES ${yesPercent}%</span>
@@ -2640,13 +2729,13 @@ async function castVote(proposalId, vote) {
     return;
   }
 
-  // Use first council member wallet
+  // Use first council member wallet, or first wallet if council data not loaded
   let wallet = null;
-  if (councilData) {
-    const memberAddrs = (councilData.members || []).map(m => m.address);
-    wallet = keystore.wallets.find(w => memberAddrs.includes(w.address));
+  if (councilData && councilData.members) {
+    const memberAddrs = (councilData.members || []).map(m => (m.address || '').toLowerCase());
+    wallet = keystore.wallets.find(w => memberAddrs.includes((w.address || '').toLowerCase()));
   }
-  if (!wallet) wallet = keystore.wallets[0];
+  if (!wallet) wallet = keystore.wallets[0]; // Backend validates council membership
 
   try {
     const res = await fetch(nodeUrl + '/vote', {
@@ -2669,9 +2758,9 @@ async function castVote(proposalId, vote) {
     myVotes.set(String(proposalId), vote ? 'yes' : 'no');
     saveVotesToStorage();
 
-    toast('Vote cast successfully', 'ok');
+    toast('Vote cast! Will update after finality (~15 seconds).', 'ok');
 
-    setTimeout(() => loadGovernance(), 1000);
+    startFinalityPolling('governance');
   } catch (err) {
     toast('Vote failed: ' + err.message, 'err');
   }
@@ -2690,29 +2779,32 @@ async function submitProposal() {
   }
   
   const wallet = keystore.wallets[walletIdx];
+
+  // Council membership check (best-effort client-side; backend validates definitively)
+  if (councilData && councilData.members) {
+    const memberAddrs = councilData.members.map(m => (m.address || '').toLowerCase());
+    if (!memberAddrs.includes(wallet.address.toLowerCase())) {
+      toast('Only Council of 21 members can create proposals. This wallet is not on the council.', 'err');
+      return;
+    }
+  }
+
   const proposalType = document.getElementById('proposal-type').value;
   const title = document.getElementById('proposal-title').value.trim();
   const description = document.getElementById('proposal-description').value.trim();
-  const duration = parseInt(document.getElementById('proposal-duration').value);
-  
+
   if (!title || !description) {
     toast('Title and description required', 'err');
     return;
   }
-  
-  if (duration < 100) {
-    toast('Duration must be at least 100 blocks', 'err');
-    return;
-  }
-  
+
   const payload = {
     proposal_type: proposalType,
     title: title,
     description: description,
-    duration: duration,
-    proposer_secret: wallet.secret_key
+    secret_key: wallet.secret_key
   };
-  
+
   if (proposalType === 'parameter') {
     const paramName = document.getElementById('proposal-param-name').value.trim();
     const paramValue = document.getElementById('proposal-param-value').value.trim();
@@ -2740,6 +2832,23 @@ async function submitProposal() {
     payload.council_address = councilAddress;
     payload.council_category = councilCategory;
   }
+
+  if (proposalType === 'treasury_spend') {
+    const recipient = document.getElementById('proposal-treasury-recipient').value.trim();
+    const amountUdag = parseFloat(document.getElementById('proposal-treasury-amount').value);
+
+    if (!recipient || recipient.length !== 64) {
+      toast('Enter a valid 64-character hex address for recipient', 'err');
+      return;
+    }
+    if (isNaN(amountUdag) || amountUdag <= 0) {
+      toast('Enter a valid amount greater than 0', 'err');
+      return;
+    }
+
+    payload.treasury_recipient = recipient;
+    payload.treasury_amount = Math.round(amountUdag * 100000000); // UDAG to sats
+  }
   
   try {
     const res = await fetch(nodeUrl + '/proposal', {
@@ -2755,14 +2864,16 @@ async function submitProposal() {
       return;
     }
     
-    toast('Proposal submitted successfully', 'ok');
-    
+    toast('Proposal submitted! Will appear after finality (~15 seconds).', 'ok');
+
     document.getElementById('proposal-title').value = '';
     document.getElementById('proposal-description').value = '';
     document.getElementById('proposal-param-name').value = '';
     document.getElementById('proposal-param-value').value = '';
-    
-    setTimeout(() => loadGovernance(), 1000);
+    document.getElementById('proposal-treasury-recipient').value = '';
+    document.getElementById('proposal-treasury-amount').value = '';
+
+    startFinalityPolling('governance');
   } catch (err) {
     toast('Proposal submission failed: ' + err.message, 'err');
   }
@@ -2772,6 +2883,8 @@ function updateProposalForm() {
   const type = document.getElementById('proposal-type').value;
   document.getElementById('param-fields').style.display = type === 'parameter' ? '' : 'none';
   document.getElementById('council-membership-fields').style.display = type === 'council_membership' ? '' : 'none';
+  document.getElementById('treasury-spend-fields').style.display = type === 'treasury_spend' ? '' : 'none';
+  if (type === 'treasury_spend') loadTreasuryBalance();
 }
 
 async function populateProposalWallets() {
@@ -2994,30 +3107,29 @@ function renderCouncilMembers(members) {
 function updateCouncilProposalAccess() {
   const lockedEl = document.getElementById('council-propose-locked');
   const formEl = document.getElementById('council-propose-form');
+  const applyCard = document.getElementById('council-apply-card');
 
   if (!keystore || !councilData) {
     lockedEl.style.display = 'block';
     formEl.style.display = 'none';
+    if (applyCard) applyCard.style.display = keystore ? 'block' : 'none';
+    populateSelfNominationWallets();
     return;
   }
 
-  const walletAddresses = keystore.wallets.map(w => w.address);
-  const isMember = (councilData.members || []).some(m => walletAddresses.includes(m.address));
+  const walletAddresses = keystore.wallets.map(w => (w.address || '').toLowerCase());
+  const isMember = (councilData.members || []).some(m => walletAddresses.includes((m.address || '').toLowerCase()));
 
   if (isMember) {
     lockedEl.style.display = 'none';
     formEl.style.display = 'block';
+    if (applyCard) applyCard.style.display = 'none'; // Already a member
     populateCouncilProposalWallets();
   } else {
-    lockedEl.innerHTML = `
-      <div class="empty">
-        <div class="empty-icon">&#x1f512;</div>
-        <div class="empty-text">Only existing council members can propose new members.<br>
-        <span style="font-size:12px;color:var(--dim)">Contact a council member to be nominated.</span></div>
-      </div>
-    `;
     lockedEl.style.display = 'block';
     formEl.style.display = 'none';
+    if (applyCard) applyCard.style.display = 'block'; // Show self-nomination
+    populateSelfNominationWallets();
   }
 }
 
@@ -3117,6 +3229,119 @@ async function submitCouncilProposal() {
 }
 
 // ========================================
+// COUNCIL SELF-NOMINATION
+// ========================================
+
+function populateSelfNominationWallets() {
+  if (!keystore) return;
+  const el = document.getElementById('council-apply-wallet');
+  if (!el) return;
+  el.innerHTML = keystore.wallets.map((w, i) =>
+    `<option value="${i}">${esc(w.name)} (${w.address.slice(0,12)}...)</option>`
+  ).join('') || '<option>No wallets available</option>';
+}
+
+async function submitSelfNomination() {
+  if (!keystore || !connected) {
+    toast('Unlock keystore and connect to node', 'err');
+    return;
+  }
+
+  const walletIdx = parseInt(document.getElementById('council-apply-wallet').value);
+  if (isNaN(walletIdx) || !keystore.wallets[walletIdx]) {
+    toast('Select a wallet', 'err');
+    return;
+  }
+
+  const wallet = keystore.wallets[walletIdx];
+  const category = document.getElementById('council-apply-category').value;
+  const title = document.getElementById('council-apply-title').value.trim();
+  const description = document.getElementById('council-apply-description').value.trim();
+
+  if (!title) { toast('Title is required', 'err'); return; }
+  if (!description) { toast('Description is required — explain your qualifications', 'err'); return; }
+
+  const payload = {
+    secret_key: wallet.secret_key,
+    title: title,
+    description: description,
+    proposal_type: 'council_membership',
+    council_action: 'add',
+    council_address: wallet.address, // Self-nomination: candidate is the submitter
+    council_category: category,
+    fee: 100000
+  };
+
+  try {
+    const res = await fetch(nodeUrl + '/proposal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.error) { toast('Application failed: ' + data.error, 'err'); return; }
+    toast('Council application submitted! Will appear after finality (~15 seconds).', 'ok');
+    document.getElementById('council-apply-title').value = '';
+    document.getElementById('council-apply-description').value = '';
+    startFinalityPolling('governance');
+  } catch (err) {
+    toast('Application failed: ' + err.message, 'err');
+  }
+}
+
+// ========================================
+// DAO TREASURY
+// ========================================
+
+async function loadTreasuryBalance() {
+  if (!connected) return;
+  try {
+    const res = await fetch(nodeUrl + '/treasury');
+    if (!res.ok) return;
+    const data = await res.json();
+    const hint = document.getElementById('treasury-balance-hint');
+    if (hint) hint.textContent = `Treasury balance: ${(data.balance_udag || 0).toLocaleString()} UDAG`;
+  } catch (e) { /* ignore */ }
+}
+
+async function loadTreasury() {
+  if (!connected) return;
+  try {
+    const res = await fetch(nodeUrl + '/treasury');
+    if (!res.ok) return;
+    const data = await res.json();
+
+    const balEl = document.getElementById('treasury-balance-display');
+    const badgeEl = document.getElementById('treasury-badge');
+    const pendingEl = document.getElementById('treasury-pending-count');
+    const listEl = document.getElementById('treasury-pending-list');
+
+    if (balEl) balEl.textContent = (data.balance_udag || 0).toLocaleString(undefined, {maximumFractionDigits: 2});
+    if (badgeEl) badgeEl.textContent = (data.balance_udag || 0).toLocaleString(undefined, {maximumFractionDigits: 0}) + ' UDAG';
+    if (pendingEl) pendingEl.textContent = (data.pending_spends || []).length;
+
+    if (listEl && data.pending_spends && data.pending_spends.length > 0) {
+      listEl.innerHTML = data.pending_spends.map(s => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--border);font-family:'DM Mono',monospace;font-size:12px">
+          <div>
+            <div style="color:var(--subtle)">Proposal #${s.proposal_id}</div>
+            <div style="color:var(--dim);font-size:10px;margin-top:2px">To: ${(s.recipient || '').slice(0,16)}...</div>
+          </div>
+          <div style="text-align:right">
+            <div style="color:var(--green)">${(s.amount_udag || 0).toLocaleString()} UDAG</div>
+            <div style="color:var(--dim);font-size:10px;margin-top:2px">${s.status || ''}</div>
+          </div>
+        </div>
+      `).join('');
+    } else if (listEl) {
+      listEl.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--dim);padding:8px 0">No pending treasury spends</div>';
+    }
+  } catch (e) {
+    console.error('Failed to load treasury:', e);
+  }
+}
+
+// ========================================
 // STAKING
 // ========================================
 
@@ -3129,7 +3354,7 @@ async function loadStakingStatus() {
     document.getElementById('stake-content').style.display = 'block';
     
     // Populate wallet selects and load staking positions
-    populateStakeWallets();
+    await populateStakeWallets();
     await loadStakingPositions();
     
   } catch (e) {
@@ -3139,26 +3364,43 @@ async function loadStakingStatus() {
   }
 }
 
-function populateStakeWallets() {
+async function populateStakeWallets() {
   if (!keystore) return;
-  
+
   const stakeSelect = document.getElementById('stake-wallet');
-  stakeSelect.innerHTML = keystore.wallets.map((w, i) => 
-    `<option value="${i}">${w.name} (${formatUdag(w.balance || 0)} UDAG)</option>`
-  ).join('');
-  
-  // Update available balance when wallet changes
-  stakeSelect.addEventListener('change', updateStakeAvailable);
+
+  // Fetch balances from node for each wallet
+  const options = [];
+  for (let i = 0; i < keystore.wallets.length; i++) {
+    const w = keystore.wallets[i];
+    let balance = 0;
+    if (connected) {
+      try {
+        const res = await fetch(nodeUrl + '/balance/' + w.address);
+        const data = await res.json();
+        balance = data.balance || 0;
+        // Cache balance on wallet object for updateStakeAvailable
+        w._cached_balance = balance;
+      } catch (e) { console.error('Failed to fetch balance for', w.address, e); }
+    }
+    options.push(`<option value="${i}">${esc(w.name)} (${formatUdag(balance)} UDAG)</option>`);
+  }
+  stakeSelect.innerHTML = options.join('') || '<option>No wallets available</option>';
+
+  // Remove old listeners by cloning
+  const newSelect = stakeSelect.cloneNode(true);
+  stakeSelect.parentNode.replaceChild(newSelect, stakeSelect);
+  newSelect.addEventListener('change', updateStakeAvailable);
   updateStakeAvailable();
 }
 
 function updateStakeAvailable() {
   const select = document.getElementById('stake-wallet');
-  const wallet = keystore.wallets[select.selectedIndex];
+  const wallet = keystore ? keystore.wallets[select.selectedIndex] : null;
   const availableSpan = document.getElementById('stake-available');
-  
+
   if (wallet) {
-    availableSpan.textContent = formatUdag(wallet.balance || 0);
+    availableSpan.textContent = formatUdag(wallet._cached_balance || 0);
   } else {
     availableSpan.textContent = '0';
   }
@@ -3300,14 +3542,13 @@ async function stakeUDAG() {
     }
     
     const data = await res.json();
-    toast('Staking successful!', 'ok');
-    
+    toast('Stake submitted! Will appear after finality (~15 seconds).', 'ok');
+
     // Clear form
     amountInput.value = '';
-    
-    // Refresh positions and portfolio
-    await loadStakingPositions();
-    refreshPortfolio();
+
+    // Start polling for finality
+    startFinalityPolling('staking');
     
   } catch (e) {
     toast(e.message || 'Failed to stake', 'err');
@@ -3354,14 +3595,13 @@ async function unstakeUDAG() {
     }
     
     const data = await res.json();
-    toast('Unstaking initiated!', 'ok');
-    
+    toast('Unstake submitted! Will appear after finality (~15 seconds).', 'ok');
+
     // Clear form
     amountInput.value = '';
-    
-    // Refresh positions and portfolio
-    await loadStakingPositions();
-    refreshPortfolio();
+
+    // Start polling for finality
+    startFinalityPolling('staking');
     
   } catch (e) {
     toast(e.message || 'Failed to unstake', 'err');
@@ -3430,6 +3670,7 @@ async function connectNode() {
     document.getElementById('council-content').style.display = '';
     loadGovernance();
     loadCouncilStatus();
+    loadTreasury();
   } else {
     connected = false;
     updateConnectionUI(false);
@@ -3489,19 +3730,67 @@ async function pollStatus() {
   }
 }
 
+// Finality polling: after submitting a tx, poll every 5s for 30s to catch finalization
+let finalityPollTimer = null;
+let finalityPollTarget = null; // 'staking' | 'governance' | 'both'
+
+function startFinalityPolling(target) {
+  // Clear any existing finality poll
+  if (finalityPollTimer) clearInterval(finalityPollTimer);
+  finalityPollTarget = target;
+  let attempts = 0;
+  const maxAttempts = 6; // 6 x 5s = 30s
+
+  finalityPollTimer = setInterval(async () => {
+    attempts++;
+    if (attempts > maxAttempts || !connected) {
+      clearInterval(finalityPollTimer);
+      finalityPollTimer = null;
+      finalityPollTarget = null;
+      return;
+    }
+    if (finalityPollTarget === 'staking' || finalityPollTarget === 'both') {
+      await loadStakingPositions();
+      await populateStakeWallets();
+      refreshPortfolio();
+    }
+    if (finalityPollTarget === 'governance' || finalityPollTarget === 'both') {
+      await loadGovernance();
+      await loadCouncilStatus();
+      await loadTreasury();
+    }
+  }, 5000);
+}
+
 async function pollDag() {
   if (!connected) return;
   try {
     const data = await (await fetch(nodeUrl + '/status')).json();
     const oldFinalized = lastStatus?.last_finalized_round;
-    lastStatus = data; 
+    lastStatus = data;
     updateDagView(data);
-    // Only reload finalized rounds if the finalized round changed
-    const dagPanel = document.getElementById('panel-dag');
-    if (dagPanel && dagPanel.classList.contains('active')) {
-      if (oldFinalized !== data.last_finalized_round) {
+
+    // When finality advances, refresh active tab data
+    if (oldFinalized !== data.last_finalized_round) {
+      const dagPanel = document.getElementById('panel-dag');
+      if (dagPanel && dagPanel.classList.contains('active')) {
         loadFinalizedRounds();
       }
+      const stakePanel = document.getElementById('panel-stake');
+      if (stakePanel && stakePanel.classList.contains('active')) {
+        loadStakingPositions();
+      }
+      const govPanel = document.getElementById('panel-governance');
+      if (govPanel && govPanel.classList.contains('active')) {
+        loadGovernance();
+      }
+      const councilPanel = document.getElementById('panel-council');
+      if (councilPanel && councilPanel.classList.contains('active')) {
+        loadCouncilStatus();
+        loadTreasury();
+      }
+      // Also refresh portfolio if wallets are loaded
+      if (keystore) refreshPortfolio();
     }
   } catch {
     // Try to reconnect using the same logic as pollStatus
@@ -3540,6 +3829,7 @@ function switchTab(tab) {
   }
   if (tab === 'council' && connected) {
     loadCouncilStatus();
+    loadTreasury();
   }
 }
 

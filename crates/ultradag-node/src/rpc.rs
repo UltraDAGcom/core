@@ -141,6 +141,7 @@ struct StatusResponse {
     validator_count: usize,
     total_staked: u64,
     active_stakers: usize,
+    treasury_balance: u64,
     bootstrap_connected: bool,
     // System resource metrics
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -296,6 +297,11 @@ struct BalanceResponse {
     balance: u64,
     nonce: u64,
     balance_udag: f64,
+    staked: u64,
+    staked_udag: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unlock_at_round: Option<u64>,
+    is_council_member: bool,
 }
 
 #[derive(Serialize)]
@@ -345,6 +351,12 @@ struct ProposalRequest {
     /// Council membership: seat category (technical, business, legal, academic, community, foundation)
     #[serde(default)]
     council_category: Option<String>,
+    /// TreasurySpend: recipient address (hex)
+    #[serde(default)]
+    treasury_recipient: Option<String>,
+    /// TreasurySpend: amount in sats
+    #[serde(default)]
+    treasury_amount: Option<u64>,
     #[serde(default)]
     fee: Option<u64>,
 }
@@ -590,6 +602,7 @@ async fn handle_request(
             let account_count = state.account_count();
             let total_staked = state.total_staked();
             let active_stakers_len = state.active_stakers().len();
+            let treasury_balance = state.treasury_balance();
             drop(state);
 
             let mempool_size = server.mempool.try_read().map(|m| m.len()).unwrap_or(0);
@@ -629,6 +642,7 @@ async fn handle_request(
                 validator_count,
                 total_staked,
                 active_stakers: active_stakers_len,
+                treasury_balance,
                 bootstrap_connected,
                 memory_usage_bytes,
                 cpu_usage_percent,
@@ -646,6 +660,9 @@ async fn handle_request(
             let state = read_lock_or_503!(server.state);
             let balance = state.balance(&addr);
             let nonce = state.nonce(&addr);
+            let staked = state.stake_of(&addr);
+            let unlock_at = state.stake_account(&addr).and_then(|s| s.unlock_at_round);
+            let is_council = state.is_council_member(&addr);
             json_response(
                 StatusCode::OK,
                 &BalanceResponse {
@@ -653,6 +670,10 @@ async fn handle_request(
                     balance,
                     nonce,
                     balance_udag: balance as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                    staked,
+                    staked_udag: staked as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                    unlock_at_round: unlock_at,
+                    is_council_member: is_council,
                 },
             )
         }
@@ -1302,8 +1323,32 @@ async fn handle_request(
                     };
                     ProposalType::CouncilMembership { action, address, category }
                 }
+                "treasury_spend" => {
+                    let Some(recipient_hex) = prop_req.treasury_recipient.as_deref() else {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "treasury_recipient required for treasury_spend"));
+                    };
+                    let Ok(recipient_bytes) = hex::decode(recipient_hex) else {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex for treasury_recipient"));
+                    };
+                    if recipient_bytes.len() != 32 {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            "treasury_recipient must be 32 bytes (64 hex chars)"));
+                    }
+                    let mut addr_bytes = [0u8; 32];
+                    addr_bytes.copy_from_slice(&recipient_bytes);
+                    let recipient = ultradag_coin::Address(addr_bytes);
+                    let Some(amount) = prop_req.treasury_amount else {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            "treasury_amount required for treasury_spend (in sats)"));
+                    };
+                    if amount == 0 {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            "treasury_amount must be greater than 0"));
+                    }
+                    ProposalType::TreasurySpend { recipient, amount }
+                }
                 _ => return Ok(error_response(StatusCode::BAD_REQUEST,
-                    "proposal_type must be 'text', 'parameter', or 'council_membership'")),
+                    "proposal_type must be 'text', 'parameter', 'council_membership', or 'treasury_spend'")),
             };
 
             let fee = prop_req.fee.unwrap_or(ultradag_coin::constants::MIN_FEE_SATS);
@@ -1324,9 +1369,15 @@ async fn handle_request(
                 }
 
                 // Only council members can create proposals
-                if !state.is_council_member(&sender) {
+                // Exception: self-nominations (CouncilMembership Add where address == sender)
+                let is_self_nomination = matches!(
+                    &proposal_type,
+                    ProposalType::CouncilMembership { action: CouncilAction::Add, address, .. }
+                    if *address == sender
+                );
+                if !state.is_council_member(&sender) && !is_self_nomination {
                     return Ok(error_response(StatusCode::FORBIDDEN,
-                        "only Council of 21 members can create proposals"));
+                        "only Council of 21 members can create proposals (anyone can self-nominate via council_membership)"));
                 }
 
                 // Check active proposal count limit
@@ -1519,8 +1570,10 @@ async fn handle_request(
                     }),
                 );
             }
+            let validator_count = state.active_validators().len().max(1) as u64;
             let (per_member, total_emission) = state.compute_council_emission(
-                state.last_finalized_round().unwrap_or(0)
+                state.last_finalized_round().unwrap_or(0),
+                validator_count,
             );
             json_response(StatusCode::OK, &serde_json::json!({
                 "member_count": members.len(),
@@ -1538,20 +1591,26 @@ async fn handle_request(
             let state = read_lock_or_503!(server.state);
             let proposals: Vec<serde_json::Value> = state.proposals()
                 .values()
-                .map(|p| serde_json::json!({
-                    "id": p.id,
-                    "proposer": p.proposer.to_hex(),
-                    "title": p.title,
-                    "description": p.description,
-                    "proposal_type": p.proposal_type,
-                    "voting_starts": p.voting_starts,
-                    "voting_ends": p.voting_ends,
-                    "votes_for": p.votes_for,
-                    "votes_for_udag": p.votes_for as f64 / ultradag_coin::SATS_PER_UDAG as f64,
-                    "votes_against": p.votes_against,
-                    "votes_against_udag": p.votes_against as f64 / ultradag_coin::SATS_PER_UDAG as f64,
-                    "status": p.status,
-                }))
+                .map(|p| {
+                    let mut pj = serde_json::json!({
+                        "id": p.id,
+                        "proposer": p.proposer.to_hex(),
+                        "title": p.title,
+                        "description": p.description,
+                        "proposal_type": p.proposal_type,
+                        "voting_starts": p.voting_starts,
+                        "voting_ends": p.voting_ends,
+                        "votes_for": p.votes_for,
+                        "votes_against": p.votes_against,
+                        "status": p.status,
+                    });
+                    if let ProposalType::TreasurySpend { ref recipient, amount } = p.proposal_type {
+                        pj["treasury_recipient"] = serde_json::json!(recipient.to_hex());
+                        pj["treasury_amount_sats"] = serde_json::json!(amount);
+                        pj["treasury_amount_udag"] = serde_json::json!(amount as f64 / ultradag_coin::SATS_PER_UDAG as f64);
+                    }
+                    pj
+                })
                 .collect();
             json_response(StatusCode::OK, &serde_json::json!({
                 "count": proposals.len(),
@@ -1570,18 +1629,19 @@ async fn handle_request(
             // Include individual voter breakdown with vote weights
             let voters: Vec<serde_json::Value> = state.votes_for_proposal(id)
                 .iter()
-                .map(|(addr, vote, _weight)| {
+                .map(|(addr, vote, weight)| {
                     let category = state.council_seat_category(addr)
                         .map(|c| c.name())
                         .unwrap_or("former member");
                     serde_json::json!({
                         "address": addr.to_hex(),
                         "vote": if *vote { "yes" } else { "no" },
+                        "vote_weight": weight,
                         "category": category,
                     })
                 })
                 .collect();
-            json_response(StatusCode::OK, &serde_json::json!({
+            let mut proposal_json = serde_json::json!({
                 "id": p.id,
                 "proposer": p.proposer.to_hex(),
                 "title": p.title,
@@ -1594,7 +1654,14 @@ async fn handle_request(
                 "status": p.status,
                 "snapshot_council_size": p.snapshot_total_stake,
                 "voters": voters,
-            }))
+            });
+            // For TreasurySpend proposals, include recipient and amount
+            if let ProposalType::TreasurySpend { ref recipient, amount } = p.proposal_type {
+                proposal_json["treasury_recipient"] = serde_json::json!(recipient.to_hex());
+                proposal_json["treasury_amount_sats"] = serde_json::json!(amount);
+                proposal_json["treasury_amount_udag"] = serde_json::json!(amount as f64 / ultradag_coin::SATS_PER_UDAG as f64);
+            }
+            json_response(StatusCode::OK, &proposal_json)
         }
 
         (&Method::GET, ["vote", id_str, addr_hex]) => {
@@ -1745,6 +1812,39 @@ async fn handle_request(
             json_response(StatusCode::OK, &serde_json::json!({
                 "status": "pending",
                 "tx_hash": hex_encode(&tx_hash),
+            }))
+        }
+
+        // ====== Treasury endpoint ======
+
+        (&Method::GET, ["treasury"]) => {
+            let state = read_lock_or_503!(server.state);
+            let balance = state.treasury_balance();
+            let pending_spends: Vec<serde_json::Value> = state.proposals()
+                .values()
+                .filter(|p| matches!(p.proposal_type, ProposalType::TreasurySpend { .. }))
+                .filter(|p| !matches!(p.status, ultradag_coin::governance::ProposalStatus::Executed
+                    | ultradag_coin::governance::ProposalStatus::Rejected
+                    | ultradag_coin::governance::ProposalStatus::Cancelled
+                    | ultradag_coin::governance::ProposalStatus::Failed { .. }))
+                .map(|p| {
+                    if let ProposalType::TreasurySpend { ref recipient, amount } = p.proposal_type {
+                        serde_json::json!({
+                            "proposal_id": p.id,
+                            "recipient": recipient.to_hex(),
+                            "amount_sats": amount,
+                            "amount_udag": amount as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                            "status": p.status,
+                        })
+                    } else {
+                        serde_json::json!({})
+                    }
+                })
+                .collect();
+            json_response(StatusCode::OK, &serde_json::json!({
+                "balance_sats": balance,
+                "balance_udag": balance as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                "pending_spends": pending_spends,
             }))
         }
 

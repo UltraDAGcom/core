@@ -14,7 +14,10 @@ use ultradag_coin::{
     block::block::Block,
     block::header::BlockHeader,
     consensus::dag::DagInsertError,
-    constants::{self, COIN, DEV_ALLOCATION_SATS, FAUCET_PREFUND_SATS, FAUCET_SEED, faucet_keypair},
+    constants::{
+        self, COIN, DEV_ALLOCATION_SATS, FAUCET_PREFUND_SATS, FAUCET_SEED, TREASURY_ALLOCATION_SATS,
+        faucet_keypair,
+    },
     tx::CoinbaseTx,
 };
 
@@ -73,6 +76,56 @@ fn make_vertex(
     );
     vertex.signature = sk.sign(&vertex.signable_bytes());
     vertex
+}
+
+/// Like `make_vertex` but accepts an explicit coinbase reward instead of computing
+/// it from `block_reward(height)`. Use this when the engine has council members
+/// that reduce the validator share (e.g. `new_with_genesis()` adds one Foundation seat).
+fn make_vertex_with_reward(
+    proposer: &Address,
+    round: u64,
+    height: u64,
+    parents: Vec<[u8; 32]>,
+    txs: Vec<Transaction>,
+    sk: &SecretKey,
+    validator_reward: u64,
+) -> DagVertex {
+    let total_fees: u64 = txs.iter().map(|tx| tx.fee()).fold(0u64, |a, x| a.saturating_add(x));
+    let coinbase = CoinbaseTx {
+        to: *proposer,
+        amount: validator_reward.saturating_add(total_fees),
+        height,
+    };
+    let block = Block {
+        header: BlockHeader {
+            version: 1,
+            height,
+            timestamp: 1_000_000 + round as i64,
+            prev_hash: parents.first().copied().unwrap_or([0u8; 32]),
+            merkle_root: [0u8; 32],
+        },
+        coinbase,
+        transactions: txs,
+    };
+    let mut vertex = DagVertex::new(
+        block,
+        parents,
+        round,
+        *proposer,
+        sk.verifying_key().to_bytes(),
+        Signature([0u8; 64]),
+    );
+    vertex.signature = sk.sign(&vertex.signable_bytes());
+    vertex
+}
+
+/// Compute the validator reward that `new_with_genesis()` engines expect.
+/// Genesis adds one Foundation council seat, so validators get
+/// (100 - council_emission_percent)% of block_reward.
+fn genesis_validator_reward(height: u64) -> u64 {
+    use ultradag_coin::constants::{COUNCIL_EMISSION_PERCENT, block_reward};
+    let full = block_reward(height);
+    full.saturating_mul(100u64.saturating_sub(COUNCIL_EMISSION_PERCENT)) / 100
 }
 
 fn setup_validators(n: usize) -> Vec<SecretKey> {
@@ -265,7 +318,11 @@ fn b1_faucet_genesis_prefund() {
     let faucet_addr = faucet_keypair().address();
 
     assert_eq!(state.balance(&faucet_addr), FAUCET_PREFUND_SATS);
-    assert_eq!(state.total_supply(), FAUCET_PREFUND_SATS + DEV_ALLOCATION_SATS);
+    // Genesis total_supply = faucet + dev allocation + DAO treasury
+    assert_eq!(
+        state.total_supply(),
+        FAUCET_PREFUND_SATS + DEV_ALLOCATION_SATS + TREASURY_ALLOCATION_SATS
+    );
 }
 
 #[test]
@@ -288,15 +345,19 @@ fn b3_faucet_transaction_valid() {
     let fee = 0;
     let tx = make_signed_tx(&faucet_sk, recipient, amount, fee, 0);
 
-    // Create a vertex with this transaction
+    // Create a vertex with this transaction.
+    // Engine has one council member (Foundation seat added in new_with_genesis), so
+    // validator reward = block_reward * (100 - council_emission_percent)% = 90%.
     let proposer_sk = SecretKey::from_bytes([1u8; 32]);
-    let v = make_vertex(
+    let reward = genesis_validator_reward(0);
+    let v = make_vertex_with_reward(
         &proposer_sk.address(),
         0,
         0,
         vec![],
         vec![tx],
         &proposer_sk,
+        reward,
     );
 
     state.apply_vertex(&v).unwrap();
@@ -322,8 +383,11 @@ fn b4_double_spend_deterministic_resolution() {
     let prop1 = SecretKey::from_bytes([1u8; 32]);
     let prop2 = SecretKey::from_bytes([2u8; 32]);
 
-    let v1 = make_vertex(&prop1.address(), 0, 0, vec![], vec![tx_a], &prop1);
-    let v2 = make_vertex(&prop2.address(), 0, 1, vec![], vec![tx_b], &prop2);
+    // Use genesis reward (90% of block_reward) — engine has one council member.
+    let reward = genesis_validator_reward(0);
+    let v1 = make_vertex_with_reward(&prop1.address(), 0, 0, vec![], vec![tx_a], &prop1, reward);
+    let reward1 = genesis_validator_reward(1);
+    let v2 = make_vertex_with_reward(&prop2.address(), 0, 1, vec![], vec![tx_b], &prop2, reward1);
 
     // Apply first vertex — succeeds
     state.apply_vertex(&v1).unwrap();
@@ -346,14 +410,19 @@ fn b5_nonce_replay_rejected() {
 
     let tx0 = make_signed_tx(&sender_sk, recv, 1000, 0, 0);
     let prop = SecretKey::from_bytes([1u8; 32]);
-    let v0 = make_vertex(&prop.address(), 0, 0, vec![], vec![tx0.clone()], &prop);
+    // Use genesis reward (90% of block_reward) — engine has one council member.
+    let v0 = make_vertex_with_reward(
+        &prop.address(), 0, 0, vec![], vec![tx0.clone()], &prop, genesis_validator_reward(0),
+    );
     state.apply_vertex(&v0).unwrap();
 
     assert_eq!(state.nonce(&sender_sk.address()), 1);
 
     // Replay nonce=0 — tx is skipped in finalized vertex (not rejected)
     let tx_replay = make_signed_tx(&sender_sk, recv, 1000, 0, 0);
-    let v1 = make_vertex(&prop.address(), 1, 1, vec![], vec![tx_replay], &prop);
+    let v1 = make_vertex_with_reward(
+        &prop.address(), 1, 1, vec![], vec![tx_replay], &prop, genesis_validator_reward(1),
+    );
     let result = state.apply_vertex(&v1);
     assert!(result.is_ok(), "Vertex applies; replayed tx is skipped");
     // Nonce should still be 1 (replay was skipped, not applied)
@@ -374,7 +443,10 @@ fn b6_atomic_vertex_application() {
     let tx_bad = make_signed_tx(&bad_sk, recv, 999_999 * COIN, 0, 0);
 
     let prop = SecretKey::from_bytes([1u8; 32]);
-    let v = make_vertex(&prop.address(), 0, 0, vec![], vec![tx_good, tx_bad], &prop);
+    // Use genesis reward (90% of block_reward) — engine has one council member.
+    let v = make_vertex_with_reward(
+        &prop.address(), 0, 0, vec![], vec![tx_good, tx_bad], &prop, genesis_validator_reward(0),
+    );
 
     let result = state.apply_vertex(&v);
     assert!(result.is_ok(), "Vertex applies; bad tx is skipped");
@@ -397,7 +469,10 @@ fn c1_max_amount_transaction() {
     // Send entire faucet balance
     let tx = make_signed_tx(&faucet_sk, recv, FAUCET_PREFUND_SATS, 0, 0);
     let prop = SecretKey::from_bytes([1u8; 32]);
-    let v = make_vertex(&prop.address(), 0, 0, vec![], vec![tx], &prop);
+    // Use genesis reward (90% of block_reward) — engine has one council member.
+    let v = make_vertex_with_reward(
+        &prop.address(), 0, 0, vec![], vec![tx], &prop, genesis_validator_reward(0),
+    );
     state.apply_vertex(&v).unwrap();
 
     assert_eq!(state.balance(&faucet_sk.address()), 0);
@@ -412,7 +487,10 @@ fn c2_exceed_balance_by_one_satoshi() {
 
     let tx = make_signed_tx(&faucet_sk, recv, FAUCET_PREFUND_SATS + 1, 0, 0);
     let prop = SecretKey::from_bytes([1u8; 32]);
-    let v = make_vertex(&prop.address(), 0, 0, vec![], vec![tx], &prop);
+    // Use genesis reward (90% of block_reward) — engine has one council member.
+    let v = make_vertex_with_reward(
+        &prop.address(), 0, 0, vec![], vec![tx], &prop, genesis_validator_reward(0),
+    );
     let result = state.apply_vertex(&v);
     assert!(result.is_ok(), "Vertex applies; bad tx is skipped");
     assert_eq!(state.balance(&recv), 0, "Receiver should have 0 (tx was skipped)");
@@ -425,9 +503,14 @@ fn c3_fee_counts_against_balance() {
     let recv = SecretKey::from_bytes([42u8; 32]).address();
 
     // amount + fee > balance — tx is skipped in finalized vertex
+    // The fee=1 makes the total (FAUCET_PREFUND_SATS + 1) which exceeds faucet balance.
     let tx = make_signed_tx(&faucet_sk, recv, FAUCET_PREFUND_SATS, 1, 0);
     let prop = SecretKey::from_bytes([1u8; 32]);
-    let v = make_vertex(&prop.address(), 0, 0, vec![], vec![tx], &prop);
+    // Coinbase must include the fee (proposer gets fee even for skipped txs).
+    // Use genesis reward (90% of block_reward) — engine has one council member.
+    let v = make_vertex_with_reward(
+        &prop.address(), 0, 0, vec![], vec![tx], &prop, genesis_validator_reward(0),
+    );
     let result = state.apply_vertex(&v);
     assert!(result.is_ok(), "Vertex applies; bad tx is skipped");
     assert_eq!(state.balance(&recv), 0, "Receiver should have 0 (tx was skipped)");
@@ -443,7 +526,10 @@ fn c4_self_send_preserves_balance() {
     let fee = 1000;
     let tx = make_signed_tx(&faucet_sk, faucet_addr, 1000 * COIN, fee, 0);
     let prop = SecretKey::from_bytes([1u8; 32]);
-    let v = make_vertex(&prop.address(), 0, 0, vec![], vec![tx], &prop);
+    // Use genesis reward (90% of block_reward) — engine has one council member.
+    let v = make_vertex_with_reward(
+        &prop.address(), 0, 0, vec![], vec![tx], &prop, genesis_validator_reward(0),
+    );
     state.apply_vertex(&v).unwrap();
 
     // Balance should decrease by only the fee
@@ -462,7 +548,10 @@ fn c5_sequential_nonce_enforcement() {
     // Skip nonce 0, try nonce 1 — tx is skipped in finalized vertex
     let tx = make_signed_tx(&faucet_sk, recv, 1000, 0, 1);
     let prop = SecretKey::from_bytes([1u8; 32]);
-    let v = make_vertex(&prop.address(), 0, 0, vec![], vec![tx], &prop);
+    // Use genesis reward (90% of block_reward) — engine has one council member.
+    let v = make_vertex_with_reward(
+        &prop.address(), 0, 0, vec![], vec![tx], &prop, genesis_validator_reward(0),
+    );
     let result = state.apply_vertex(&v);
     assert!(result.is_ok(), "Vertex applies; bad nonce tx is skipped");
     assert_eq!(state.balance(&recv), 0, "Receiver should have 0 (tx was skipped)");
@@ -475,16 +564,19 @@ fn c6_many_sequential_nonces() {
     let recv = SecretKey::from_bytes([44u8; 32]).address();
     let prop = SecretKey::from_bytes([1u8; 32]);
 
-    // 100 sequential transactions, each in its own vertex
+    // 100 sequential transactions, each in its own vertex.
+    // Use genesis reward (90% of block_reward) — engine has one council member.
     for nonce in 0u64..100 {
         let tx = make_signed_tx(&faucet_sk, recv, 1000, 0, nonce);
-        let v = make_vertex(
+        let reward = genesis_validator_reward(nonce);
+        let v = make_vertex_with_reward(
             &prop.address(),
             nonce,
             nonce,
             if nonce == 0 { vec![] } else { vec![[0u8; 32]] },
             vec![tx],
             &prop,
+            reward,
         );
         state.apply_vertex(&v).unwrap();
     }
@@ -602,29 +694,35 @@ fn d3_network_stalls_below_quorum() {
 #[test]
 fn d4_supply_cap_enforced_near_max() {
     let mut state = StateEngine::new_with_genesis();
-    // Genesis has 2,050,000 UDAG. We need to get close to max (21M).
+    // Genesis has 4,150,000 UDAG (faucet + dev + treasury). We need to get close to max (21M).
     let max = constants::MAX_SUPPLY_SATS;
-    
-    // Apply many vertices to approach max supply through block rewards
+
+    // Apply many vertices to approach max supply through block rewards.
+    // Use genesis reward (90% of block_reward) — engine has one council member.
     let validators: Vec<_> = (0..4).map(|i| SecretKey::from_bytes([i as u8; 32])).collect();
-    
-    // Apply vertices until we're close to max supply
+
     let mut round = 0u64;
     while state.total_supply() < max - (1000 * constants::COIN) {
         let proposer = &validators[(round % 4) as usize];
-        let v = make_vertex(&proposer.address(), round, round, vec![], vec![], proposer);
+        let reward = genesis_validator_reward(round);
+        let v = make_vertex_with_reward(
+            &proposer.address(), round, round, vec![], vec![], proposer, reward,
+        );
         state.apply_vertex(&v).unwrap();
         round += 1;
-        
+
         // Safety: don't loop forever
         if round > 100_000 {
             break;
         }
     }
 
-    // Now apply one more vertex - should be capped
+    // Now apply one more vertex — should be capped at MAX_SUPPLY_SATS
     let prop = &validators[0];
-    let v = make_vertex(&prop.address(), round, round, vec![], vec![], prop);
+    let reward = genesis_validator_reward(round);
+    let v = make_vertex_with_reward(
+        &prop.address(), round, round, vec![], vec![], prop, reward,
+    );
     state.apply_vertex(&v).unwrap();
 
     assert!(state.total_supply() <= max, "Supply must never exceed MAX_SUPPLY_SATS");

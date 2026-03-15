@@ -191,7 +191,7 @@ fn test_proposal_quorum_calculation() {
 fn test_state_engine_governance_integration() {
     let state = StateEngine::new();
 
-    assert_eq!(state.current_epoch(), 0);
+    assert_eq!(state.current_epoch(), u64::MAX); // sentinel: epoch never initialized
 }
 
 #[test]
