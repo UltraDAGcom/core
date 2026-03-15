@@ -2862,14 +2862,16 @@ async function loadCouncilStatus() {
     // Update proposal form visibility
     updateCouncilProposalAccess();
 
-    // Show content
-    document.getElementById('council-offline').style.display = 'none';
-    document.getElementById('council-content').style.display = 'block';
-
   } catch (e) {
-    console.error('Failed to load council status:', e);
-    document.getElementById('council-offline').style.display = 'block';
-    document.getElementById('council-content').style.display = 'none';
+    console.error('Failed to load council data:', e);
+    // Still show the council page with defaults — don't hide it
+    document.getElementById('council-member-count').textContent = '0';
+    document.getElementById('council-count').textContent = '0/21';
+    document.getElementById('council-emission-reward').textContent = '0';
+    document.getElementById('council-open-seats').textContent = '21';
+    renderSeatGrid(null);
+    renderCouncilMembers([]);
+    updateCouncilProposalAccess();
   }
 }
 
@@ -2900,9 +2902,16 @@ function updateCouncilYourStatus() {
 
 function renderSeatGrid(seats) {
   const el = document.getElementById('council-seats-grid');
+  // Default seat structure when API unavailable
   if (!seats) {
-    el.innerHTML = '<div class="empty">No seat data</div>';
-    return;
+    seats = {
+      technical: { filled: 0, max: 7, available: 7 },
+      business: { filled: 0, max: 4, available: 4 },
+      legal: { filled: 0, max: 3, available: 3 },
+      academic: { filled: 0, max: 3, available: 3 },
+      community: { filled: 0, max: 2, available: 2 },
+      foundation: { filled: 0, max: 2, available: 2 }
+    };
   }
 
   const categories = ['technical', 'business', 'legal', 'academic', 'community', 'foundation'];
@@ -3417,8 +3426,9 @@ async function connectNode() {
     loadFinalizedRounds();
     document.getElementById('gov-offline').style.display = 'none';
     document.getElementById('gov-content').style.display = '';
+    document.getElementById('council-offline').style.display = 'none';
+    document.getElementById('council-content').style.display = '';
     loadGovernance();
-    // Pre-load council data for governance voting power check
     loadCouncilStatus();
   } else {
     connected = false;
