@@ -35,7 +35,7 @@ macro_rules! write_lock_or_503 {
     };
 }
 
-use ultradag_coin::{Address, Mempool, SecretKey, Signature, StateEngine, Transaction, TransferTx, StakeTx, UnstakeTx, MIN_STAKE_SATS};
+use ultradag_coin::{Address, Mempool, SecretKey, Signature, StateEngine, Transaction, TransferTx, StakeTx, UnstakeTx, DelegateTx, UndelegateTx, SetCommissionTx, MIN_STAKE_SATS};
 use ultradag_coin::governance::{CreateProposalTx, VoteTx, ProposalType, CouncilAction, CouncilSeatCategory};
 use ultradag_network::{Message, NodeServer};
 use crate::rate_limit::{RateLimiter, limits};
@@ -302,6 +302,14 @@ struct BalanceResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     unlock_at_round: Option<u64>,
     is_council_member: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    delegated: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    delegated_udag: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    delegated_to: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    delegation_unlock_at_round: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -378,6 +386,12 @@ struct StakeInfoResponse {
     staked_udag: f64,
     unlock_at_round: Option<u64>,
     is_active_validator: bool,
+    effective_stake: u64,
+    effective_stake_udag: f64,
+    commission_percent: u8,
+    delegator_count: usize,
+    total_delegated: u64,
+    total_delegated_udag: f64,
 }
 
 #[derive(Serialize)]
@@ -385,6 +399,28 @@ struct ValidatorInfo {
     address: String,
     staked: u64,
     staked_udag: f64,
+    effective_stake: u64,
+    effective_stake_udag: f64,
+    commission_percent: u8,
+    delegator_count: usize,
+}
+
+#[derive(Deserialize)]
+struct DelegateRequest {
+    secret_key: String,
+    validator: String,
+    amount: u64,
+}
+
+#[derive(Deserialize)]
+struct UndelegateRequest {
+    secret_key: String,
+}
+
+#[derive(Deserialize)]
+struct SetCommissionRequest {
+    secret_key: String,
+    commission_percent: u8,
 }
 
 #[derive(Deserialize)]
@@ -663,6 +699,7 @@ async fn handle_request(
             let staked = state.stake_of(&addr);
             let unlock_at = state.stake_account(&addr).and_then(|s| s.unlock_at_round);
             let is_council = state.is_council_member(&addr);
+            let delegation = state.delegation_account(&addr);
             json_response(
                 StatusCode::OK,
                 &BalanceResponse {
@@ -674,6 +711,10 @@ async fn handle_request(
                     staked_udag: staked as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                     unlock_at_round: unlock_at,
                     is_council_member: is_council,
+                    delegated: delegation.map(|d| d.delegated),
+                    delegated_udag: delegation.map(|d| d.delegated as f64 / ultradag_coin::SATS_PER_UDAG as f64),
+                    delegated_to: delegation.map(|d| d.validator.to_hex()),
+                    delegation_unlock_at_round: delegation.and_then(|d| d.unlock_at_round),
                 },
             )
         }
@@ -887,6 +928,27 @@ async fn handle_request(
                         "proposal_id": t.proposal_id,
                         "vote": t.vote,
                         "fee": t.fee,
+                        "nonce": t.nonce,
+                    }),
+                    Transaction::Delegate(t) => serde_json::json!({
+                        "type": "delegate",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "validator": t.validator.to_hex(),
+                        "amount": t.amount,
+                        "nonce": t.nonce,
+                    }),
+                    Transaction::Undelegate(t) => serde_json::json!({
+                        "type": "undelegate",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "nonce": t.nonce,
+                    }),
+                    Transaction::SetCommission(t) => serde_json::json!({
+                        "type": "set_commission",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "commission_percent": t.commission_percent,
                         "nonce": t.nonce,
                     }),
                 }
@@ -1195,13 +1257,23 @@ async fn handle_request(
             let staked = state.stake_of(&addr);
             let stake_acct = state.stake_account(&addr);
             let unlock_at = stake_acct.and_then(|s| s.unlock_at_round);
+            let commission = stake_acct.map(|s| s.commission_percent).unwrap_or(ultradag_coin::DEFAULT_COMMISSION_PERCENT);
             let is_active = state.is_active_validator(&addr);
+            let effective = state.effective_stake_of(&addr);
+            let delegators = state.delegators_of(&addr);
+            let total_del: u64 = delegators.iter().map(|(_, amt)| *amt).fold(0u64, |acc, x| acc.saturating_add(x));
             json_response(StatusCode::OK, &StakeInfoResponse {
                 address: addr.to_hex(),
                 staked,
                 staked_udag: staked as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                 unlock_at_round: unlock_at,
                 is_active_validator: is_active,
+                effective_stake: effective,
+                effective_stake_udag: effective as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                commission_percent: commission,
+                delegator_count: delegators.len(),
+                total_delegated: total_del,
+                total_delegated_udag: total_del as f64 / ultradag_coin::SATS_PER_UDAG as f64,
             })
         }
 
@@ -1210,15 +1282,23 @@ async fn handle_request(
             let stakers = state.active_stakers();
             let validators: Vec<ValidatorInfo> = stakers.iter().map(|addr| {
                 let staked = state.stake_of(addr);
+                let effective = state.effective_stake_of(addr);
+                let commission = state.stake_account(addr).map(|s| s.commission_percent).unwrap_or(ultradag_coin::DEFAULT_COMMISSION_PERCENT);
+                let delegator_count = state.delegators_of(addr).len();
                 ValidatorInfo {
                     address: addr.to_hex(),
                     staked,
                     staked_udag: staked as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                    effective_stake: effective,
+                    effective_stake_udag: effective as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                    commission_percent: commission,
+                    delegator_count,
                 }
             }).collect();
             json_response(StatusCode::OK, &serde_json::json!({
                 "count": validators.len(),
                 "total_staked": state.total_staked(),
+                "total_delegated": state.total_delegated(),
                 "validators": validators,
             }))
         }
@@ -1732,6 +1812,9 @@ async fn handle_request(
                         Transaction::Unstake(_) => "unstake",
                         Transaction::CreateProposal(_) => "create_proposal",
                         Transaction::Vote(_) => "vote",
+                        Transaction::Delegate(_) => "delegate",
+                        Transaction::Undelegate(_) => "undelegate",
+                        Transaction::SetCommission(_) => "set_commission",
                     },
                     "from": tx.from().to_hex(),
                     "fee": tx.fee(),
@@ -1768,7 +1851,7 @@ async fn handle_request(
             }
             let Ok(tx) = serde_json::from_slice::<Transaction>(&body) else {
                 return Ok(error_response(StatusCode::BAD_REQUEST,
-                    "invalid JSON: expected a serialized Transaction (Transfer, Stake, Unstake, CreateProposal, or Vote)"));
+                    "invalid JSON: expected a serialized Transaction (Transfer, Stake, Unstake, CreateProposal, Vote, Delegate, Undelegate, or SetCommission)"));
             };
 
             // Verify Ed25519 signature
@@ -1812,6 +1895,305 @@ async fn handle_request(
             json_response(StatusCode::OK, &serde_json::json!({
                 "status": "pending",
                 "tx_hash": hex_encode(&tx_hash),
+            }))
+        }
+
+        // ====== Delegation endpoints ======
+
+        (&Method::POST, ["delegate"]) => {
+            // TESTNET ONLY: accepts secret_key in body. Mainnet: use /tx/submit with pre-signed DelegateTx.
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE,
+                    "POST /delegate disabled: private keys must not transit over the network. Use /tx/submit with a pre-signed DelegateTx."));
+            }
+            if !rate_limiter.check_rate_limit(client_ip, limits::DELEGATE) {
+                return Ok(error_response(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "rate limit exceeded: too many delegate requests",
+                ));
+            }
+
+            let body = req.collect().await?.to_bytes();
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large (max 1MB)"));
+            }
+            let Ok(delegate_req) = serde_json::from_slice::<DelegateRequest>(&body) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {secret_key, validator, amount}"));
+            };
+
+            let sk = match parse_secret_key(&delegate_req.secret_key) {
+                Ok(sk) => sk,
+                Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, e)),
+            };
+            let sender = sk.address();
+
+            let Some(validator_addr) = Address::from_hex(&delegate_req.validator) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid validator address hex"));
+            };
+
+            let (tx, tx_hash, nonce) = {
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
+
+                // Validate: minimum delegation amount
+                if delegate_req.amount < ultradag_coin::MIN_DELEGATION_SATS {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!("minimum delegation is {} sats ({} UDAG)",
+                            ultradag_coin::MIN_DELEGATION_SATS,
+                            ultradag_coin::MIN_DELEGATION_SATS / ultradag_coin::SATS_PER_UDAG)));
+                }
+
+                // Validate: validator must be staking
+                if state.stake_of(&validator_addr) == 0 {
+                    return Ok(error_response(StatusCode::BAD_REQUEST, "target validator is not staking"));
+                }
+
+                // Validate: not already delegating
+                if state.delegation_account(&sender).is_some() {
+                    return Ok(error_response(StatusCode::BAD_REQUEST, "already has an active delegation — undelegate first"));
+                }
+
+                let nonce = next_nonce(&state, &mp, &sender);
+                let balance = state.balance(&sender);
+                let pc = pending_cost(&mp, &sender);
+                let total_needed = pc.saturating_add(delegate_req.amount);
+
+                if balance < total_needed {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!("insufficient balance: need {} sats (incl. {} pending), have {} sats",
+                            total_needed, pc, balance)));
+                }
+
+                let mut delegate_tx = DelegateTx {
+                    from: sender,
+                    validator: validator_addr,
+                    amount: delegate_req.amount,
+                    nonce,
+                    pub_key: sk.verifying_key().to_bytes(),
+                    signature: Signature([0u8; 64]),
+                };
+                delegate_tx.signature = sk.sign(&delegate_tx.signable_bytes());
+                let tx = Transaction::Delegate(delegate_tx);
+                let tx_hash = tx.hash();
+
+                if !mp.insert(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                }
+
+                (tx, tx_hash, nonce)
+            };
+
+            server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+            let _ = server.tx_tx.send(tx);
+
+            json_response(StatusCode::OK, &serde_json::json!({
+                "status": "pending",
+                "tx_hash": hex_encode(&tx_hash),
+                "address": sender.to_hex(),
+                "validator": validator_addr.to_hex(),
+                "amount": delegate_req.amount,
+                "amount_udag": delegate_req.amount as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                "nonce": nonce,
+                "note": "Delegate transaction added to mempool. Will be applied when included in a finalized vertex."
+            }))
+        }
+
+        (&Method::POST, ["undelegate"]) => {
+            // TESTNET ONLY: accepts secret_key in body. Mainnet: use /tx/submit with pre-signed UndelegateTx.
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE,
+                    "POST /undelegate disabled: private keys must not transit over the network. Use /tx/submit with a pre-signed UndelegateTx."));
+            }
+            if !rate_limiter.check_rate_limit(client_ip, limits::UNDELEGATE) {
+                return Ok(error_response(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "rate limit exceeded: too many undelegate requests",
+                ));
+            }
+
+            let body = req.collect().await?.to_bytes();
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large (max 1MB)"));
+            }
+            let Ok(undelegate_req) = serde_json::from_slice::<UndelegateRequest>(&body) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {secret_key}"));
+            };
+
+            let sk = match parse_secret_key(&undelegate_req.secret_key) {
+                Ok(sk) => sk,
+                Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, e)),
+            };
+            let sender = sk.address();
+
+            let current_round = {
+                let dag = read_lock_or_503!(server.dag);
+                dag.current_round()
+            };
+
+            let (tx, tx_hash, nonce) = {
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
+
+                // Check that address has an active delegation
+                match state.delegation_account(&sender) {
+                    None => return Ok(error_response(StatusCode::BAD_REQUEST, "no active delegation")),
+                    Some(d) if d.unlock_at_round.is_some() => {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "already undelegating — wait for cooldown to complete"));
+                    }
+                    _ => {}
+                }
+
+                let nonce = next_nonce(&state, &mp, &sender);
+
+                let mut undelegate_tx = UndelegateTx {
+                    from: sender,
+                    nonce,
+                    pub_key: sk.verifying_key().to_bytes(),
+                    signature: Signature([0u8; 64]),
+                };
+                undelegate_tx.signature = sk.sign(&undelegate_tx.signable_bytes());
+                let tx = Transaction::Undelegate(undelegate_tx);
+                let tx_hash = tx.hash();
+
+                if !mp.insert(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                }
+
+                (tx, tx_hash, nonce)
+            };
+
+            server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+            let _ = server.tx_tx.send(tx);
+
+            let unlock_at = current_round + ultradag_coin::UNSTAKE_COOLDOWN_ROUNDS;
+            json_response(StatusCode::OK, &serde_json::json!({
+                "status": "pending",
+                "tx_hash": hex_encode(&tx_hash),
+                "address": sender.to_hex(),
+                "unlock_at_round": unlock_at,
+                "nonce": nonce,
+                "note": "Undelegate transaction added to mempool. Will be applied when included in a finalized vertex."
+            }))
+        }
+
+        (&Method::POST, ["set-commission"]) => {
+            // TESTNET ONLY: accepts secret_key in body. Mainnet: use /tx/submit with pre-signed SetCommissionTx.
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE,
+                    "POST /set-commission disabled: private keys must not transit over the network. Use /tx/submit with a pre-signed SetCommissionTx."));
+            }
+            if !rate_limiter.check_rate_limit(client_ip, limits::SET_COMMISSION) {
+                return Ok(error_response(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "rate limit exceeded: too many set-commission requests",
+                ));
+            }
+
+            let body = req.collect().await?.to_bytes();
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large (max 1MB)"));
+            }
+            let Ok(commission_req) = serde_json::from_slice::<SetCommissionRequest>(&body) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {secret_key, commission_percent}"));
+            };
+
+            let sk = match parse_secret_key(&commission_req.secret_key) {
+                Ok(sk) => sk,
+                Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, e)),
+            };
+            let sender = sk.address();
+
+            let (tx, tx_hash, nonce) = {
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
+
+                // Must be staking to set commission
+                if state.stake_of(&sender) == 0 {
+                    return Ok(error_response(StatusCode::BAD_REQUEST, "not staked — must be a validator to set commission"));
+                }
+
+                if commission_req.commission_percent > ultradag_coin::MAX_COMMISSION_PERCENT {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!("commission_percent must be 0-{}", ultradag_coin::MAX_COMMISSION_PERCENT)));
+                }
+
+                let nonce = next_nonce(&state, &mp, &sender);
+
+                let mut set_commission_tx = SetCommissionTx {
+                    from: sender,
+                    commission_percent: commission_req.commission_percent,
+                    nonce,
+                    pub_key: sk.verifying_key().to_bytes(),
+                    signature: Signature([0u8; 64]),
+                };
+                set_commission_tx.signature = sk.sign(&set_commission_tx.signable_bytes());
+                let tx = Transaction::SetCommission(set_commission_tx);
+                let tx_hash = tx.hash();
+
+                if !mp.insert(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                }
+
+                (tx, tx_hash, nonce)
+            };
+
+            server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+            let _ = server.tx_tx.send(tx);
+
+            json_response(StatusCode::OK, &serde_json::json!({
+                "status": "pending",
+                "tx_hash": hex_encode(&tx_hash),
+                "address": sender.to_hex(),
+                "commission_percent": commission_req.commission_percent,
+                "nonce": nonce,
+                "note": "Set-commission transaction added to mempool. Will be applied when included in a finalized vertex."
+            }))
+        }
+
+        (&Method::GET, ["delegation", addr_hex]) => {
+            let Some(addr) = Address::from_hex(addr_hex) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address hex"));
+            };
+            let state = read_lock_or_503!(server.state);
+            match state.delegation_account(&addr) {
+                Some(d) => {
+                    json_response(StatusCode::OK, &serde_json::json!({
+                        "address": addr.to_hex(),
+                        "delegated": d.delegated,
+                        "delegated_udag": d.delegated as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                        "validator": d.validator.to_hex(),
+                        "unlock_at_round": d.unlock_at_round,
+                        "is_undelegating": d.unlock_at_round.is_some(),
+                    }))
+                }
+                None => {
+                    error_response(StatusCode::NOT_FOUND, "no active delegation for this address")
+                }
+            }
+        }
+
+        (&Method::GET, ["validator", addr_hex, "delegators"]) => {
+            let Some(addr) = Address::from_hex(addr_hex) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address hex"));
+            };
+            let state = read_lock_or_503!(server.state);
+            let delegators = state.delegators_of(&addr);
+            let total: u64 = delegators.iter().map(|(_, amt)| *amt).fold(0u64, |acc, x| acc.saturating_add(x));
+            let delegator_list: Vec<serde_json::Value> = delegators.iter().map(|(delegator_addr, amount)| {
+                let deleg = state.delegation_account(delegator_addr);
+                serde_json::json!({
+                    "address": delegator_addr.to_hex(),
+                    "delegated": amount,
+                    "delegated_udag": *amount as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                    "is_undelegating": deleg.map(|d| d.unlock_at_round.is_some()).unwrap_or(false),
+                })
+            }).collect();
+            json_response(StatusCode::OK, &serde_json::json!({
+                "validator": addr.to_hex(),
+                "delegator_count": delegators.len(),
+                "total_delegated": total,
+                "total_delegated_udag": total as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                "delegators": delegator_list,
             }))
         }
 

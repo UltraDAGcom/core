@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
 
 use crate::address::{Address, Signature};
-use crate::tx::{StakeTx, UnstakeTx};
+use crate::tx::stake::{StakeTx, UnstakeTx};
+use crate::tx::delegate::{DelegateTx, UndelegateTx, SetCommissionTx};
 use crate::governance::{CreateProposalTx, VoteTx};
 
-/// Unified transaction type supporting transfers, staking, unstaking, and governance.
+/// Unified transaction type supporting transfers, staking, unstaking, delegation, and governance.
 /// All variants go through consensus and are included in DAG vertices.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Transaction {
@@ -13,6 +14,9 @@ pub enum Transaction {
     Unstake(UnstakeTx),
     CreateProposal(CreateProposalTx),
     Vote(VoteTx),
+    Delegate(DelegateTx),
+    Undelegate(UndelegateTx),
+    SetCommission(SetCommissionTx),
 }
 
 /// A transaction transferring UDAG from one address to another.
@@ -42,6 +46,9 @@ impl Transaction {
             Transaction::Unstake(tx) => tx.hash(),
             Transaction::CreateProposal(tx) => tx.hash(),
             Transaction::Vote(tx) => tx.hash(),
+            Transaction::Delegate(tx) => tx.hash(),
+            Transaction::Undelegate(tx) => tx.hash(),
+            Transaction::SetCommission(tx) => tx.hash(),
         }
     }
 
@@ -53,6 +60,9 @@ impl Transaction {
             Transaction::Unstake(tx) => tx.verify_signature(),
             Transaction::CreateProposal(tx) => tx.verify_signature(),
             Transaction::Vote(tx) => tx.verify_signature(),
+            Transaction::Delegate(tx) => tx.verify_signature(),
+            Transaction::Undelegate(tx) => tx.verify_signature(),
+            Transaction::SetCommission(tx) => tx.verify_signature(),
         }
     }
 
@@ -64,6 +74,9 @@ impl Transaction {
             Transaction::Unstake(tx) => tx.from,
             Transaction::CreateProposal(tx) => tx.from,
             Transaction::Vote(tx) => tx.from,
+            Transaction::Delegate(tx) => tx.from,
+            Transaction::Undelegate(tx) => tx.from,
+            Transaction::SetCommission(tx) => tx.from,
         }
     }
 
@@ -75,36 +88,49 @@ impl Transaction {
             Transaction::Unstake(tx) => tx.nonce,
             Transaction::CreateProposal(tx) => tx.nonce,
             Transaction::Vote(tx) => tx.nonce,
+            Transaction::Delegate(tx) => tx.nonce,
+            Transaction::Undelegate(tx) => tx.nonce,
+            Transaction::SetCommission(tx) => tx.nonce,
         }
     }
 
-    /// Get the fee (0 for stake/unstake).
+    /// Get the fee (0 for stake/unstake/delegate/undelegate/set_commission).
     pub fn fee(&self) -> u64 {
         match self {
             Transaction::Transfer(tx) => tx.fee,
             Transaction::CreateProposal(tx) => tx.fee,
             Transaction::Vote(tx) => tx.fee,
-            Transaction::Stake(_) | Transaction::Unstake(_) => 0,
+            Transaction::Stake(_)
+            | Transaction::Unstake(_)
+            | Transaction::Delegate(_)
+            | Transaction::Undelegate(_)
+            | Transaction::SetCommission(_) => 0,
         }
     }
 
-    /// Get the amount (0 for unstake).
+    /// Get the amount (0 for unstake/undelegate/set_commission).
     pub fn amount(&self) -> u64 {
         match self {
             Transaction::Transfer(tx) => tx.amount,
             Transaction::Stake(tx) => tx.amount,
+            Transaction::Delegate(tx) => tx.amount,
             Transaction::Unstake(_)
+            | Transaction::Undelegate(_)
+            | Transaction::SetCommission(_)
             | Transaction::CreateProposal(_)
             | Transaction::Vote(_) => 0,
         }
     }
 
-    /// Get the recipient address (None for stake/unstake).
+    /// Get the recipient address (None for stake/unstake, Some(validator) for delegate).
     pub fn to(&self) -> Option<Address> {
         match self {
             Transaction::Transfer(tx) => Some(tx.to),
+            Transaction::Delegate(tx) => Some(tx.validator),
             Transaction::Stake(_)
             | Transaction::Unstake(_)
+            | Transaction::Undelegate(_)
+            | Transaction::SetCommission(_)
             | Transaction::CreateProposal(_)
             | Transaction::Vote(_) => None,
         }
@@ -118,6 +144,9 @@ impl Transaction {
             Transaction::Unstake(tx) => tx.pub_key,
             Transaction::CreateProposal(tx) => tx.pub_key,
             Transaction::Vote(tx) => tx.pub_key,
+            Transaction::Delegate(tx) => tx.pub_key,
+            Transaction::Undelegate(tx) => tx.pub_key,
+            Transaction::SetCommission(tx) => tx.pub_key,
         }
     }
 
@@ -129,17 +158,23 @@ impl Transaction {
             Transaction::Unstake(tx) => tx.signable_bytes(),
             Transaction::CreateProposal(tx) => tx.signable_bytes(),
             Transaction::Vote(tx) => tx.signable_bytes(),
+            Transaction::Delegate(tx) => tx.signable_bytes(),
+            Transaction::Undelegate(tx) => tx.signable_bytes(),
+            Transaction::SetCommission(tx) => tx.signable_bytes(),
         }
     }
 
-    /// Get the total cost (amount + fee for transfers, amount for stake, 0 for unstake).
+    /// Get the total cost (amount + fee for transfers, amount for stake/delegate, 0 for others).
     pub fn total_cost(&self) -> u64 {
         match self {
             Transaction::Transfer(tx) => tx.total_cost(),
             Transaction::Stake(tx) => tx.amount,
+            Transaction::Delegate(tx) => tx.amount,
             Transaction::CreateProposal(tx) => tx.fee,
             Transaction::Vote(tx) => tx.fee,
-            Transaction::Unstake(_) => 0,
+            Transaction::Unstake(_)
+            | Transaction::Undelegate(_)
+            | Transaction::SetCommission(_) => 0,
         }
     }
 }

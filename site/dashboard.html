@@ -991,9 +991,17 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
         <!-- Staking Info -->
         <div class="card card-blue" style="margin-bottom:16px">
           <div class="stat" style="text-align:center;padding:24px">
-            <div class="stat-label">Minimum Stake</div>
-            <div class="stat-val blue" style="font-size:36px;margin-top:8px">10,000 <span style="font-size:16px;color:var(--subtle)">UDAG</span></div>
-            <div class="stat-sub" style="margin-top:8px">Become a validator and earn rewards</div>
+            <div class="stat-label">Staking Options</div>
+            <div style="display:flex;gap:24px;justify-content:center;margin-top:12px;flex-wrap:wrap">
+              <div>
+                <div class="stat-val blue" style="font-size:28px">10,000 <span style="font-size:14px;color:var(--subtle)">UDAG</span></div>
+                <div class="stat-sub">Run a validator node</div>
+              </div>
+              <div style="border-left:1px solid var(--border);padding-left:24px">
+                <div class="stat-val blue" style="font-size:28px">100 <span style="font-size:14px;color:var(--subtle)">UDAG</span></div>
+                <div class="stat-sub">Delegate to a validator</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1070,6 +1078,75 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
             </div>
 
             <button class="btn btn-secondary" onclick="unstakeUDAG()">Unstake UDAG</button>
+          </div>
+        </div>
+
+        <!-- Your Delegations -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Your Delegations</span>
+            <span class="badge" id="delegation-count">0</span>
+          </div>
+          <div id="delegation-positions">
+            <div class="empty">No delegations yet</div>
+          </div>
+        </div>
+
+        <!-- Delegate to Validator -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Delegate to Validator</span>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <label class="label">Select Wallet</label>
+              <select class="select" id="delegate-wallet">
+                <option>No wallets available</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <label class="label">Select Validator</label>
+              <select class="select" id="delegate-validator">
+                <option>Loading validators...</option>
+              </select>
+              <div class="help">Commission: <span id="delegate-commission">--</span>%</div>
+            </div>
+
+            <div class="field">
+              <label class="label">Amount to Delegate</label>
+              <input class="input" id="delegate-amount" type="number" placeholder="100" min="100" step="1">
+              <div class="help">Minimum: 100 UDAG • Available: <span id="delegate-available">0</span> UDAG</div>
+            </div>
+
+            <div class="field">
+              <label class="label">Delegation Information</label>
+              <div class="help">
+                • Earn passive rewards without running a node<br>
+                • Validator takes <span id="delegate-commission-info">10</span>% commission<br>
+                • One delegation per wallet address<br>
+                • Undelegation requires 2,016 rounds (~2.8 hours)
+              </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="delegateUDAG()">Delegate UDAG</button>
+          </div>
+        </div>
+
+        <!-- Undelegate -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Undelegate</span>
+          </div>
+          <div class="card-body">
+            <div class="field">
+              <label class="label">Select Delegation</label>
+              <select class="select" id="undelegate-position">
+                <option>No delegations</option>
+              </select>
+            </div>
+
+            <button class="btn btn-secondary" onclick="undelegateUDAG()">Undelegate</button>
           </div>
         </div>
       </div>
@@ -3356,7 +3433,12 @@ async function loadStakingStatus() {
     // Populate wallet selects and load staking positions
     await populateStakeWallets();
     await loadStakingPositions();
-    
+
+    // Load delegation data
+    await loadDelegationPositions();
+    await loadValidatorList();
+    await populateDelegateWallets();
+
   } catch (e) {
     console.error('Failed to load staking status:', e);
     document.getElementById('stake-offline').style.display = 'block';
@@ -3609,6 +3691,194 @@ async function unstakeUDAG() {
 }
 
 // ========================================
+// DELEGATION
+// ========================================
+
+async function loadDelegationPositions() {
+  if (!keystore || !connected) return;
+  const positions = [];
+  for (const wallet of keystore.wallets) {
+    try {
+      const res = await fetch(nodeUrl + '/delegation/' + wallet.address);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.delegated > 0) {
+          positions.push({ wallet, ...data });
+        }
+      }
+    } catch (e) { /* ignore */ }
+  }
+  renderDelegationPositions(positions);
+  updateUndelegateSelect(positions);
+}
+
+function renderDelegationPositions(positions) {
+  const container = document.getElementById('delegation-positions');
+  const badge = document.getElementById('delegation-count');
+  badge.textContent = positions.length;
+  if (positions.length === 0) {
+    container.innerHTML = '<div class="empty">No delegations yet</div>';
+    return;
+  }
+  container.innerHTML = positions.map(pos => {
+    const isUndelegating = pos.unlock_at_round != null;
+    const status = isUndelegating ? 'Undelegating' : 'Active';
+    const statusColor = isUndelegating ? 'orange' : 'green';
+    const validatorShort = (pos.validator || '').slice(0, 12) + '...';
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-weight:600">${pos.wallet.name}</div>
+          <div style="margin-top:4px">${formatUdag(pos.delegated)} UDAG</div>
+          <div style="font-size:11px;color:var(--subtle)">To: ${validatorShort}</div>
+          ${isUndelegating ? `<div style="font-size:11px;color:var(--subtle)">Unlocks at round ${pos.unlock_at_round}</div>` : ''}
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:${statusColor}">${status}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function updateUndelegateSelect(positions) {
+  const select = document.getElementById('undelegate-position');
+  if (positions.length === 0) {
+    select.innerHTML = '<option>No delegations</option>';
+    return;
+  }
+  select.innerHTML = positions.map((pos, i) =>
+    `<option value="${i}">${pos.wallet.name} (${formatUdag(pos.delegated)} UDAG)</option>`
+  ).join('');
+  select._positions = positions;
+}
+
+async function loadValidatorList() {
+  if (!connected) return;
+  try {
+    const res = await fetch(nodeUrl + '/validators');
+    if (!res.ok) return;
+    const data = await res.json();
+    const select = document.getElementById('delegate-validator');
+    if (!data.validators || data.validators.length === 0) {
+      select.innerHTML = '<option>No validators available</option>';
+      return;
+    }
+    select.innerHTML = data.validators.map(v => {
+      const commission = v.commission_percent != null ? v.commission_percent : 10;
+      const shortAddr = v.address.slice(0, 12) + '...';
+      const effectiveStr = v.effective_stake_udag != null ? v.effective_stake_udag.toLocaleString() : (v.staked_udag || 0).toLocaleString();
+      return `<option value="${v.address}" data-commission="${commission}">${shortAddr} — ${effectiveStr} UDAG effective (${commission}% commission)</option>`;
+    }).join('');
+    select._validators = data.validators;
+    select.addEventListener('change', updateDelegateCommission);
+    updateDelegateCommission();
+  } catch (e) { /* ignore */ }
+}
+
+function updateDelegateCommission() {
+  const select = document.getElementById('delegate-validator');
+  const opt = select.options[select.selectedIndex];
+  const commission = opt ? (opt.dataset.commission || '10') : '10';
+  const el1 = document.getElementById('delegate-commission');
+  const el2 = document.getElementById('delegate-commission-info');
+  if (el1) el1.textContent = commission;
+  if (el2) el2.textContent = commission;
+}
+
+async function populateDelegateWallets() {
+  if (!keystore) return;
+  const select = document.getElementById('delegate-wallet');
+  const options = [];
+  for (const w of keystore.wallets) {
+    let balance = 0;
+    if (connected) {
+      try {
+        const res = await fetch(nodeUrl + '/balance/' + w.address);
+        const data = await res.json();
+        balance = data.balance || 0;
+      } catch (e) { /* ignore */ }
+    }
+    options.push(`<option value="${w.address}">${esc(w.name)} (${formatUdag(balance)} UDAG)</option>`);
+  }
+  select.innerHTML = options.join('') || '<option>No wallets available</option>';
+  select.addEventListener('change', updateDelegateAvailable);
+  updateDelegateAvailable();
+}
+
+function updateDelegateAvailable() {
+  const select = document.getElementById('delegate-wallet');
+  const idx = select.selectedIndex;
+  const wallet = keystore && keystore.wallets[idx];
+  const span = document.getElementById('delegate-available');
+  if (wallet && wallet._cached_balance != null) {
+    span.textContent = formatUdag(wallet._cached_balance);
+  } else {
+    span.textContent = '0';
+  }
+}
+
+async function delegateUDAG() {
+  if (!keystore || !connected) {
+    toast('Connect to a node and unlock keystore first', 'err');
+    return;
+  }
+  const walletIdx = document.getElementById('delegate-wallet').selectedIndex;
+  const wallet = keystore.wallets[walletIdx];
+  const validatorSelect = document.getElementById('delegate-validator');
+  const validatorAddr = validatorSelect.value;
+  const amountInput = document.getElementById('delegate-amount');
+  const amountSats = parseFloat(amountInput.value) * 100000000;
+
+  if (!wallet) { toast('Select a wallet', 'err'); return; }
+  if (!validatorAddr || validatorAddr.length !== 64) { toast('Select a validator', 'err'); return; }
+  if (!amountSats || amountSats < 10000000000) { toast('Minimum delegation is 100 UDAG', 'err'); return; }
+
+  try {
+    const res = await fetch(nodeUrl + '/delegate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        secret_key: wallet.secret_key,
+        validator: validatorAddr,
+        amount: Math.floor(amountSats)
+      })
+    });
+    const data = await res.json();
+    if (data.error) { toast('Delegation failed: ' + data.error, 'err'); return; }
+    toast('Delegation submitted! Will appear after finality (~15 seconds).', 'ok');
+    amountInput.value = '';
+    startFinalityPolling('staking');
+  } catch (e) {
+    toast('Delegation failed: ' + e.message, 'err');
+  }
+}
+
+async function undelegateUDAG() {
+  if (!keystore || !connected) {
+    toast('Connect to a node and unlock keystore first', 'err');
+    return;
+  }
+  const select = document.getElementById('undelegate-position');
+  const positions = select._positions || [];
+  const pos = positions[select.selectedIndex];
+  if (!pos) { toast('Select a delegation to undelegate', 'err'); return; }
+
+  try {
+    const res = await fetch(nodeUrl + '/undelegate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret_key: pos.wallet.secret_key })
+    });
+    const data = await res.json();
+    if (data.error) { toast('Undelegation failed: ' + data.error, 'err'); return; }
+    toast('Undelegation submitted! Will appear after finality (~15 seconds).', 'ok');
+    startFinalityPolling('staking');
+  } catch (e) {
+    toast('Undelegation failed: ' + e.message, 'err');
+  }
+}
+
+// ========================================
 // NODE CONNECTION
 // ========================================
 
@@ -3751,6 +4021,7 @@ function startFinalityPolling(target) {
     }
     if (finalityPollTarget === 'staking' || finalityPollTarget === 'both') {
       await loadStakingPositions();
+      await loadDelegationPositions();
       await populateStakeWallets();
       refreshPortfolio();
     }

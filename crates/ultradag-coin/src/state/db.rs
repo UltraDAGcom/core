@@ -4,16 +4,17 @@ use redb::{Database, ReadableTable, TableDefinition};
 
 use crate::address::Address;
 use crate::persistence::PersistenceError;
-use crate::state::engine::{AccountState, StakeAccount, StateEngine};
+use crate::state::engine::{AccountState, DelegationAccount, StakeAccount, StateEngine};
 
 // Table definitions for redb
 const ACCOUNTS: TableDefinition<&[u8; 32], (u64, u64)> = TableDefinition::new("accounts");
-const STAKES: TableDefinition<&[u8; 32], (u64, u64)> = TableDefinition::new("stakes");
+const STAKES: TableDefinition<&[u8; 32], &[u8]> = TableDefinition::new("stakes_v2");
 const PROPOSALS: TableDefinition<u64, &[u8]> = TableDefinition::new("proposals");
 const VOTES: TableDefinition<&[u8], u8> = TableDefinition::new("votes");
 const METADATA: TableDefinition<&str, &[u8]> = TableDefinition::new("metadata");
 const ACTIVE_VALIDATORS: TableDefinition<u64, &[u8; 32]> = TableDefinition::new("active_validators");
 const COUNCIL_MEMBERS: TableDefinition<&[u8; 32], u8> = TableDefinition::new("council_members");
+const DELEGATIONS: TableDefinition<&[u8; 32], &[u8]> = TableDefinition::new("delegations");
 
 impl From<redb::Error> for PersistenceError {
     fn from(e: redb::Error) -> Self {
@@ -72,12 +73,23 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
         }
     }
 
-    // Stakes
+    // Stakes (postcard serialized StakeAccount — includes commission_percent)
     {
         let mut table = txn.open_table(STAKES)?;
         for (addr, stake) in engine.all_stakes() {
-            let unlock = stake.unlock_at_round.unwrap_or(0);
-            table.insert(&addr.0, (stake.staked, unlock))?;
+            let bytes = postcard::to_allocvec(stake)
+                .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+            table.insert(&addr.0, bytes.as_slice())?;
+        }
+    }
+
+    // Delegations
+    {
+        let mut table = txn.open_table(DELEGATIONS)?;
+        for (addr, delegation) in engine.all_delegations() {
+            let bytes = postcard::to_allocvec(delegation)
+                .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+            table.insert(&addr.0, bytes.as_slice())?;
         }
     }
 
@@ -184,15 +196,15 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         accounts.insert(addr, AccountState { balance, nonce });
     }
 
-    // Stakes
+    // Stakes (postcard serialized StakeAccount)
     let mut stake_accounts = std::collections::HashMap::new();
     let stake_table = txn.open_table(STAKES)?;
     for entry in stake_table.iter()? {
         let (k, v) = entry?;
         let addr = Address(*k.value());
-        let (staked, unlock) = v.value();
-        let unlock_at_round = if unlock == 0 { None } else { Some(unlock) };
-        stake_accounts.insert(addr, StakeAccount { staked, unlock_at_round });
+        let stake: StakeAccount = postcard::from_bytes(v.value())
+            .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+        stake_accounts.insert(addr, stake);
     }
 
     // Active validators
@@ -237,6 +249,19 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
 
     let treasury_balance = read_u64(&meta, "treasury_balance")?;
 
+    // Delegations
+    let mut delegation_accounts = std::collections::HashMap::new();
+    if let Ok(deleg_table) = txn.open_table(DELEGATIONS) {
+        for entry in deleg_table.iter()? {
+            let (k, v) = entry?;
+            let addr = Address(*k.value());
+            let delegation: DelegationAccount = postcard::from_bytes(v.value())
+                .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+            delegation_accounts.insert(addr, delegation);
+        }
+    }
+    // Legacy databases without DELEGATIONS table will have empty delegation_accounts
+
     // Council members
     let mut council_members = std::collections::HashMap::new();
     let cm_table = txn.open_table(COUNCIL_MEMBERS)?;
@@ -262,6 +287,7 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         configured_validator_count,
         council_members,
         treasury_balance,
+        delegation_accounts,
     );
 
     // Verify state integrity: recompute state root and compare against stored value.

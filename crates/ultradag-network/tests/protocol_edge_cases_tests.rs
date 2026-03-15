@@ -391,6 +391,7 @@ fn test_checkpoint_sync_message() {
         governance_params: Default::default(),
         council_members: vec![],
         treasury_balance: 0,
+        delegation_accounts: vec![],
     };
 
     let msg = Message::CheckpointSync {

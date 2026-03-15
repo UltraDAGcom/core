@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::address::Address;
 use crate::persistence::{self, PersistenceError};
-use crate::state::engine::{AccountState, StakeAccount};
+use crate::state::engine::{AccountState, DelegationAccount, StakeAccount};
 
 /// Serializable snapshot of StateEngine
 /// Uses Vec of tuples instead of HashMap to avoid JSON serialization issues
@@ -32,6 +32,9 @@ pub struct StateSnapshot {
     /// DAO treasury balance in sats. Controlled by Council of 21 via TreasurySpend proposals.
     #[serde(default)]
     pub treasury_balance: u64,
+    /// Delegated staking accounts: delegator address → delegation details.
+    #[serde(default)]
+    pub delegation_accounts: Vec<(crate::address::Address, DelegationAccount)>,
 }
 
 impl StateSnapshot {

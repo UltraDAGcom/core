@@ -77,6 +77,15 @@ pub enum CoinError {
     #[error("already voted on this proposal")]
     AlreadyVoted,
 
+    #[error("already has an active delegation")]
+    AlreadyDelegating,
+
+    #[error("no active delegation")]
+    NotDelegating,
+
+    #[error("already undelegating — wait for cooldown to complete")]
+    AlreadyUndelegating,
+
     #[error("validation error: {0}")]
     ValidationError(String),
 }

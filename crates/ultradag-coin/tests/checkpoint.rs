@@ -173,6 +173,7 @@ fn test_07_state_root_is_deterministic() {
         governance_params: Default::default(),
         council_members: vec![],
         treasury_balance: 0,
+        delegation_accounts: vec![],
     };
 
     let snapshot2 = StateSnapshot {
@@ -188,6 +189,7 @@ fn test_07_state_root_is_deterministic() {
         governance_params: Default::default(),
         council_members: vec![],
         treasury_balance: 0,
+        delegation_accounts: vec![],
     };
 
     let root1 = compute_state_root(&snapshot1);

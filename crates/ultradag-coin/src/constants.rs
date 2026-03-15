@@ -153,11 +153,11 @@ pub const CHECKPOINT_INTERVAL: u64 = 100;
 /// Run `cargo test --features mainnet test_compute_mainnet_genesis_hash` to recompute.
 #[cfg(not(feature = "mainnet"))]
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
-    0x8f, 0xda, 0x26, 0x9e, 0x0c, 0x8f, 0x34, 0x9c,
-    0xd0, 0xd7, 0x78, 0x65, 0x49, 0x32, 0xdd, 0xc3,
-    0xd1, 0x19, 0xa7, 0xa6, 0xf5, 0x27, 0x14, 0x29,
-    0x0b, 0xc9, 0x14, 0x16, 0xf7, 0x7b, 0x3b, 0x69,
-]; // Testnet: computed from genesis with faucet + dev allocation + treasury + council_members
+    0xdf, 0x03, 0x8d, 0x94, 0xf2, 0x2f, 0x89, 0x69,
+    0xa0, 0x2b, 0x5d, 0x3d, 0x66, 0xdc, 0x2f, 0x2a,
+    0x45, 0xfa, 0x9f, 0xbb, 0xeb, 0x08, 0x57, 0x73,
+    0xc8, 0x2d, 0x05, 0x51, 0x05, 0xd5, 0x22, 0xa2,
+]; // Testnet: computed from genesis with faucet + dev allocation + treasury + council_members + delegation_accounts
 
 /// Mainnet genesis checkpoint hash — computed from genesis WITHOUT faucet.
 /// To compute: `cargo test test_compute_genesis_hash -- --nocapture`
@@ -267,6 +267,16 @@ pub const MAX_FUTURE_ROUNDS: u64 = 10;
 
 /// Percentage of stake burned on equivocation (slashing).
 pub const SLASH_PERCENTAGE: u64 = 50;
+
+/// Minimum delegation amount: 100 UDAG.
+/// Keeps delegations meaningful and reduces state bloat from dust delegations.
+pub const MIN_DELEGATION_SATS: u64 = 100 * COIN;
+
+/// Default commission percentage for validators on delegated rewards.
+pub const DEFAULT_COMMISSION_PERCENT: u8 = 10;
+
+/// Maximum commission percentage a validator can charge on delegated rewards.
+pub const MAX_COMMISSION_PERCENT: u8 = 100;
 
 /// Transaction time-to-live in mempool (in seconds).
 /// Transactions older than this are evicted to prevent stale execution.

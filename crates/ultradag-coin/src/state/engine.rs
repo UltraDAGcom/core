@@ -37,6 +37,24 @@ pub struct StakeAccount {
     pub staked: u64,
     /// If Some(round), funds unlock after this round.
     pub unlock_at_round: Option<u64>,
+    /// Commission percentage charged on delegated rewards (0-100).
+    #[serde(default = "default_commission")]
+    pub commission_percent: u8,
+}
+
+fn default_commission() -> u8 {
+    crate::constants::DEFAULT_COMMISSION_PERCENT
+}
+
+/// Delegation account tracking delegated funds to a validator.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DelegationAccount {
+    /// Amount of UDAG delegated to the validator.
+    pub delegated: u64,
+    /// The validator this delegation is assigned to.
+    pub validator: Address,
+    /// If Some(round), delegation is being withdrawn and unlocks after this round.
+    pub unlock_at_round: Option<u64>,
 }
 
 /// StateEngine: derives account state from an ordered list of finalized DAG vertices.
@@ -73,6 +91,9 @@ pub struct StateEngine {
     /// DAO treasury balance in sats. Funded at genesis (10% of max supply).
     /// Spent via TreasurySpend proposals approved by the Council of 21.
     treasury_balance: u64,
+    /// Delegated staking accounts: delegator address → delegation details.
+    /// One delegation per address (like one stake per address).
+    delegation_accounts: HashMap<Address, DelegationAccount>,
     /// Bounded index of finalized transaction hashes → their location in the DAG.
     /// Enables `/tx/{hash}` lookups without scanning the full DAG.
     /// FIFO eviction when exceeding MAX_TX_INDEX_SIZE.
@@ -97,6 +118,7 @@ impl StateEngine {
             next_proposal_id: 0,
             governance_params: crate::governance::GovernanceParams::default(),
             configured_validator_count: None,
+            delegation_accounts: HashMap::new(),
             tx_index: HashMap::new(),
             tx_index_order: VecDeque::new(),
         }
@@ -139,13 +161,13 @@ impl StateEngine {
             total_round_reward
         };
 
-        let total_stake = self.total_staked();
-        let own_stake = self.stake_of(proposer);
+        let total_stake = self.total_staked().saturating_add(self.total_delegated());
+        let own_effective = self.effective_stake_of(proposer);
 
-        let base_reward = if total_stake > 0 && own_stake > 0 {
-            // Proportional to stake using u128 to avoid overflow
+        let base_reward = if total_stake > 0 && own_effective > 0 {
+            // Proportional to effective stake (own + delegations) using u128 to avoid overflow
             let proportional = ((validator_pool as u128)
-                .saturating_mul(own_stake as u128)
+                .saturating_mul(own_effective as u128)
                 / total_stake as u128) as u64;
             // Observer penalty: staked but not in the active validator set
             if !self.active_validator_set.is_empty()
@@ -331,6 +353,11 @@ impl StateEngine {
         // Credit proposer: capped block reward + fees
         self.credit(proposer, capped_reward.saturating_add(total_fees));
 
+        // Distribute delegation rewards: delegators get their proportional share
+        // minus the validator's commission. Only the capped_reward portion is
+        // distributed (fees are kept by the proposer).
+        self.distribute_delegation_rewards(proposer, capped_reward);
+
         // Distribute council emission share
         let (council_per_member, council_total_minted) = self.compute_council_emission(vertex.round, active_validator_count);
         if council_per_member > 0 {
@@ -485,6 +512,27 @@ impl StateEngine {
                         self.increment_nonce(&vote_tx.from);
                     }
                 }
+                crate::tx::Transaction::Delegate(delegate_tx) => {
+                    if let Err(e) = self.apply_delegate_tx(delegate_tx) {
+                        tracing::warn!("Skipping invalid Delegate tx in finalized vertex: {}", e);
+                        // Delegate txs have zero fee, nothing to undo
+                        self.increment_nonce(&delegate_tx.from);
+                    }
+                }
+                crate::tx::Transaction::Undelegate(undelegate_tx) => {
+                    if let Err(e) = self.apply_undelegate_tx(undelegate_tx, vertex.round) {
+                        tracing::warn!("Skipping invalid Undelegate tx in finalized vertex: {}", e);
+                        // Undelegate txs have zero fee, nothing to undo
+                        self.increment_nonce(&undelegate_tx.from);
+                    }
+                }
+                crate::tx::Transaction::SetCommission(commission_tx) => {
+                    if let Err(e) = self.apply_set_commission_tx(commission_tx) {
+                        tracing::warn!("Skipping invalid SetCommission tx in finalized vertex: {}", e);
+                        // SetCommission txs have zero fee, nothing to undo
+                        self.increment_nonce(&commission_tx.from);
+                    }
+                }
             }
         }
 
@@ -514,17 +562,18 @@ impl StateEngine {
         // before remaining vertices in the same round are processed.
 
         // Supply invariant check — unconditional (catches state corruption in release builds too)
-        // sum(liquid balances) + sum(staked) + treasury == total_supply
+        // sum(liquid balances) + sum(staked) + sum(delegated) + treasury == total_supply
         // Maintained even for skipped txs: when a tx is skipped, its fee is debited from
         // the proposer (undoing the coinbase credit for that fee).
         {
             let liquid: u64 = self.accounts.values().map(|a| a.balance).fold(0u64, |acc, x| acc.saturating_add(x));
             let staked: u64 = self.stake_accounts.values().map(|s| s.staked).fold(0u64, |acc, x| acc.saturating_add(x));
-            let total = liquid.saturating_add(staked).saturating_add(self.treasury_balance);
+            let delegated: u64 = self.delegation_accounts.values().map(|d| d.delegated).fold(0u64, |acc, x| acc.saturating_add(x));
+            let total = liquid.saturating_add(staked).saturating_add(delegated).saturating_add(self.treasury_balance);
             if total != self.total_supply {
                 return Err(CoinError::ValidationError(format!(
-                    "Supply invariant broken: liquid={} staked={} treasury={} total_supply={}",
-                    liquid, staked, self.treasury_balance, self.total_supply
+                    "Supply invariant broken: liquid={} staked={} delegated={} treasury={} total_supply={}",
+                    liquid, staked, delegated, self.treasury_balance, self.total_supply
                 )));
             }
         }
@@ -700,7 +749,7 @@ impl StateEngine {
                 // Must not be unstaking
                 s.unlock_at_round.is_none()
             })
-            .map(|(addr, s)| (*addr, s.staked))
+            .map(|(addr, _s)| (*addr, self.effective_stake_of(addr)))
             .collect();
         
         // Sort by stake descending, then by address for determinism
@@ -849,8 +898,10 @@ impl StateEngine {
     }
 
     /// Process unstake completions: return funds after cooldown.
+    /// Also processes delegation undelegation completions.
     /// Call this at the start of each round.
     pub fn process_unstake_completions(&mut self, current_round: u64) {
+        // Process stake unstake completions
         let mut to_return: Vec<(Address, u64)> = Vec::new();
         for (addr, stake) in &self.stake_accounts {
             if let Some(unlock_at) = stake.unlock_at_round {
@@ -865,6 +916,20 @@ impl StateEngine {
                 stake.unlock_at_round = None;
                 self.credit(&addr, amount);
             }
+        }
+
+        // Process delegation undelegation completions
+        let mut delegations_to_return: Vec<(Address, u64)> = Vec::new();
+        for (addr, delegation) in &self.delegation_accounts {
+            if let Some(unlock_at) = delegation.unlock_at_round {
+                if current_round >= unlock_at {
+                    delegations_to_return.push((*addr, delegation.delegated));
+                }
+            }
+        }
+        for (addr, amount) in delegations_to_return {
+            self.delegation_accounts.remove(&addr);
+            self.credit(&addr, amount);
         }
     }
 
@@ -885,6 +950,22 @@ impl StateEngine {
             // Immediately remove from active set if below minimum stake
             if stake.staked < MIN_STAKE_SATS {
                 self.active_validator_set.retain(|a| a != addr);
+            }
+        }
+        // Also slash delegated stake for this validator (delegators share the risk)
+        let delegators: Vec<Address> = self.delegation_accounts.iter()
+            .filter(|(_, d)| d.validator == *addr)
+            .map(|(delegator, _)| *delegator)
+            .collect();
+        for delegator in delegators {
+            if let Some(delegation) = self.delegation_accounts.get_mut(&delegator) {
+                let slash_amount = delegation.delegated.saturating_mul(crate::constants::SLASH_PERCENTAGE) / 100;
+                delegation.delegated = delegation.delegated.saturating_sub(slash_amount);
+                self.total_supply = self.total_supply.saturating_sub(slash_amount);
+                // Remove empty delegations
+                if delegation.delegated == 0 {
+                    self.delegation_accounts.remove(&delegator);
+                }
             }
         }
     }
@@ -915,6 +996,201 @@ impl StateEngine {
         self.credit(address, amount);
         
         Ok(())
+    }
+
+    // ========================================
+    // DELEGATION
+    // ========================================
+
+    /// Apply a DelegateTx: debit liquid balance, create delegation to validator.
+    pub fn apply_delegate_tx(&mut self, tx: &crate::tx::DelegateTx) -> Result<(), CoinError> {
+        if !tx.verify_signature() {
+            return Err(CoinError::InvalidSignature);
+        }
+        let expected_nonce = self.nonce(&tx.from);
+        if tx.nonce != expected_nonce {
+            return Err(CoinError::InvalidNonce {
+                expected: expected_nonce,
+                got: tx.nonce,
+            });
+        }
+        if tx.amount < crate::constants::MIN_DELEGATION_SATS {
+            return Err(CoinError::ValidationError(format!(
+                "delegation below minimum: need {} sats, got {} sats",
+                crate::constants::MIN_DELEGATION_SATS, tx.amount
+            )));
+        }
+        // Check validator has sufficient own stake
+        if self.stake_of(&tx.validator) < MIN_STAKE_SATS {
+            return Err(CoinError::ValidationError(
+                "target is not a validator (insufficient stake)".to_string(),
+            ));
+        }
+        // One delegation per address
+        if self.delegation_accounts.contains_key(&tx.from) {
+            return Err(CoinError::ValidationError(
+                "already has an active delegation (one per address)".to_string(),
+            ));
+        }
+        // Check balance
+        let balance = self.balance(&tx.from);
+        if balance < tx.amount {
+            return Err(CoinError::InsufficientBalance {
+                address: tx.from,
+                available: balance,
+                required: tx.amount,
+            });
+        }
+        // Debit liquid balance
+        self.debit(&tx.from, tx.amount)?;
+        // Create delegation
+        self.delegation_accounts.insert(tx.from, DelegationAccount {
+            delegated: tx.amount,
+            validator: tx.validator,
+            unlock_at_round: None,
+        });
+        self.increment_nonce(&tx.from);
+        Ok(())
+    }
+
+    /// Apply an UndelegateTx: begin cooldown to withdraw delegated funds.
+    pub fn apply_undelegate_tx(
+        &mut self,
+        tx: &crate::tx::UndelegateTx,
+        current_round: u64,
+    ) -> Result<(), CoinError> {
+        if !tx.verify_signature() {
+            return Err(CoinError::InvalidSignature);
+        }
+        let expected_nonce = self.nonce(&tx.from);
+        if tx.nonce != expected_nonce {
+            return Err(CoinError::InvalidNonce {
+                expected: expected_nonce,
+                got: tx.nonce,
+            });
+        }
+        let delegation = self.delegation_accounts.get_mut(&tx.from)
+            .ok_or_else(|| CoinError::ValidationError("no active delegation".to_string()))?;
+        if delegation.unlock_at_round.is_some() {
+            return Err(CoinError::ValidationError(
+                "already undelegating — wait for cooldown to complete".to_string(),
+            ));
+        }
+        delegation.unlock_at_round = Some(current_round.saturating_add(UNSTAKE_COOLDOWN_ROUNDS));
+        self.increment_nonce(&tx.from);
+        Ok(())
+    }
+
+    /// Apply a SetCommissionTx: change validator's commission rate.
+    pub fn apply_set_commission_tx(
+        &mut self,
+        tx: &crate::tx::SetCommissionTx,
+    ) -> Result<(), CoinError> {
+        if !tx.verify_signature() {
+            return Err(CoinError::InvalidSignature);
+        }
+        let expected_nonce = self.nonce(&tx.from);
+        if tx.nonce != expected_nonce {
+            return Err(CoinError::InvalidNonce {
+                expected: expected_nonce,
+                got: tx.nonce,
+            });
+        }
+        // Check sender has stake (is a validator)
+        let stake = self.stake_accounts.get_mut(&tx.from)
+            .ok_or(CoinError::NotStaking)?;
+        if stake.staked == 0 {
+            return Err(CoinError::NotStaking);
+        }
+        if tx.commission_percent > crate::constants::MAX_COMMISSION_PERCENT {
+            return Err(CoinError::ValidationError(format!(
+                "commission_percent {} exceeds maximum {}",
+                tx.commission_percent, crate::constants::MAX_COMMISSION_PERCENT
+            )));
+        }
+        stake.commission_percent = tx.commission_percent;
+        self.increment_nonce(&tx.from);
+        Ok(())
+    }
+
+    /// Effective stake of a validator: own stake + active (non-undelegating) delegations.
+    pub fn effective_stake_of(&self, validator: &Address) -> u64 {
+        let own_stake = self.stake_of(validator);
+        let delegated: u64 = self.delegation_accounts.values()
+            .filter(|d| d.validator == *validator && d.unlock_at_round.is_none())
+            .map(|d| d.delegated)
+            .fold(0u64, |acc, x| acc.saturating_add(x));
+        own_stake.saturating_add(delegated)
+    }
+
+    /// Total UDAG delegated across all delegation accounts.
+    pub fn total_delegated(&self) -> u64 {
+        self.delegation_accounts.values()
+            .map(|d| d.delegated)
+            .fold(0u64, |acc, x| acc.saturating_add(x))
+    }
+
+    /// Get all delegators for a specific validator.
+    pub fn delegators_of(&self, validator: &Address) -> Vec<(Address, u64)> {
+        self.delegation_accounts.iter()
+            .filter(|(_, d)| d.validator == *validator)
+            .map(|(addr, d)| (*addr, d.delegated))
+            .collect()
+    }
+
+    /// Get delegation info for an address.
+    pub fn delegation_account(&self, addr: &Address) -> Option<&DelegationAccount> {
+        self.delegation_accounts.get(addr)
+    }
+
+    /// Iterate all delegation accounts (for persistence).
+    pub fn all_delegations(&self) -> impl Iterator<Item = (&Address, &DelegationAccount)> {
+        self.delegation_accounts.iter()
+    }
+
+    /// Distribute delegation rewards after a validator receives their coinbase.
+    /// The validator was credited the full effective-stake-proportional reward.
+    /// Delegators' share is deducted from validator and credited to delegators
+    /// minus the validator's commission.
+    pub fn distribute_delegation_rewards(&mut self, validator: &Address, total_reward: u64) {
+        if total_reward == 0 {
+            return;
+        }
+        let effective = self.effective_stake_of(validator);
+        if effective == 0 {
+            return;
+        }
+        let commission_percent = self.stake_accounts
+            .get(validator)
+            .map(|s| s.commission_percent)
+            .unwrap_or(crate::constants::DEFAULT_COMMISSION_PERCENT);
+
+        // Collect delegator info (avoid borrow issues)
+        let delegators: Vec<(Address, u64)> = self.delegation_accounts.iter()
+            .filter(|(_, d)| d.validator == *validator && d.unlock_at_round.is_none())
+            .map(|(addr, d)| (*addr, d.delegated))
+            .collect();
+
+        for (delegator, delegated) in delegators {
+            // delegator_share = total_reward * (delegated / effective_stake)
+            let delegator_share = ((total_reward as u128)
+                .saturating_mul(delegated as u128)
+                / effective as u128) as u64;
+            if delegator_share == 0 {
+                continue;
+            }
+            // commission = delegator_share * commission_percent / 100
+            let commission = delegator_share.saturating_mul(commission_percent as u64) / 100;
+            let net_reward = delegator_share.saturating_sub(commission);
+            if net_reward > 0 {
+                // Debit from validator (who received the full coinbase)
+                // Best-effort: if validator balance is somehow insufficient, skip
+                if self.balance(validator) >= net_reward {
+                    let _ = self.debit(validator, net_reward);
+                    self.credit(&delegator, net_reward);
+                }
+            }
+        }
     }
 
     pub fn credit(&mut self, address: &Address, amount: u64) {
@@ -1333,6 +1609,7 @@ impl StateEngine {
         configured_validator_count: Option<u64>,
         council_members: HashMap<Address, crate::governance::CouncilSeatCategory>,
         treasury_balance: u64,
+        delegation_accounts: HashMap<Address, DelegationAccount>,
     ) -> Self {
         Self {
             accounts,
@@ -1348,6 +1625,7 @@ impl StateEngine {
             configured_validator_count,
             council_members,
             treasury_balance,
+            delegation_accounts,
             tx_index: HashMap::new(),
             tx_index_order: VecDeque::new(),
         }
@@ -1368,6 +1646,8 @@ impl StateEngine {
         votes.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.0.1.0.cmp(&b.0.1.0)));
         let mut council: Vec<_> = self.council_members.iter().map(|(k, v)| (*k, *v)).collect();
         council.sort_by_key(|(addr, _)| addr.0);
+        let mut delegation_accounts: Vec<_> = self.delegation_accounts.iter().map(|(k, v)| (*k, v.clone())).collect();
+        delegation_accounts.sort_by_key(|(addr, _)| addr.0);
         crate::state::persistence::StateSnapshot {
             accounts,
             stake_accounts,
@@ -1381,6 +1661,7 @@ impl StateEngine {
             governance_params: self.governance_params.clone(),
             council_members: council,
             treasury_balance: self.treasury_balance,
+            delegation_accounts,
         }
     }
 
@@ -1400,6 +1681,7 @@ impl StateEngine {
             configured_validator_count: None,
             council_members: snapshot.council_members.into_iter().collect(),
             treasury_balance: snapshot.treasury_balance,
+            delegation_accounts: snapshot.delegation_accounts.into_iter().collect(),
             tx_index: HashMap::new(),
             tx_index_order: VecDeque::new(),
         }
@@ -1419,6 +1701,7 @@ impl StateEngine {
         self.governance_params = snapshot.governance_params;
         self.council_members = snapshot.council_members.into_iter().collect();
         self.treasury_balance = snapshot.treasury_balance;
+        self.delegation_accounts = snapshot.delegation_accounts.into_iter().collect();
     }
 
     /// Save state to redb database (ACID, crash-safe).
@@ -1781,11 +2064,12 @@ mod tests {
             // Verify invariant manually (also checked in apply_vertex)
             let liquid: u64 = state.accounts.values().map(|a| a.balance).fold(0u64, |acc, x| acc.saturating_add(x));
             let staked: u64 = state.stake_accounts.values().map(|s| s.staked).fold(0u64, |acc, x| acc.saturating_add(x));
-            let total = liquid.saturating_add(staked).saturating_add(state.treasury_balance());
+            let delegated: u64 = state.delegation_accounts.values().map(|d| d.delegated).fold(0u64, |acc, x| acc.saturating_add(x));
+            let total = liquid.saturating_add(staked).saturating_add(delegated).saturating_add(state.treasury_balance());
             assert_eq!(
                 total, state.total_supply,
-                "Supply invariant broken at round {}: liquid={} staked={} treasury={} supply={}",
-                round, liquid, staked, state.treasury_balance(), state.total_supply
+                "Supply invariant broken at round {}: liquid={} staked={} delegated={} treasury={} supply={}",
+                round, liquid, staked, delegated, state.treasury_balance(), state.total_supply
             );
         }
     }
