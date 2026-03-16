@@ -8,6 +8,23 @@
 
 ## Recent Updates (March 2026)
 
+**Comprehensive Security Audit & Hardening (March 16, 2026):**
+- **4-way parallel security audit** covering Noise protocol, state engine, P2P handlers, and DAG consensus.
+- **Self-delegation prevention** — `apply_delegate_tx()` now rejects `tx.from == tx.validator`. Self-delegation inflated effective_stake without economic risk (delegator = validator, no slashing risk diversification). New test: `test_28_delegate_to_self_rejected`.
+- **Pre-staking reward distribution determinism** — `distribute_round_rewards()` collected HashSet into sorted Vec before iterating producers. HashMap iteration order is non-deterministic. New test: `test_29_pre_staking_reward_distribution_deterministic`.
+- **`insert()` silent parent truncation removed** — `insert()` silently truncated `parent_hashes` to `MAX_PARENTS` before inserting, but the vertex hash was already computed from the original parents. Stored vertex had different parents than its hash key — a hash invariant violation. Fix: removed the truncation (callers already truncate before calling).
+- **Noise handshake `.parse().unwrap()` replaced** — Both `perform_handshake_initiator` and `perform_handshake_responder` had `.parse().unwrap()` that could panic on invalid Noise pattern strings. Replaced with `.parse().map_err(NoiseError::Snow)?`. New tests: `handshake_fails_gracefully_on_immediate_close`, `handshake_fails_gracefully_on_garbage_data`.
+- **Dead `NOISE_TAG_LEN` duplicate removed** — `connection.rs` had its own `const NOISE_TAG_LEN: usize = 16` alongside the import from `noise.rs`. Removed duplicate.
+- **Dead unreachable branch removed** — `|| chunk_len > 65535` check in noise chunk reading was unreachable (u16 max IS 65535).
+- **DagVertices handler unbounded** — Incoming `DagVertices` vector had no cap. Added `.take(500)` to match `GetDagVertices` cap.
+- **`peer_max_round` store() reverted to fetch_max()** — `store()` allowed malicious peers to reset `peer_max_round` to 0 by sending Hello with low round, breaking sync decisions. Reverted to `fetch_max()` (monotonic, matches CLAUDE.md documentation for Bug #104 which was incorrect — the original `store()` was the bug, not the fix).
+- **RPC `/tx/submit` TOCTOU fix** — State read and mempool write were in separate scopes, allowing balance to change between validation and insertion. Now holds state read + mempool write together. Added pending cost check.
+- **RPC `/proposal` and `/vote` missing minimum fee check** — Accepted `fee: 0` despite `MIN_FEE_SATS` requirement. Added `fee >= MIN_FEE_SATS` validation.
+- **Faucet `MAX_FAUCET_SATS` was 50,000 UDAG** — Documentation said 100 UDAG max per request, but code had `50000 * COIN`. Fixed to `100 * COIN`.
+- **Faucet rate limit was 1/5s** — Documentation said 1/10min, but rate_limit.rs had `RateLimit::new("faucet", 1, 5)`. Fixed to `RateLimit::new("faucet", 1, 600)`.
+- **main.rs validator key file panic** — `read_to_string().unwrap_or_else(|e| panic!(...))` replaced with `error!() + process::exit(1)` for consistency with other startup error handling.
+- **830 tests passing**, 0 failed, 14 ignored (jepsen).
+
 **Transport Encryption — Noise Protocol (March 16, 2026):**
 - **All P2P connections now encrypted** via Noise_XX_25519_ChaChaPoly_BLAKE2s (snow crate v0.9)
 - **Forward secrecy**: ephemeral X25519 keypair generated per connection (not persisted)
@@ -1310,7 +1327,7 @@ cargo test --workspace
 
 Run `cargo test --workspace --release` to verify:
 ```
-test result: ok. 819 passed; 0 failed; 14 ignored
+test result: ok. 830 passed; 0 failed; 14 ignored
 ```
 
 ### Test Breakdown by Crate:
@@ -2049,6 +2066,7 @@ UltraDAG is offering rewards for security researchers who discover and responsib
     - **Fix:** `insert_orphan()` helper evicts the vertex with the lowest round before inserting.
 104. **Network layer: peer_max_round never decreased (March 14, 2026)** — `fetch_max()` is monotonic — after a clean deploy (network reset to round 0), peer_max_round stayed at the pre-reset value, misleading sync decisions.
     - **Fix:** Changed to `store()` in Hello/HelloAck handlers.
+    - **Note (March 16, 2026):** This fix was reverted in Bug #154. `store()` allows malicious peers to reset peer_max_round to 0 via Hello with low height. `fetch_max()` restored as the monotonic behavior is the correct choice for a security-critical field.
 105. **Network layer: banned_peers was dead code (March 14, 2026)** — Field, initialization, and ban check existed but no code ever added entries. Wasted a mutex lock on every incoming connection.
     - **Fix:** Removed entirely.
 106. **TOCTOU race in `try_connect_peer` (March 14, 2026)** — Two tasks could simultaneously check `is_listen_addr_connected` (both return false), then both proceed to TCP connect and create duplicate connections to the same peer.
@@ -2151,6 +2169,31 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 148. **`process::exit(101)` in supply invariant handler bypasses state flush (March 16, 2026)** — `apply_finality_and_state()` called `std::process::exit(101)` when `CoinError::is_fatal()` returned true. Same issue as #147: state not flushed before exit.
     - **Fix:** Sets `fatal_exit_code = 101` and `fatal_shutdown = true` via `Arc<AtomicI32>` / `Arc<AtomicBool>` on NodeServer, then returns. Fatal shutdown watcher saves state and exits with code 101.
     - **Design:** `NodeServer` carries `fatal_shutdown` and `fatal_exit_code` fields, threaded through `PeerContext` to all P2P handlers. Main.rs polls `fatal_shutdown` every 100ms and calls `save_state()` before `process::exit(code)`.
+149. **Self-delegation inflates effective_stake without risk (March 16, 2026)** — `apply_delegate_tx()` allowed `tx.from == tx.validator`, letting validators delegate to themselves. This inflated `effective_stake` (own + delegated) without diversifying slashing risk — the delegator IS the validator, so "delegated" stake faces the same slashing as own stake, but counts double in active set ranking.
+    - **Fix:** Added `if tx.from == tx.validator { return Err(CoinError::ValidationError("cannot delegate to self".into())) }` in `apply_delegate_tx()`.
+    - **Test:** `test_28_delegate_to_self_rejected` in staking.rs.
+150. **Pre-staking reward distribution non-deterministic (March 16, 2026)** — `distribute_round_rewards()` iterated `HashSet<Address>` of producers without sorting. Different nodes could credit producers in different order — if a credit pushed balance past supply cap, different ordering would cap different producers.
+    - **Fix:** Collected HashSet into Vec, sorted by address bytes before iterating.
+    - **Test:** `test_29_pre_staking_reward_distribution_deterministic` in staking.rs.
+151. **`insert()` silent parent truncation breaks hash invariant (March 16, 2026)** — `BlockDag::insert()` silently truncated `parent_hashes` to `MAX_PARENTS` before inserting, but the vertex hash was already computed from the original parents. The stored vertex had different parents than its hash implied — breaking the DAG's hash integrity assumption.
+    - **Fix:** Removed truncation from `insert()`. Callers (validator loop) already truncate before hashing.
+152. **Noise handshake panics on invalid pattern string (March 16, 2026)** — Both `perform_handshake_initiator` and `perform_handshake_responder` used `.parse().unwrap()` on the Noise pattern string, which would panic if the pattern was invalid. While the string is hardcoded and correct, `unwrap()` in library code is bad practice.
+    - **Fix:** Replaced with `.parse().map_err(NoiseError::Snow)?`.
+    - **Tests:** `handshake_fails_gracefully_on_immediate_close`, `handshake_fails_gracefully_on_garbage_data`.
+153. **DagVertices handler accepts unbounded vertex count (March 16, 2026)** — Incoming `DagVertices` messages had no cap on vector length. A peer could send millions of vertices in a single message. `GetDagVertices` was capped at 500, but the response handler wasn't.
+    - **Fix:** Added `.take(500)` to cap incoming vertex processing.
+154. **`peer_max_round` store() allows malicious reset to 0 (March 16, 2026)** — Hello/HelloAck handlers used `store()` for `peer_max_round`, allowing any peer to set it to 0 by sending Hello with `height: 0`. This breaks sync decisions that rely on knowing the highest round seen from peers. Bug #104 in CLAUDE.md incorrectly documented `store()` as the fix — it was the bug.
+    - **Fix:** Reverted to `fetch_max()` (monotonic — only increases).
+155. **RPC `/tx/submit` TOCTOU race (March 16, 2026)** — Balance validation and mempool insertion were in separate lock scopes. Between dropping state read and acquiring mempool write, another request could consume the balance or collide on nonce.
+    - **Fix:** Hold state read + mempool write locks together during validation and insertion. Added pending cost check.
+156. **RPC `/proposal` and `/vote` accept zero fee (March 16, 2026)** — Both endpoints lacked `fee >= MIN_FEE_SATS` validation, accepting `fee: 0` despite the minimum fee requirement.
+    - **Fix:** Added minimum fee check before processing.
+157. **Faucet max amount 500x too high (March 16, 2026)** — `MAX_FAUCET_SATS` was `50000 * COIN` (50,000 UDAG) instead of documented `100 * COIN` (100 UDAG). A single request could drain 5% of the faucet reserve.
+    - **Fix:** Changed to `100 * COIN`.
+158. **Faucet rate limit 120x too permissive (March 16, 2026)** — Rate limit was `RateLimit::new("faucet", 1, 5)` (1 request per 5 seconds) instead of documented `RateLimit::new("faucet", 1, 600)` (1 per 10 minutes).
+    - **Fix:** Changed to 600-second window.
+159. **main.rs panic on validator key file read failure (March 16, 2026)** — `read_to_string().unwrap_or_else(|e| panic!(...))` for validator key file. All other startup errors use `error!() + process::exit(1)`.
+    - **Fix:** Replaced with `match` + `error!()` + `process::exit(1)`.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.
