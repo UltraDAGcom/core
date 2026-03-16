@@ -8,6 +8,36 @@
 
 ## Recent Updates (March 2026)
 
+**P2P & RPC Hardening + Eclipse Fix + All SDK Signing (March 16, 2026):**
+- **CRITICAL: Fresh node eclipse attack fixed (Bug #175)** — `CheckpointSync` handler skipped chain verification for fresh nodes with zero local checkpoints. Attacker could fabricate entire state with own validator set, sign checkpoint, and fresh node accepted it. Fix: `CheckpointSync` message now carries `checkpoint_chain: Vec<Checkpoint>` field. Sender includes full local checkpoint chain. Receiver builds hash-to-checkpoint map from both local and peer-provided checkpoints, then ALWAYS verifies chain back to `GENESIS_CHECKPOINT_HASH` (hardcoded, unforgeable). Chain verification is never skipped.
+- **Encrypted chunk amplification fix (Bug #176)** — In `recv_encrypted`, a peer claiming large `total_len` (4MB) but sending tiny 1-byte chunks caused ~4M decrypt operations (each acquiring noise mutex). Fix: `max_chunks = (total_len / 64) + 128` cap rejects pathological fragmentation.
+- **`/tx/submit` comprehensive validation (Bug #177)** — The ONLY mainnet tx path had no transaction-type-specific validation beyond signature/balance/nonce. Fix: validates Transfer (amount>0, fee>=MIN_FEE, memo<=256B), Stake (>=MIN_STAKE), Delegate (>=MIN_DELEGATION, no self-delegation), SetCommission (<=MAX_COMMISSION), CreateProposal (fee, title/desc limits), Vote (fee).
+- **`/delegate` missing self-delegation check (Bug #178)** — RPC endpoint didn't check `sender == validator` upfront despite engine rejection. Fix: early check with clear error message.
+- **`/proposals` response unbounded (Bug #179)** — No cap on returned proposals. Fix: 200 max, sorted by ID descending.
+- **`/validator/:address/delegators` response unbounded (Bug #180)** — Popular validators could have thousands of delegators. Fix: 500 max entries.
+- **GetCheckpoint rate limited** — 30-second per-peer cooldown. Checkpoint sync is expensive (disk reads, DAG lock, large response).
+- **CheckpointSync caps** — Suffix vertices capped at `MAX_CHECKPOINT_SYNC_SUFFIX = 600`, chain at `MAX_CHECKPOINT_CHAIN_LENGTH = 200`.
+- **Hello listen_port=0 rejected** — Prevents pollution of known peer list with invalid addresses.
+- **Security headers** — `X-Content-Type-Options: nosniff`, `Cache-Control: no-store`, `Access-Control-Max-Age: 3600`.
+- **Rate limiter saturating arithmetic** — Request counter and connection counter use `saturating_add` to prevent u32 overflow.
+- **All 4 SDKs: client-side transaction signing** — JavaScript (55 tests), Python (41 tests), Go (36 tests), Rust (14 tests wrapping ultradag-coin types). All 8 tx types, byte-identical `signable_bytes()`, Ed25519 signing, `/tx/submit` wired. **Mainnet SDK blocker fully resolved.**
+- **Rate limit tests** — New `rate_limit_tests.rs` covering correctness, overflow, and endpoint-specific limits.
+- **937 tests passing**, 0 failed, 14 ignored (jepsen). Zero clippy warnings.
+- **Breaking change** — `CheckpointSync` message has new `checkpoint_chain` field (`#[serde(default)]` for backward compat). Clean testnet restart recommended.
+
+**Multi-Agent Security Audit & Hardening Pass (March 16, 2026):**
+- **5-agent parallel audit** covering security, consensus correctness, code quality, test coverage, and SDK parity.
+- **CRITICAL: `insert()` parent truncation regression fixed (Bug #170)** — Bug #151 claimed parent truncation was removed from `insert()`, but the truncation code was still present. Hash computed before truncation → stored vertex had different parents than its hash key. Removed truncation entirely; callers already handle it.
+- **HIGH: Double/triple slash for single equivocation fixed (Bug #171)** — Intra-batch and cross-batch equivocation detection could both trigger `slash()` for the same (validator, round) pair. With 3 equivocating vertices, up to 4 slashes (87.5% loss instead of intended 50%). Fix: `HashSet<(Address, u64)>` tracks already-slashed pairs, ensuring exactly one slash per equivocation event.
+- **HIGH: `configured_validator_count` added to state root hash (Bug #172)** — Field was excluded from `StateSnapshot` and `compute_state_root()`. Two nodes with different `--validators N` values computed different rewards but identical state roots, allowing checkpoint co-signing despite divergent financial state. Fix: added to StateSnapshot, from_snapshot, and canonical state root hash. GENESIS_CHECKPOINT_HASH recomputed.
+- **MEDIUM: `process_unstake_completions` moved to per-round (Bug #173)** — Was called per-vertex in `apply_vertex_with_validators()`. Multiple vertices in same round each called it; unstake returns became spendable by later vertices based on hash ordering (subtle MEV). Fix: moved to per-round boundary in `apply_finalized_vertices()` alongside `distribute_round_rewards` and `tick_governance`.
+- **MEDIUM: Fee clawback failure now fatal (Bug #174)** — Governance tx (CreateProposal/Vote) fee clawback failure was logged but execution continued, allowing supply inflation. A malicious validator could craft a vertex causing ALL nodes to halt via supply invariant check. Fix: clawback failure now returns `SupplyInvariantBroken` directly.
+- **56 new edge case tests** — Delegation (13), governance (8), treasury spend (2), params validation (10), council (4), state engine (7), checkpoint (4), DAG (4), rewards (3). Total: 892 tests passing.
+- **Zero clippy warnings** — 22 code quality fixes: `is_multiple_of()`, `is_some_and()`, `div_ceil()`, `Error::other()`, type aliases, `#[derive(Default)]`, range contains patterns, `?` operator, `sort_by_key`.
+- **JS SDK transaction signing** — All 8 transaction types implemented with client-side `signable_bytes()` construction matching Rust exactly. NETWORK_ID prefix, type discriminators, LE byte order. 55 SDK tests passing. `/tx/submit` endpoint wired. BLOCKING mainnet requirement resolved.
+- **Breaking change** — `GENESIS_CHECKPOINT_HASH` changed (configured_validator_count in state root). Clean testnet restart required.
+- **892 tests passing**, 0 failed, 14 ignored (jepsen).
+
 **Comprehensive Security Audit & Hardening (March 16, 2026):**
 - **4-way parallel security audit** covering Noise protocol, state engine, P2P handlers, and DAG consensus.
 - **Self-delegation prevention** — `apply_delegate_tx()` now rejects `tx.from == tx.validator`. Self-delegation inflated effective_stake without economic risk (delegator = validator, no slashing risk diversification). New test: `test_28_delegate_to_self_rejected`.
@@ -33,7 +63,7 @@
 - **Future CheckpointProposal stored without signature check** — Garbage checkpoints with no valid signatures could fill all 10 pending slots, evicting legitimate proposals. Fix: require at least one valid signer.
 - **`topo_level` unchecked addition** — `max_parent_level + 1` could overflow at u64::MAX on very long-running chains. Fix: `saturating_add(1)`.
 - **RPC `/tx` accepts zero-amount transfers** — Transfer of 0 sats wastes mempool slots. Fix: reject with "amount must be greater than 0".
-- **836 tests passing**, 0 failed, 14 ignored (jepsen).
+- **892 tests passing**, 0 failed, 14 ignored (jepsen).
 
 **Transport Encryption — Noise Protocol (March 16, 2026):**
 - **All P2P connections now encrypted** via Noise_XX_25519_ChaChaPoly_BLAKE2s (snow crate v0.9)
@@ -1337,7 +1367,7 @@ cargo test --workspace
 
 Run `cargo test --workspace --release` to verify:
 ```
-test result: ok. 836 passed; 0 failed; 14 ignored
+test result: ok. 937 passed; 0 failed; 14 ignored
 ```
 
 ### Test Breakdown by Crate:
@@ -2224,6 +2254,28 @@ UltraDAG is offering rewards for security researchers who discover and responsib
     - **Fix:** Changed to `saturating_add(1)`.
 169. **RPC `/tx` accepts zero-amount transfers (March 16, 2026)** — Transfer of 0 sats with valid fee accepted, wasting mempool slots.
     - **Fix:** Added `amount == 0` rejection with "amount must be greater than 0".
+170. **CRITICAL: `insert()` parent truncation regression (March 16, 2026)** — Bug #151 claimed parent truncation was removed from `insert()`, but the code was still present. `vertex.hash()` computed before truncation → stored vertex key didn't match `vertex.hash()` of stored data. Hash integrity violation.
+    - **Fix:** Removed truncation entirely from `insert()`. Callers already truncate before calling; `try_insert()` rejects >64 parents.
+171. **HIGH: Double/triple slash for single equivocation (March 16, 2026)** — Intra-batch detection (lines 800-814) and cross-batch detection (lines 817-829) could both call `slash()` for the same (validator, round). With N equivocating vertices in one batch where the round was also in a previous batch, up to N+1 slashes occurred. 50% compounding: 75% loss for double, 87.5% for triple.
+    - **Fix:** Added `already_slashed: HashSet<(Address, u64)>` gating both detection loops. Only first `insert()` returning true triggers `slash()`.
+172. **HIGH: `configured_validator_count` not in state root (March 16, 2026)** — Field excluded from `StateSnapshot` and `compute_state_root()`. Two nodes with different `--validators N` computed different rewards but identical state roots. Checkpoint co-signing could succeed despite divergent financial state.
+    - **Fix:** Added to `StateSnapshot` (with `#[serde(default)]`), `snapshot()`, `from_snapshot()`, and canonical state root hash (Option discriminant byte + LE value). GENESIS_CHECKPOINT_HASH recomputed.
+173. **`process_unstake_completions` per-vertex ordering dependency (March 16, 2026)** — Called at start of each `apply_vertex_with_validators()`. Multiple vertices in same round each called it; only first had effect. Unstake returns became spendable by later vertices based on hash ordering (deterministic but subtle MEV).
+    - **Fix:** Moved to per-round boundary in `apply_finalized_vertices()`, alongside `distribute_round_rewards` and `tick_governance`. Also added to `apply_vertex()` convenience method for test compatibility.
+174. **Fee clawback failure on governance tx allows supply leak (March 16, 2026)** — CreateProposal/Vote tx failure handler logged fee clawback errors but continued execution. Coinbase proposer received fees that were never collected from sender → supply inflation → FATAL supply invariant halt on ALL nodes. Malicious validator DoS vector.
+    - **Fix:** Clawback failure now returns `SupplyInvariantBroken` directly instead of logging and continuing. Propagates up through `apply_finalized_vertices` fatal error path.
+175. **CRITICAL: Fresh node eclipse attack via CheckpointSync (March 16, 2026)** — Fresh nodes with zero local checkpoints skipped chain verification entirely. Attacker could fabricate state with own validator set, sign checkpoint, and fresh node accepted it. VULN-01 fully exploitable.
+    - **Fix:** `CheckpointSync` message now carries `checkpoint_chain: Vec<Checkpoint>` field. Sender includes full local chain. Receiver builds hash-to-checkpoint map from local + peer-provided checkpoints, ALWAYS verifies chain back to `GENESIS_CHECKPOINT_HASH`. Chain verification never skipped. `#[serde(default)]` for backward compat.
+176. **Encrypted chunk amplification attack (March 16, 2026)** — `recv_encrypted` allowed a peer claiming large `total_len` (4MB) to send tiny 1-byte chunks, causing ~4M decrypt operations (each acquiring noise mutex). CPU exhaustion via lock contention.
+    - **Fix:** Added `max_chunks = (total_len / 64) + 128` cap. Rejects pathological fragmentation while allowing legitimate traffic.
+177. **`/tx/submit` missing transaction-type validation (March 16, 2026)** — The ONLY mainnet tx path accepted pre-signed transactions but only validated signature/balance/nonce. No type-specific constraints: zero-value transfers, sub-minimum stakes, self-delegation, oversized memos all accepted.
+    - **Fix:** Added comprehensive `match &tx` validation block before state/mempool access, mirroring all per-endpoint validations.
+178. **`/delegate` missing self-delegation check (March 16, 2026)** — RPC endpoint didn't check `sender == validator` upfront despite engine rejection (Bug #149). Users got generic engine error.
+    - **Fix:** Added early `sender == validator_addr` check with clear error message.
+179. **`/proposals` response unbounded (March 16, 2026)** — No cap on returned proposals. Over time, proposals accumulate beyond MAX_ACTIVE_PROPOSALS limit.
+    - **Fix:** Capped at 200, sorted by ID descending (newest first).
+180. **`/validator/:address/delegators` response unbounded (March 16, 2026)** — Popular validators could have thousands of delegators.
+    - **Fix:** Capped at 500 entries per response. Total delegated amount still computed from all delegators.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.
