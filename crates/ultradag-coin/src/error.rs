@@ -88,4 +88,7 @@ pub enum CoinError {
 
     #[error("validation error: {0}")]
     ValidationError(String),
+
+    #[error("FATAL: supply invariant broken — node must halt: {0}")]
+    SupplyInvariantBroken(String),
 }

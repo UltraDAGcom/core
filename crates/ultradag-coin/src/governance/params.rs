@@ -24,10 +24,17 @@ pub struct GovernanceParams {
     /// Council emission share percentage (param: "council_emission_percent")
     #[serde(default = "default_council_emission")]
     pub council_emission_percent: u64,
+    /// Slash percentage on equivocation (param: "slash_percent")
+    #[serde(default = "default_slash_percent")]
+    pub slash_percent: u64,
 }
 
 fn default_council_emission() -> u64 {
     COUNCIL_EMISSION_PERCENT
+}
+
+fn default_slash_percent() -> u64 {
+    SLASH_PERCENTAGE
 }
 
 impl Default for GovernanceParams {
@@ -42,6 +49,7 @@ impl Default for GovernanceParams {
             max_active_proposals: MAX_ACTIVE_PROPOSALS as u64,
             observer_reward_percent: OBSERVER_REWARD_PERCENT,
             council_emission_percent: COUNCIL_EMISSION_PERCENT,
+            slash_percent: SLASH_PERCENTAGE,
         }
     }
 }
@@ -130,6 +138,14 @@ impl GovernanceParams {
                 }
                 self.council_emission_percent = value;
             }
+            "slash_percent" => {
+                // Floor: 10% — must be meaningful deterrent against equivocation
+                // Ceiling: 100% — full stake burn (maximum punishment)
+                if value < 10 || value > 100 {
+                    return Err("slash_percent must be 10-100".to_string());
+                }
+                self.slash_percent = value;
+            }
             _ => {
                 return Err(format!("Unknown governable parameter: '{}'", param));
             }
@@ -150,6 +166,7 @@ impl GovernanceParams {
             "max_active_proposals",
             "observer_reward_percent",
             "council_emission_percent",
+            "slash_percent",
         ]
     }
 }

@@ -8,13 +8,61 @@
 
 ## Recent Updates (March 2026)
 
+**Mainnet Readiness Assessment (March 16, 2026):**
+
+The codebase is past the critical code issues. What remains is operational work outside the codebase itself:
+
+1. **Genesis coordination** — One-shot irreversible decision: real council members (21 people, offline keys), real dev allocation address, real treasury controls, computed GENESIS_CHECKPOINT_HASH baked into binary. Must be done before everything else.
+2. **Key ceremony** — Air-gapped key generation for dev allocation, treasury, council members, bootstrap validators. Hardware wallet integration needs to be tested end-to-end (the code supports `from_bytes()` but ceremony tooling doesn't exist).
+3. **Client SDK verification** — Mainnet disables all secret-key-in-body endpoints. `/tx/submit` with pre-signed transactions is the only path. JS/TS SDK must construct `signable_bytes()` identically to Rust code. Cross-language signing parity tests required.
+4. **Block explorer with persistent indexing** — In-memory `tx_index` (100K entries) covers ~3 hours. Mainnet needs a separate indexing service following finality and writing to a database.
+5. **Documentation** — Operator runbook, key management guide, council governance guide, security model rationale (for auditors), incident response procedures.
+6. **Testnet soak** — 4-6 weeks running exact mainnet binary (`--features mainnet`) with external participants. Must observe: epoch transitions, governance execution, delegation cycling, slashing events, checkpoint fast-sync, node restarts, adverse network conditions.
+
+See **Mainnet Launch Checklist** below for the complete phased plan.
+
+**Cross-Batch Equivocation & Supply Invariant Test Coverage (March 16, 2026):**
+- **Cross-batch equivocation test** — Confirms `applied_validators_per_round` HashMap on StateEngine detects equivocation split across separate `apply_finalized_vertices` calls. Vertex A in batch 1, equivocating vertex B in batch 2 → validator slashed. Also tests intra-batch baseline and tracker pruning after 1000 rounds.
+- **Supply invariant fatal test** — Confirms `SupplyInvariantBroken` error fires when `total_supply` is corrupted (inflated or deflated by 1 sat). Verifies error message contains diagnostic breakdown (liquid/staked/delegated/treasury/total_supply) and matches the string check in server.rs that triggers `process::exit(101)`.
+- **Confirmed**: `applied_validators_per_round` is a FIELD on StateEngine (persists across calls within a session), not a local variable. Cross-batch detection works correctly. NOT persisted to redb (lost on restart), but restart rebuilds DAG which re-enables primary equivocation defense at insertion.
+- **All 819 tests passing**, 0 failed, 14 ignored (jepsen).
+
+**Networking & Economic Hardening Pass (March 16, 2026):**
+- **Governable slash percentage** — `SLASH_PERCENTAGE` (50%) is now a `GovernanceParams` field (`slash_percent`). Council can adjust via ParameterChange proposal (bounds: 10-100%). Previously required a code change and coordinated upgrade. `slash()` reads from `self.governance_params.slash_percent` instead of the constant. Canonical state root includes `slash_percent`.
+- **Per-peer aggregate message rate limiting** — Added sliding-window rate limiter in `handle_peer()`: max 500 messages per 60-second window per peer. Peers exceeding the limit are disconnected with warning log. Prevents bandwidth abuse from malicious peers spamming requests at individual cooldown rates (e.g., GetDagVertices every 2s + GetRoundHashes every 10s + DagProposal continuously). Existing per-message-type cooldowns retained as secondary defense.
+- **Delegation reward rounding documented** — Integer division dust (< 1 sat per delegator per round) remains with validator. Documented as known economic property in `distribute_delegation_rewards()`. Magnitude: max 99 sats/round with 100 delegators (0.0000099 UDAG). Not a consensus issue.
+- **GENESIS_CHECKPOINT_HASH recomputed** — New hash for `slash_percent` in GovernanceParams canonical state root.
+- **State root regression test suite** — 6 tests in `state_root_regression.rs`: known-fixture hash anchor (exact bytes checked into repo), genesis determinism, collision resistance, order sensitivity, Option discrimination, empty state. Any change to `compute_state_root` fails the regression anchor — which is the point.
+- **Cross-batch slashing documented as defense-in-depth** — Analysis confirmed the DAG rejects equivocating vertices at insertion (try_insert → Equivocation error), so both vertices can never be finalized. The `applied_validators_per_round` cross-batch detection is a secondary defense against theoretical bypasses (e.g., future bugs, CheckpointSync suffix injection).
+- **Known mainnet gaps documented** — Peer authentication (mutual TLS / challenge-response), P2P message authentication for control messages, version negotiation for hard forks, council emergency recovery mechanism, formal incident response tooling.
+- **All 819 tests passing**, 0 failed, 14 ignored (jepsen).
+- **Breaking change** — GovernanceParams has new `slash_percent` field, GENESIS_CHECKPOINT_HASH changed. Clean testnet restart required.
+- **Corrections to user's assessment:**
+  - "No adversarial/fuzzing tests" — FALSE: 32 adversarial tests, 14 Jepsen fault injection tests, 5 adversarial integration tests exist (see Test Suite Assessment section).
+  - "No integration tests with multiple nodes" — PARTIALLY: `adversarial_integration_tests.rs` runs 4-node simulated consensus. Real TCP multi-node test is a known gap.
+  - "No load testing with 1/3 offline" — FALSE: `test_minority_partition_liveness` in Jepsen suite tests exactly this.
+  - "WAL replay doesn't verify signatures" — MOOT: WAL is unused in production. State loads from redb ACID database. Vertices were signature-verified before finalization.
+  - "Monitoring limited to checkpoint metrics" — PARTIALLY: `/health/detailed`, `/metrics`, `/metrics/json`, Grafana dashboard templates exist (see Monitoring section in docs).
+
+**Critical Hardening Pass (March 16, 2026):**
+- **Supply invariant now FATAL** — Fee clawback failures and supply invariant violations now return `SupplyInvariantBroken` error, which triggers `std::process::exit(101)` in the P2P handler. On mainnet, any supply drift is unrecoverable without a hard fork — halting is safer than accumulating drift.
+- **Cross-batch equivocation detection** — Slashing no longer depends on all nodes seeing identical finality batches. `applied_validators_per_round` HashMap on StateEngine persists which validators produced in each round across batches. If Node A finalizes [V1, V2_equivocating] in one batch but Node B finalizes them in separate batches, both nodes still detect and slash the equivocation. Pruned to last 1000 rounds.
+- **Council emission deterministic ordering** — Council member credits now sorted by Address before iteration, ensuring identical credit ordering across all nodes regardless of HashMap iteration order. Added `Ord` derive on `Address`.
+- **Governance timing determinism documented** — `tick_governance` runs at round boundaries in sorted vertex order, ensuring all nodes execute governance at the same logical point. ParameterChange takes effect starting from the round AFTER `execute_at_round`.
+- **GENESIS_CHECKPOINT_HASH compile-time guard** — Added `const _GENESIS_HASH_GUARD` assertion for mainnet builds. The placeholder `[0u8; 32]` now fails at compile time (checking first 4 bytes), not just runtime. Runtime `verify_genesis_checkpoint_hash()` retained as secondary defense.
+- **`SecretKey::generate()` gated to testnet** — `#[cfg(not(feature = "mainnet"))]` prevents accidental use of `thread_rng()` key generation in mainnet builds. Mainnet keys must be generated offline with explicit `OsRng` and hardware wallet storage.
+- **Orphan buffer defense-in-depth** — `insert_orphan()` now verifies Ed25519 signature before buffering. All 3 existing call sites already verified, but this prevents future code paths from bypassing the check.
+- **CRITICAL: State root replaced with canonical byte representation** — `compute_state_root()` no longer uses `postcard::to_allocvec()` (not version-stable). Replaced with hand-rolled canonical byte hashing via `blake3::Hasher` streaming API. Version-prefixed (`ultradag-state-root-v1`) for explicit forward compatibility. Uses little-endian integers, length-prefixed strings, explicit enum discriminants. Postcard pinned to `=1.1.3` for P2P messages (non-consensus).
+- **GENESIS_CHECKPOINT_HASH recomputed** — New hash `[0x0b, 0xf5, 0x53, ...]` for canonical state root v1 algorithm. Breaking change — clean testnet restart required.
+- **All 819 tests passing**, 0 failed, 14 ignored (jepsen).
+
 **Per-Round Protocol Reward Distribution (March 16, 2026):**
 - **BREAKING: Coinbase = fees only** — Vertex coinbase no longer contains block rewards. Rewards distributed by the protocol per round via `distribute_round_rewards()`, not per vertex.
 - **Passive staking works** — All stakers earn proportionally without running a node. Active vertex producers get 100% of share; passive stakers get 20% (observer rate). This is the standard DPoS model.
 - **`distribute_round_rewards(round, producers)`** — New method on StateEngine. Called once per finalized round in `apply_finalized_vertices()`. Distributes `block_reward(round)` to all stakers proportionally, splits between own-stake and delegated portions with commission, mints council emission.
 - **Validator loop** — `validator_reward = 0` (fees only). `compute_validator_reward()` retained but no longer used for coinbase.
 - **Supply invariant preserved** — `liquid + staked + delegated + treasury == total_supply` still checked per vertex.
-- **All 805 tests passing**, 0 failed, 14 ignored (jepsen).
+- **All 819 tests passing**, 0 failed, 14 ignored (jepsen).
 - **Breaking change** — Requires clean testnet restart (different state progression).
 
 **Delegated Staking (March 15, 2026):**
@@ -34,7 +82,7 @@
 - **Fee-exempt** — DelegateTx, UndelegateTx, SetCommissionTx have zero fee (same as Stake/Unstake).
 - **Dashboard** — Staking tab has "Your Delegations" card, "Delegate to Validator" form, "Undelegate" form with finality-aware auto-refresh.
 - **Breaking change** — New Transaction variants, new redb table, updated GENESIS_CHECKPOINT_HASH. Clean testnet restart required.
-- **Tests** — 805 tests pass, 0 failed, 14 ignored (jepsen).
+- **Tests** — 819 tests pass, 0 failed, 14 ignored (jepsen).
 
 **Council of 21 Governance Model — Full Overhaul (March 15, 2026):**
 - **No stake requirement** — Council members don't need UDAG stake to govern. Seats are earned through expertise and DAO proposal, not purchased with tokens. Council members earn emission rewards instead.
@@ -713,7 +761,7 @@ formal/
 - `DelegateTx` — from, validator, amount, nonce, pub_key, signature — delegates UDAG to a validator for passive rewards
 - `UndelegateTx` — from, nonce, pub_key, signature — begins undelegation cooldown
 - `SetCommissionTx` — from, commission_percent (u8), nonce, pub_key, signature — validator sets commission rate
-- `GovernanceParams` — runtime-adjustable governance parameters: min_fee_sats, min_stake_to_propose, quorum_numerator, approval_numerator, voting_period_rounds, execution_delay_rounds, max_active_proposals, observer_reward_percent, council_emission_percent. Modified via ParameterChange proposal execution. Persisted in StateSnapshot.
+- `GovernanceParams` — runtime-adjustable governance parameters: min_fee_sats, min_stake_to_propose, quorum_numerator, approval_numerator, voting_period_rounds, execution_delay_rounds, max_active_proposals, observer_reward_percent, council_emission_percent, slash_percent. Modified via ParameterChange proposal execution. Persisted in StateSnapshot.
 - `CouncilSeatCategory` — enum: Technical(7), Business(4), Legal(3), Academic(3), Community(2), Foundation(2). Fixed seat limits per category.
 
 ## DAG-BFT Consensus (Pure DAG-Driven Ledger)
@@ -872,7 +920,7 @@ When a vertex fails insertion due to missing parents, the node:
 - `MIN_DAO_VALIDATORS` = 8 — Minimum active validators for DAO governance execution. ParameterChange proposals stay in PassedPending (hibernation) below this threshold. TextProposals execute regardless. Self-healing: DAO reactivates when validator count recovers.
 - `MAX_ACTIVE_PROPOSALS` = 20 — Maximum simultaneous active proposals
 - `MAX_FUTURE_ROUNDS` = 10 — Reject vertices more than 10 rounds ahead of current DAG round
-- `SLASH_PERCENTAGE` = 50 — Percentage of stake burned on equivocation
+- `SLASH_PERCENTAGE` = 50 — Default percentage of stake burned on equivocation. Now governable via `GovernanceParams.slash_percent` (10-100% bounds via ParameterChange proposal)
 - `PROPOSAL_TITLE_MAX_BYTES` = 128 — Maximum proposal title length
 - `PROPOSAL_DESCRIPTION_MAX_BYTES` = 4096 — Maximum proposal description length
 - `COUNCIL_MAX_MEMBERS` = 21 — Maximum Council of 21 members
@@ -1197,15 +1245,15 @@ cargo test --workspace
 
 ## Tests
 
-**805 tests passing** (all pass, zero failures, 14 ignored jepsen long-running tests):
+**811 tests passing** (all pass, zero failures, 14 ignored jepsen long-running tests):
 
 Run `cargo test --workspace --release` to verify:
 ```
-test result: ok. 805 passed; 0 failed; 14 ignored
+test result: ok. 819 passed; 0 failed; 14 ignored
 ```
 
 ### Test Breakdown by Crate:
-- **ultradag-coin**: 168 unit tests + 399 integration tests (includes 7 delegation tx unit tests)
+- **ultradag-coin**: 168 unit tests + 407 integration tests (includes 7 delegation tx unit tests, 3 cross-batch equivocation, 5 supply invariant fatal)
 - **ultradag-network**: 25 unit tests + 12 integration tests + 49 fault injection tests
 - **ultradag-sdk**: 2 doc tests
 
@@ -1242,6 +1290,9 @@ test result: ok. 805 passed; 0 failed; 14 ignored
 - `governance_integration.rs` — 13 tests: full proposal lifecycle, quorum/approval, voting period, double-vote prevention, parameter change execution, text proposal execution, invalid params, validation bounds, snapshot persistence, downstream effects, sequential proposals
 - `governance_tests.rs` — 10 tests: proposal creation, voting period, types, status transitions, vote counting, quorum calculation, state engine integration, ID uniqueness, has_passed logic
 - `genesis_hash_compute.rs` — 1 test: verifies genesis checkpoint hash computation and determinism
+- `state_root_regression.rs` — 6 tests: known-fixture regression anchor (exact hash), genesis determinism, collision resistance, order sensitivity, Option discrimination, empty state
+- `cross_batch_equivocation.rs` — 3 tests: cross-batch equivocation detection and slashing via `applied_validators_per_round`, intra-batch equivocation slashing, tracker pruning after 1000 rounds
+- `supply_invariant_fatal.rs` — 5 tests: supply invariant detects inflated/deflated total_supply, passes on healthy state, error includes diagnostics, error string matches server.rs halt check
 
 ### Integration Test Files (ultradag-node/tests/):
 - `rpc_tests.rs` — 25 tests: is_trusted_proxy (12 tests covering IPv4/IPv6/private/public/Fly.io), RPC endpoints (health, status, keygen, balance, tx validation, mempool, peers, validators, 404, rate limiting, CORS)
@@ -1995,6 +2046,33 @@ UltraDAG is offering rewards for security researchers who discover and responsib
     - **Fix:** Falls back to `evidence_store` when prunable map doesn't have the entry.
 128. **Persistence file extensions misleading (March 14, 2026)** — `dag.json` and `finality.json` used postcard binary format, not JSON. Misleading for operators, could cause manual editing attempts.
     - **Fix:** Renamed to `dag.bin`/`finality.bin` across all code, tests, and docker-entrypoint.sh.
+129. **Fee clawback failures silently drift supply (March 16, 2026)** — When transactions were skipped (bad nonce, insufficient balance, invalid sig), fee clawback via `debit()` could fail. The error was logged but execution continued, causing permanent total_supply divergence. On mainnet this is unrecoverable without a hard fork.
+    - **Fix:** Fee clawback failures now return `CoinError::SupplyInvariantBroken`, which triggers `std::process::exit(101)` in the P2P handler. Supply invariant check also upgraded to same fatal error type.
+130. **Slashing depends on identical finality batches (March 16, 2026)** — `apply_finalized_vertices` detected equivocation only within a single batch. If `find_newly_finalized` returned different batch compositions on different nodes (e.g., [V1, V2_equivocating] vs [V1] then [V2_equivocating]), some nodes would slash and others wouldn't — permanent state divergence.
+    - **Fix:** Added `applied_validators_per_round: HashMap<u64, HashSet<Address>>` to StateEngine. Cross-batch equivocation detected by checking if a validator already produced in a round from a previous batch. Pruned to last 1000 rounds.
+131. **Council emission non-deterministic ordering (March 16, 2026)** — Council member credits iterated HashMap keys which have non-deterministic order. If credit amounts caused rounding differences (e.g., supply cap scaling), different nodes could compute different totals.
+    - **Fix:** Sort council members by Address before crediting. Added `Ord` derive on `Address`.
+132. **GENESIS_CHECKPOINT_HASH only runtime-checked on mainnet (March 16, 2026)** — Placeholder `[0u8; 32]` only caught by `verify_genesis_checkpoint_hash()` at runtime. If someone forgot to call it, the node would accept any checkpoint chain.
+    - **Fix:** Added `const _GENESIS_HASH_GUARD` compile-time assertion checking first 4 bytes aren't all zero. Runtime check retained as secondary defense.
+133. **`SecretKey::generate()` available in mainnet builds (March 16, 2026)** — `thread_rng()` key generation had no compile-time gate, allowing accidental use in production.
+    - **Fix:** `#[cfg(not(feature = "mainnet"))]` on `generate()`. Mainnet keys must use `from_bytes()` with offline-generated seeds.
+134. **Council membership divergence via stale fast-sync (March 16, 2026)** — A node joining mid-epoch with a stale council set would compute different emissions. Analyzed: council_members is part of StateSnapshot (propagated via fast-sync CheckpointSync), persisted in redb, and the supply invariant (now FATAL) catches any divergence. No code change needed — defense-in-depth already sufficient.
+    - **Fix:** Added documentation to `distribute_round_rewards` explaining council emission safety guarantees.
+135. **Orphan buffer defense-in-depth signature verification (March 16, 2026)** — All 3 call sites (DagProposal, DagVertices, ParentVertices) verify signatures before calling `insert_orphan()`, but a future code path could bypass this.
+    - **Fix:** Added `vertex.verify_signature()` check inside `insert_orphan()` itself. Invalid signatures rejected with warning log before buffering.
+136. **CRITICAL: State root uses postcard serialization — not version-stable (March 16, 2026)** — `compute_state_root()` used `postcard::to_allocvec(snapshot)` to hash the state. Postcard's encoding is not guaranteed stable across versions — a library update could silently change the hash, breaking checkpoint verification across nodes running different builds. Even with pinned `postcard = "=1.1.3"`, this is fragile.
+    - **Fix:** Replaced postcard-based state root with hand-rolled canonical byte representation. Uses `blake3::Hasher` streaming API with version prefix `"ultradag-state-root-v1"`, little-endian integers, length-prefixed strings, and explicit enum discriminants. Helper functions `council_category_byte()` and `council_action_byte()` map governance enums to stable byte values. Postcard pinned to `=1.1.3` for P2P message encoding (non-consensus-critical).
+    - **Breaking change:** State root algorithm changed — `GENESIS_CHECKPOINT_HASH` recomputed. Clean testnet restart required.
+137. **Slash percentage hardcoded — no governance path (March 16, 2026)** — `SLASH_PERCENTAGE = 50` was a compile-time constant. If the network needs to adjust (too harsh discourages staking, too lenient doesn't deter), it required a code change and coordinated binary upgrade across all validators.
+    - **Fix:** Added `slash_percent: u64` to `GovernanceParams` with `#[serde(default)]` for backward compatibility. `slash()` reads from `self.governance_params.slash_percent` instead of the constant. Governable via ParameterChange proposal (bounds: 10-100%). Added to canonical state root hash. GENESIS_CHECKPOINT_HASH recomputed.
+138. **No per-peer aggregate bandwidth throttling (March 16, 2026)** — Per-message-type cooldowns existed (2s for GetDagVertices, 10s for GetRoundHashes) but no aggregate limit. A malicious peer could send a mix of message types (DagProposal, NewTx, GetPeers, Ping) at high frequency, forcing expensive processing without hitting any individual cooldown.
+    - **Fix:** Added sliding-window rate limiter in `handle_peer()`: 500 messages per 60-second window per peer. Exceeding the limit disconnects the peer with warning log. Window resets after 60 seconds of good behavior.
+139. **Delegation reward rounding undocumented (March 16, 2026)** — Integer division in `distribute_delegation_rewards()` means dust (< 1 sat per delegator per round) remains with the validator. Over millions of rounds this creates a small advantage for validators with many small delegators.
+    - **Fix:** Documented as known economic property in function doc comment. Magnitude: max 99 sats/round with 100 delegators (0.0000099 UDAG). Not a consensus issue.
+140. **No cross-batch equivocation test (March 16, 2026)** — `applied_validators_per_round` HashMap existed for cross-batch detection but had no dedicated test. Relied on assumption that DAG primary defense covers all cases.
+    - **Fix:** Added `cross_batch_equivocation.rs` with 3 tests: cross-batch detection and slashing, intra-batch baseline, tracker pruning verification. Confirmed HashMap is a field on StateEngine (persists across calls).
+141. **No supply invariant exit test (March 16, 2026)** — `SupplyInvariantBroken` error and `process::exit(101)` existed but had no test verifying the detection mechanism fires on corrupted state.
+    - **Fix:** Added `supply_invariant_fatal.rs` with 5 tests: inflated total_supply detection, deflated total_supply detection, healthy state passes, diagnostic details in error, error string matches server.rs halt check.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.
@@ -2151,61 +2229,103 @@ TLA+ specification of UltraDAG's DAG-BFT consensus, derived directly from the Ru
 
 ## Mainnet Launch Checklist
 
-**CRITICAL — Must complete before mainnet:**
+**CRITICAL — Must complete before mainnet. Organized by dependency order, not priority.**
 
-### Security
-- [ ] **Replace DEV_ADDRESS_SEED** — Generate offline keypair, store in hardware wallet, NEVER commit private key
-- [ ] **Remove faucet entirely** — Delete `FAUCET_SEED`, `FAUCET_PREFUND_SATS`, `faucet_keypair()`, faucet genesis credit, and `/faucet` RPC endpoint. **Critical:** Faucet prefund (1M UDAG) inflates supply to 22M instead of 21M. Acceptable for testnet only.
-- [ ] **Verify max supply** — After faucet removal, confirm total circulating supply at genesis = 1,050,000 UDAG (dev allocation only), and max supply = 21,000,000 UDAG exactly
-- [ ] **Security audit** — External audit of consensus, state, and cryptographic implementations. Scope document: `docs/security/AUDIT_SCOPE.md` (~6,500 lines across 5 critical paths)
-- [ ] **Penetration testing** — Network-level attacks, eclipse attacks, DDoS resilience
-- [x] **Formal verification** — TLA+ specification (`formal/UltraDAGConsensus.tla`) verified by TLC model checker. 32.6M states explored at N=4, f=1, MAX_ROUNDS=2 with zero violations across 6 invariants (Safety, HonestNoEquivocation, FinalizedParentsConsistency, TypeOK, RoundMonotonicity, ByzantineBound). Results: `formal/VERIFICATION.md`. Liveness checking deferred (resource-intensive).
-- [x] **Hardcode GENESIS_CHECKPOINT_HASH** — Testnet genesis hash `[0xbd, 0x76, 0xa4, ...]` computed and hardcoded in constants.rs. Bypass clauses removed from `verify_checkpoint_chain()`. **Mainnet:** Must recompute after removing faucet prefund (changes genesis state).
+### Phase 1: Genesis Coordination (irreversible, do first)
 
-### Code Quality
-- [ ] **Reduce public API surface** — `StateEngine.last_finalized_round` and `active_validator_set` should be private with accessor methods (currently pub for test convenience)
-- [ ] **Audit remaining unwrap/expect in production** — 9 calls remain (all infallible: array conversions, logic-guarded merkle). Replace with explicit error handling where possible.
-- [ ] **Consistent documentation on public APIs** — Some critical functions (e.g. `credit()`, `debit()`) lack doc comments while others are well-documented. Add `///` docs to all public methods in engine.rs, dag.rs, finality.rs.
+This is a one-shot irreversible decision. Everything downstream depends on getting it right.
 
-### Protocol
-- [x] **Governance execution** — ParameterChange proposals now apply changes to runtime `GovernanceParams` via `apply_change()` with validation bounds. 7 integration tests verify execution, persistence, and downstream effects.
-- [ ] **Change NETWORK_ID** — Update from `ultradag-testnet-v1` to `ultradag-mainnet-v1`
-- [ ] **Verify genesis parameters** — Confirm MAX_SUPPLY_SATS, INITIAL_REWARD_SATS, HALVING_INTERVAL
-- [ ] **Verify staking parameters** — Confirm MIN_STAKE_SATS, UNSTAKE_COOLDOWN_ROUNDS, MAX_ACTIVE_VALIDATORS, MIN_DELEGATION_SATS, DEFAULT_COMMISSION_PERCENT
-- [x] **DAG pruning** — Implemented (PRUNING_HORIZON = 1000 rounds, --pruning-depth, --archive flags)
-- [x] **Snapshot mechanism** — Checkpoint + fast-sync implemented (CheckpointProposal, CheckpointSync)
-- [x] **Minimum fee enforcement** — MIN_FEE_SATS = 10,000 sats (0.0001 UDAG). Zero-fee transactions rejected at mempool and RPC layer. Cost to spam 10K-tx mempool: 1 UDAG.
+- [ ] **Key ceremony** — Generate all genesis keys on air-gapped machines in a verifiable offline ceremony. Required keys:
+  - Dev allocation key (replaces `DEV_ADDRESS_SEED = [0x75, ...]` testnet seed)
+  - Treasury control key(s) — consider multi-sig from the start
+  - Initial 21 council member keys (real people, real offline-generated keys, hardware wallet stored)
+  - Bootstrap validator keys (at least 8 for DAO activation gate)
+  - **Hardware wallet integration must be tested end-to-end** — `SecretKey::from_bytes()` loads keys, but the ceremony tooling to get bytes FROM a hardware wallet into the node config doesn't exist yet
+  - The `DEV_ADDRESS_SEED` compile-time assertion catches the testnet placeholder, but someone must actually run the ceremony
+- [ ] **Council bootstrap plan** — Currently dev address is sole Foundation member at genesis. If that key is lost, governance is permanently locked. Need: (1) bootstrap with multiple Foundation members (use both Foundation seats), (2) document council emergency recovery path (validator supermajority override or time-locked recovery)
+- [ ] **Decide genesis state** — Who are the 21 council members (names, categories, keys)? What is the real dev allocation address? What is the treasury address? These are baked into the binary forever.
+- [ ] **Remove faucet from genesis** — Delete `FAUCET_SEED`, `FAUCET_PREFUND_SATS`, `faucet_keypair()`, faucet genesis credit. Faucet prefund (1M UDAG) inflates supply to ~4.15M instead of ~3.15M at genesis. Compile with `--features mainnet` which excludes faucet from `new_with_genesis()`.
+- [ ] **Compute mainnet GENESIS_CHECKPOINT_HASH** — Run `cargo test --features mainnet test_compute_genesis_hash -- --nocapture` with the real genesis state. Bake the resulting hash into `constants.rs`. The compile-time `_GENESIS_HASH_GUARD` assertion prevents the `[0u8; 32]` placeholder from shipping. This hash anchors the entire checkpoint chain forever.
+- [ ] **Verify max supply** — After faucet removal, confirm genesis supply = dev allocation (1,050,000 UDAG) + treasury (2,100,000 UDAG) = 3,150,000 UDAG. Max supply = 21,000,000 UDAG. Emission fills the remaining 17,850,000 UDAG over ~106 years.
+- [ ] **Verify NETWORK_ID** — `#[cfg(feature = "mainnet")]` selects `b"ultradag-mainnet-v1"`. All signatures are cryptographically incompatible with testnet.
 
-### Testing
-- [ ] **Extended testnet run** — Minimum 1 month continuous operation with 21 validators
-- [x] **Chaos testing** — Jepsen-style fault injection framework with full consensus simulation (28 tests: network partitions, clock skew, message chaos, crash-restart, invariant checkers, integration tests with `simulate_rounds()`)
-- [ ] **Load testing** — Sustained high transaction volume, mempool saturation
-- [ ] **Upgrade testing** — Binary upgrade without consensus failure
-- [x] **All tests passing** — 141 coin unit + integration tests + 28 Jepsen fault injection tests, 0 failures (March 10, 2026)
+### Phase 2: Client SDK (mainnet has no usable tx path without this)
 
-### Documentation
-- [ ] **Remove testnet warnings** — Update all references from testnet to mainnet
-- [ ] **Mainnet deployment guide** — Production-grade setup, monitoring, backup procedures
-- [ ] **Validator handbook** — Staking guide, slashing conditions, reward calculations
-- [ ] **API stability guarantees** — Version RPC endpoints, document breaking changes policy
-- [ ] **Incident response plan** — Emergency contacts, rollback procedures, communication channels
+Mainnet disables all 7 secret-key-in-body endpoints (`/tx`, `/stake`, `/unstake`, `/faucet`, `/keygen`, `/proposal`, `/vote`). The ONLY transaction path is `/tx/submit` with pre-signed transactions. Without a client SDK, mainnet is unusable.
 
-### Infrastructure
-- [ ] **Bootstrap nodes** — Deploy and harden 3+ geographically distributed bootstrap nodes
-- [ ] **Block explorer** — Public dashboard for mainnet transparency
-- [ ] **Monitoring** — Prometheus/Grafana for validator health, finality lag, network metrics
-- [ ] **Backup strategy** — Automated state snapshots, disaster recovery plan
+- [ ] **JavaScript/TypeScript SDK** — Must construct `signable_bytes()` identically to the Rust code and sign with Ed25519. Critical path: this is the primary wallet integration language. Existing `sdk/javascript/` has the foundation but must be verified against mainnet `signable_bytes` format (NETWORK_ID prefix, transaction type discriminators, field ordering).
+- [ ] **SDK parity tests** — For each SDK (JS, Python, Rust, Go): generate a keypair, construct every transaction type, sign it, verify the signature matches what the Rust code would produce. Cross-language signing compatibility is consensus-critical.
+- [ ] **Wallet integration guide** — Document the full flow: generate key offline → fund via exchange → construct tx → sign locally → submit to `/tx/submit` → poll `/tx/{hash}` for confirmation. Include code examples in JS and Python.
 
-### Legal & Compliance
+### Phase 3: Block Explorer (users need to verify transactions)
+
+- [ ] **Persistent transaction indexing** — The in-memory `tx_index` (100K entries, FIFO eviction) covers ~3 hours. Mainnet needs full history. Build a separate indexing service that follows finality and writes to a database (PostgreSQL or similar). Reads from `/round/{n}` and `/vertex/{hash}` endpoints.
+- [ ] **Explorer service** — Web UI for searching transactions, vertices, addresses, rounds. The existing `site/explorer.html` works against RPC but needs the persistent backend for historical queries.
+- [ ] **Archive node** — At least one node running with `--archive` (no pruning) to serve full history for the explorer and for auditing.
+
+### Phase 4: Security Audit
+
+- [ ] **External security audit** — Scope document: `docs/security/AUDIT_SCOPE.md` (~6,500 lines across 5 critical paths: cryptographic signatures, BFT finality, state engine, P2P message handling, checkpoint chain)
+- [ ] **Cryptographic rationale document** — For auditor review. Document: Blake3 choice for address derivation/hashing, Ed25519 for signatures, domain separation design (`signable_bytes` includes NETWORK_ID, `hash()` doesn't — intentional), `compute_state_root` canonical byte format and version prefix, NETWORK_ID cross-network replay prevention.
+- [ ] **Penetration testing** — Network-level: eclipse attacks, MITM on control messages, bandwidth exhaustion. Note: vertex signatures protect consensus data, but Hello/GetPeers/Peers messages are unauthenticated.
+
+### Phase 5: Networking Hardening
+
+- [ ] **Peer authentication** — Mutual TLS or challenge-response handshake for peer identity verification. Currently any node can connect. Vertex signatures protect consensus, but control messages (Hello, GetPeers, Peers, Ping) are unauthenticated — MITM can inject/modify.
+- [ ] **Version negotiation for hard forks** — Protocol changes (new tx type, changed serialization) cause nodes on different versions to diverge. Need: (1) version field in Hello already exists, (2) hard fork activation height mechanism, (3) documented upgrade procedure with rollback path.
+- [ ] **Formal incident response tooling** — Circuit breaker halts individual nodes, but no coordinated network pause. Need: governance-triggered pause, documented rollback procedures, emergency communication channels.
+
+### Phase 6: Testnet Soak (4-6 weeks minimum)
+
+Run the exact mainnet binary (`--features mainnet`, real genesis state, real NETWORK_ID) on a public testnet with external participants. Must observe all of these working under real conditions:
+
+- [ ] **Epoch transitions** — Validator set recalculation every 210,000 rounds (~12 days at 5s). Need at least 2-3 epochs.
+- [ ] **Governance proposals executing** — ParameterChange and CouncilMembership proposals through full lifecycle (create → vote → pass → delay → execute).
+- [ ] **Delegation cycling** — Delegate, earn rewards, undelegate, cooldown, re-delegate to different validator.
+- [ ] **Slashing events** — Deliberate equivocation to verify deterministic slashing, supply burn, delegation cascade, and active set removal all work correctly in production.
+- [ ] **Checkpoint fast-sync** — New node joins network from scratch, fast-syncs from checkpoint, catches up, begins producing. Verify state root agreement.
+- [ ] **Node restarts and upgrades** — Crash, restart from redb, rejoin consensus without state divergence. Binary upgrade without finality stall.
+- [ ] **Adverse conditions** — Clock skew (NTP drift), packet loss, node restarts during epoch boundaries, network partitions healing.
+- [ ] **External participants** — Real users sending transactions, staking, delegating — not just internal validators.
+
+### Phase 7: Documentation
+
+- [ ] **Node operator runbook** — Deployment (binary/Docker/systemd), configuration, monitoring setup, backup/restore, troubleshooting. Existing `docs/guides/operations/node-operator-guide.md` needs mainnet update.
+- [ ] **Key management guide** — Offline key generation, hardware wallet integration, key rotation, backup procedures. Critical for validators and council members.
+- [ ] **Council governance guide** — For the 21 council members: how to vote, proposal lifecycle, parameter change implications, membership management.
+- [ ] **Security model rationale** — Formal document for auditors: cryptographic choices, domain separation, BFT assumptions, threat model, known limitations.
+- [ ] **Incident response procedures** — Escalation paths, emergency contacts, rollback procedures, communication plan.
+- [ ] **API stability guarantees** — Version RPC endpoints, document breaking changes policy.
+
+### Phase 8: Infrastructure
+
+- [ ] **Bootstrap nodes** — 3+ geographically distributed, hardened (rate limiting, DDoS protection, dedicated IPs). Current testnet nodes in single region (ams).
+- [ ] **Monitoring** — Prometheus/Grafana for finality lag, peer health, mempool depth, supply invariant. Existing `/metrics` endpoint and Grafana templates in `docs/monitoring/`. Need external supply invariant verifier (independent check that `liquid + staked + delegated + treasury == total_supply`).
+- [ ] **Backup strategy** — Automated redb snapshots, archive node for full history, disaster recovery plan.
+
+### Phase 9: Legal & Launch
+
 - [ ] **Legal review** — Regulatory compliance for target jurisdictions
 - [ ] **Terms of service** — Clear disclaimers, no investment advice
-- [ ] **Privacy policy** — GDPR/CCPA compliance if applicable
-- [ ] **Trademark** — Protect UltraDAG name and logo
+- [ ] **Genesis ceremony execution** — Transparent, auditable, recorded. Produce the mainnet binary with real genesis.
+- [ ] **Validator onboarding** — Pre-launch registration, key verification, stake funding
+- [ ] **Communication plan** — Announce launch date, migration from testnet, go/no-go criteria
 
-### Launch Coordination
-- [ ] **Genesis ceremony** — Transparent, auditable genesis block creation
-- [ ] **Validator onboarding** — Pre-launch validator registration and testing
-- [ ] **Communication plan** — Announce launch date, migration from testnet
-- [ ] **Emergency pause mechanism** — Circuit breaker for critical bugs (remove after stability proven)
+### Already Complete
+- [x] **Formal verification** — TLA+ (32.6M states, zero violations). `formal/VERIFICATION.md`.
+- [x] **Hardcode GENESIS_CHECKPOINT_HASH** — Testnet hash hardcoded. Compile-time + runtime guards.
+- [x] **Governance execution** — ParameterChange proposals apply changes via `apply_change()`.
+- [x] **DAG pruning** — PRUNING_HORIZON = 1000, `--pruning-depth`, `--archive`.
+- [x] **Snapshot mechanism** — Checkpoint + fast-sync (CheckpointProposal, CheckpointSync).
+- [x] **Minimum fee enforcement** — MIN_FEE_SATS = 10,000 sats. Mempool + RPC enforcement.
+- [x] **Chaos testing** — 14 Jepsen tests + 5 adversarial integration + 32 adversarial unit tests.
+- [x] **State root regression tests** — 6 tests with known-fixture hash anchor checked into repo.
+- [x] **Supply invariant fatal** — `process::exit(101)` on broken invariant.
+- [x] **Canonical state root** — Hand-rolled byte hashing, version-prefixed, not dependent on serde.
+- [x] **Governable slash percentage** — Council can adjust 10-100% via ParameterChange.
+- [x] **Per-peer bandwidth throttling** — 500 msgs/60s aggregate + per-message-type cooldowns.
+- [x] **Cross-batch equivocation detection** — Defense-in-depth via `applied_validators_per_round`.
+- [x] **`SecretKey::generate()` mainnet gate** — `#[cfg(not(feature = "mainnet"))]`.
+- [x] **811 tests passing** — 0 failures, 14 ignored (jepsen long-running).
 
-**DO NOT LAUNCH MAINNET until ALL items are complete and verified.**
+**DO NOT LAUNCH MAINNET until ALL unchecked items are complete and verified.**

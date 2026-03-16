@@ -115,6 +115,14 @@ fn orphan_buffer_bytes(orphans: &HashMap<[u8; 32], OrphanEntry>) -> usize {
 /// Insert a vertex into the orphan buffer with per-peer and global eviction.
 /// Returns false if rejected due to per-peer cap.
 fn insert_orphan(orphans: &mut HashMap<[u8; 32], OrphanEntry>, hash: [u8; 32], vertex: DagVertex, peer: &str) -> bool {
+    // Defense-in-depth: verify Ed25519 signature before buffering.
+    // All call sites already verify signatures, but this prevents a future
+    // code path from accidentally buffering unverified vertices.
+    if !vertex.verify_signature() {
+        warn!("Orphan buffer: rejecting vertex with invalid signature from {}", peer);
+        return false;
+    }
+
     // Per-peer cap: prevent one peer from monopolizing the buffer
     let peer_count = orphans.values().filter(|e| e.peer == peer).count();
     if peer_count >= MAX_ORPHAN_ENTRIES_PER_PEER {
@@ -187,6 +195,13 @@ async fn apply_finality_and_state(
         let mut state_w = state.write().await;
         let prev_round = state_w.last_finalized_round();
         if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
+            let msg = format!("{}", e);
+            if msg.contains("supply invariant broken") || msg.contains("FATAL") {
+                // Supply invariant violations are unrecoverable — halt immediately.
+                // On mainnet, any supply drift requires a hard fork to fix.
+                tracing::error!("FATAL: {}", msg);
+                std::process::exit(101);
+            }
             warn!("Failed to apply finalized vertices: {}", e);
             return (finalized_vertices, 0);
         }
@@ -882,8 +897,28 @@ async fn handle_peer(
     let mut last_round_hash_request: Option<Instant> = None;
     let mut last_get_dag_vertices: Option<Instant> = None;
 
+    // Per-peer aggregate message rate limiting: track messages in a sliding window.
+    // Disconnect peers that exceed MAX_MESSAGES_PER_WINDOW within RATE_WINDOW_SECS.
+    const MAX_MESSAGES_PER_WINDOW: u32 = 500;
+    const RATE_WINDOW_SECS: u64 = 60;
+    let mut message_count: u32 = 0;
+    let mut window_start = Instant::now();
+
     loop {
         let msg = reader.recv().await?;
+
+        // Aggregate rate limiting: disconnect abusive peers
+        message_count += 1;
+        let elapsed = window_start.elapsed();
+        if elapsed >= std::time::Duration::from_secs(RATE_WINDOW_SECS) {
+            // Reset window
+            message_count = 1;
+            window_start = Instant::now();
+        } else if message_count > MAX_MESSAGES_PER_WINDOW {
+            warn!("Peer {} exceeded message rate limit ({} msgs in {}s), disconnecting",
+                peer_addr, message_count, elapsed.as_secs());
+            return Ok(());
+        }
 
         // Yield to the runtime after each message so other tasks (RPC, validator loop)
         // get a chance to run. Without this, a burst of messages from one peer can

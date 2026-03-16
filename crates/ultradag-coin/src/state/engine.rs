@@ -100,6 +100,11 @@ pub struct StateEngine {
     tx_index: HashMap<[u8; 32], TxLocation>,
     /// Insertion order for FIFO eviction of tx_index entries.
     tx_index_order: VecDeque<[u8; 32]>,
+    /// Tracks which validators have produced vertices in each finalized round.
+    /// Used for cross-batch equivocation detection: if a validator appears in a
+    /// round that was already applied in a previous batch, that's equivocation.
+    /// Pruned to keep only rounds > last_finalized_round - 1000.
+    applied_validators_per_round: HashMap<u64, std::collections::HashSet<Address>>,
 }
 
 impl StateEngine {
@@ -121,6 +126,7 @@ impl StateEngine {
             delegation_accounts: HashMap::new(),
             tx_index: HashMap::new(),
             tx_index_order: VecDeque::new(),
+            applied_validators_per_round: HashMap::new(),
         }
     }
 
@@ -238,7 +244,15 @@ impl StateEngine {
             return Ok(());
         }
 
-        // --- Council emission (same as before but computed once per round) ---
+        // --- Council emission (computed once per round) ---
+        // SAFETY: council_members must be identical across all nodes at this round.
+        // This is guaranteed because: (1) CouncilMembership proposals execute via
+        // tick_governance which runs per-round AFTER all vertices in that round are
+        // applied, and (2) tick_governance uses deterministic sorted proposal iteration.
+        // (3) Fast-sync loads council_members from checkpoint snapshot.
+        // (4) If council sets diverge, total_supply will differ, and the supply
+        // invariant check (SupplyInvariantBroken → process exit) catches it.
+        // The member list is sorted by address for deterministic credit ordering.
         let council_percent = self.governance_params.council_emission_percent;
         let council_count = self.council_members.len() as u64;
         let validator_pool = if council_count > 0 && council_percent > 0 {
@@ -248,7 +262,9 @@ impl StateEngine {
                 let council_mint = per_member.saturating_mul(council_count).min(remaining_supply);
                 let capped_per = council_mint / council_count;
                 if capped_per > 0 {
-                    let members: Vec<Address> = self.council_members.keys().copied().collect();
+                    // Sort members by address for deterministic credit ordering
+                    let mut members: Vec<Address> = self.council_members.keys().copied().collect();
+                    members.sort();
                     for member in &members {
                         self.credit(member, capped_per);
                     }
@@ -546,15 +562,17 @@ impl StateEngine {
             if !tx.verify_signature() {
                 tracing::warn!("Skipping tx with invalid signature in finalized vertex");
                 // Undo the fee credit to proposer to maintain supply balance.
-                // Best-effort: proposer was just credited capped_reward + total_fees,
-                // so balance should always suffice. If it somehow doesn't (e.g. due to
-                // prior clawbacks exhausting the credit), log and continue rather than
-                // halting finality for the entire batch — finalized vertices can't be
-                // un-finalized, so a hard error here would deadlock state application.
+                // If clawback fails, the supply invariant is broken — halt the node.
+                // A failed clawback means the coinbase credited fees that can't be
+                // recovered, indicating a bug in coinbase calculation.
                 let fee = tx.fee();
                 if fee > 0 {
                     if let Err(e) = self.debit(proposer, fee) {
-                        tracing::error!("Fee clawback failed (invalid sig): {}. Supply may drift by {} sats.", e, fee);
+                        return Err(CoinError::SupplyInvariantBroken(format!(
+                            "Fee clawback failed (invalid sig): {}. Drift: {} sats. \
+                             This indicates a coinbase calculation bug — halting to prevent \
+                             unrecoverable supply divergence.", e, fee
+                        )));
                     }
                 }
                 continue;
@@ -568,7 +586,10 @@ impl StateEngine {
                 let fee = tx.fee();
                 if fee > 0 {
                     if let Err(e) = self.debit(proposer, fee) {
-                        tracing::error!("Fee clawback failed (bad nonce): {}. Supply may drift by {} sats.", e, fee);
+                        return Err(CoinError::SupplyInvariantBroken(format!(
+                            "Fee clawback failed (bad nonce): {}. Drift: {} sats. \
+                             Halting to prevent unrecoverable supply divergence.", e, fee
+                        )));
                     }
                 }
                 tracing::warn!(
@@ -585,7 +606,10 @@ impl StateEngine {
                 let fee = tx.fee();
                 if fee > 0 {
                     if let Err(e) = self.debit(proposer, fee) {
-                        tracing::error!("Fee clawback failed (insufficient balance): {}. Supply may drift by {} sats.", e, fee);
+                        return Err(CoinError::SupplyInvariantBroken(format!(
+                            "Fee clawback failed (insufficient balance): {}. Drift: {} sats. \
+                             Halting to prevent unrecoverable supply divergence.", e, fee
+                        )));
                     }
                 }
                 self.increment_nonce(&tx.from());
@@ -715,19 +739,19 @@ impl StateEngine {
         // would tick governance 4 times, and a ParameterChange execution could apply
         // before remaining vertices in the same round are processed.
 
-        // Supply invariant check — unconditional (catches state corruption in release builds too)
-        // sum(liquid balances) + sum(staked) + sum(delegated) + treasury == total_supply
-        // Maintained even for skipped txs: when a tx is skipped, its fee is debited from
-        // the proposer (undoing the coinbase credit for that fee).
+        // Supply invariant check — FATAL. Any violation means state is corrupt and the node
+        // must halt immediately. On mainnet, supply drift is unrecoverable without a hard fork.
+        // Fee clawback failures now also return SupplyInvariantBroken (see above), so this
+        // check is the last line of defense.
         {
             let liquid: u64 = self.accounts.values().map(|a| a.balance).fold(0u64, |acc, x| acc.saturating_add(x));
             let staked: u64 = self.stake_accounts.values().map(|s| s.staked).fold(0u64, |acc, x| acc.saturating_add(x));
             let delegated: u64 = self.delegation_accounts.values().map(|d| d.delegated).fold(0u64, |acc, x| acc.saturating_add(x));
             let total = liquid.saturating_add(staked).saturating_add(delegated).saturating_add(self.treasury_balance);
             if total != self.total_supply {
-                return Err(CoinError::ValidationError(format!(
-                    "Supply invariant broken: liquid={} staked={} delegated={} treasury={} total_supply={}",
-                    liquid, staked, delegated, self.treasury_balance, self.total_supply
+                return Err(CoinError::SupplyInvariantBroken(format!(
+                    "liquid={} staked={} delegated={} treasury={} sum={} != total_supply={}",
+                    liquid, staked, delegated, self.treasury_balance, total, self.total_supply
                 )));
             }
         }
@@ -745,31 +769,63 @@ impl StateEngine {
             a.round.cmp(&b.round).then_with(|| a.hash().cmp(&b.hash()))
         });
 
-        // Deterministic equivocation detection: if two vertices from the same
-        // validator appear in the same round, slash the validator. This is the
-        // ONLY place slashing happens — P2P handlers only broadcast evidence.
-        // All nodes process the same sorted finality batch, so slashing is
-        // deterministic and cannot cause state divergence.
+        // Deterministic equivocation detection (defense-in-depth):
+        //
+        // PRIMARY DEFENSE: The DAG rejects equivocating vertices at insertion via
+        // try_insert() → DagInsertError::Equivocation. The second vertex never enters
+        // the DAG, so it can never be finalized. This makes equivocation in finality
+        // batches impossible by construction.
+        //
+        // SECONDARY DEFENSE (this code): Checks BOTH within this batch AND against
+        // previously-applied batches via the persistent applied_validators_per_round
+        // HashMap. This catches theoretical edge cases where the DAG defense is
+        // somehow bypassed (e.g., future implementation bugs, or if equivocating
+        // vertices arrive via CheckpointSync suffix without DAG insertion).
+        //
+        // The applied_validators_per_round map persists across calls to this method,
+        // so equivocation is detected regardless of how finality batches are split.
+        // This is the ONLY place slashing happens — P2P handlers only broadcast evidence.
         {
-            let mut seen: std::collections::HashMap<(crate::Address, u64), usize> =
+            // First check within this batch (same as before)
+            let mut batch_seen: std::collections::HashMap<(crate::Address, u64), usize> =
                 std::collections::HashMap::new();
             for v in &sorted {
                 let key = (v.validator, v.round);
-                *seen.entry(key).or_insert(0) += 1;
+                *batch_seen.entry(key).or_insert(0) += 1;
             }
-            for ((validator, round), count) in &seen {
+            for ((validator, round), count) in &batch_seen {
                 if *count > 1 {
                     tracing::warn!(
-                        "Deterministic slash: validator {} equivocated in round {} ({} vertices)",
+                        "Deterministic slash (intra-batch): validator {} equivocated in round {} ({} vertices)",
                         validator.to_hex(), round, count
                     );
                     self.slash(validator);
+                }
+            }
+
+            // Then check against previously-applied rounds (cross-batch detection)
+            for v in &sorted {
+                if let Some(existing) = self.applied_validators_per_round.get(&v.round) {
+                    if existing.contains(&v.validator) {
+                        // This validator already produced a vertex in this round
+                        // in a previous finality batch — equivocation.
+                        tracing::warn!(
+                            "Deterministic slash (cross-batch): validator {} already applied in round {}",
+                            v.validator.to_hex(), v.round
+                        );
+                        self.slash(&v.validator);
+                    }
                 }
             }
         }
 
         // Group vertices by round. Update last_finalized_round only BETWEEN rounds.
         // Rewards distributed once per completed round via distribute_round_rewards().
+        // DETERMINISM: tick_governance runs at the boundary between round N and N+1,
+        // AFTER all vertices in round N are applied. Since vertices are sorted by
+        // (round, hash), all nodes see identical round boundaries and tick governance
+        // at the same logical point. ParameterChange proposals can only take effect
+        // starting from the round AFTER their execute_at_round.
         let mut prev_round = None;
         let mut round_producers: std::collections::HashSet<Address> = std::collections::HashSet::new();
         for vertex in &sorted {
@@ -787,6 +843,12 @@ impl StateEngine {
             let count = 1; // reward splitting now in distribute_round_rewards
             self.apply_vertex_with_validators(vertex, count)?;
             round_producers.insert(vertex.validator);
+
+            // Record this validator's participation for cross-batch equivocation detection
+            self.applied_validators_per_round
+                .entry(vertex.round)
+                .or_insert_with(std::collections::HashSet::new)
+                .insert(vertex.validator);
 
             // Index all transactions in this vertex for /tx/{hash} lookups
             let vertex_hash = vertex.hash();
@@ -808,6 +870,13 @@ impl StateEngine {
             self.last_finalized_round = Some(r);
             self.tick_governance(r);
         }
+
+        // Prune old entries from cross-batch equivocation tracker (keep last 1000 rounds)
+        if let Some(fin) = self.last_finalized_round {
+            let floor = fin.saturating_sub(1000);
+            self.applied_validators_per_round.retain(|round, _| *round >= floor);
+        }
+
         Ok(())
     }
 
@@ -1092,8 +1161,9 @@ impl StateEngine {
     /// boundary. Security trumps epoch stability — the active set is an optimization
     /// for predictability, not a shield for Byzantine actors.
     pub fn slash(&mut self, addr: &Address) {
+        let slash_pct = self.governance_params.slash_percent;
         if let Some(stake) = self.stake_accounts.get_mut(addr) {
-            let slash_amount = stake.staked.saturating_mul(crate::constants::SLASH_PERCENTAGE) / 100;
+            let slash_amount = stake.staked.saturating_mul(slash_pct) / 100;
             stake.staked = stake.staked.saturating_sub(slash_amount);
             // Slashed amount is burned (not credited anywhere)
             self.total_supply = self.total_supply.saturating_sub(slash_amount);
@@ -1109,7 +1179,7 @@ impl StateEngine {
             .collect();
         for delegator in delegators {
             if let Some(delegation) = self.delegation_accounts.get_mut(&delegator) {
-                let slash_amount = delegation.delegated.saturating_mul(crate::constants::SLASH_PERCENTAGE) / 100;
+                let slash_amount = delegation.delegated.saturating_mul(slash_pct) / 100;
                 delegation.delegated = delegation.delegated.saturating_sub(slash_amount);
                 self.total_supply = self.total_supply.saturating_sub(slash_amount);
                 // Remove empty delegations
@@ -1302,6 +1372,14 @@ impl StateEngine {
     /// The validator was credited the full effective-stake-proportional reward.
     /// Delegators' share is deducted from validator and credited to delegators
     /// minus the validator's commission.
+    /// Distribute delegation rewards for a validator's delegators.
+    ///
+    /// ROUNDING NOTE: Integer division means small amounts of dust (< 1 sat per delegator
+    /// per round) remain with the validator. Over millions of rounds this creates a small
+    /// measurable advantage for validators with many small delegators. This is a known
+    /// economic property, not a bug — the alternative (fractional sats) requires arbitrary
+    /// precision and complicates consensus. The magnitude is negligible: with 100 delegators,
+    /// max dust per round is 99 sats (0.0000099 UDAG).
     pub fn distribute_delegation_rewards(&mut self, validator: &Address, total_reward: u64) {
         if total_reward == 0 {
             return;
@@ -1778,6 +1856,7 @@ impl StateEngine {
             delegation_accounts,
             tx_index: HashMap::new(),
             tx_index_order: VecDeque::new(),
+            applied_validators_per_round: HashMap::new(),
         }
     }
 
@@ -1834,6 +1913,7 @@ impl StateEngine {
             delegation_accounts: snapshot.delegation_accounts.into_iter().collect(),
             tx_index: HashMap::new(),
             tx_index_order: VecDeque::new(),
+            applied_validators_per_round: HashMap::new(),
         }
     }
 

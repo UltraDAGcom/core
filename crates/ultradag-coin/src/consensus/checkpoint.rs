@@ -94,19 +94,187 @@ impl Checkpoint {
 
 /// Compute the state root hash from a StateSnapshot.
 ///
-/// Uses postcard binary serialization which is deterministic for the same input.
-/// Depends on accounts/stakes/proposals/votes being sorted before serialization
+/// Uses a hand-rolled canonical byte representation instead of postcard serialization.
+/// This ensures the state root is stable across serialization library upgrades —
+/// a postcard version change cannot silently break checkpoint verification.
+///
+/// The canonical format hashes all fields in a fixed order using little-endian
+/// integers and raw byte arrays. String fields (proposal titles, descriptions)
+/// are length-prefixed. Depends on all collections being sorted before calling
 /// (done in `StateEngine::snapshot()`).
+///
+/// VERSION PREFIX: The hash is prefixed with "ultradag-state-root-v1" so any
+/// future format changes can be explicitly versioned.
 pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
-    match postcard::to_allocvec(snapshot) {
-        Ok(bytes) => *blake3::hash(&bytes).as_bytes(),
-        Err(e) => {
-            // Return a clearly invalid sentinel instead of creating a collision class.
-            // [0xFF; 32] will never match a real blake3 hash in practice, and will
-            // cause checkpoint validation to fail loudly rather than silently.
-            eprintln!("CRITICAL: StateSnapshot serialization failed: {e}");
-            [0xFF; 32]
+    let mut hasher = blake3::Hasher::new();
+
+    // Version prefix — changing the format requires changing this version string,
+    // which makes the incompatibility explicit rather than silent.
+    hasher.update(b"ultradag-state-root-v1");
+
+    // Core financial state (fixed-size fields)
+    hasher.update(&snapshot.total_supply.to_le_bytes());
+    hasher.update(&snapshot.treasury_balance.to_le_bytes());
+    hasher.update(&snapshot.current_epoch.to_le_bytes());
+    hasher.update(&snapshot.next_proposal_id.to_le_bytes());
+
+    // last_finalized_round: 0xFF sentinel for None, else round bytes
+    match snapshot.last_finalized_round {
+        Some(r) => {
+            hasher.update(&[1u8]);
+            hasher.update(&r.to_le_bytes());
         }
+        None => { hasher.update(&[0u8]); }
+    }
+
+    // Accounts (sorted by address in snapshot())
+    hasher.update(&(snapshot.accounts.len() as u64).to_le_bytes());
+    for (addr, acct) in &snapshot.accounts {
+        hasher.update(&addr.0);
+        hasher.update(&acct.balance.to_le_bytes());
+        hasher.update(&acct.nonce.to_le_bytes());
+    }
+
+    // Stake accounts (sorted by address in snapshot())
+    hasher.update(&(snapshot.stake_accounts.len() as u64).to_le_bytes());
+    for (addr, stake) in &snapshot.stake_accounts {
+        hasher.update(&addr.0);
+        hasher.update(&stake.staked.to_le_bytes());
+        match stake.unlock_at_round {
+            Some(r) => {
+                hasher.update(&[1u8]);
+                hasher.update(&r.to_le_bytes());
+            }
+            None => { hasher.update(&[0u8]); }
+        }
+        hasher.update(&[stake.commission_percent]);
+    }
+
+    // Delegation accounts (sorted by address in snapshot())
+    hasher.update(&(snapshot.delegation_accounts.len() as u64).to_le_bytes());
+    for (addr, deleg) in &snapshot.delegation_accounts {
+        hasher.update(&addr.0);
+        hasher.update(&deleg.delegated.to_le_bytes());
+        hasher.update(&deleg.validator.0);
+        match deleg.unlock_at_round {
+            Some(r) => {
+                hasher.update(&[1u8]);
+                hasher.update(&r.to_le_bytes());
+            }
+            None => { hasher.update(&[0u8]); }
+        }
+    }
+
+    // Active validator set
+    hasher.update(&(snapshot.active_validator_set.len() as u64).to_le_bytes());
+    for addr in &snapshot.active_validator_set {
+        hasher.update(&addr.0);
+    }
+
+    // Council members (sorted by address in snapshot())
+    hasher.update(&(snapshot.council_members.len() as u64).to_le_bytes());
+    for (addr, category) in &snapshot.council_members {
+        hasher.update(&addr.0);
+        hasher.update(&[council_category_byte(category)]);
+    }
+
+    // Governance params (all u64)
+    hasher.update(&snapshot.governance_params.min_fee_sats.to_le_bytes());
+    hasher.update(&snapshot.governance_params.min_stake_to_propose.to_le_bytes());
+    hasher.update(&snapshot.governance_params.quorum_numerator.to_le_bytes());
+    hasher.update(&snapshot.governance_params.approval_numerator.to_le_bytes());
+    hasher.update(&snapshot.governance_params.voting_period_rounds.to_le_bytes());
+    hasher.update(&snapshot.governance_params.execution_delay_rounds.to_le_bytes());
+    hasher.update(&snapshot.governance_params.max_active_proposals.to_le_bytes());
+    hasher.update(&snapshot.governance_params.observer_reward_percent.to_le_bytes());
+    hasher.update(&snapshot.governance_params.council_emission_percent.to_le_bytes());
+    hasher.update(&snapshot.governance_params.slash_percent.to_le_bytes());
+
+    // Proposals (sorted by ID in snapshot())
+    hasher.update(&(snapshot.proposals.len() as u64).to_le_bytes());
+    for (id, proposal) in &snapshot.proposals {
+        hasher.update(&id.to_le_bytes());
+        hasher.update(&proposal.proposer.0);
+        // Length-prefixed strings for title and description
+        hasher.update(&(proposal.title.len() as u32).to_le_bytes());
+        hasher.update(proposal.title.as_bytes());
+        hasher.update(&(proposal.description.len() as u32).to_le_bytes());
+        hasher.update(proposal.description.as_bytes());
+        hasher.update(&proposal.voting_starts.to_le_bytes());
+        hasher.update(&proposal.voting_ends.to_le_bytes());
+        hasher.update(&proposal.votes_for.to_le_bytes());
+        hasher.update(&proposal.votes_against.to_le_bytes());
+        hasher.update(&proposal.snapshot_total_stake.to_le_bytes());
+        // Proposal type discriminant + fields
+        match &proposal.proposal_type {
+            crate::governance::ProposalType::TextProposal => { hasher.update(&[0u8]); }
+            crate::governance::ProposalType::ParameterChange { param, new_value } => {
+                hasher.update(&[1u8]);
+                hasher.update(&(param.len() as u32).to_le_bytes());
+                hasher.update(param.as_bytes());
+                hasher.update(&(new_value.len() as u32).to_le_bytes());
+                hasher.update(new_value.as_bytes());
+            }
+            crate::governance::ProposalType::CouncilMembership { action, address, category } => {
+                hasher.update(&[2u8]);
+                hasher.update(&[council_action_byte(action)]);
+                hasher.update(&address.0);
+                hasher.update(&[council_category_byte(category)]);
+            }
+            crate::governance::ProposalType::TreasurySpend { recipient, amount } => {
+                hasher.update(&[3u8]);
+                hasher.update(&recipient.0);
+                hasher.update(&amount.to_le_bytes());
+            }
+        }
+        // Proposal status discriminant
+        match &proposal.status {
+            crate::governance::ProposalStatus::Active => { hasher.update(&[0u8]); }
+            crate::governance::ProposalStatus::PassedPending { execute_at_round } => {
+                hasher.update(&[1u8]);
+                hasher.update(&execute_at_round.to_le_bytes());
+            }
+            crate::governance::ProposalStatus::Executed => { hasher.update(&[2u8]); }
+            crate::governance::ProposalStatus::Failed { reason } => {
+                hasher.update(&[3u8]);
+                hasher.update(&(reason.len() as u32).to_le_bytes());
+                hasher.update(reason.as_bytes());
+            }
+            crate::governance::ProposalStatus::Rejected => { hasher.update(&[4u8]); }
+            crate::governance::ProposalStatus::Cancelled => { hasher.update(&[5u8]); }
+        }
+    }
+
+    // Votes (sorted by (proposal_id, address) in snapshot())
+    hasher.update(&(snapshot.votes.len() as u64).to_le_bytes());
+    for ((proposal_id, voter), approve) in &snapshot.votes {
+        hasher.update(&proposal_id.to_le_bytes());
+        hasher.update(&voter.0);
+        hasher.update(&[*approve as u8]);
+    }
+
+    *hasher.finalize().as_bytes()
+}
+
+/// Map CouncilSeatCategory to a stable byte value for canonical hashing.
+fn council_category_byte(cat: &crate::governance::CouncilSeatCategory) -> u8 {
+    use crate::governance::CouncilSeatCategory::*;
+    match cat {
+        Technical => 0,
+        Business => 1,
+        Legal => 2,
+        Academic => 3,
+        Community => 4,
+        Foundation => 5,
+    }
+}
+
+/// Map CouncilAction to a stable byte value for canonical hashing.
+fn council_action_byte(action: &crate::governance::council::CouncilAction) -> u8 {
+    use crate::governance::council::CouncilAction::*;
+    match action {
+        Add => 0,
+        Remove => 1,
     }
 }
 

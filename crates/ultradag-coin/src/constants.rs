@@ -153,11 +153,11 @@ pub const CHECKPOINT_INTERVAL: u64 = 100;
 /// Run `cargo test --features mainnet test_compute_mainnet_genesis_hash` to recompute.
 #[cfg(not(feature = "mainnet"))]
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
-    0xdf, 0x03, 0x8d, 0x94, 0xf2, 0x2f, 0x89, 0x69,
-    0xa0, 0x2b, 0x5d, 0x3d, 0x66, 0xdc, 0x2f, 0x2a,
-    0x45, 0xfa, 0x9f, 0xbb, 0xeb, 0x08, 0x57, 0x73,
-    0xc8, 0x2d, 0x05, 0x51, 0x05, 0xd5, 0x22, 0xa2,
-]; // Testnet: computed from genesis with faucet + dev allocation + treasury + council_members + delegation_accounts
+    0xe7, 0x98, 0x79, 0x55, 0xae, 0x85, 0xbe, 0xa9,
+    0x83, 0x9c, 0x02, 0x69, 0x08, 0x5e, 0x24, 0xae,
+    0x6e, 0x7a, 0x58, 0xa4, 0xec, 0x2a, 0x4b, 0x94,
+    0x08, 0x39, 0xe7, 0xd0, 0x66, 0x34, 0xd3, 0xb3,
+]; // Testnet: canonical state root v1 + governable slash_percent
 
 /// Mainnet genesis checkpoint hash — computed from genesis WITHOUT faucet.
 /// To compute: `cargo test test_compute_genesis_hash -- --nocapture`
@@ -166,9 +166,25 @@ pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
 #[cfg(feature = "mainnet")]
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [0u8; 32]; // PLACEHOLDER — see test_compute_genesis_hash
 
+/// Compile-time assertion: GENESIS_CHECKPOINT_HASH must not be the placeholder on mainnet.
+/// This is the primary defense — prevents building a mainnet binary with [0u8; 32].
+/// The runtime check below is a secondary defense for extra safety.
+#[cfg(feature = "mainnet")]
+const _GENESIS_HASH_GUARD: () = {
+    // Check first 4 bytes are not all zero (sufficient to detect placeholder).
+    // Full const array comparison requires nightly, so we check a prefix.
+    assert!(
+        GENESIS_CHECKPOINT_HASH[0] != 0
+            || GENESIS_CHECKPOINT_HASH[1] != 0
+            || GENESIS_CHECKPOINT_HASH[2] != 0
+            || GENESIS_CHECKPOINT_HASH[3] != 0,
+        "GENESIS_CHECKPOINT_HASH is placeholder [0u8; 32]. \
+         Compute mainnet hash with: cargo test test_compute_genesis_hash -- --nocapture"
+    );
+};
+
 /// Runtime check: panics at startup if mainnet builds have the placeholder hash.
-/// This is a runtime guard (not compile-time) because the hash must be computed
-/// by running code, not derivable from const expressions.
+/// Secondary defense — the compile-time assertion above should catch this first.
 #[cfg(feature = "mainnet")]
 pub fn verify_genesis_checkpoint_hash() {
     assert_ne!(

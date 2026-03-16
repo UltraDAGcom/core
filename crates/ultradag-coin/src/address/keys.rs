@@ -2,7 +2,7 @@ use ed25519_dalek::Signer;
 use serde::{Deserialize, Serialize};
 
 /// A 32-byte address derived from the Ed25519 public key: blake3(pubkey).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Address(pub [u8; 32]);
 
 /// An Ed25519 signing key (32-byte seed).
@@ -86,11 +86,13 @@ impl std::fmt::Display for Address {
 }
 
 impl SecretKey {
-    /// Generate a new random Ed25519 signing key.
+    /// Generate a new random Ed25519 signing key using OS CSPRNG.
     ///
     /// Uses `rand::thread_rng()` which delegates to the OS CSPRNG (getrandom).
-    /// This is suitable for testnet and tests. For mainnet key generation,
-    /// consider explicit CSPRNG sourcing with `OsRng` directly for auditability.
+    /// **TESTNET/TEST ONLY** — disabled in mainnet builds to prevent accidental
+    /// use of non-auditable key generation in production. Mainnet keys must be
+    /// generated offline with explicit `OsRng` sourcing and hardware wallet storage.
+    #[cfg(not(feature = "mainnet"))]
     pub fn generate() -> Self {
         let mut rng = rand::thread_rng();
         Self {
