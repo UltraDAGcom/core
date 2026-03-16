@@ -84,7 +84,7 @@ impl GovernanceParams {
                 self.min_stake_to_propose = value;
             }
             "quorum_numerator" => {
-                if value < 5 || value > 100 {
+                if !(5..=100).contains(&value) {
                     return Err("quorum_numerator must be 5-100".to_string());
                 }
                 self.quorum_numerator = value;
@@ -141,7 +141,7 @@ impl GovernanceParams {
             "slash_percent" => {
                 // Floor: 10% — must be meaningful deterrent against equivocation
                 // Ceiling: 100% — full stake burn (maximum punishment)
-                if value < 10 || value > 100 {
+                if !(10..=100).contains(&value) {
                     return Err("slash_percent must be 10-100".to_string());
                 }
                 self.slash_percent = value;

@@ -518,6 +518,8 @@ impl StateEngine {
     /// Apply a finalized vertex to the state (convenience for single-vertex tests).
     /// Also distributes round rewards and ticks governance.
     pub fn apply_vertex(&mut self, vertex: &DagVertex) -> Result<(), CoinError> {
+        // Process unstake completions at the round boundary (same as apply_finalized_vertices)
+        self.process_unstake_completions(vertex.round);
         self.apply_vertex_with_validators(vertex, 1)?;
         // Single-vertex convenience: distribute round rewards, update finality, tick governance.
         let mut producers = std::collections::HashSet::new();
@@ -536,9 +538,8 @@ impl StateEngine {
         _active_validator_count: u64,
     ) -> Result<(), CoinError> {
         // Apply directly — finalized vertices are BFT-confirmed and must succeed.
-
-        // Process any unstake completions for this round
-        self.process_unstake_completions(vertex.round);
+        // Note: unstake completions are processed once per round in apply_finalized_vertices(),
+        // not per-vertex, to ensure deterministic unlock timing at round boundaries.
 
         let total_fees: u64 = vertex.block.transactions.iter()
             .map(|tx| tx.fee())
@@ -685,8 +686,13 @@ impl StateEngine {
                 crate::tx::Transaction::CreateProposal(proposal_tx) => {
                     if let Err(e) = self.apply_create_proposal(proposal_tx, vertex.round) {
                         tracing::warn!("Skipping invalid CreateProposal tx in finalized vertex: {}", e);
-                        if let Err(debit_err) = self.debit(&proposal_tx.from, proposal_tx.fee) {
-                            tracing::error!("Fee clawback failed (proposal): {}. Supply may drift by {} sats.", debit_err, proposal_tx.fee);
+                        if proposal_tx.fee > 0 {
+                            if let Err(debit_err) = self.debit(&proposal_tx.from, proposal_tx.fee) {
+                                return Err(CoinError::SupplyInvariantBroken(format!(
+                                    "Fee clawback failed (proposal): {}. Drift: {} sats. \
+                                     Halting to prevent unrecoverable supply divergence.", debit_err, proposal_tx.fee
+                                )));
+                            }
                         }
                         self.increment_nonce(&proposal_tx.from);
                     }
@@ -694,8 +700,13 @@ impl StateEngine {
                 crate::tx::Transaction::Vote(vote_tx) => {
                     if let Err(e) = self.apply_vote(vote_tx, vertex.round) {
                         tracing::warn!("Skipping invalid Vote tx in finalized vertex: {}", e);
-                        if let Err(debit_err) = self.debit(&vote_tx.from, vote_tx.fee) {
-                            tracing::error!("Fee clawback failed (vote): {}. Supply may drift by {} sats.", debit_err, vote_tx.fee);
+                        if vote_tx.fee > 0 {
+                            if let Err(debit_err) = self.debit(&vote_tx.from, vote_tx.fee) {
+                                return Err(CoinError::SupplyInvariantBroken(format!(
+                                    "Fee clawback failed (vote): {}. Drift: {} sats. \
+                                     Halting to prevent unrecoverable supply divergence.", debit_err, vote_tx.fee
+                                )));
+                            }
                         }
                         self.increment_nonce(&vote_tx.from);
                     }
@@ -796,6 +807,12 @@ impl StateEngine {
         // so equivocation is detected regardless of how finality batches are split.
         // This is the ONLY place slashing happens — P2P handlers only broadcast evidence.
         {
+            // Track (validator, round) pairs already slashed in this pass to prevent
+            // double/triple slashing when both intra-batch and cross-batch detection
+            // fire for the same equivocation event.
+            let mut already_slashed: std::collections::HashSet<(crate::Address, u64)> =
+                std::collections::HashSet::new();
+
             // First check within this batch (same as before)
             let mut batch_seen: std::collections::HashMap<(crate::Address, u64), usize> =
                 std::collections::HashMap::new();
@@ -804,7 +821,7 @@ impl StateEngine {
                 *batch_seen.entry(key).or_insert(0) += 1;
             }
             for ((validator, round), count) in &batch_seen {
-                if *count > 1 {
+                if *count > 1 && already_slashed.insert((*validator, *round)) {
                     tracing::warn!(
                         "Deterministic slash (intra-batch): validator {} equivocated in round {} ({} vertices)",
                         validator.to_hex(), round, count
@@ -819,11 +836,13 @@ impl StateEngine {
                     if existing.contains(&v.validator) {
                         // This validator already produced a vertex in this round
                         // in a previous finality batch — equivocation.
-                        tracing::warn!(
-                            "Deterministic slash (cross-batch): validator {} already applied in round {}",
-                            v.validator.to_hex(), v.round
-                        );
-                        self.slash(&v.validator);
+                        if already_slashed.insert((v.validator, v.round)) {
+                            tracing::warn!(
+                                "Deterministic slash (cross-batch): validator {} already applied in round {}",
+                                v.validator.to_hex(), v.round
+                            );
+                            self.slash(&v.validator);
+                        }
                     }
                 }
             }
@@ -840,7 +859,8 @@ impl StateEngine {
         let mut round_producers: std::collections::HashSet<Address> = std::collections::HashSet::new();
         for vertex in &sorted {
             // When transitioning to a new round, finalize the previous round:
-            // distribute rewards, update last_finalized_round, tick governance.
+            // distribute rewards, update last_finalized_round, tick governance,
+            // and process unstake completions for the new round.
             if prev_round.is_some() && prev_round != Some(vertex.round) {
                 if let Some(r) = prev_round {
                     self.distribute_round_rewards(r, &round_producers)?;
@@ -848,6 +868,11 @@ impl StateEngine {
                     self.tick_governance(r);
                 }
                 round_producers.clear();
+                // Process unstake completions once at the start of each new round
+                self.process_unstake_completions(vertex.round);
+            } else if prev_round.is_none() {
+                // First vertex in the batch: process unstake completions for its round
+                self.process_unstake_completions(vertex.round);
             }
 
             let count = 1; // reward splitting now in distribute_round_rewards
@@ -857,7 +882,7 @@ impl StateEngine {
             // Record this validator's participation for cross-batch equivocation detection
             self.applied_validators_per_round
                 .entry(vertex.round)
-                .or_insert_with(std::collections::HashSet::new)
+                .or_default()
                 .insert(vertex.validator);
 
             // Index all transactions in this vertex for /tx/{hash} lookups
@@ -1494,9 +1519,7 @@ impl StateEngine {
                 available: balance,
             });
         }
-        if let Err(e) = self.debit(&tx.from, tx.fee) {
-            return Err(e);
-        }
+        self.debit(&tx.from, tx.fee)?;
 
         // 10. Increment nonce
         self.increment_nonce(&tx.from);
@@ -1586,9 +1609,7 @@ impl StateEngine {
                 available: balance,
             });
         }
-        if let Err(e) = self.debit(&tx.from, tx.fee) {
-            return Err(e);
-        }
+        self.debit(&tx.from, tx.fee)?;
 
         // 9. Increment nonce
         self.increment_nonce(&tx.from);
@@ -1655,11 +1676,9 @@ impl StateEngine {
                     if matches!(&proposal.proposal_type,
                         crate::governance::ProposalType::ParameterChange { .. } |
                         crate::governance::ProposalType::TreasurySpend { .. }
-                    ) {
-                        if !self.dao_is_active() {
-                            // DAO hibernating — skip execution, leave as PassedPending
-                            continue;
-                        }
+                    ) && !self.dao_is_active() {
+                        // DAO hibernating — skip execution, leave as PassedPending
+                        continue;
                     }
                     // Collect for execution attempt — final status determined below
                     to_update.push((*id, crate::governance::ProposalStatus::Executed));
@@ -1807,6 +1826,7 @@ impl StateEngine {
     }
 
     /// Construct StateEngine from individual components (for redb loading).
+    #[allow(clippy::too_many_arguments)]
     pub fn from_parts(
         accounts: HashMap<Address, AccountState>,
         stake_accounts: HashMap<Address, StakeAccount>,
@@ -1875,6 +1895,7 @@ impl StateEngine {
             council_members: council,
             treasury_balance: self.treasury_balance,
             delegation_accounts,
+            configured_validator_count: self.configured_validator_count,
         }
     }
 
@@ -1891,7 +1912,7 @@ impl StateEngine {
             votes: snapshot.votes.into_iter().collect(),
             next_proposal_id: snapshot.next_proposal_id,
             governance_params: snapshot.governance_params,
-            configured_validator_count: None,
+            configured_validator_count: snapshot.configured_validator_count,
             council_members: snapshot.council_members.into_iter().collect(),
             treasury_balance: snapshot.treasury_balance,
             delegation_accounts: snapshot.delegation_accounts.into_iter().collect(),

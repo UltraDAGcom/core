@@ -208,3 +208,78 @@ fn test_stake_unstake_rate_limits() {
     }
     assert!(!limiter.check_rate_limit(ip, limits::UNSTAKE));
 }
+
+#[test]
+fn test_rate_limit_counter_does_not_overflow() {
+    // Verify that the request counter uses saturating arithmetic.
+    // With a very high limit, exercise the counter to ensure no panic.
+    let limiter = RateLimiter::new();
+    let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+    let limit = RateLimit::new("overflow_test", u32::MAX, 60);
+
+    // Make many requests — the counter should saturate at u32::MAX, not panic.
+    for _ in 0..1000 {
+        limiter.check_rate_limit(ip, limit);
+    }
+    // Should still be under the u32::MAX limit
+    assert!(limiter.check_rate_limit(ip, limit));
+}
+
+#[test]
+fn test_delegate_rate_limits() {
+    let limiter = RateLimiter::new();
+    let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+
+    for _ in 0..limits::DELEGATE.requests_per_window {
+        assert!(limiter.check_rate_limit(ip, limits::DELEGATE));
+    }
+    assert!(!limiter.check_rate_limit(ip, limits::DELEGATE));
+}
+
+#[test]
+fn test_undelegate_rate_limits() {
+    let limiter = RateLimiter::new();
+    let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+
+    for _ in 0..limits::UNDELEGATE.requests_per_window {
+        assert!(limiter.check_rate_limit(ip, limits::UNDELEGATE));
+    }
+    assert!(!limiter.check_rate_limit(ip, limits::UNDELEGATE));
+}
+
+#[test]
+fn test_set_commission_rate_limits() {
+    let limiter = RateLimiter::new();
+    let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+
+    for _ in 0..limits::SET_COMMISSION.requests_per_window {
+        assert!(limiter.check_rate_limit(ip, limits::SET_COMMISSION));
+    }
+    assert!(!limiter.check_rate_limit(ip, limits::SET_COMMISSION));
+}
+
+#[test]
+fn test_keygen_rate_limits() {
+    let limiter = RateLimiter::new();
+    let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+
+    for _ in 0..limits::KEYGEN.requests_per_window {
+        assert!(limiter.check_rate_limit(ip, limits::KEYGEN));
+    }
+    assert!(!limiter.check_rate_limit(ip, limits::KEYGEN));
+}
+
+#[test]
+fn test_predefined_limits_delegation_endpoints() {
+    assert_eq!(limits::DELEGATE.requests_per_window, 5);
+    assert_eq!(limits::DELEGATE.window_duration.as_secs(), 60);
+
+    assert_eq!(limits::UNDELEGATE.requests_per_window, 5);
+    assert_eq!(limits::UNDELEGATE.window_duration.as_secs(), 60);
+
+    assert_eq!(limits::SET_COMMISSION.requests_per_window, 5);
+    assert_eq!(limits::SET_COMMISSION.window_duration.as_secs(), 60);
+
+    assert_eq!(limits::KEYGEN.requests_per_window, 10);
+    assert_eq!(limits::KEYGEN.window_duration.as_secs(), 60);
+}

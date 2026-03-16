@@ -35,6 +35,11 @@ pub struct StateSnapshot {
     /// Delegated staking accounts: delegator address → delegation details.
     #[serde(default)]
     pub delegation_accounts: Vec<(crate::address::Address, DelegationAccount)>,
+    /// Configured validator count from --validators N CLI flag.
+    /// Affects pre-staking reward distribution (divisor). Must be in state root
+    /// to prevent divergence between nodes with different --validators N values.
+    #[serde(default)]
+    pub configured_validator_count: Option<u64>,
 }
 
 impl StateSnapshot {

@@ -262,6 +262,18 @@ pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
         hasher.update(&[*approve as u8]);
     }
 
+    // Configured validator count: affects pre-staking reward distribution (divisor).
+    // Two nodes with different --validators N values would compute different rewards
+    // but identical state roots without this field, allowing checkpoint co-signing
+    // to succeed despite divergent financial state.
+    match snapshot.configured_validator_count {
+        Some(n) => {
+            hasher.update(&[1u8]);
+            hasher.update(&n.to_le_bytes());
+        }
+        None => { hasher.update(&[0u8]); }
+    }
+
     *hasher.finalize().as_bytes()
 }
 

@@ -82,9 +82,25 @@ impl PeerReader {
             ));
         }
 
+        // Compute expected chunk count to prevent amplification via tiny chunks.
+        // Legitimate senders use NOISE_MAX_PLAINTEXT-sized chunks (~65519 bytes each).
+        // A 4MB message should produce ~62 chunks, not millions of 1-byte chunks.
+        // Cap at (total_len / min_chunk_size) + 2 to allow some variation.
+        // min_chunk_size = NOISE_TAG_LEN + 1 = 17 bytes (smallest valid encrypted chunk)
+        let max_chunks = (total_len / 64).saturating_add(128);
+
         let mut plaintext = Vec::with_capacity(total_len);
+        let mut chunk_count: usize = 0;
 
         while plaintext.len() < total_len {
+            chunk_count = chunk_count.saturating_add(1);
+            if chunk_count > max_chunks {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "too many encrypted chunks (amplification attack)",
+                ));
+            }
+
             // Read 2-byte encrypted chunk length
             let mut chunk_len_buf = [0u8; 2];
             self.reader.read_exact(&mut chunk_len_buf).await?;

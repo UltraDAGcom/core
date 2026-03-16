@@ -392,12 +392,14 @@ fn test_checkpoint_sync_message() {
         council_members: vec![],
         treasury_balance: 0,
         delegation_accounts: vec![],
+        configured_validator_count: None,
     };
 
     let msg = Message::CheckpointSync {
         checkpoint,
         suffix_vertices: vec![vertex],
         state_at_checkpoint: state,
+        checkpoint_chain: vec![],
     };
     
     let serialized = serde_json::to_vec(&msg).unwrap();

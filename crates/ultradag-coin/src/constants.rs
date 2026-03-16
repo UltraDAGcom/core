@@ -13,7 +13,7 @@ pub fn sats_to_udag(sats: u64) -> f64 {
 }
 
 /// Initial block reward: 1 UDAG per round (split among validators)
-pub const INITIAL_REWARD_SATS: u64 = 1 * COIN;
+pub const INITIAL_REWARD_SATS: u64 = COIN;
 
 /// Reward halves every 10,500,000 rounds (~1.66 years at 5s rounds)
 /// Chosen so that reward × interval × 2 = MAX_SUPPLY (21M UDAG).
@@ -51,11 +51,16 @@ pub const MAX_MEMO_BYTES: usize = 256;
 /// - **`/keygen`, `/tx`, `/stake`, `/unstake`, `/faucet`, `/proposal`, `/vote`** are
 ///   testnet-only endpoints that accept secret keys in the request body. They return
 ///   HTTP 410 GONE when `--testnet false` (mainnet mode).
-
-/// Network identifier included in all signatures to prevent cross-network replay attacks.
+///
+/// # Network Identifier
+///
+/// Included in all signatures to prevent cross-network replay attacks.
 /// Mainnet and testnet use different NETWORK_IDs, making signatures cryptographically
 /// incompatible across networks. A transaction signed for testnet cannot be replayed
 /// on mainnet (and vice versa) because the signable_bytes() include this prefix.
+///
+/// On mainnet builds (`--features mainnet`), this is `b"ultradag-mainnet-v1"` instead,
+/// making cross-network signature replay cryptographically impossible.
 #[cfg(not(feature = "mainnet"))]
 pub const NETWORK_ID: &[u8] = b"ultradag-testnet-v1";
 
@@ -113,13 +118,14 @@ pub const EPOCH_LENGTH_ROUNDS: u64 = 210_000;
 /// Observer reward percentage: staked-but-not-active addresses earn 20% of normal.
 pub const OBSERVER_REWARD_PERCENT: u64 = 20;
 
-/// ===== COUNCIL OF 21 CONSTANTS =====
-
-/// Council of 21: No stake requirement for council members.
-/// Council seats are earned through Foundation membership and expertise,
-/// not purchased with tokens. Council members earn emission rewards instead.
+// ===== COUNCIL OF 21 CONSTANTS =====
 
 /// Council of 21: Panama Foundation membership requirement.
+///
+/// No stake requirement for council members. Council seats are earned
+/// through Foundation membership and expertise, not purchased with tokens.
+/// Council members earn emission rewards instead.
+///
 /// In production, this would be verified against foundation records.
 /// For now, this is a placeholder for future integration.
 pub const COUNCIL_FOUNDATION_MEMBERSHIP_REQUIRED: bool = true;
@@ -153,11 +159,11 @@ pub const CHECKPOINT_INTERVAL: u64 = 100;
 /// Run `cargo test --features mainnet test_compute_mainnet_genesis_hash` to recompute.
 #[cfg(not(feature = "mainnet"))]
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
-    0xe7, 0x98, 0x79, 0x55, 0xae, 0x85, 0xbe, 0xa9,
-    0x83, 0x9c, 0x02, 0x69, 0x08, 0x5e, 0x24, 0xae,
-    0x6e, 0x7a, 0x58, 0xa4, 0xec, 0x2a, 0x4b, 0x94,
-    0x08, 0x39, 0xe7, 0xd0, 0x66, 0x34, 0xd3, 0xb3,
-]; // Testnet: canonical state root v1 + governable slash_percent
+    0x8b, 0x11, 0x13, 0x6b, 0xfe, 0x2e, 0x19, 0xe1,
+    0x54, 0xa2, 0x07, 0xd5, 0x6f, 0x49, 0x5d, 0x45,
+    0xd8, 0x29, 0xef, 0x73, 0x2f, 0x55, 0x36, 0xf2,
+    0x59, 0xf5, 0xdf, 0x61, 0x1b, 0x1d, 0x41, 0x05,
+]; // Testnet: canonical state root v1 + configured_validator_count in state root
 
 /// Mainnet genesis checkpoint hash — computed from genesis WITHOUT faucet.
 /// To compute: `cargo test test_compute_genesis_hash -- --nocapture`
@@ -205,7 +211,7 @@ pub fn epoch_of(round: u64) -> u64 {
 
 /// Check if a round is an epoch boundary (start of new epoch).
 pub fn is_epoch_boundary(round: u64) -> bool {
-    round % EPOCH_LENGTH_ROUNDS == 0
+    round.is_multiple_of(EPOCH_LENGTH_ROUNDS)
 }
 
 /// Deterministic seed for the testnet faucet keypair.

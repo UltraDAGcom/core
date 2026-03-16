@@ -71,16 +71,14 @@ impl Proposal {
             return false;
         }
         // Use u128 to prevent overflow: total_staked * quorum_numerator can exceed u64
-        let quorum = ((total_staked as u128 * params.quorum_numerator as u128
-            + GOVERNANCE_QUORUM_DENOMINATOR as u128 - 1)
-            / GOVERNANCE_QUORUM_DENOMINATOR as u128) as u64;
+        let quorum = (total_staked as u128 * params.quorum_numerator as u128)
+            .div_ceil(GOVERNANCE_QUORUM_DENOMINATOR as u128) as u64;
         let total = self.total_votes();
         if total < quorum {
             return false;
         }
-        let threshold = ((total as u128 * params.approval_numerator as u128
-            + GOVERNANCE_APPROVAL_DENOMINATOR as u128 - 1)
-            / GOVERNANCE_APPROVAL_DENOMINATOR as u128) as u64;
+        let threshold = (total as u128 * params.approval_numerator as u128)
+            .div_ceil(GOVERNANCE_APPROVAL_DENOMINATOR as u128) as u64;
         self.votes_for >= threshold
     }
 

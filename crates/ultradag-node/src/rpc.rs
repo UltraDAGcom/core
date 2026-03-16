@@ -58,6 +58,8 @@ fn json_response(status: StatusCode, json: &impl Serialize) -> Response<BoxBody>
         .header("Access-Control-Allow-Origin", "*")
         .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         .header("Access-Control-Allow-Headers", "Content-Type")
+        .header("X-Content-Type-Options", "nosniff")
+        .header("Cache-Control", "no-store")
         .body(Full::new(Bytes::from(json)))
         .unwrap_or_else(|e| {
             tracing::error!("Failed to build JSON response: {}", e);
@@ -456,6 +458,7 @@ async fn handle_request(
             .header("Access-Control-Allow-Origin", "*")
             .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             .header("Access-Control-Allow-Headers", "Content-Type")
+            .header("Access-Control-Max-Age", "3600")
             .body(Full::new(Bytes::new()))
             .unwrap_or_else(|e| {
                 tracing::error!("Failed to build CORS response: {}", e);
@@ -1405,7 +1408,7 @@ async fn handle_request(
                     let Some(cat_str) = prop_req.council_category else {
                         return Ok(error_response(StatusCode::BAD_REQUEST, "council_category required (technical, business, legal, academic, community, foundation)"));
                     };
-                    let Some(category) = CouncilSeatCategory::from_str(&cat_str) else {
+                    let Some(category) = CouncilSeatCategory::parse_name(&cat_str) else {
                         return Ok(error_response(StatusCode::BAD_REQUEST,
                             "invalid council_category: must be technical, business, legal, academic, community, or foundation"));
                     };
@@ -1689,8 +1692,13 @@ async fn handle_request(
 
         (&Method::GET, ["proposals"]) => {
             let state = read_lock_or_503!(server.state);
-            let proposals: Vec<serde_json::Value> = state.proposals()
-                .values()
+            // Cap response to prevent unbounded data. Sort by ID descending (newest first).
+            let mut proposal_ids: Vec<u64> = state.proposals().keys().copied().collect();
+            proposal_ids.sort_unstable_by(|a, b| b.cmp(a));
+            const MAX_PROPOSALS_RESPONSE: usize = 200;
+            proposal_ids.truncate(MAX_PROPOSALS_RESPONSE);
+            let proposals: Vec<serde_json::Value> = proposal_ids.iter()
+                .filter_map(|id| state.proposals().get(id))
                 .map(|p| {
                     let mut pj = serde_json::json!({
                         "id": p.id,
@@ -1879,6 +1887,74 @@ async fn handle_request(
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid signature"));
             }
 
+            // Validate transaction-type-specific constraints before touching state/mempool.
+            // These mirror the checks in the per-endpoint handlers (POST /tx, /stake, etc.)
+            // but are critical here because /tx/submit is the ONLY mainnet tx path.
+            match &tx {
+                Transaction::Transfer(t) => {
+                    if t.amount == 0 {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "transfer amount must be greater than 0"));
+                    }
+                    if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+                    }
+                    if let Some(ref memo) = t.memo {
+                        if memo.len() > ultradag_coin::constants::MAX_MEMO_BYTES {
+                            return Ok(error_response(StatusCode::BAD_REQUEST,
+                                &format!("memo too large: {} bytes (max {})", memo.len(), ultradag_coin::constants::MAX_MEMO_BYTES)));
+                        }
+                    }
+                }
+                Transaction::Stake(t) => {
+                    if t.amount < ultradag_coin::MIN_STAKE_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("minimum stake is {} sats ({} UDAG)",
+                                ultradag_coin::MIN_STAKE_SATS,
+                                ultradag_coin::MIN_STAKE_SATS / ultradag_coin::SATS_PER_UDAG)));
+                    }
+                }
+                Transaction::Delegate(t) => {
+                    if t.amount < ultradag_coin::MIN_DELEGATION_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("minimum delegation is {} sats ({} UDAG)",
+                                ultradag_coin::MIN_DELEGATION_SATS,
+                                ultradag_coin::MIN_DELEGATION_SATS / ultradag_coin::SATS_PER_UDAG)));
+                    }
+                    if t.from == t.validator {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "cannot delegate to self"));
+                    }
+                }
+                Transaction::SetCommission(t) => {
+                    if t.commission_percent > ultradag_coin::MAX_COMMISSION_PERCENT {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("commission_percent must be 0-{}", ultradag_coin::MAX_COMMISSION_PERCENT)));
+                    }
+                }
+                Transaction::CreateProposal(t) => {
+                    if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+                    }
+                    if t.title.len() > ultradag_coin::constants::PROPOSAL_TITLE_MAX_BYTES {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("title too long: max {} bytes", ultradag_coin::constants::PROPOSAL_TITLE_MAX_BYTES)));
+                    }
+                    if t.description.len() > ultradag_coin::constants::PROPOSAL_DESCRIPTION_MAX_BYTES {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("description too long: max {} bytes", ultradag_coin::constants::PROPOSAL_DESCRIPTION_MAX_BYTES)));
+                    }
+                }
+                Transaction::Vote(t) => {
+                    if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+                    }
+                }
+                // Unstake, Undelegate — no amount/fee fields to validate
+                Transaction::Unstake(_) | Transaction::Undelegate(_) => {}
+            }
+
             let tx_hash = tx.hash();
 
             // Atomic validation + mempool insertion (hold both locks to prevent TOCTOU)
@@ -1951,6 +2027,11 @@ async fn handle_request(
             let Some(validator_addr) = Address::from_hex(&delegate_req.validator) else {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid validator address hex"));
             };
+
+            // Validate: cannot delegate to self (Bug #149)
+            if sender == validator_addr {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "cannot delegate to self"));
+            }
 
             let (tx, tx_hash, nonce) = {
                 let state = read_lock_or_503!(server.state);
@@ -2200,7 +2281,9 @@ async fn handle_request(
             let state = read_lock_or_503!(server.state);
             let delegators = state.delegators_of(&addr);
             let total: u64 = delegators.iter().map(|(_, amt)| *amt).fold(0u64, |acc, x| acc.saturating_add(x));
-            let delegator_list: Vec<serde_json::Value> = delegators.iter().map(|(delegator_addr, amount)| {
+            // Cap delegator list to prevent unbounded response size
+            const MAX_DELEGATORS_RESPONSE: usize = 500;
+            let delegator_list: Vec<serde_json::Value> = delegators.iter().take(MAX_DELEGATORS_RESPONSE).map(|(delegator_addr, amount)| {
                 let deleg = state.delegation_account(delegator_addr);
                 serde_json::json!({
                     "address": delegator_addr.to_hex(),
@@ -2376,4 +2459,86 @@ fn parse_hash_hex(hex: &str) -> Option<[u8; 32]> {
         bytes[i] = u8::from_str_radix(s, 16).ok()?;
     }
     Some(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_secret_key_valid() {
+        let hex = "aa".repeat(32);
+        assert!(parse_secret_key(&hex).is_ok());
+    }
+
+    #[test]
+    fn test_parse_secret_key_too_short() {
+        let hex = "aa".repeat(31);
+        assert!(matches!(parse_secret_key(&hex), Err("secret key must be 64 hex chars (32 bytes)")));
+    }
+
+    #[test]
+    fn test_parse_secret_key_too_long() {
+        let hex = "aa".repeat(33);
+        assert!(matches!(parse_secret_key(&hex), Err("secret key must be 64 hex chars (32 bytes)")));
+    }
+
+    #[test]
+    fn test_parse_secret_key_invalid_hex() {
+        let hex = "zz".repeat(32);
+        assert!(matches!(parse_secret_key(&hex), Err("invalid hex in secret key")));
+    }
+
+    #[test]
+    fn test_parse_secret_key_null_byte() {
+        let mut hex = "aa".repeat(31);
+        hex.push('\0');
+        hex.push('a');
+        assert!(parse_secret_key(&hex).is_err());
+    }
+
+    #[test]
+    fn test_parse_hash_hex_valid() {
+        let hex = "ab".repeat(32);
+        let result = parse_hash_hex(&hex);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap()[0], 0xab);
+    }
+
+    #[test]
+    fn test_parse_hash_hex_wrong_length() {
+        assert!(parse_hash_hex("abcd").is_none());
+        assert!(parse_hash_hex(&"ab".repeat(33)).is_none());
+    }
+
+    #[test]
+    fn test_parse_hash_hex_invalid_chars() {
+        let mut hex = "ab".repeat(31);
+        hex.push_str("zz");
+        assert!(parse_hash_hex(&hex).is_none());
+    }
+
+    #[test]
+    fn test_hex_encode_roundtrip() {
+        let bytes = [0xab, 0xcd, 0xef, 0x01];
+        assert_eq!(hex_encode(&bytes), "abcdef01");
+    }
+
+    #[test]
+    fn test_is_trusted_proxy_public_ipv4_not_trusted() {
+        let ip = std::net::IpAddr::V4(std::net::Ipv4Addr::new(8, 8, 8, 8));
+        assert!(!is_trusted_proxy(ip));
+    }
+
+    #[test]
+    fn test_is_trusted_proxy_private_172() {
+        let ip = std::net::IpAddr::V4(std::net::Ipv4Addr::new(172, 16, 0, 1));
+        assert!(is_trusted_proxy(ip));
+    }
+
+    #[test]
+    fn test_is_trusted_proxy_flyio_fdaa() {
+        let ip = std::net::IpAddr::V6(std::net::Ipv6Addr::new(0xfdaa, 0, 0, 0, 0, 0, 0, 1));
+        assert!(is_trusted_proxy(ip));
+    }
 }

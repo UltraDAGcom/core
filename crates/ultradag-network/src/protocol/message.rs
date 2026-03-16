@@ -115,6 +115,12 @@ pub enum Message {
         suffix_vertices: Vec<DagVertex>,
         /// State snapshot at checkpoint.round.
         state_at_checkpoint: ultradag_coin::state::persistence::StateSnapshot,
+        /// Full checkpoint chain from genesis to this checkpoint (excluding the tip).
+        /// Enables fresh nodes to verify the chain back to GENESIS_CHECKPOINT_HASH
+        /// without having any local checkpoints. Prevents eclipse attacks where an
+        /// attacker fabricates a state snapshot with their own validators.
+        #[serde(default)]
+        checkpoint_chain: Vec<ultradag_coin::consensus::Checkpoint>,
     },
 }
 
@@ -444,22 +450,25 @@ mod tests {
             council_members: vec![],
             treasury_balance: 0,
             delegation_accounts: vec![],
+            configured_validator_count: None,
         };
 
         let msg = Message::CheckpointSync {
             checkpoint,
             suffix_vertices: vec![],
             state_at_checkpoint: state,
+            checkpoint_chain: vec![],
         };
-        
+
         let encoded = roundtrip(&msg);
         let decoded = Message::decode(&encoded[4..]).unwrap();
-        
+
         match decoded {
-            Message::CheckpointSync { checkpoint, suffix_vertices, state_at_checkpoint } => {
+            Message::CheckpointSync { checkpoint, suffix_vertices, state_at_checkpoint, checkpoint_chain } => {
                 assert_eq!(checkpoint.round, 1000);
                 assert_eq!(suffix_vertices.len(), 0);
                 assert_eq!(state_at_checkpoint.total_supply, 1_000_000_000);
+                assert_eq!(checkpoint_chain.len(), 0);
             }
             _ => panic!("expected CheckpointSync"),
         }

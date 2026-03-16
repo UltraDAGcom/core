@@ -133,7 +133,7 @@ impl Mempool {
     /// Transfers sorted by fee, stake/unstake transactions have priority 0.
     pub fn best(&self, max: usize) -> Vec<Transaction> {
         let mut txs: Vec<&Transaction> = self.txs.values().map(|e| &e.tx).collect();
-        txs.sort_by(|a, b| b.fee().cmp(&a.fee()));
+        txs.sort_by_key(|tx| std::cmp::Reverse(tx.fee()));
         txs.into_iter().take(max).cloned().collect()
     }
 

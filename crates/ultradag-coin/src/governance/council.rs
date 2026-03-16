@@ -56,7 +56,7 @@ impl CouncilSeatCategory {
     }
 
     /// Parse from string (for governance proposals).
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_name(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "technical" => Some(CouncilSeatCategory::Technical),
             "business" => Some(CouncilSeatCategory::Business),
@@ -87,10 +87,10 @@ mod tests {
     }
 
     #[test]
-    fn from_str_roundtrip() {
+    fn parse_name_roundtrip() {
         for cat in CouncilSeatCategory::all() {
-            assert_eq!(CouncilSeatCategory::from_str(cat.name()), Some(*cat));
+            assert_eq!(CouncilSeatCategory::parse_name(cat.name()), Some(*cat));
         }
-        assert_eq!(CouncilSeatCategory::from_str("unknown"), None);
+        assert_eq!(CouncilSeatCategory::parse_name("unknown"), None);
     }
 }

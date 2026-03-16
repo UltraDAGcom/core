@@ -10,6 +10,7 @@ use crate::consensus::vertex::DagVertex;
 /// Enables O(1) finality checks using BitVec instead of HashSet<Address>.
 /// Indices are append-only and never reused within a DAG lifetime.
 /// Rebuilt from vertices on load().
+#[derive(Default)]
 pub struct ValidatorIndex {
     addr_to_idx: HashMap<Address, usize>,
     idx_to_addr: Vec<Address>,
@@ -17,10 +18,12 @@ pub struct ValidatorIndex {
 
 impl ValidatorIndex {
     pub fn new() -> Self {
-        Self {
-            addr_to_idx: HashMap::new(),
-            idx_to_addr: Vec::new(),
-        }
+        Self::default()
+    }
+
+    /// Returns true if no validators have been indexed.
+    pub fn is_empty(&self) -> bool {
+        self.idx_to_addr.is_empty()
     }
 
     /// Get or assign an index for a validator address.
@@ -161,12 +164,11 @@ impl BlockDag {
             return false;
         }
 
-        // Enforce MAX_PARENTS: truncate excess parents instead of rejecting
-        // (matches what the validator loop does before calling insert)
+        // The caller must ensure parents are truncated to MAX_PARENTS before calling.
+        // We do NOT truncate here because the vertex hash was already computed from
+        // the original parents — truncating would store different parents than the hash
+        // implies, breaking the DAG's hash integrity invariant.
         let mut vertex = vertex;
-        if vertex.parent_hashes.len() > MAX_PARENTS {
-            vertex.parent_hashes.truncate(MAX_PARENTS);
-        }
 
         // CRITICAL: Verify all parents exist before inserting.
         // The zero hash [0u8; 32] is the sentinel genesis parent for round-1 vertices.

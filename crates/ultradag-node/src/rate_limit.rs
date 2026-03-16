@@ -4,11 +4,14 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+/// Type alias for the per-(IP, endpoint) request tracking map.
+type IpRequestMap = Arc<DashMap<(IpAddr, &'static str), RwLock<(u32, Instant)>>>;
+
 /// Rate limiter for protecting RPC endpoints from abuse
 #[derive(Clone)]
 pub struct RateLimiter {
     /// Per-(IP, endpoint) request tracking: (IP, endpoint) -> (request_count, window_start)
-    ip_requests: Arc<DashMap<(IpAddr, &'static str), RwLock<(u32, Instant)>>>,
+    ip_requests: IpRequestMap,
     /// Global connection counter
     active_connections: Arc<RwLock<u32>>,
 }
@@ -75,7 +78,7 @@ impl RateLimiter {
         
         // Check if under limit
         if data.0 < limit.requests_per_window {
-            data.0 += 1;
+            data.0 = data.0.saturating_add(1);
             true
         } else {
             false
@@ -88,7 +91,7 @@ impl RateLimiter {
         if *count >= limits::MAX_CONCURRENT_CONNECTIONS {
             return Err("max concurrent connections reached");
         }
-        *count += 1;
+        *count = count.saturating_add(1);
         Ok(())
     }
 

@@ -146,9 +146,9 @@ impl FinalityTracker {
                                 *p == genesis
                                     || self.finalized.contains(p)
                                     || dag.get(p).is_none()
-                                    || dag.get(p).map_or(false, |pv| pv.round < stuck_threshold)
+                                    || dag.get(p).is_some_and(|pv| pv.round < stuck_threshold)
                             });
-                    
+
                     if !parents_ok {
                         continue;
                     }
@@ -192,7 +192,7 @@ impl FinalityTracker {
                                 *p == genesis
                                     || self.finalized.contains(p)
                                     || dag.get(p).is_none()
-                                    || dag.get(p).map_or(false, |pv| pv.round < stuck_threshold)
+                                    || dag.get(p).is_some_and(|pv| pv.round < stuck_threshold)
                             });
                         if parents_ok {
                             ready.insert(child);

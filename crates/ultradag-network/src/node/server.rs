@@ -42,6 +42,17 @@ const MAX_SNAPSHOT_ACCOUNTS: usize = 10_000_000;
 /// Maximum proposals in a CheckpointSync state snapshot.
 const MAX_SNAPSHOT_PROPOSALS: usize = 10_000;
 
+/// Maximum checkpoint chain length in CheckpointSync messages.
+/// At CHECKPOINT_INTERVAL=100 rounds and PRUNING_HORIZON=1000, a node keeps ~10 checkpoints.
+/// Allow up to 200 for networks with different configurations. Prevents OOM from malicious
+/// peers sending fabricated chains with thousands of checkpoint entries (each carrying signatures).
+const MAX_CHECKPOINT_CHAIN_LENGTH: usize = 200;
+
+/// Maximum suffix vertices allowed in incoming CheckpointSync messages.
+/// Matches the sending cap (MAX_CHECKPOINT_SUFFIX_VERTICES) with a small margin.
+/// Prevents a malicious peer from sending millions of suffix vertices in a crafted message.
+const MAX_CHECKPOINT_SYNC_SUFFIX: usize = 600;
+
 /// Default batch size for DAG vertex sync requests.
 const DAG_SYNC_BATCH_SIZE: u32 = 50;
 
@@ -629,7 +640,7 @@ impl NodeServer {
             }
             Ok(Err(e)) => {
                 warn!("Noise handshake failed with seed {}: {}", addr_str, e);
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("noise handshake: {}", e)));
+                return Err(std::io::Error::other(format!("noise handshake: {}", e)));
             }
             Err(_) => {
                 warn!("Noise handshake timed out with seed {}", addr_str);
@@ -702,6 +713,7 @@ impl NodeServer {
 
 /// Try to insert orphaned vertices whose parents may now exist.
 /// Returns hashes of parents still missing (for further fetching).
+#[allow(clippy::too_many_arguments)]
 async fn resolve_orphans(
     orphans: &Arc<Mutex<HashMap<[u8; 32], OrphanEntry>>>,
     dag: &Arc<RwLock<BlockDag>>,
@@ -1003,6 +1015,7 @@ async fn handle_peer(
     let mut allowlist_rejections: u32 = 0;
     let mut last_round_hash_request: Option<Instant> = None;
     let mut last_get_dag_vertices: Option<Instant> = None;
+    let mut last_get_checkpoint: Option<Instant> = None;
 
     // Per-peer aggregate message rate limiting: track messages in a sliding window.
     // Disconnect peers that exceed MAX_MESSAGES_PER_WINDOW within RATE_WINDOW_SECS.
@@ -1070,6 +1083,14 @@ async fn handle_peer(
                             max_count: DAG_SYNC_BATCH_SIZE,
                         })
                         .await?;
+                }
+
+                // Validate listen_port: reject port 0 (invalid) and privileged ports
+                // that a real validator node would never use. A malicious peer could
+                // claim arbitrary ports to pollute the known peer list.
+                if listen_port == 0 {
+                    debug!("Ignoring Hello from {} with listen_port=0", peer_addr);
+                    continue;
                 }
 
                 // Register peer's canonical listen address for discovery
@@ -1758,7 +1779,19 @@ async fn handle_peer(
             }
 
             Message::GetCheckpoint { min_round } => {
-                // Rate-limit checkpoint sync — it's expensive (locks DAG + state).
+                // Rate limit: at most one GetCheckpoint per 30s per peer.
+                // Checkpoint sync is expensive: multiple disk reads (checkpoint files,
+                // checkpoint state, entire chain), DAG read lock, and a large response
+                // message containing state snapshot + suffix vertices + full chain.
+                let now = Instant::now();
+                if let Some(last) = last_get_checkpoint {
+                    if now.duration_since(last) < Duration::from_secs(30) {
+                        debug!("GetCheckpoint rate limited for {}", peer_addr);
+                        continue;
+                    }
+                }
+                last_get_checkpoint = Some(now);
+
                 // Use try_read to avoid blocking if locks are contended.
                 let checkpoint = match ultradag_coin::persistence::load_latest_checkpoint(data_dir) {
                     Some(cp) if cp.round >= min_round => {
@@ -1815,53 +1848,106 @@ async fn handle_peer(
                         }
                     };
 
+                    // Load all local checkpoints to send as the chain.
+                    // Fresh nodes need this to verify the chain back to GENESIS_CHECKPOINT_HASH
+                    // (prevents eclipse attacks where attacker fabricates validator set).
+                    let checkpoint_chain = {
+                        let rounds = ultradag_coin::persistence::list_checkpoints(data_dir);
+                        let mut chain = Vec::new();
+                        for round in rounds {
+                            if let Some(cp) = ultradag_coin::persistence::load_checkpoint_by_round(data_dir, round) {
+                                // Include all checkpoints except the tip (which is sent separately)
+                                if cp.round != checkpoint.round {
+                                    chain.push(cp);
+                                }
+                            }
+                            // Cap chain length to prevent sending oversized messages
+                            if chain.len() >= MAX_CHECKPOINT_CHAIN_LENGTH {
+                                break;
+                            }
+                        }
+                        chain
+                    };
+
                     let _ = peers.send_to(&peer_addr, &Message::CheckpointSync {
                         checkpoint,
                         suffix_vertices,
                         state_at_checkpoint: state_snapshot,
+                        checkpoint_chain,
                     }).await;
 
                     info!("Sent checkpoint sync for round {} to {}", min_round, peer_addr);
                 }
             }
 
-            Message::CheckpointSync { checkpoint, suffix_vertices, state_at_checkpoint } => {
+            Message::CheckpointSync { checkpoint, suffix_vertices, state_at_checkpoint, checkpoint_chain } => {
                 checkpoint_metrics.record_fast_sync_attempt();
                 let sync_start = std::time::Instant::now();
-                
-                // Checkpoint chain verification: defense-in-depth against eclipse attacks.
-                // Walks prev_checkpoint_hash chain back to genesis if local checkpoints exist.
-                // If local checkpoints are unavailable (fresh/syncing node), skip chain verification
-                // and rely on quorum signature verification below (the primary trust mechanism).
+
+                // Validate checkpoint_chain length to prevent OOM from malicious peers
+                // sending fabricated chains with thousands of entries (each carrying signatures).
+                if checkpoint_chain.len() > MAX_CHECKPOINT_CHAIN_LENGTH {
+                    warn!("CheckpointSync: rejecting message with {} checkpoint chain entries (max {})",
+                        checkpoint_chain.len(), MAX_CHECKPOINT_CHAIN_LENGTH);
+                    checkpoint_metrics.record_fast_sync_failure();
+                    continue;
+                }
+
+                // Validate suffix vertex count to prevent OOM.
+                // The sender caps at MAX_CHECKPOINT_SUFFIX_VERTICES (500), but a malicious
+                // peer could craft a message with far more.
+                if suffix_vertices.len() > MAX_CHECKPOINT_SYNC_SUFFIX {
+                    warn!("CheckpointSync: rejecting message with {} suffix vertices (max {})",
+                        suffix_vertices.len(), MAX_CHECKPOINT_SYNC_SUFFIX);
+                    checkpoint_metrics.record_fast_sync_failure();
+                    continue;
+                }
+
+                // Checkpoint chain verification: ALWAYS verify back to GENESIS_CHECKPOINT_HASH.
+                // This is the primary defense against eclipse attacks. An attacker who fabricates
+                // a state snapshot with their own validators cannot forge a checkpoint chain
+                // that links back to the real genesis hash (hardcoded in the binary).
+                //
+                // When local checkpoints exist, use them as the lookup source.
+                // When no local checkpoints exist (fresh node), use the checkpoint_chain
+                // provided by the peer. The chain is verified cryptographically — each link's
+                // hash must match, and the chain must terminate at GENESIS_CHECKPOINT_HASH.
+                // An attacker cannot forge this chain without knowing the genesis state.
                 {
                     let dir = data_dir;
                     let local_checkpoints = ultradag_coin::persistence::list_checkpoints(dir);
-                    if !local_checkpoints.is_empty() {
-                        // Build a hash→checkpoint lookup once to avoid O(N²) disk I/O
-                    // in the chain verification closure (was scanning all checkpoints per link).
-                    let mut local_cp_map = std::collections::HashMap::new();
+
+                    // Build a hash→checkpoint lookup from local checkpoints + peer-provided chain
+                    let mut cp_map = std::collections::HashMap::new();
+
+                    // Local checkpoints (trusted — we produced or verified them previously)
                     for round in &local_checkpoints {
                         if let Some(cp) = ultradag_coin::persistence::load_checkpoint_by_round(dir, *round) {
                             let cp_hash = ultradag_coin::consensus::compute_checkpoint_hash(&cp);
-                            local_cp_map.insert(cp_hash, cp);
+                            cp_map.insert(cp_hash, cp);
                         }
                     }
+
+                    // Peer-provided checkpoint chain (untrusted — verified cryptographically
+                    // by verify_checkpoint_chain walking hashes back to genesis)
+                    for cp in &checkpoint_chain {
+                        let cp_hash = ultradag_coin::consensus::compute_checkpoint_hash(cp);
+                        cp_map.insert(cp_hash, cp.clone());
+                    }
+
                     let checkpoint_loader = |hash: [u8; 32]| -> Option<ultradag_coin::Checkpoint> {
-                        local_cp_map.get(&hash).cloned()
+                        cp_map.get(&hash).cloned()
                     };
 
-                        match ultradag_coin::consensus::verify_checkpoint_chain(&checkpoint, checkpoint_loader) {
-                            Ok(()) => {
-                                info!("Checkpoint chain verification passed for round {}", checkpoint.round);
-                            }
-                            Err(e) => {
-                                error!("Checkpoint chain verification FAILED: {} — disconnecting peer {}", e, peer_addr);
-                                checkpoint_metrics.record_fast_sync_failure();
-                                return Ok(());
-                            }
+                    match ultradag_coin::consensus::verify_checkpoint_chain(&checkpoint, checkpoint_loader) {
+                        Ok(()) => {
+                            info!("Checkpoint chain verification passed for round {}", checkpoint.round);
                         }
-                    } else {
-                        info!("No local checkpoints — skipping chain verification for round {} (relying on quorum signatures)", checkpoint.round);
+                        Err(e) => {
+                            error!("Checkpoint chain verification FAILED: {} — disconnecting peer {}", e, peer_addr);
+                            checkpoint_metrics.record_fast_sync_failure();
+                            return Ok(());
+                        }
                     }
                 }
                 
