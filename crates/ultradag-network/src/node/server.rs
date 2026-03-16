@@ -11,7 +11,8 @@ use std::path::PathBuf;
 use ultradag_coin::{Address, BlockDag, DagVertex, FinalityTracker, Mempool, SecretKey, StateEngine, Transaction, sync_epoch_validators};
 use ultradag_coin::consensus::dag::{DagInsertError, MAX_PARENTS};
 
-use crate::peer::{split_connection, PeerReader, PeerRegistry};
+use crate::peer::{split_connection, PeerReader, PeerRegistry, handshake_initiator, handshake_responder};
+use crate::peer::noise::HANDSHAKE_TIMEOUT_SECS;
 use crate::protocol::Message;
 
 /// Expected protocol version for Hello handshake.
@@ -409,9 +410,6 @@ impl NodeServer {
 
             info!("Incoming connection from {}", addr_str);
 
-            let (reader, writer) = split_connection(stream, addr_str.clone());
-            self.peers.add_writer(addr_str.clone(), writer).await;
-
             let state = self.state.clone();
             let mempool = self.mempool.clone();
             let dag = self.dag.clone();
@@ -429,6 +427,31 @@ impl NodeServer {
             let fatal_shutdown = self.fatal_shutdown.clone();
             let fatal_exit_code = self.fatal_exit_code.clone();
             tokio::spawn(async move {
+                // Noise handshake before any application messages
+                let mut stream = stream;
+                let noise_transport = match tokio::time::timeout(
+                    Duration::from_secs(HANDSHAKE_TIMEOUT_SECS),
+                    handshake_responder(&mut stream, validator_sk.as_ref()),
+                ).await {
+                    Ok(Ok(result)) => {
+                        if let Some(ref id) = result.peer_identity {
+                            info!("Peer {} authenticated as validator {}", addr_str, id.address.short());
+                        }
+                        Some(result.transport)
+                    }
+                    Ok(Err(e)) => {
+                        warn!("Noise handshake failed with {}: {}", addr_str, e);
+                        return;
+                    }
+                    Err(_) => {
+                        warn!("Noise handshake timed out with {}", addr_str);
+                        return;
+                    }
+                };
+
+                let (reader, writer) = split_connection(stream, addr_str.clone(), noise_transport);
+                peers.add_writer(addr_str.clone(), writer).await;
+
                 let ctx = PeerContext {
                     state: &state,
                     mempool: &mempool,
@@ -592,10 +615,32 @@ impl NodeServer {
 
         info!("Connected to {}", addr_str);
 
+        // Noise handshake as initiator before any application messages
+        let mut stream = stream;
+        let noise_transport = match tokio::time::timeout(
+            Duration::from_secs(HANDSHAKE_TIMEOUT_SECS),
+            handshake_initiator(&mut stream, self.validator_sk.as_ref()),
+        ).await {
+            Ok(Ok(result)) => {
+                if let Some(ref id) = result.peer_identity {
+                    info!("Seed peer {} authenticated as validator {}", addr_str, id.address.short());
+                }
+                Some(result.transport)
+            }
+            Ok(Err(e)) => {
+                warn!("Noise handshake failed with seed {}: {}", addr_str, e);
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, format!("noise handshake: {}", e)));
+            }
+            Err(_) => {
+                warn!("Noise handshake timed out with seed {}", addr_str);
+                return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "noise handshake timeout"));
+            }
+        };
+
         self.peers.add_known(addr_str.clone()).await;
         self.peers.add_connected_listen_addr(addr_str.clone()).await;
 
-        let (reader, writer) = split_connection(stream, addr_str.clone());
+        let (reader, writer) = split_connection(stream, addr_str.clone(), noise_transport);
         self.peers.add_writer(addr_str.clone(), writer).await;
 
         // Send hello with current DAG round
@@ -817,11 +862,36 @@ async fn try_connect_peer(
             }
 
             info!("Peer discovery: connected to {}", addr);
+
+            // Noise handshake as initiator before any application messages
+            let mut stream = stream;
+            let noise_transport = match tokio::time::timeout(
+                Duration::from_secs(HANDSHAKE_TIMEOUT_SECS),
+                handshake_initiator(&mut stream, validator_sk),
+            ).await {
+                Ok(Ok(result)) => {
+                    if let Some(ref id) = result.peer_identity {
+                        info!("Peer {} authenticated as validator {}", addr, id.address.short());
+                    }
+                    Some(result.transport)
+                }
+                Ok(Err(e)) => {
+                    warn!("Noise handshake failed with {}: {}", addr, e);
+                    peers.finish_connecting(&addr).await;
+                    return;
+                }
+                Err(_) => {
+                    warn!("Noise handshake timed out with {}", addr);
+                    peers.finish_connecting(&addr).await;
+                    return;
+                }
+            };
+
             peers.finish_connecting(&addr).await;
             peers.add_known(addr.clone()).await;
             peers.add_connected_listen_addr(addr.clone()).await;
 
-            let (reader, writer) = split_connection(stream, addr.clone());
+            let (reader, writer) = split_connection(stream, addr.clone(), noise_transport);
             peers.add_writer(addr.clone(), writer).await;
 
             // Send hello so the remote knows our listen port

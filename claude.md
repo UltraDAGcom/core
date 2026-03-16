@@ -8,6 +8,20 @@
 
 ## Recent Updates (March 2026)
 
+**Transport Encryption — Noise Protocol (March 16, 2026):**
+- **All P2P connections now encrypted** via Noise_XX_25519_ChaChaPoly_BLAKE2s (snow crate v0.9)
+- **Forward secrecy**: ephemeral X25519 keypair generated per connection (not persisted)
+- **Validator identity binding**: Ed25519 validator key signs Noise static pubkey in handshake payload, binding validator identity to encrypted session
+- **Observer support**: nodes without validator identity connect encrypted but unauthenticated (payload `[0x00]`)
+- **Message chunking**: Noise spec 65535-byte limit handled transparently — large messages (up to 4MB) split into NOISE_MAX_PLAINTEXT (65519) byte chunks, each encrypted with 16-byte Poly1305 tag
+- **Handshake at all 3 connection sites**: `listen()` (responder), `connect_to()` (initiator), `try_connect_peer()` (initiator) — all with 10s timeout
+- **Deadlock-safe**: noise transport lock and writer lock never held simultaneously
+- **New files**: `peer/noise.rs` (handshake, identity, 4 tests), `peer/connection.rs` rewritten with encrypted transport (2 new tests)
+- **New dependency**: `snow = "0.9"` (workspace-level)
+- **New method**: `Signature::verify_with_pubkey_bytes()` on ultradag-coin keys.rs — verifies against raw 32-byte pubkey without exposing ed25519_dalek
+- **Tests**: All passing (0 failures, 14 ignored jepsen)
+- **Security impact**: Prevents traffic analysis, selective message dropping, connection hijacking, and MITM attacks on P2P layer. Ed25519 vertex/tx signatures already prevented fabrication; Noise adds confidentiality and session authentication.
+
 **Mainnet Readiness Assessment (March 16, 2026):**
 
 The codebase is past the critical code issues. What remains is operational work outside the codebase itself:
@@ -58,7 +72,7 @@ See **Mainnet Launch Checklist** below for the complete phased plan.
 - **GENESIS_CHECKPOINT_HASH recomputed** — New hash for `slash_percent` in GovernanceParams canonical state root.
 - **State root regression test suite** — 6 tests in `state_root_regression.rs`: known-fixture hash anchor (exact bytes checked into repo), genesis determinism, collision resistance, order sensitivity, Option discrimination, empty state. Any change to `compute_state_root` fails the regression anchor — which is the point.
 - **Cross-batch slashing documented as defense-in-depth** — Analysis confirmed the DAG rejects equivocating vertices at insertion (try_insert → Equivocation error), so both vertices can never be finalized. The `applied_validators_per_round` cross-batch detection is a secondary defense against theoretical bypasses (e.g., future bugs, CheckpointSync suffix injection).
-- **Known mainnet gaps documented** — Peer authentication (mutual TLS / challenge-response), P2P message authentication for control messages, version negotiation for hard forks, council emergency recovery mechanism, formal incident response tooling.
+- **Known mainnet gaps documented** — Version negotiation for hard forks, council emergency recovery mechanism, formal incident response tooling. ~~Peer authentication~~ (DONE: Noise protocol). ~~P2P message authentication~~ (DONE: all messages encrypted/authenticated).
 - **All 819 tests passing**, 0 failed, 14 ignored (jepsen).
 - **Breaking change** — GovernanceParams has new `slash_percent` field, GENESIS_CHECKPOINT_HASH changed. Clean testnet restart required.
 - **Corrections to user's assessment:**
@@ -961,7 +975,8 @@ When a vertex fails insertion due to missing parents, the node:
 
 ### Module Layout (`ultradag-network/src/`):
 - `protocol/message.rs` — Message enum with all P2P message types, JSON serialization, 4-byte length-prefix encoding/decoding
-- `peer/connection.rs` — `PeerReader` and `PeerWriter` for split TCP connections, message send/recv with length framing
+- `peer/noise.rs` — Noise protocol handshake (XX pattern), identity binding via Ed25519 signatures, `handshake_initiator()`, `handshake_responder()`
+- `peer/connection.rs` — `PeerReader` and `PeerWriter` for split TCP connections, message send/recv with length framing, optional Noise encryption
 - `peer/registry.rs` — `PeerRegistry`: thread-safe peer management, broadcast to all peers, peer discovery via `GetPeers`/`Peers`
 - `node/server.rs` — `NodeServer`: main P2P server, handles incoming connections, message routing, DAG sync, checkpoint handlers
 - `bootstrap.rs` — `TESTNET_BOOTSTRAP_NODES`: hardcoded public bootstrap nodes for testnet
@@ -986,7 +1001,29 @@ pub struct NodeServer {
 
 ### P2P Protocol
 
-**Transport:** TCP with 4-byte big-endian length-prefixed JSON messages (max 4MB)
+**Transport:** TCP with Noise protocol encryption (Noise_XX_25519_ChaChaPoly_BLAKE2s), 4-byte big-endian length-prefixed postcard messages (max 4MB)
+
+**Transport Security (Noise Protocol):**
+- **Pattern:** Noise_XX — mutual authentication without prior key knowledge
+- **Key exchange:** X25519 Diffie-Hellman (ephemeral keypairs per connection for forward secrecy)
+- **Encryption:** ChaChaPoly1305 AEAD (authenticated encryption with associated data)
+- **Hashing:** BLAKE2s
+- **Implementation:** `snow` crate v0.9
+- **Identity binding:** Validator Ed25519 key signs the Noise static pubkey during handshake, binding validator identity to the encrypted session. Verified by peer against `NETWORK_ID || b"noise-identity" || noise_static_pubkey`.
+- **Observer support:** Nodes without validator identity connect encrypted but without authentication (payload `[0x00]`).
+- **Handshake timeout:** 10 seconds (`HANDSHAKE_TIMEOUT_SECS`)
+- **Message chunking:** Noise spec limits messages to 65535 bytes. Large messages (up to 4MB) are split into 65519-byte plaintext chunks (`NOISE_MAX_PLAINTEXT = 65535 - 16`), each encrypted separately with 16-byte Poly1305 tag.
+- **Wire format (encrypted):** `[4-byte total plaintext length] [2-byte chunk length][encrypted chunk]...` — receiver reads total length, then iterates chunks, decrypting each.
+- **Lock ordering:** Noise transport lock and writer lock are never held simultaneously. Encrypt all chunks under noise lock (release), then write under writer lock.
+- **Files:** `peer/noise.rs` (handshake), `peer/connection.rs` (encrypted send/recv)
+- **Handshake flow:**
+  1. Initiator → Responder: `-> e` (ephemeral key, empty payload)
+  2. Responder → Initiator: `<- e, ee, s, es` + identity payload `[0x01][32B ed25519_pubkey][64B signature]`
+  3. Initiator → Responder: `-> s, se` + identity payload
+  4. Both sides verify Ed25519 signature against peer's Noise static key
+  5. Transition to transport mode — all subsequent messages encrypted
+- **Result:** `HandshakeResult { transport: Arc<Mutex<TransportState>>, peer_identity: Option<PeerIdentity> }`
+- **PeerIdentity:** `{ ed25519_pubkey: [u8; 32], address: Address }` — extracted from handshake, used for logging/validation
 
 **Message Types:**
 - `Hello` / `HelloAck` — Version handshake, current DAG round exchange
@@ -1492,6 +1529,7 @@ let dag_round = {
 - **GetDagVertices cap**: max_count capped at 500 server-side.
 - **Pending checkpoint eviction**: Max 10 pending checkpoints, oldest evicted.
 - **Saturating arithmetic**: All credit/debit, vote counting, and slash operations use saturating math.
+- **Transport encryption**: Noise_XX_25519_ChaChaPoly_BLAKE2s on all P2P connections. Forward secrecy via per-connection ephemeral X25519 keys. Validator identity bound to session via Ed25519 signature over Noise static key.
 
 ### State Persistence
 - Postcard binary serialization for BlockDag, FinalityTracker, Mempool.
@@ -2311,7 +2349,7 @@ Mainnet disables all 7 secret-key-in-body endpoints (`/tx`, `/stake`, `/unstake`
 
 ### Phase 5: Networking Hardening
 
-- [ ] **Peer authentication** — Mutual TLS or challenge-response handshake for peer identity verification. Currently any node can connect. Vertex signatures protect consensus, but control messages (Hello, GetPeers, Peers, Ping) are unauthenticated — MITM can inject/modify.
+- [x] **Peer authentication** — Noise_XX_25519_ChaChaPoly_BLAKE2s on all P2P connections. Validator Ed25519 identity bound to Noise session via signed static key. All messages (including control: Hello, GetPeers, Ping) are now encrypted and authenticated. Forward secrecy via ephemeral X25519 keys.
 - [ ] **Version negotiation for hard forks** — Protocol changes (new tx type, changed serialization) cause nodes on different versions to diverge. Need: (1) version field in Hello already exists, (2) hard fork activation height mechanism, (3) documented upgrade procedure with rollback path.
 - [ ] **Formal incident response tooling** — Circuit breaker halts individual nodes, but no coordinated network pause. Need: governance-triggered pause, documented rollback procedures, emergency communication channels.
 

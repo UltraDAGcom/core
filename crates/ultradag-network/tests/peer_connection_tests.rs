@@ -16,7 +16,7 @@ async fn tcp_pair() -> (tokio::net::TcpStream, tokio::net::TcpStream) {
 #[tokio::test]
 async fn split_connection_creates_reader_and_writer() {
     let (server, _client) = tcp_pair().await;
-    let (reader, writer) = split_connection(server, "test".into());
+    let (reader, writer) = split_connection(server, "test".into(), None);
     assert_eq!(reader.addr, "test");
     assert_eq!(writer.addr, "test");
 }
@@ -24,8 +24,8 @@ async fn split_connection_creates_reader_and_writer() {
 #[tokio::test]
 async fn writer_send_reader_recv_roundtrip() {
     let (server, client) = tcp_pair().await;
-    let (_server_reader, server_writer) = split_connection(server, "server".into());
-    let (mut client_reader, _client_writer) = split_connection(client, "client".into());
+    let (_server_reader, server_writer) = split_connection(server, "server".into(), None);
+    let (mut client_reader, _client_writer) = split_connection(client, "client".into(), None);
 
     let msg = Message::Ping(42);
     server_writer.send(&msg).await.unwrap();
@@ -40,8 +40,8 @@ async fn writer_send_reader_recv_roundtrip() {
 #[tokio::test]
 async fn multiple_messages_roundtrip() {
     let (server, client) = tcp_pair().await;
-    let (_, server_writer) = split_connection(server, "s".into());
-    let (mut client_reader, _) = split_connection(client, "c".into());
+    let (_, server_writer) = split_connection(server, "s".into(), None);
+    let (mut client_reader, _) = split_connection(client, "c".into(), None);
 
     let messages = vec![
         Message::Ping(1),
@@ -65,8 +65,8 @@ async fn multiple_messages_roundtrip() {
 #[tokio::test]
 async fn recv_eof_returns_error() {
     let (server, client) = tcp_pair().await;
-    let (mut reader, _) = split_connection(server, "s".into());
-    
+    let (mut reader, _) = split_connection(server, "s".into(), None);
+
     drop(client);
     
     let result = reader.recv().await;
@@ -76,8 +76,8 @@ async fn recv_eof_returns_error() {
 #[tokio::test]
 async fn bidirectional_communication() {
     let (server, client) = tcp_pair().await;
-    let (mut server_reader, server_writer) = split_connection(server, "server".into());
-    let (mut client_reader, client_writer) = split_connection(client, "client".into());
+    let (mut server_reader, server_writer) = split_connection(server, "server".into(), None);
+    let (mut client_reader, client_writer) = split_connection(client, "client".into(), None);
 
     server_writer.send(&Message::Ping(100)).await.unwrap();
     let msg = client_reader.recv().await.unwrap();
@@ -91,8 +91,8 @@ async fn bidirectional_communication() {
 #[tokio::test]
 async fn concurrent_sends() {
     let (server, client) = tcp_pair().await;
-    let (_, server_writer) = split_connection(server, "s".into());
-    let (mut client_reader, _) = split_connection(client, "c".into());
+    let (_, server_writer) = split_connection(server, "s".into(), None);
+    let (mut client_reader, _) = split_connection(client, "c".into(), None);
 
     let writer1 = server_writer.clone();
     let writer2 = server_writer.clone();
@@ -121,7 +121,7 @@ async fn concurrent_sends() {
 #[tokio::test]
 async fn connection_drop_cleanup() {
     let (server, client) = tcp_pair().await;
-    let (mut reader, _writer) = split_connection(server, "s".into());
+    let (mut reader, _writer) = split_connection(server, "s".into(), None);
     
     drop(client);
     

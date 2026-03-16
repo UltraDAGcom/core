@@ -15,6 +15,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 rand = { workspace = true }
 hostname = "0.4"
+snow = { workspace = true }
 
 [features]
 test-helpers = []

@@ -41,7 +41,7 @@ async fn add_writer_and_remove_peer() {
     let _client_stream = connect_handle.await.unwrap();
 
     let addr = "test-peer".to_string();
-    let (_, writer) = split_connection(server_stream, addr.clone());
+    let (_, writer) = split_connection(server_stream, addr.clone(), None);
 
     let reg = PeerRegistry::new();
     reg.add_writer(addr.clone(), writer).await;

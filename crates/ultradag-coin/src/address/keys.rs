@@ -136,6 +136,16 @@ impl Signature {
         let sig = ed25519_dalek::Signature::from_bytes(&self.0);
         verifying_key.verify_strict(data, &sig).is_ok()
     }
+
+    /// Verify this signature against a raw 32-byte Ed25519 public key and data.
+    /// Returns false if the public key bytes are invalid or signature doesn't match.
+    pub fn verify_with_pubkey_bytes(&self, pubkey_bytes: &[u8; 32], data: &[u8]) -> bool {
+        let vk = match ed25519_dalek::VerifyingKey::from_bytes(pubkey_bytes) {
+            Ok(vk) => vk,
+            Err(_) => return false,
+        };
+        self.verify(&vk, data)
+    }
 }
 
 impl Copy for Signature {}

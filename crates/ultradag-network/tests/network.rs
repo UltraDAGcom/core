@@ -59,8 +59,8 @@ fn make_real_vertex(sk: &SecretKey, round: u64) -> DagVertex {
 #[tokio::test]
 async fn hello_handshake_roundtrip() {
     let (server, client) = tcp_pair().await;
-    let (_, server_writer) = split_connection(server, "s".into());
-    let (mut client_reader, _) = split_connection(client, "c".into());
+    let (_, server_writer) = split_connection(server, "s".into(), None);
+    let (mut client_reader, _) = split_connection(client, "c".into(), None);
 
     let msg = Message::Hello { version: 1, height: 42, listen_port: 9333 };
     server_writer.send(&msg).await.unwrap();
@@ -81,8 +81,8 @@ async fn hello_handshake_roundtrip() {
 #[tokio::test]
 async fn malformed_message_rejected() {
     let (server, client) = tcp_pair().await;
-    let (mut server_reader, _) = split_connection(server, "s".into());
-    let (_, client_writer) = split_connection(client, "c".into());
+    let (mut server_reader, _) = split_connection(server, "s".into(), None);
+    let (_, client_writer) = split_connection(client, "c".into(), None);
 
     // Send garbage bytes with valid length prefix
     client_writer.send_raw(b"this is not json").await.unwrap();
@@ -105,8 +105,8 @@ async fn dag_proposal_roundtrip() {
     let original_sig = vertex.signature;
 
     let (server, client) = tcp_pair().await;
-    let (_, server_writer) = split_connection(server, "s".into());
-    let (mut client_reader, _) = split_connection(client, "c".into());
+    let (_, server_writer) = split_connection(server, "s".into(), None);
+    let (mut client_reader, _) = split_connection(client, "c".into(), None);
 
     server_writer.send(&Message::DagProposal(vertex)).await.unwrap();
 
@@ -136,8 +136,8 @@ async fn transaction_roundtrip() {
     let original_nonce = tx.nonce();
 
     let (server, client) = tcp_pair().await;
-    let (_, server_writer) = split_connection(server, "s".into());
-    let (mut client_reader, _) = split_connection(client, "c".into());
+    let (_, server_writer) = split_connection(server, "s".into(), None);
+    let (mut client_reader, _) = split_connection(client, "c".into(), None);
 
     server_writer.send(&Message::NewTx(tx)).await.unwrap();
 
@@ -164,8 +164,8 @@ async fn transaction_roundtrip() {
 #[tokio::test]
 async fn ping_pong_roundtrip() {
     let (server, client) = tcp_pair().await;
-    let (_, server_writer) = split_connection(server, "s".into());
-    let (mut client_reader, _) = split_connection(client, "c".into());
+    let (_, server_writer) = split_connection(server, "s".into(), None);
+    let (mut client_reader, _) = split_connection(client, "c".into(), None);
 
     let nonce = 0xDEADBEEFu64;
     server_writer.send(&Message::Ping(nonce)).await.unwrap();
@@ -177,8 +177,8 @@ async fn ping_pong_roundtrip() {
 
     // Also test Pong
     let (server2, client2) = tcp_pair().await;
-    let (_, sw) = split_connection(server2, "s".into());
-    let (mut cr, _) = split_connection(client2, "c".into());
+    let (_, sw) = split_connection(server2, "s".into(), None);
+    let (mut cr, _) = split_connection(client2, "c".into(), None);
 
     sw.send(&Message::Pong(nonce)).await.unwrap();
     match cr.recv().await.unwrap() {
@@ -192,7 +192,7 @@ async fn ping_pong_roundtrip() {
 #[tokio::test]
 async fn disconnected_peer_removed() {
     let (server, client) = tcp_pair().await;
-    let (_, writer) = split_connection(server, "peer-1".into());
+    let (_, writer) = split_connection(server, "peer-1".into(), None);
 
     let reg = PeerRegistry::new();
     reg.add_writer("peer-1".into(), writer).await;
@@ -227,8 +227,8 @@ async fn send_to_nonexistent_peer_returns_error() {
 #[tokio::test]
 async fn multiple_messages_in_order() {
     let (server, client) = tcp_pair().await;
-    let (_, sw) = split_connection(server, "s".into());
-    let (mut cr, _) = split_connection(client, "c".into());
+    let (_, sw) = split_connection(server, "s".into(), None);
+    let (mut cr, _) = split_connection(client, "c".into(), None);
 
     let sk = SecretKey::from_bytes([30u8; 32]);
     let tx = make_real_tx(&sk);
@@ -262,7 +262,7 @@ async fn multiple_messages_in_order() {
 #[tokio::test]
 async fn eof_returns_error() {
     let (server, client) = tcp_pair().await;
-    let (mut reader, _) = split_connection(server, "s".into());
+    let (mut reader, _) = split_connection(server, "s".into(), None);
     drop(client);
 
     let result = reader.recv().await;
@@ -273,8 +273,8 @@ async fn eof_returns_error() {
 #[tokio::test]
 async fn get_parents_roundtrip() {
     let (server, client) = tcp_pair().await;
-    let (_, sw) = split_connection(server, "s".into());
-    let (mut cr, _) = split_connection(client, "c".into());
+    let (_, sw) = split_connection(server, "s".into(), None);
+    let (mut cr, _) = split_connection(client, "c".into(), None);
 
     let h1 = [0xAA; 32];
     let h2 = [0xBB; 32];
@@ -300,8 +300,8 @@ async fn parent_vertices_roundtrip() {
     let h2 = v2.hash();
 
     let (server, client) = tcp_pair().await;
-    let (_, sw) = split_connection(server, "s".into());
-    let (mut cr, _) = split_connection(client, "c".into());
+    let (_, sw) = split_connection(server, "s".into(), None);
+    let (mut cr, _) = split_connection(client, "c".into(), None);
 
     sw.send(&Message::ParentVertices { vertices: vec![v1, v2] }).await.unwrap();
 
@@ -322,8 +322,8 @@ async fn parent_vertices_roundtrip() {
 #[tokio::test]
 async fn oversized_message_rejected() {
     let (server, client) = tcp_pair().await;
-    let (mut server_reader, _) = split_connection(server, "s".into());
-    let (_, client_writer) = split_connection(client, "c".into());
+    let (mut server_reader, _) = split_connection(server, "s".into(), None);
+    let (_, client_writer) = split_connection(client, "c".into(), None);
 
     // Send a length prefix indicating >10MB message
     client_writer.send_raw_len(11 * 1024 * 1024).await.unwrap();
