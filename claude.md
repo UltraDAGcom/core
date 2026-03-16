@@ -23,7 +23,17 @@
 - **Faucet `MAX_FAUCET_SATS` was 50,000 UDAG** — Documentation said 100 UDAG max per request, but code had `50000 * COIN`. Fixed to `100 * COIN`.
 - **Faucet rate limit was 1/5s** — Documentation said 1/10min, but rate_limit.rs had `RateLimit::new("faucet", 1, 5)`. Fixed to `RateLimit::new("faucet", 1, 600)`.
 - **main.rs validator key file panic** — `read_to_string().unwrap_or_else(|e| panic!(...))` replaced with `error!() + process::exit(1)` for consistency with other startup error handling.
-- **830 tests passing**, 0 failed, 14 ignored (jepsen).
+- **Governance empty-council auto-pass vulnerability** — When all 21 council members are removed, `snapshot_total_stake=0` makes quorum=0, so `0 >= 0` passes with zero votes. A self-nomination CouncilMembership proposal would auto-pass with no oversight. Fix: `has_passed_with_params()` returns false when `total_staked == 0`. Test: `test_empty_council_proposals_cannot_pass`.
+- **Fee-exempt transactions silently rejected from full mempool** — When mempool was at 10K capacity, Stake/Delegate/Unstake/etc (fee=0 by design) could never evict because `0 > 0` is always false. Fix: added `|| (fee_exempt && lowest_fee == 0)` eviction condition. Test: `fee_exempt_tx_can_enter_full_mempool`.
+- **`list_checkpoints()` matched `checkpoint_state_*` files** — Pattern `checkpoint_*.bin` also matched `checkpoint_state_NNNNNNNNNN.bin`. If `postcard::from_bytes::<Checkpoint>` succeeded on a StateSnapshot binary, spurious rounds would be returned. Fix: added `!name.starts_with("checkpoint_state_")` filter.
+- **`message_count` u32 wraps to zero defeating rate limit** — After ~4B messages (~8h at 500 msg/s), counter wraps and rate limit can never trigger again. Fix: `saturating_add(1)`.
+- **`RoundHashes` handler amplification attack** — Unbounded incoming hash count could generate thousands of `GetParents` messages from a single 4MB message. Fix: cap outer rounds at 1000, inner hashes at 100 per round.
+- **`checkpoint_loader` O(N²) disk I/O** — Chain verification closure called `list_checkpoints()` per link (up to 10K calls, each scanning disk). Fix: build `HashMap<hash, checkpoint>` upfront.
+- **CheckpointSync snapshot size check incomplete** — Only validated accounts and proposals. stake_accounts, delegation_accounts, and votes were unchecked, allowing OOM. Fix: validate all five collection sizes.
+- **Future CheckpointProposal stored without signature check** — Garbage checkpoints with no valid signatures could fill all 10 pending slots, evicting legitimate proposals. Fix: require at least one valid signer.
+- **`topo_level` unchecked addition** — `max_parent_level + 1` could overflow at u64::MAX on very long-running chains. Fix: `saturating_add(1)`.
+- **RPC `/tx` accepts zero-amount transfers** — Transfer of 0 sats wastes mempool slots. Fix: reject with "amount must be greater than 0".
+- **836 tests passing**, 0 failed, 14 ignored (jepsen).
 
 **Transport Encryption — Noise Protocol (March 16, 2026):**
 - **All P2P connections now encrypted** via Noise_XX_25519_ChaChaPoly_BLAKE2s (snow crate v0.9)
@@ -1327,7 +1337,7 @@ cargo test --workspace
 
 Run `cargo test --workspace --release` to verify:
 ```
-test result: ok. 830 passed; 0 failed; 14 ignored
+test result: ok. 836 passed; 0 failed; 14 ignored
 ```
 
 ### Test Breakdown by Crate:
@@ -2194,6 +2204,26 @@ UltraDAG is offering rewards for security researchers who discover and responsib
     - **Fix:** Changed to 600-second window.
 159. **main.rs panic on validator key file read failure (March 16, 2026)** — `read_to_string().unwrap_or_else(|e| panic!(...))` for validator key file. All other startup errors use `error!() + process::exit(1)`.
     - **Fix:** Replaced with `match` + `error!()` + `process::exit(1)`.
+160. **Governance empty-council auto-pass (March 16, 2026)** — When all council members removed, `snapshot_total_stake=0` makes quorum=0. `0 >= 0` passes with zero votes. Self-nomination proposals auto-pass with no oversight.
+    - **Fix:** `has_passed_with_params()` returns false when `total_staked == 0`.
+161. **Fee-exempt transactions rejected from full mempool (March 16, 2026)** — Stake/Delegate/Unstake (fee=0 by design) could never enter a full 10K mempool. `0 > 0` eviction check always fails.
+    - **Fix:** Added `|| (fee_exempt && lowest_fee == 0)` to eviction condition.
+162. **`list_checkpoints()` matched checkpoint_state files (March 16, 2026)** — `checkpoint_*.bin` pattern also matched `checkpoint_state_NNNNNNNNNN.bin`, causing spurious round entries.
+    - **Fix:** Added `!name.starts_with("checkpoint_state_")` filter to both `list_checkpoints()` and `load_latest_checkpoint()`.
+163. **`message_count` u32 overflow defeats rate limit (March 16, 2026)** — After ~4B messages (~8h at 500 msg/s), counter wraps to 0 and rate limit permanently disabled for that connection.
+    - **Fix:** Changed to `saturating_add(1)`.
+164. **RoundHashes amplification attack (March 16, 2026)** — Unbounded incoming hash count in `RoundHashes` handler could generate thousands of `GetParents` messages from a single 4MB message.
+    - **Fix:** Cap outer rounds at 1000, inner hashes at 100 per round.
+165. **checkpoint_loader O(N²) disk I/O (March 16, 2026)** — Chain verification closure called `list_checkpoints()` on every invocation (up to 10K calls), each scanning all checkpoint files on disk.
+    - **Fix:** Build `HashMap<hash, checkpoint>` once upfront, O(1) lookup per chain link.
+166. **CheckpointSync incomplete snapshot size validation (March 16, 2026)** — Only `accounts` and `proposals` were size-checked. `stake_accounts`, `delegation_accounts`, and `votes` vectors were unbounded.
+    - **Fix:** Validate all five collection sizes against `MAX_SNAPSHOT_ACCOUNTS`.
+167. **Future CheckpointProposal stored without signature check (March 16, 2026)** — Garbage checkpoints with no valid signatures could fill all 10 pending slots, evicting legitimate proposals awaiting co-signatures.
+    - **Fix:** Require `valid_signers().is_empty() == false` before storing in pending_checkpoints.
+168. **topo_level unchecked addition (March 16, 2026)** — `max_parent_level + 1` could overflow at u64::MAX on very long-running chains.
+    - **Fix:** Changed to `saturating_add(1)`.
+169. **RPC `/tx` accepts zero-amount transfers (March 16, 2026)** — Transfer of 0 sats with valid fee accepted, wasting mempool slots.
+    - **Fix:** Added `amount == 0` rejection with "amount must be greater than 0".
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.
