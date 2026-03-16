@@ -178,7 +178,16 @@ pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
         hasher.update(&[council_category_byte(category)]);
     }
 
-    // Governance params (all u64)
+    // Governance params (all u64).
+    // IMPORTANT: If you add a field to GovernanceParams, you MUST add it here too.
+    // Otherwise the state root will silently ignore the new field, and two nodes
+    // with different values for it will compute the same hash (consensus split).
+    // After adding a new field here, update the regression test in
+    // state_root_regression.rs (the known-fixture hash will change).
+    // Current fields (10): min_fee_sats, min_stake_to_propose, quorum_numerator,
+    // approval_numerator, voting_period_rounds, execution_delay_rounds,
+    // max_active_proposals, observer_reward_percent, council_emission_percent,
+    // slash_percent.
     hasher.update(&snapshot.governance_params.min_fee_sats.to_le_bytes());
     hasher.update(&snapshot.governance_params.min_stake_to_propose.to_le_bytes());
     hasher.update(&snapshot.governance_params.quorum_numerator.to_le_bytes());

@@ -92,3 +92,12 @@ pub enum CoinError {
     #[error("FATAL: supply invariant broken — node must halt: {0}")]
     SupplyInvariantBroken(String),
 }
+
+impl CoinError {
+    /// Returns true if this error represents an unrecoverable state corruption
+    /// that requires immediate node shutdown. Used by server.rs to decide
+    /// whether to call process::exit(101).
+    pub fn is_fatal(&self) -> bool {
+        matches!(self, CoinError::SupplyInvariantBroken(_))
+    }
+}

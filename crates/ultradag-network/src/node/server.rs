@@ -195,11 +195,10 @@ async fn apply_finality_and_state(
         let mut state_w = state.write().await;
         let prev_round = state_w.last_finalized_round();
         if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
-            let msg = format!("{}", e);
-            if msg.contains("supply invariant broken") || msg.contains("FATAL") {
+            if e.is_fatal() {
                 // Supply invariant violations are unrecoverable — halt immediately.
                 // On mainnet, any supply drift requires a hard fork to fix.
-                tracing::error!("FATAL: {}", msg);
+                tracing::error!("FATAL: {}", e);
                 std::process::exit(101);
             }
             warn!("Failed to apply finalized vertices: {}", e);

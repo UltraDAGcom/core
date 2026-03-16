@@ -21,9 +21,16 @@ The codebase is past the critical code issues. What remains is operational work 
 
 See **Mainnet Launch Checklist** below for the complete phased plan.
 
+**API Cleanup & Reviewer Fixes (March 16, 2026):**
+- **`create_block` parameter removed** — Removed `validator_reward` parameter from `create_block()` in `producer.rs`. All callers passed 0 since per-round reward distribution. Coinbase now unconditionally equals fees. Eliminates misleading API that accepted arbitrary reward amounts.
+- **`CoinError::is_fatal()` method** — Replaced fragile string matching in `server.rs` (`msg.contains("supply invariant broken")`) with type-safe `e.is_fatal()` method on `CoinError`. Returns true for `SupplyInvariantBroken` variant. If error wording changes, halt still triggers.
+- **GovernanceParams hash field inventory** — Added comment in `compute_state_root()` listing all 10 hashed GovernanceParams fields. Documents that adding a field to GovernanceParams requires updating both the hash function and the regression test.
+- **`applied_validators_per_round` NOT persisted to redb** — Documented as acceptable: primary defense (DAG `try_insert` rejection) still works after restart; secondary defense is defense-in-depth against theoretical bypasses only.
+- **All 819 tests passing**, 0 failed, 14 ignored (jepsen).
+
 **Cross-Batch Equivocation & Supply Invariant Test Coverage (March 16, 2026):**
 - **Cross-batch equivocation test** — Confirms `applied_validators_per_round` HashMap on StateEngine detects equivocation split across separate `apply_finalized_vertices` calls. Vertex A in batch 1, equivocating vertex B in batch 2 → validator slashed. Also tests intra-batch baseline and tracker pruning after 1000 rounds.
-- **Supply invariant fatal test** — Confirms `SupplyInvariantBroken` error fires when `total_supply` is corrupted (inflated or deflated by 1 sat). Verifies error message contains diagnostic breakdown (liquid/staked/delegated/treasury/total_supply) and matches the string check in server.rs that triggers `process::exit(101)`.
+- **Supply invariant fatal test** — Confirms `SupplyInvariantBroken` error fires when `total_supply` is corrupted (inflated or deflated by 1 sat). Verifies error message contains diagnostic breakdown and `is_fatal()` returns true.
 - **Confirmed**: `applied_validators_per_round` is a FIELD on StateEngine (persists across calls within a session), not a local variable. Cross-batch detection works correctly. NOT persisted to redb (lost on restart), but restart rebuilds DAG which re-enables primary equivocation defense at insertion.
 - **All 819 tests passing**, 0 failed, 14 ignored (jepsen).
 
@@ -2072,7 +2079,13 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 140. **No cross-batch equivocation test (March 16, 2026)** — `applied_validators_per_round` HashMap existed for cross-batch detection but had no dedicated test. Relied on assumption that DAG primary defense covers all cases.
     - **Fix:** Added `cross_batch_equivocation.rs` with 3 tests: cross-batch detection and slashing, intra-batch baseline, tracker pruning verification. Confirmed HashMap is a field on StateEngine (persists across calls).
 141. **No supply invariant exit test (March 16, 2026)** — `SupplyInvariantBroken` error and `process::exit(101)` existed but had no test verifying the detection mechanism fires on corrupted state.
-    - **Fix:** Added `supply_invariant_fatal.rs` with 5 tests: inflated total_supply detection, deflated total_supply detection, healthy state passes, diagnostic details in error, error string matches server.rs halt check.
+    - **Fix:** Added `supply_invariant_fatal.rs` with 5 tests: inflated total_supply detection, deflated total_supply detection, healthy state passes, diagnostic details in error, `is_fatal()` returns true.
+142. **`create_block` accepts arbitrary `validator_reward` (March 16, 2026)** — After per-round reward distribution, coinbase should contain fees only. But `create_block()` still accepted a `validator_reward` parameter and added it to coinbase. Misleading API — any caller could pass non-zero value.
+    - **Fix:** Removed `validator_reward` parameter. Coinbase unconditionally equals `total_fees`. All callers (validator.rs, 2 test files) updated.
+143. **Supply invariant halt uses fragile string matching (March 16, 2026)** — `server.rs` checked `msg.contains("supply invariant broken")` to decide whether to call `process::exit(101)`. If error message wording changed, the halt would silently stop triggering.
+    - **Fix:** Added `CoinError::is_fatal()` method. Server.rs now uses `e.is_fatal()` (type-safe, immune to wording changes).
+144. **GovernanceParams hash fields undocumented (March 16, 2026)** — `compute_state_root()` hashed 10 GovernanceParams fields, but no comment listed them. Adding a new field to GovernanceParams without updating the hash function would silently break state root consensus (two nodes with different param values would compute the same hash).
+    - **Fix:** Added inventory comment listing all 10 fields with instructions to update both hash function and regression test when adding new fields.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.

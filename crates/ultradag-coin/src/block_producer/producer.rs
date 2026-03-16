@@ -3,16 +3,15 @@ use crate::block::{Block, BlockHeader, merkle_root};
 use crate::constants;
 use crate::tx::{CoinbaseTx, Mempool, Transaction};
 
-/// Create a new block on top of the given chain tip.
+/// Create a new block for inclusion in a DAG vertex.
 /// In DAG-BFT, blocks are produced directly by validators — no PoW needed.
-/// `validator_reward` is the pre-computed per-validator reward for this round
-/// (total_round_reward / n in equal-split mode, or proportional to stake).
+/// Coinbase contains transaction fees only. Block rewards are distributed
+/// by the protocol via `distribute_round_rewards()` at round boundaries.
 pub fn create_block(
     prev_hash: [u8; 32],
     height: u64,
     validator_address: &Address,
     mempool: &Mempool,
-    validator_reward: u64,
 ) -> Block {
     let mut txs: Vec<Transaction> = mempool.best(constants::MAX_TXS_PER_BLOCK);
     // Sort by (sender, nonce) to ensure valid execution order for sequential nonces
@@ -23,7 +22,7 @@ pub fn create_block(
 
     let coinbase = CoinbaseTx {
         to: *validator_address,
-        amount: validator_reward.saturating_add(total_fees),
+        amount: total_fees,
         height,
     };
 

@@ -116,11 +116,10 @@ fn test_supply_invariant_error_includes_diagnostics() {
     assert!(err_msg.contains("total_supply="), "Error must include total_supply");
 }
 
-/// Test that server.rs would match the error string for process::exit(101).
-/// This doesn't actually call process::exit — it verifies the string matching
-/// that server.rs uses to decide whether to halt.
+/// Test that is_fatal() returns true for SupplyInvariantBroken errors.
+/// server.rs uses is_fatal() to decide whether to call process::exit(101).
 #[test]
-fn test_supply_invariant_error_string_matches_server_check() {
+fn test_supply_invariant_is_fatal() {
     let mut state = StateEngine::new_with_genesis();
     state.set_configured_validator_count(1);
     let sk = SecretKey::generate();
@@ -129,13 +128,8 @@ fn test_supply_invariant_error_string_matches_server_check() {
 
     let v = make_vertex(&sk, 1, 0);
     let result = state.apply_finalized_vertices(&[v]);
-    let err_msg = format!("{}", result.unwrap_err());
+    let err = result.unwrap_err();
 
-    // server.rs line 199 checks:
-    //   if msg.contains("supply invariant broken") || msg.contains("FATAL")
-    // Both conditions must match for the error to trigger process::exit(101).
-    assert!(
-        err_msg.contains("supply invariant broken") || err_msg.contains("FATAL"),
-        "Error message must match server.rs halt check. Got: {}", err_msg
-    );
+    // server.rs uses e.is_fatal() to decide whether to halt.
+    assert!(err.is_fatal(), "SupplyInvariantBroken must be fatal");
 }

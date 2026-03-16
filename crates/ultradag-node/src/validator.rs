@@ -225,21 +225,15 @@ pub async fn validator_loop(
             dag_round, height, mempool_snap.len(), dag_tips.len(),
         );
 
-        // Block rewards are distributed per-round by the protocol via
-        // distribute_round_rewards() — NOT via coinbase. Coinbase contains
-        // only collected transaction fees. This enables passive staking:
-        // all stakers earn proportionally without running a node.
-        let validator_reward = 0u64;
-
-        // Create block with transactions from mempool
-        // The "prev_hash" is just the first parent for merkle purposes
+        // Create block with transactions from mempool.
+        // Coinbase = fees only. Block rewards distributed by protocol via
+        // distribute_round_rewards() at round boundaries (enables passive staking).
         let prev_hash = dag_tips.first().copied().unwrap_or([0u8; 32]);
         let block = create_block(
             prev_hash,
             height,
             &validator,
             &mempool_snap,
-            validator_reward,
         );
 
         let block_hash = block.hash();

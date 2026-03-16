@@ -3,7 +3,7 @@ use ultradag_coin::{BlockDag, FinalityTracker, DagVertex, SecretKey, create_bloc
 fn make_vertex(sk: &SecretKey, round: u64, parents: Vec<[u8; 32]>) -> DagVertex {
     let validator = sk.address();
     let mempool = Mempool::new();
-    let block = create_block([0u8; 32], round, &validator, &mempool, 0);
+    let block = create_block([0u8; 32], round, &validator, &mempool);
     let mut vertex = DagVertex::new(
         block,
         parents,
