@@ -359,8 +359,13 @@ async fn main() {
     // This ensures the allowlist gates which validators get registered during rebuild.
     // set_allowed_validators also purges any already-registered non-allowed validators.
     if let Some(ref key_file) = args.validator_key {
-        let content = std::fs::read_to_string(key_file)
-            .unwrap_or_else(|e| panic!("Failed to read validator key file {}: {}", key_file, e));
+        let content = match std::fs::read_to_string(key_file) {
+            Ok(c) => c,
+            Err(e) => {
+                error!("Failed to read validator key file {}: {}", key_file, e);
+                std::process::exit(1);
+            }
+        };
         let mut allowed = std::collections::HashSet::new();
         for line in content.lines() {
             let line = line.trim();
