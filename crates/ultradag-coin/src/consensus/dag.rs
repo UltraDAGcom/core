@@ -153,7 +153,7 @@ impl BlockDag {
 
     /// Insert a vertex into the DAG. Returns false if already present.
     /// Does NOT check equivocation — use `try_insert` for untrusted vertices.
-    /// Truncates parents to MAX_PARENTS if exceeded (matching validator loop behavior).
+    /// The caller must ensure parents are truncated to MAX_PARENTS before calling.
     pub fn insert(&mut self, vertex: DagVertex) -> bool {
         let hash = vertex.hash();
 

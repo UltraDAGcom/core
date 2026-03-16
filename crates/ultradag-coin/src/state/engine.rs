@@ -407,13 +407,17 @@ impl StateEngine {
             self.total_supply = self.total_supply.saturating_add(actually_minted);
         } else {
             // --- Pre-staking fallback: equal split among producers ---
+            // MUST sort producers for deterministic credit ordering — HashSet iteration
+            // order is non-deterministic and would cause consensus splits across nodes.
             let n = self.configured_validator_count
                 .unwrap_or(producers.len().max(1) as u64);
             if !producers.is_empty() {
                 let per_producer = validator_pool / n.max(1);
                 let capped = per_producer.min(remaining_supply / producers.len().max(1) as u64);
                 if capped > 0 {
-                    for producer in producers {
+                    let mut sorted_producers: Vec<_> = producers.iter().collect();
+                    sorted_producers.sort();
+                    for producer in sorted_producers {
                         self.credit(producer, capped);
                     }
                     let minted = capped.saturating_mul(producers.len() as u64);
@@ -1230,6 +1234,11 @@ impl StateEngine {
 
     /// Apply a DelegateTx: debit liquid balance, create delegation to validator.
     pub fn apply_delegate_tx(&mut self, tx: &crate::tx::DelegateTx) -> Result<(), CoinError> {
+        // Prevent self-delegation: a validator delegating to themselves artificially
+        // inflates their effective_stake without additional economic risk.
+        if tx.from == tx.validator {
+            return Err(CoinError::ValidationError("cannot delegate to self".into()));
+        }
         if !tx.verify_signature() {
             return Err(CoinError::InvalidSignature);
         }

@@ -5,16 +5,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::protocol::{Message, MAX_MESSAGE_SIZE};
-use super::noise::NOISE_MAX_PLAINTEXT;
+use super::noise::{NOISE_MAX_PLAINTEXT, NOISE_TAG_LEN};
 
 /// Timeout for reading a complete message from a peer (prevents slowloris).
 /// Must be significantly longer than the heartbeat interval (30s) to avoid
 /// cascading disconnections during temporary stalls. At 120s, the heartbeat
 /// has 4 opportunities to deliver a Ping before the connection is killed.
 const READ_TIMEOUT: Duration = Duration::from_secs(120);
-
-/// AEAD tag overhead per Noise transport message (Poly1305).
-const NOISE_TAG_LEN: usize = 16;
 
 /// Read half of a peer connection, optionally encrypted via Noise protocol.
 pub struct PeerReader {
@@ -93,7 +90,7 @@ impl PeerReader {
             self.reader.read_exact(&mut chunk_len_buf).await?;
             let chunk_len = u16::from_be_bytes(chunk_len_buf) as usize;
 
-            if chunk_len == 0 || chunk_len > 65535 {
+            if chunk_len == 0 {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     "invalid encrypted chunk length",

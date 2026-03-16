@@ -180,7 +180,8 @@ pub async fn handshake_initiator(
     stream: &mut TcpStream,
     identity: Option<&SecretKey>,
 ) -> Result<HandshakeResult, NoiseError> {
-    let builder = snow::Builder::new(NOISE_PATTERN.parse().unwrap());
+    let params = NOISE_PATTERN.parse().map_err(NoiseError::Snow)?;
+    let builder = snow::Builder::new(params);
     let noise_keypair = builder.generate_keypair().map_err(NoiseError::Snow)?;
     let mut noise = builder
         .local_private_key(&noise_keypair.private)
@@ -235,7 +236,8 @@ pub async fn handshake_responder(
     stream: &mut TcpStream,
     identity: Option<&SecretKey>,
 ) -> Result<HandshakeResult, NoiseError> {
-    let builder = snow::Builder::new(NOISE_PATTERN.parse().unwrap());
+    let params = NOISE_PATTERN.parse().map_err(NoiseError::Snow)?;
+    let builder = snow::Builder::new(params);
     let noise_keypair = builder.generate_keypair().map_err(NoiseError::Snow)?;
     let mut noise = builder
         .local_private_key(&noise_keypair.private)

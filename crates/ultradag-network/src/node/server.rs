@@ -1047,12 +1047,11 @@ async fn handle_peer(
                     })
                     .await?;
 
-                // Track current network round from this peer.
-                // Uses store() not fetch_max() so the value reflects the actual current
-                // network state. After a clean deploy (network reset), peers report low
-                // rounds and peer_max_round must decrease accordingly; fetch_max would
-                // keep the stale high value forever.
-                peer_max_round.store(height, std::sync::atomic::Ordering::Relaxed);
+                // Track highest network round seen from any peer.
+                // Uses fetch_max() so a single malicious peer cannot lower the value
+                // to 0. A stale high value after clean deploy is preferable to letting
+                // any peer reset it downward.
+                peer_max_round.fetch_max(height, std::sync::atomic::Ordering::Relaxed);
 
                 // If peer is ahead, sync from them
                 if height > our_round {
@@ -1106,8 +1105,8 @@ async fn handle_peer(
                         peer_addr, version, PROTOCOL_VERSION);
                     return Ok(());
                 }
-                // Track current network round (see Hello handler for rationale on store vs fetch_max)
-                peer_max_round.store(height, std::sync::atomic::Ordering::Relaxed);
+                // Track highest network round seen (see Hello handler for rationale on fetch_max)
+                peer_max_round.fetch_max(height, std::sync::atomic::Ordering::Relaxed);
 
                 let our_round = dag.read().await.current_round();
                 if height > our_round {
@@ -1355,10 +1354,11 @@ async fn handle_peer(
                 let mut new_validators = Vec::new();
                 let mut failed_vertices = Vec::new();
                 let mut all_missing_parents: Vec<[u8; 32]> = Vec::new();
-                // Filter out non-allowlisted vertices BEFORE acquiring dag write lock
+                // Cap incoming vertices to 500 (matching GetDagVertices server-side cap)
+                // and filter out non-allowlisted vertices BEFORE acquiring dag write lock
                 let filtered: Vec<DagVertex> = {
                     let fin_r = finality.read().await;
-                    vertices.into_iter().filter(|v| {
+                    vertices.into_iter().take(500).filter(|v| {
                         v.verify_signature() && fin_r.validator_set().is_allowed(&v.validator)
                     }).collect()
                 };
