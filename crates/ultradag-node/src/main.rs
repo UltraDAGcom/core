@@ -757,6 +757,26 @@ async fn main() {
         std::process::exit(0);
     });
 
+    // Fatal condition watcher: observes fatal_shutdown flag set by supply invariant
+    // violations or circuit breaker rollback detection. Saves state before exiting
+    // with the appropriate exit code (100 = circuit breaker, 101 = supply invariant).
+    let fatal_server = server.clone();
+    let fatal_cancel = cancel.clone();
+    let fatal_dir = data_dir.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            if fatal_server.fatal_shutdown.load(Ordering::SeqCst) {
+                let code = fatal_server.fatal_exit_code.load(Ordering::SeqCst);
+                error!("Fatal condition detected (exit code {}), saving state before halt...", code);
+                fatal_cancel.store(true, Ordering::Relaxed);
+                save_state(&fatal_server, &fatal_dir).await;
+                error!("State saved. Exiting with code {}.", code);
+                std::process::exit(code);
+            }
+        }
+    });
+
     // Heartbeat: detect and remove dead TCP connections every 30 seconds
     server.start_heartbeat();
 

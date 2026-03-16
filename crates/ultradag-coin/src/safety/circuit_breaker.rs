@@ -19,13 +19,14 @@ impl CircuitBreaker {
         }
     }
 
-    /// Check if round is moving forward
-    /// HALTS THE PROCESS if rollback detected
-    pub fn check_finality(&self, current_round: u64) {
+    /// Check if round is moving forward.
+    /// Returns `true` if a rollback was detected — caller must initiate
+    /// graceful shutdown (save state, then exit with code 100).
+    pub fn check_finality(&self, current_round: u64) -> bool {
         if !self.enabled {
             // When disabled, still track but don't enforce
             self.last_finalized.store(current_round, Ordering::SeqCst);
-            return;
+            return false;
         }
 
         let last = self.last_finalized.load(Ordering::SeqCst);
@@ -33,7 +34,7 @@ impl CircuitBreaker {
         if current_round < last {
             // CRITICAL: ROLLBACK DETECTED
             error!("╔═══════════════════════════════════════════════════════╗");
-            error!("║       🚨 EMERGENCY CIRCUIT BREAKER 🚨                ║");
+            error!("║       EMERGENCY CIRCUIT BREAKER                      ║");
             error!("║       ROLLBACK DETECTED - HALTING NODE               ║");
             error!("╚═══════════════════════════════════════════════════════╝");
             error!("");
@@ -42,7 +43,7 @@ impl CircuitBreaker {
             error!("Rollback amount: {} rounds", last - current_round);
             error!("");
             error!("This indicates a critical consensus failure.");
-            error!("The node is halting to prevent state corruption.");
+            error!("The node will save state and halt.");
             error!("");
             error!("MANUAL INTERVENTION REQUIRED:");
             error!("1. Check all validator logs");
@@ -51,15 +52,13 @@ impl CircuitBreaker {
             error!("4. Coordinate recovery plan");
             error!("");
             error!("DO NOT RESTART without understanding the cause.");
-            error!("");
-            error!("Exit code 100 = circuit breaker triggered");
 
-            // HALT THE PROCESS
-            std::process::exit(100);
+            return true;
         }
 
         // Update last finalized
         self.last_finalized.store(current_round, Ordering::SeqCst);
+        false
     }
 
     /// Check if round is advancing too slowly (possible stall)
@@ -154,6 +153,13 @@ mod tests {
         assert!(!cb_disabled.is_enabled());
     }
     
-    // Note: Cannot test actual rollback halt in unit tests as it calls std::process::exit(100)
-    // This must be tested in integration tests or manually
+    #[test]
+    fn test_circuit_breaker_detects_rollback() {
+        let cb = CircuitBreaker::new(true);
+
+        cb.check_finality(10);
+        assert!(!cb.check_finality(11)); // forward is fine
+        assert!(!cb.check_finality(11)); // same is fine
+        assert!(cb.check_finality(5));   // rollback detected
+    }
 }

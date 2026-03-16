@@ -21,6 +21,16 @@ The codebase is past the critical code issues. What remains is operational work 
 
 See **Mainnet Launch Checklist** below for the complete phased plan.
 
+**Graceful Fatal Shutdown (March 16, 2026):**
+- **CRITICAL: `process::exit` replaced with graceful shutdown** — Both `process::exit(100)` (circuit breaker) and `process::exit(101)` (supply invariant) killed the process immediately without flushing state to disk. On mainnet, this could corrupt redb state mid-write.
+- **`CircuitBreaker::check_finality()` now returns `bool`** instead of calling `exit()`. The validator loop checks the return value and signals graceful shutdown via `server.fatal_shutdown`. CircuitBreaker remains in ultradag-coin crate with zero dependencies on networking types.
+- **`apply_finality_and_state()` signals via `fatal_shutdown`** instead of calling `exit(101)`. Sets `fatal_exit_code` to 101 and returns, allowing the caller to unwind.
+- **`NodeServer` has `fatal_shutdown: Arc<AtomicBool>` and `fatal_exit_code: Arc<AtomicI32>`** — threaded through `PeerContext` to all P2P handlers and `resolve_orphans`.
+- **Fatal shutdown watcher in main.rs** — Polls `fatal_shutdown` every 100ms. On detection: sets `cancel` flag (stops validator loop), calls `save_state()` (flushes DAG, finality, state.redb, mempool), then exits with the correct code.
+- **Validator loop checks `fatal_shutdown`** alongside existing `shutdown` flag for prompt exit.
+- **Startup `process::exit(1)` calls unchanged** — No state exists yet at startup, so immediate exit is correct.
+- **All 820 tests passing**, 0 failed, 14 ignored (jepsen). New test: `test_circuit_breaker_detects_rollback`.
+
 **Consensus Determinism Fixes (March 16, 2026):**
 - **CRITICAL: Reward distribution non-deterministic** — `distribute_round_rewards()` iterated `stake_accounts` and `delegation_accounts` (HashMaps) without sorting. Different nodes could compute rewards in different order. Fix: sort both by address before iteration.
 - **CRITICAL: Governance execution non-deterministic** — `tick_governance()` iterated `self.proposals` (HashMap) without sorting. If two ParameterChange proposals execute in the same round, the final parameter value depended on iteration order. Fix: sort proposals by ID before processing.
@@ -2098,6 +2108,11 @@ UltraDAG is offering rewards for security researchers who discover and responsib
 146. **CRITICAL: `tick_governance()` non-deterministic proposal execution (March 16, 2026)** — `self.proposals` is a HashMap. If two ParameterChange proposals execute in the same round (e.g., both change `min_fee_sats` to different values), the final parameter value depends on which proposal executes last — determined by HashMap iteration order, which differs across nodes. Same issue for CouncilMembership (add then remove vs remove then add for same seat) and TreasurySpend (two proposals exceeding remaining balance — order determines which succeeds). Consensus-critical determinism bug.
     - **Fix:** Collect proposals into sorted Vec before iteration: `sorted_proposals.sort_by_key(|(id, _)| *id)`. Proposals now execute in ascending ID order, which is deterministic and matches temporal ordering (lower IDs were created earlier).
     - **Fix:** Corrected false comment (line 251) that claimed "tick_governance uses deterministic sorted proposal iteration" — it didn't until this fix.
+147. **`process::exit(100)` in circuit breaker bypasses state flush (March 16, 2026)** — `CircuitBreaker::check_finality()` called `std::process::exit(100)` directly on finality rollback detection. This killed the process without saving DAG, finality tracker, state.redb, or mempool to disk. On mainnet, this could leave redb in a partially-written state (redb is ACID per-transaction, but the process might be mid-rename of .redb.tmp → state.redb).
+    - **Fix:** `check_finality()` now returns `bool` (true = rollback detected). Validator loop checks return value, sets `server.fatal_shutdown` and `server.fatal_exit_code = 100`. Fatal shutdown watcher in main.rs saves state then exits. CircuitBreaker remains a pure detection mechanism in ultradag-coin crate.
+148. **`process::exit(101)` in supply invariant handler bypasses state flush (March 16, 2026)** — `apply_finality_and_state()` called `std::process::exit(101)` when `CoinError::is_fatal()` returned true. Same issue as #147: state not flushed before exit.
+    - **Fix:** Sets `fatal_exit_code = 101` and `fatal_shutdown = true` via `Arc<AtomicI32>` / `Arc<AtomicBool>` on NodeServer, then returns. Fatal shutdown watcher saves state and exits with code 101.
+    - **Design:** `NodeServer` carries `fatal_shutdown` and `fatal_exit_code` fields, threaded through `PeerContext` to all P2P handlers. Main.rs polls `fatal_shutdown` every 100ms and calls `save_state()` before `process::exit(code)`.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.

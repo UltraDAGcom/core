@@ -34,7 +34,8 @@ pub async fn validator_loop(
     let mut last_checkpoint_round: u64 = (last_fin / ultradag_coin::CHECKPOINT_INTERVAL) * ultradag_coin::CHECKPOINT_INTERVAL;
     let circuit_breaker = CircuitBreaker::new(true);
     if last_fin > 0 {
-        circuit_breaker.check_finality(last_fin);
+        // Initial load — can't be a rollback (breaker starts at 0), ignore return value
+        let _ = circuit_breaker.check_finality(last_fin);
     }
     const MAX_SKIPS_BEFORE_RECOVERY: u32 = 3;
     // Minimum time between vertex productions to prevent runaway optimistic loops.
@@ -70,7 +71,7 @@ pub async fn validator_loop(
             }
         }
 
-        if shutdown.load(Ordering::Relaxed) {
+        if shutdown.load(Ordering::Relaxed) || server.fatal_shutdown.load(Ordering::SeqCst) {
             info!("Validator shutdown");
             return;
         }
@@ -371,7 +372,12 @@ pub async fn validator_loop(
 
         // Circuit breaker: halt if finality rolls back (critical safety check)
         let current_fin = server.finality.read().await.last_finalized_round();
-        circuit_breaker.check_finality(current_fin);
+        if circuit_breaker.check_finality(current_fin) {
+            error!("Circuit breaker triggered — initiating graceful shutdown");
+            server.fatal_exit_code.store(100, Ordering::SeqCst);
+            server.fatal_shutdown.store(true, Ordering::SeqCst);
+            return;
+        }
 
         // Checkpoint generation: runs independently of finality block above.
         // P2P handler may finalize vertices before validator loop, making all_finalized empty.

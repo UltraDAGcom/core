@@ -155,6 +155,8 @@ async fn apply_finality_and_state(
     finality: &Arc<RwLock<FinalityTracker>>,
     state: &Arc<RwLock<StateEngine>>,
     mempool: &Arc<RwLock<Mempool>>,
+    fatal_shutdown: &Arc<std::sync::atomic::AtomicBool>,
+    fatal_exit_code: &Arc<std::sync::atomic::AtomicI32>,
 ) -> (Vec<DagVertex>, u64) {
     // Phase 1: Register validators and find newly-finalized vertices.
     // Hold finality+dag locks, then drop both before touching state.
@@ -196,10 +198,12 @@ async fn apply_finality_and_state(
         let prev_round = state_w.last_finalized_round();
         if let Err(e) = state_w.apply_finalized_vertices(&finalized_vertices) {
             if e.is_fatal() {
-                // Supply invariant violations are unrecoverable — halt immediately.
-                // On mainnet, any supply drift requires a hard fork to fix.
-                tracing::error!("FATAL: {}", e);
-                std::process::exit(101);
+                // Supply invariant violations are unrecoverable.
+                // Signal graceful shutdown so state is flushed before exit.
+                tracing::error!("FATAL: {} — initiating graceful shutdown", e);
+                fatal_exit_code.store(101, std::sync::atomic::Ordering::SeqCst);
+                fatal_shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
+                return (finalized_vertices, 0);
             }
             warn!("Failed to apply finalized vertices: {}", e);
             return (finalized_vertices, 0);
@@ -266,6 +270,11 @@ pub struct NodeServer {
     /// Testnet mode: enables secret-key-in-body RPC endpoints (/tx, /stake, /unstake,
     /// /proposal, /vote, /faucet, /keygen). Disabled on mainnet — only /tx/submit accepted.
     pub testnet_mode: bool,
+    /// Set to true when a fatal condition requires graceful shutdown.
+    /// The main loop observes this, saves state, then exits with `fatal_exit_code`.
+    pub fatal_shutdown: Arc<std::sync::atomic::AtomicBool>,
+    /// Exit code for fatal shutdown (100 = circuit breaker, 101 = supply invariant).
+    pub fatal_exit_code: Arc<std::sync::atomic::AtomicI32>,
 }
 
 impl NodeServer {
@@ -294,6 +303,8 @@ impl NodeServer {
             pruning_depth: 1000,
             peer_max_round: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             testnet_mode: true,
+            fatal_shutdown: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            fatal_exit_code: Arc::new(std::sync::atomic::AtomicI32::new(0)),
         }
     }
 
@@ -415,6 +426,8 @@ impl NodeServer {
             let checkpoint_metrics = self.checkpoint_metrics.clone();
             let sync_complete = self.sync_complete.clone();
             let peer_max_round = self.peer_max_round.clone();
+            let fatal_shutdown = self.fatal_shutdown.clone();
+            let fatal_exit_code = self.fatal_exit_code.clone();
             tokio::spawn(async move {
                 let ctx = PeerContext {
                     state: &state,
@@ -431,6 +444,8 @@ impl NodeServer {
                     checkpoint_metrics: &checkpoint_metrics,
                     sync_complete: &sync_complete,
                     peer_max_round: &peer_max_round,
+                    fatal_shutdown: &fatal_shutdown,
+                    fatal_exit_code: &fatal_exit_code,
                 };
                 // handle_peer may rename peer_addr via Hello; remove both keys on disconnect
                 if let Err(e) = handle_peer(reader, &ctx).await {
@@ -462,6 +477,8 @@ impl NodeServer {
         let checkpoint_metrics = self.checkpoint_metrics.clone();
         let sync_complete = self.sync_complete.clone();
         let peer_max_round = self.peer_max_round.clone();
+        let fatal_shutdown = self.fatal_shutdown.clone();
+        let fatal_exit_code = self.fatal_exit_code.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30));
             // Consume first tick (fires immediately) — let seed connections establish first
@@ -511,6 +528,8 @@ impl NodeServer {
                         let checkpoint_metrics = checkpoint_metrics.clone();
                         let sync_complete = sync_complete.clone();
                         let peer_max_round = peer_max_round.clone();
+                        let fatal_shutdown = fatal_shutdown.clone();
+                        let fatal_exit_code = fatal_exit_code.clone();
                         let addr = addr.clone();
                         tokio::spawn(async move {
                             let ctx = PeerContext {
@@ -528,6 +547,8 @@ impl NodeServer {
                                 checkpoint_metrics: &checkpoint_metrics,
                                 sync_complete: &sync_complete,
                                 peer_max_round: &peer_max_round,
+                                fatal_shutdown: &fatal_shutdown,
+                                fatal_exit_code: &fatal_exit_code,
                             };
                             try_connect_peer(addr, listen_port, &ctx).await;
                         });
@@ -601,6 +622,8 @@ impl NodeServer {
         let checkpoint_metrics = self.checkpoint_metrics.clone();
         let sync_complete = self.sync_complete.clone();
         let peer_max_round = self.peer_max_round.clone();
+        let fatal_shutdown = self.fatal_shutdown.clone();
+        let fatal_exit_code = self.fatal_exit_code.clone();
 
         tokio::spawn(async move {
             let ctx = PeerContext {
@@ -618,6 +641,8 @@ impl NodeServer {
                 checkpoint_metrics: &checkpoint_metrics,
                 sync_complete: &sync_complete,
                 peer_max_round: &peer_max_round,
+                fatal_shutdown: &fatal_shutdown,
+                fatal_exit_code: &fatal_exit_code,
             };
             if let Err(e) = handle_peer(reader, &ctx).await {
                 warn!("Peer {} disconnected: {}", addr_str, e);
@@ -641,6 +666,8 @@ async fn resolve_orphans(
     peers: &PeerRegistry,
     peer_addr: &str,
     _round_notify: &Arc<Notify>,
+    fatal_shutdown: &Arc<std::sync::atomic::AtomicBool>,
+    fatal_exit_code: &Arc<std::sync::atomic::AtomicI32>,
 ) {
     let mut resolved = true;
     let mut passes = 0;
@@ -666,6 +693,7 @@ async fn resolve_orphans(
                     let validator = vertex.validator;
                     apply_finality_and_state(
                         &[validator], dag, finality, state, mempool,
+                        fatal_shutdown, fatal_exit_code,
                     ).await;
                     peers.broadcast(&Message::DagProposal(vertex), peer_addr).await;
                 }
@@ -708,6 +736,8 @@ async fn try_connect_peer(
     let checkpoint_metrics = ctx.checkpoint_metrics;
     let sync_complete = ctx.sync_complete;
     let peer_max_round = ctx.peer_max_round;
+    let fatal_shutdown = ctx.fatal_shutdown;
+    let fatal_exit_code = ctx.fatal_exit_code;
     // Don't connect to ourselves
     if is_self_addr(&addr, listen_port) {
         info!("Skipping self-connection to {}", addr);
@@ -820,6 +850,8 @@ async fn try_connect_peer(
             let checkpoint_metrics = checkpoint_metrics.clone();
             let sync_complete = sync_complete.clone();
             let peer_max_round = peer_max_round.clone();
+            let fatal_shutdown = fatal_shutdown.clone();
+            let fatal_exit_code = fatal_exit_code.clone();
             let addr_clone = addr.clone();
             tokio::spawn(async move {
                 let inner_ctx = PeerContext {
@@ -837,6 +869,8 @@ async fn try_connect_peer(
                     checkpoint_metrics: &checkpoint_metrics,
                     sync_complete: &sync_complete,
                     peer_max_round: &peer_max_round,
+                    fatal_shutdown: &fatal_shutdown,
+                    fatal_exit_code: &fatal_exit_code,
                 };
                 let fut = Box::pin(handle_peer(reader, &inner_ctx));
                 if let Err(e) = fut.await {
@@ -870,6 +904,8 @@ struct PeerContext<'a> {
     checkpoint_metrics: &'a Arc<crate::CheckpointMetrics>,
     sync_complete: &'a Arc<std::sync::atomic::AtomicBool>,
     peer_max_round: &'a Arc<std::sync::atomic::AtomicU64>,
+    fatal_shutdown: &'a Arc<std::sync::atomic::AtomicBool>,
+    fatal_exit_code: &'a Arc<std::sync::atomic::AtomicI32>,
 }
 
 async fn handle_peer(
@@ -890,6 +926,8 @@ async fn handle_peer(
     let checkpoint_metrics = ctx.checkpoint_metrics;
     let sync_complete = ctx.sync_complete;
     let peer_max_round = ctx.peer_max_round;
+    let fatal_shutdown = ctx.fatal_shutdown;
+    let fatal_exit_code = ctx.fatal_exit_code;
 
     let peer_addr = reader.addr.clone();
     let mut allowlist_rejections: u32 = 0;
@@ -1152,12 +1190,13 @@ async fn handle_peer(
 
                     apply_finality_and_state(
                         &[validator], dag, finality, state, mempool,
+                        fatal_shutdown, fatal_exit_code,
                     ).await;
 
                     peers.broadcast(&Message::DagProposal(vertex), &peer_addr).await;
 
                     // Try to resolve orphaned vertices now that a new vertex was inserted
-                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify).await;
+                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify, fatal_shutdown, fatal_exit_code).await;
                 }
             }
 
@@ -1322,8 +1361,9 @@ async fn handle_peer(
                     // Don't notify here — DagVertices is bulk sync context.
                     apply_finality_and_state(
                         &new_validators, dag, finality, state, mempool,
+                        fatal_shutdown, fatal_exit_code,
                     ).await;
-                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify).await;
+                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify, fatal_shutdown, fatal_exit_code).await;
                 }
 
                 // Sync continuation: if we received new vertices, request the next batch.
@@ -1456,8 +1496,9 @@ async fn handle_peer(
                     // Don't notify here — ParentVertices is bulk sync context.
                     apply_finality_and_state(
                         &new_validators, dag, finality, state, mempool,
+                        fatal_shutdown, fatal_exit_code,
                     ).await;
-                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify).await;
+                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify, fatal_shutdown, fatal_exit_code).await;
                 }
             }
 
