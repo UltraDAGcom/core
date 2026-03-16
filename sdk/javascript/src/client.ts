@@ -304,4 +304,25 @@ export class UltraDagClient {
   async castVote(params: CastVoteRequest): Promise<CastVoteResponse> {
     return this.post<CastVoteResponse>("/vote", params);
   }
+
+  // -----------------------------------------------------------------------
+  // Client-side signed transaction submission
+  // -----------------------------------------------------------------------
+
+  /**
+   * Submit a pre-signed transaction to the network via `/tx/submit`.
+   *
+   * This is the **mainnet transaction path** — no secret keys are sent to
+   * the server.  Build the transaction object using the `buildSigned*Tx`
+   * helpers from `transactions.ts`, then pass it here.
+   *
+   * @param tx - A fully-signed Transaction object matching the Rust
+   *   `Transaction` serde JSON format (e.g. `{ Transfer: { ... } }`).
+   * @returns `{ status: "pending", tx_hash: string }` on success.
+   */
+  async submitSignedTransaction(
+    tx: object,
+  ): Promise<{ status: string; tx_hash: string }> {
+    return this.post<{ status: string; tx_hash: string }>("/tx/submit", tx);
+  }
 }

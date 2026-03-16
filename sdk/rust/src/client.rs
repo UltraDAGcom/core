@@ -4,6 +4,8 @@ use serde_json::Value;
 use crate::error::{Result, UltraDagError};
 use crate::types::*;
 
+use ultradag_coin::tx::transaction::Transaction;
+
 /// Default RPC base URL.
 const DEFAULT_BASE_URL: &str = "http://localhost:10333";
 
@@ -187,6 +189,30 @@ impl UltraDagClient {
     /// `POST /vote` — cast a vote on a governance proposal.
     pub fn vote(&self, req: &VoteRequest) -> Result<Value> {
         self.post("/vote", req)
+    }
+
+    /// `POST /tx/submit` — submit a pre-signed transaction.
+    ///
+    /// This is the mainnet-compatible transaction submission path. The transaction
+    /// is signed client-side (see [`crate::transactions`]) and submitted as JSON.
+    /// No private keys are sent to the node.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use ultradag_sdk::{UltraDagClient, transactions};
+    /// use ultradag_coin::{SecretKey, Address};
+    ///
+    /// let sk = SecretKey::from_bytes([0x42; 32]);
+    /// let to = Address([0xAB; 32]);
+    /// let tx = transactions::build_transfer(&sk, to, 1_000_000, 10_000, 0, None);
+    ///
+    /// let client = UltraDagClient::default_local();
+    /// let result = client.submit_transaction(&tx).unwrap();
+    /// println!("Submitted tx: {}", result.hash);
+    /// ```
+    pub fn submit_transaction(&self, tx: &Transaction) -> Result<SubmitTxResponse> {
+        self.post("/tx/submit", tx)
     }
 
     // -----------------------------------------------------------------------

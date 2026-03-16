@@ -29,6 +29,7 @@
 pub mod client;
 pub mod crypto;
 pub mod error;
+pub mod transactions;
 pub mod types;
 
 pub use client::UltraDagClient;

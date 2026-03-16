@@ -511,6 +511,22 @@ class UltraDagClient:
             note=data.get("note"),
         )
 
+    def submit_signed_transaction(self, tx: Dict[str, Any]) -> Dict[str, Any]:
+        """Submit a pre-signed transaction to the node via POST /tx/submit.
+
+        This is the mainnet-compatible transaction path. The transaction
+        must be fully signed client-side (e.g., via the builder functions
+        in ``ultradag.transactions``).
+
+        Args:
+            tx: A JSON-serializable dict matching the Rust ``Transaction``
+                serde format (e.g., ``{"Transfer": {...}}``).
+
+        Returns:
+            Server response as a dictionary.
+        """
+        return self._post("/tx/submit", tx)
+
     # ------------------------------------------------------------------
     # Convenience helpers
     # ------------------------------------------------------------------

@@ -231,6 +231,20 @@ pub struct TxResponse {
 }
 
 // ---------------------------------------------------------------------------
+// POST /tx/submit
+// ---------------------------------------------------------------------------
+
+/// Response from `POST /tx/submit`.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SubmitTxResponse {
+    /// Transaction hash (hex).
+    pub hash: String,
+    /// Status message.
+    #[serde(default)]
+    pub status: String,
+}
+
+// ---------------------------------------------------------------------------
 // POST /faucet
 // ---------------------------------------------------------------------------
 
