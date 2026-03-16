@@ -198,7 +198,7 @@ impl BlockDag {
         vertex.topo_level = if vertex.parent_hashes.is_empty() || (vertex.parent_hashes.len() == 1 && vertex.parent_hashes[0] == genesis_topo) {
             0
         } else {
-            max_parent_level + 1
+            max_parent_level.saturating_add(1)
         };
 
         // Update parent -> child edges

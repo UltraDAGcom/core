@@ -810,6 +810,14 @@ async fn handle_request(
                 None
             };
 
+            // Validate amount is non-zero
+            if send_req.amount == 0 {
+                return Ok(error_response(
+                    StatusCode::BAD_REQUEST,
+                    "amount must be greater than 0",
+                ));
+            }
+
             // Validate minimum fee
             if send_req.fee < ultradag_coin::constants::MIN_FEE_SATS {
                 return Ok(error_response(

@@ -1015,7 +1015,7 @@ async fn handle_peer(
         let msg = reader.recv().await?;
 
         // Aggregate rate limiting: disconnect abusive peers
-        message_count += 1;
+        message_count = message_count.saturating_add(1);
         let elapsed = window_start.elapsed();
         if elapsed >= std::time::Duration::from_secs(RATE_WINDOW_SECS) {
             // Reset window
@@ -1333,12 +1333,14 @@ async fn handle_peer(
             }
 
             Message::RoundHashes { rounds } => {
+                // Cap incoming rounds to prevent amplification attacks.
+                // Each missing hash generates a GetParents request, so bound total.
+                let capped_rounds = rounds.into_iter().take(1000);
                 let missing_hashes: Vec<[u8; 32]> = {
                     let dag_r = dag.read().await;
-                    rounds.iter()
-                        .flat_map(|(_, hashes)| hashes.iter())
+                    capped_rounds
+                        .flat_map(|(_, hashes)| hashes.into_iter().take(100))
                         .filter(|h| dag_r.get(h).is_none())
-                        .copied()
                         .collect()
                 };
                 if !missing_hashes.is_empty() {
@@ -1579,7 +1581,12 @@ async fn handle_peer(
                 drop(fin);
 
                 if checkpoint.round > our_finalized {
-                    // We haven't finalized this round yet — store for later
+                    // We haven't finalized this round yet — store for later.
+                    // Verify at least one valid signature to prevent garbage filling pending slots.
+                    if checkpoint.valid_signers().is_empty() {
+                        debug!("Ignoring future checkpoint for round {} with no valid signatures", checkpoint.round);
+                        continue;
+                    }
                     let mut pending = pending_checkpoints.write().await;
                     pending.insert(checkpoint.round, checkpoint);
                     // Evict oldest if over cap (same cap as co-signing path)
@@ -1830,19 +1837,18 @@ async fn handle_peer(
                     let dir = data_dir;
                     let local_checkpoints = ultradag_coin::persistence::list_checkpoints(dir);
                     if !local_checkpoints.is_empty() {
-                        let checkpoint_loader = |hash: [u8; 32]| -> Option<ultradag_coin::Checkpoint> {
-                            // Search all local checkpoints by round, match by hash
-                            let rounds = ultradag_coin::persistence::list_checkpoints(dir);
-                            for round in rounds {
-                                if let Some(cp) = ultradag_coin::persistence::load_checkpoint_by_round(dir, round) {
-                                    let cp_hash = ultradag_coin::consensus::compute_checkpoint_hash(&cp);
-                                    if cp_hash == hash {
-                                        return Some(cp);
-                                    }
-                                }
-                            }
-                            None
-                        };
+                        // Build a hash→checkpoint lookup once to avoid O(N²) disk I/O
+                    // in the chain verification closure (was scanning all checkpoints per link).
+                    let mut local_cp_map = std::collections::HashMap::new();
+                    for round in &local_checkpoints {
+                        if let Some(cp) = ultradag_coin::persistence::load_checkpoint_by_round(dir, *round) {
+                            let cp_hash = ultradag_coin::consensus::compute_checkpoint_hash(&cp);
+                            local_cp_map.insert(cp_hash, cp);
+                        }
+                    }
+                    let checkpoint_loader = |hash: [u8; 32]| -> Option<ultradag_coin::Checkpoint> {
+                        local_cp_map.get(&hash).cloned()
+                    };
 
                         match ultradag_coin::consensus::verify_checkpoint_chain(&checkpoint, checkpoint_loader) {
                             Ok(()) => {
@@ -1870,6 +1876,25 @@ async fn handle_peer(
                 if state_at_checkpoint.proposals.len() > MAX_SNAPSHOT_PROPOSALS {
                     warn!("CheckpointSync: rejecting snapshot with {} proposals (max {})",
                         state_at_checkpoint.proposals.len(), MAX_SNAPSHOT_PROPOSALS);
+                    checkpoint_metrics.record_fast_sync_failure();
+                    continue;
+                }
+                // Also validate secondary collections to prevent OOM.
+                if state_at_checkpoint.stake_accounts.len() > MAX_SNAPSHOT_ACCOUNTS {
+                    warn!("CheckpointSync: rejecting snapshot with {} stake accounts (max {})",
+                        state_at_checkpoint.stake_accounts.len(), MAX_SNAPSHOT_ACCOUNTS);
+                    checkpoint_metrics.record_fast_sync_failure();
+                    continue;
+                }
+                if state_at_checkpoint.delegation_accounts.len() > MAX_SNAPSHOT_ACCOUNTS {
+                    warn!("CheckpointSync: rejecting snapshot with {} delegation accounts (max {})",
+                        state_at_checkpoint.delegation_accounts.len(), MAX_SNAPSHOT_ACCOUNTS);
+                    checkpoint_metrics.record_fast_sync_failure();
+                    continue;
+                }
+                if state_at_checkpoint.votes.len() > MAX_SNAPSHOT_ACCOUNTS {
+                    warn!("CheckpointSync: rejecting snapshot with {} votes (max {})",
+                        state_at_checkpoint.votes.len(), MAX_SNAPSHOT_ACCOUNTS);
                     checkpoint_metrics.record_fast_sync_failure();
                     continue;
                 }
