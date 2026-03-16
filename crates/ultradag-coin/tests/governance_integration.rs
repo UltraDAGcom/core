@@ -1168,3 +1168,47 @@ fn test_non_council_non_self_nomination_rejected() {
     let result2 = state.apply_create_proposal(&tx2, 100);
     assert!(result2.is_err(), "Non-council creating text proposal should be rejected");
 }
+
+#[test]
+fn test_empty_council_proposals_cannot_pass() {
+    // When all council members are removed, proposals must NOT auto-pass.
+    // With snapshot_total_stake=0, quorum=0, and 0 votes >= 0 would be true
+    // without the explicit zero-denominator guard.
+    use ultradag_coin::governance::proposals::Proposal;
+    use ultradag_coin::governance::proposals::ProposalStatus;
+    use ultradag_coin::governance::GovernanceParams;
+
+    let proposal = Proposal {
+        id: 1,
+        proposer: SecretKey::generate().address(),
+        title: "Self-nomination".to_string(),
+        description: "I nominate myself".to_string(),
+        proposal_type: ProposalType::TextProposal,
+        voting_starts: 0,
+        voting_ends: 1000,
+        votes_for: 0,
+        votes_against: 0,
+        status: ProposalStatus::Active,
+        snapshot_total_stake: 0, // empty council
+    };
+
+    // With zero total stake (empty council), proposal must not pass
+    assert!(
+        !proposal.has_passed(0),
+        "Proposal must NOT pass with zero total stake (empty council)"
+    );
+    assert!(
+        !proposal.has_passed_with_params(0, &GovernanceParams::default()),
+        "Proposal must NOT pass with zero total stake via has_passed_with_params"
+    );
+
+    // Even with votes_for > 0 (shouldn't happen but defensive)
+    let proposal_with_votes = Proposal {
+        votes_for: 1,
+        ..proposal
+    };
+    assert!(
+        !proposal_with_votes.has_passed(0),
+        "Proposal must NOT pass with zero denominator even with votes"
+    );
+}

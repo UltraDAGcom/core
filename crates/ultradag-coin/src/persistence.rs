@@ -100,13 +100,14 @@ pub fn load_checkpoint_by_round(dir: &Path, round: u64) -> Option<crate::consens
 }
 
 /// Load the latest checkpoint from disk, if any.
+/// Matches "checkpoint_NNNNNNNNNN.bin" but excludes "checkpoint_state_*" files.
 pub fn load_latest_checkpoint(dir: &Path) -> Option<crate::consensus::Checkpoint> {
     let mut latest: Option<(u64, crate::consensus::Checkpoint)> = None;
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
             let name = entry.file_name();
             let name = name.to_string_lossy();
-            if name.starts_with("checkpoint_") && name.ends_with(".bin") {
+            if name.starts_with("checkpoint_") && name.ends_with(".bin") && !name.starts_with("checkpoint_state_") {
                 if let Ok(bytes) = std::fs::read(entry.path()) {
                     if let Ok(cp) = postcard::from_bytes::<crate::consensus::Checkpoint>(&bytes) {
                         if latest.as_ref().is_none_or(|(r, _)| cp.round > *r) {
@@ -121,13 +122,14 @@ pub fn load_latest_checkpoint(dir: &Path) -> Option<crate::consensus::Checkpoint
 }
 
 /// List all available checkpoint rounds.
+/// Matches "checkpoint_NNNNNNNNNN.bin" but excludes "checkpoint_state_*" files.
 pub fn list_checkpoints(dir: &Path) -> Vec<u64> {
     let mut rounds = Vec::new();
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
             let name = entry.file_name();
             let name = name.to_string_lossy();
-            if name.starts_with("checkpoint_") && name.ends_with(".bin") {
+            if name.starts_with("checkpoint_") && name.ends_with(".bin") && !name.starts_with("checkpoint_state_") {
                 if let Ok(bytes) = std::fs::read(entry.path()) {
                     if let Ok(cp) = postcard::from_bytes::<crate::consensus::Checkpoint>(&bytes) {
                         rounds.push(cp.round);

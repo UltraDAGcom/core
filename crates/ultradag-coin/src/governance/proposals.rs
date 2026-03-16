@@ -65,6 +65,11 @@ impl Proposal {
     /// Check if proposal passed with governance-adjustable thresholds.
     /// Uses u128 for intermediate calculations to prevent overflow with large staked values.
     pub fn has_passed_with_params(&self, total_staked: u64, params: &GovernanceParams) -> bool {
+        // Empty council/zero quorum denominator: proposals cannot pass with 0 eligible voters.
+        // Prevents auto-pass when all council members are removed (quorum=0, 0>=0 would pass).
+        if total_staked == 0 {
+            return false;
+        }
         // Use u128 to prevent overflow: total_staked * quorum_numerator can exceed u64
         let quorum = ((total_staked as u128 * params.quorum_numerator as u128
             + GOVERNANCE_QUORUM_DENOMINATOR as u128 - 1)

@@ -71,8 +71,11 @@ impl Mempool {
                 .min_by_key(|(_, fee)| *fee)
             {
                 let new_fee = tx.fee();
-                // Only evict if new transaction has higher fee
-                if new_fee > lowest_fee {
+                // Fee-exempt transactions (Stake, Unstake, Delegate, etc.) have fee=0
+                // but are protocol-critical and should be able to enter a full mempool
+                // by evicting the lowest-fee entry (which may also be fee=0).
+                let can_evict = new_fee > lowest_fee || (fee_exempt && lowest_fee == 0);
+                if can_evict {
                     if let Some(evicted) = self.txs.remove(&lowest_hash) {
                         let evicted_sender = evicted.tx.from();
                         if let Some(hashes) = self.by_sender.get_mut(&evicted_sender) {
@@ -333,5 +336,43 @@ mod tests {
         assert!(pool.insert(high_fee_tx.clone()), "Should accept high-fee tx and evict lowest");
         assert_eq!(pool.len(), MAX_MEMPOOL_SIZE, "Size should remain at limit");
         assert!(pool.contains(&high_fee_tx.hash()), "High-fee tx should be in pool");
+    }
+
+    #[test]
+    fn fee_exempt_tx_can_enter_full_mempool() {
+        use crate::tx::StakeTx;
+
+        let mut pool = Mempool::new();
+
+        // Fill mempool with zero-fee stake transactions
+        for i in 0..MAX_MEMPOOL_SIZE {
+            let sk = SecretKey::from_bytes([(i % 250 + 1) as u8; 32]);
+            let mut stake_tx = StakeTx {
+                from: sk.address(),
+                amount: 100_000_000,
+                nonce: (i / 250) as u64,
+                pub_key: sk.verifying_key().to_bytes(),
+                signature: Signature([0u8; 64]),
+            };
+            stake_tx.signature = sk.sign(&stake_tx.signable_bytes());
+            pool.insert(Transaction::Stake(stake_tx));
+        }
+        assert_eq!(pool.len(), MAX_MEMPOOL_SIZE);
+
+        // A new fee-exempt tx should be able to evict one of the zero-fee txs
+        let new_sk = SecretKey::from_bytes([0xFE; 32]);
+        let mut new_stake = StakeTx {
+            from: new_sk.address(),
+            amount: 100_000_000,
+            nonce: 0,
+            pub_key: new_sk.verifying_key().to_bytes(),
+            signature: Signature([0u8; 64]),
+        };
+        new_stake.signature = new_sk.sign(&new_stake.signable_bytes());
+        assert!(
+            pool.insert(Transaction::Stake(new_stake)),
+            "Fee-exempt tx must be able to enter a full mempool by evicting another zero-fee tx"
+        );
+        assert_eq!(pool.len(), MAX_MEMPOOL_SIZE);
     }
 }
