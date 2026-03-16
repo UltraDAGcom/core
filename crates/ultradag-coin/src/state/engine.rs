@@ -248,10 +248,10 @@ impl StateEngine {
         // SAFETY: council_members must be identical across all nodes at this round.
         // This is guaranteed because: (1) CouncilMembership proposals execute via
         // tick_governance which runs per-round AFTER all vertices in that round are
-        // applied, and (2) tick_governance uses deterministic sorted proposal iteration.
-        // (3) Fast-sync loads council_members from checkpoint snapshot.
-        // (4) If council sets diverge, total_supply will differ, and the supply
-        // invariant check (SupplyInvariantBroken → process exit) catches it.
+        // applied, and (2) tick_governance iterates proposals sorted by ID for
+        // deterministic execution order. (3) Fast-sync loads council_members from
+        // checkpoint snapshot. (4) If council sets diverge, total_supply will differ,
+        // and the supply invariant check (SupplyInvariantBroken → process exit) catches it.
         // The member list is sorted by address for deterministic credit ordering.
         let council_percent = self.governance_params.council_emission_percent;
         let council_count = self.council_members.len() as u64;
@@ -292,11 +292,14 @@ impl StateEngine {
 
         if total_effective_stake > 0 {
             // --- Staking active: distribute proportionally to all stakers ---
-            // Collect all validators (anyone with stake) and their effective stakes
-            let validators: Vec<(Address, u64)> = self.stake_accounts.iter()
+            // Collect all validators (anyone with stake) and their effective stakes.
+            // MUST sort by address for deterministic iteration — HashMap order is
+            // non-deterministic and would cause consensus splits across nodes.
+            let mut validators: Vec<(Address, u64)> = self.stake_accounts.iter()
                 .filter(|(_, s)| s.staked > 0)
                 .map(|(addr, _)| (*addr, self.effective_stake_of(addr)))
                 .collect();
+            validators.sort_by_key(|(addr, _)| *addr);
 
             let mut total_to_mint: u64 = 0;
             let mut credits: Vec<(Address, u64)> = Vec::new();
@@ -345,10 +348,13 @@ impl StateEngine {
                         .map(|s| s.commission_percent)
                         .unwrap_or(crate::constants::DEFAULT_COMMISSION_PERCENT);
 
-                    let delegators: Vec<(Address, u64)> = self.delegation_accounts.iter()
+                    // Sort delegators by address for deterministic reward distribution.
+                    // HashMap iteration order is non-deterministic.
+                    let mut delegators: Vec<(Address, u64)> = self.delegation_accounts.iter()
                         .filter(|(_, d)| d.validator == *validator && d.unlock_at_round.is_none())
                         .map(|(addr, d)| (*addr, d.delegated))
                         .collect();
+                    delegators.sort_by_key(|(addr, _)| *addr);
 
                     let total_delegated_to_validator: u64 = delegators.iter()
                         .map(|(_, d)| *d)
@@ -1639,7 +1645,15 @@ impl StateEngine {
     pub fn tick_governance(&mut self, current_round: u64) {
         let mut to_update = vec![];
 
-        for (id, proposal) in &self.proposals {
+        // MUST sort proposals by ID for deterministic execution order.
+        // HashMap iteration is non-deterministic — if two ParameterChange proposals
+        // execute in the same round, the final parameter value depends on which
+        // executes last. Sorting by ID ensures all nodes apply them identically.
+        let mut sorted_proposals: Vec<(u64, &crate::governance::Proposal)> =
+            self.proposals.iter().map(|(id, p)| (*id, p)).collect();
+        sorted_proposals.sort_by_key(|(id, _)| *id);
+
+        for (id, proposal) in &sorted_proposals {
             match &proposal.status {
                 crate::governance::ProposalStatus::Active if current_round > proposal.voting_ends => {
                     // Use snapshotted council count from proposal creation as quorum denominator.

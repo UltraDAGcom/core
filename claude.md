@@ -21,6 +21,13 @@ The codebase is past the critical code issues. What remains is operational work 
 
 See **Mainnet Launch Checklist** below for the complete phased plan.
 
+**Consensus Determinism Fixes (March 16, 2026):**
+- **CRITICAL: Reward distribution non-deterministic** — `distribute_round_rewards()` iterated `stake_accounts` and `delegation_accounts` (HashMaps) without sorting. Different nodes could compute rewards in different order. Fix: sort both by address before iteration.
+- **CRITICAL: Governance execution non-deterministic** — `tick_governance()` iterated `self.proposals` (HashMap) without sorting. If two ParameterChange proposals execute in the same round, the final parameter value depended on iteration order. Fix: sort proposals by ID before processing.
+- **False comment corrected** — Code comment claimed "tick_governance uses deterministic sorted proposal iteration" — this was false until this fix. Corrected.
+- **External review findings documented** — Reviewer identified key zeroization (SecretKey Drop), consensus liveness heuristics, transaction replay across checkpoints, process::exit dangers, P2P encryption absence, orphan buffer DoS vectors, and redb save-on-crash strategy as areas for mainnet hardening.
+- **All 819 tests passing**, 0 failed, 14 ignored (jepsen).
+
 **API Cleanup & Reviewer Fixes (March 16, 2026):**
 - **`create_block` parameter removed** — Removed `validator_reward` parameter from `create_block()` in `producer.rs`. All callers passed 0 since per-round reward distribution. Coinbase now unconditionally equals fees. Eliminates misleading API that accepted arbitrary reward amounts.
 - **`CoinError::is_fatal()` method** — Replaced fragile string matching in `server.rs` (`msg.contains("supply invariant broken")`) with type-safe `e.is_fatal()` method on `CoinError`. Returns true for `SupplyInvariantBroken` variant. If error wording changes, halt still triggers.
@@ -2086,6 +2093,11 @@ UltraDAG is offering rewards for security researchers who discover and responsib
     - **Fix:** Added `CoinError::is_fatal()` method. Server.rs now uses `e.is_fatal()` (type-safe, immune to wording changes).
 144. **GovernanceParams hash fields undocumented (March 16, 2026)** — `compute_state_root()` hashed 10 GovernanceParams fields, but no comment listed them. Adding a new field to GovernanceParams without updating the hash function would silently break state root consensus (two nodes with different param values would compute the same hash).
     - **Fix:** Added inventory comment listing all 10 fields with instructions to update both hash function and regression test when adding new fields.
+145. **CRITICAL: `distribute_round_rewards()` non-deterministic iteration (March 16, 2026)** — `self.stake_accounts.iter()` and `self.delegation_accounts.iter()` iterate HashMaps in non-deterministic order. The `validators` Vec and `delegators` Vec accumulated entries in arbitrary order. While current credit operations are commutative, integer division truncation during supply-cap scaling could produce different `total_to_mint` sums on different nodes, and any future change adding order-dependent logic would be a consensus split vector.
+    - **Fix:** Added `.sort_by_key(|(addr, _)| *addr)` after collecting both `validators` and `delegators` Vecs. Deterministic address-sorted iteration for all reward computation.
+146. **CRITICAL: `tick_governance()` non-deterministic proposal execution (March 16, 2026)** — `self.proposals` is a HashMap. If two ParameterChange proposals execute in the same round (e.g., both change `min_fee_sats` to different values), the final parameter value depends on which proposal executes last — determined by HashMap iteration order, which differs across nodes. Same issue for CouncilMembership (add then remove vs remove then add for same seat) and TreasurySpend (two proposals exceeding remaining balance — order determines which succeeds). Consensus-critical determinism bug.
+    - **Fix:** Collect proposals into sorted Vec before iteration: `sorted_proposals.sort_by_key(|(id, _)| *id)`. Proposals now execute in ascending ID order, which is deterministic and matches temporal ordering (lower IDs were created earlier).
+    - **Fix:** Corrected false comment (line 251) that claimed "tick_governance uses deterministic sorted proposal iteration" — it didn't until this fix.
 
 ### Security Audit Fixes (March 9-10, 2026)
 - **CreateProposalTx hash omits proposal_type** — Two proposals with different types got identical hashes. Fixed by including `proposal_type` in `hash()`.
