@@ -97,7 +97,7 @@ fn test_predefined_limits() {
     assert_eq!(limits::TX.window_duration.as_secs(), 60);
 
     assert_eq!(limits::FAUCET.requests_per_window, 1);
-    assert_eq!(limits::FAUCET.window_duration.as_secs(), 5);
+    assert_eq!(limits::FAUCET.window_duration.as_secs(), 600);
 
     assert_eq!(limits::STAKE.requests_per_window, 5);
     assert_eq!(limits::UNSTAKE.requests_per_window, 5);

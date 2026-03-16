@@ -965,7 +965,7 @@ async fn handle_request(
             if !rate_limiter.check_rate_limit(client_ip, limits::FAUCET) {
                 return Ok(error_response(
                     StatusCode::TOO_MANY_REQUESTS,
-                    "rate limit exceeded: faucet limited to 1 request per 5 seconds",
+                    "rate limit exceeded: faucet limited to 1 request per 10 minutes",
                 ));
             }
 
@@ -990,11 +990,11 @@ async fn handle_request(
             }
 
             // Cap faucet amount at 50,000 UDAG per request
-            const MAX_FAUCET_SATS: u64 = 50000 * ultradag_coin::COIN; // 50,000 UDAG
+            const MAX_FAUCET_SATS: u64 = 100 * ultradag_coin::COIN; // 100 UDAG
             if faucet_req.amount > MAX_FAUCET_SATS {
                 return Ok(error_response(
                     StatusCode::BAD_REQUEST,
-                    &format!("faucet amount exceeds maximum of 50,000 UDAG ({} sats)", MAX_FAUCET_SATS),
+                    &format!("faucet amount exceeds maximum of 100 UDAG ({} sats)", MAX_FAUCET_SATS),
                 ));
             }
 
@@ -1432,6 +1432,12 @@ async fn handle_request(
             };
 
             let fee = prop_req.fee.unwrap_or(ultradag_coin::constants::MIN_FEE_SATS);
+            if fee < ultradag_coin::constants::MIN_FEE_SATS {
+                return Ok(error_response(
+                    StatusCode::BAD_REQUEST,
+                    &format!("fee too low: minimum {} sats (0.0001 UDAG)", ultradag_coin::constants::MIN_FEE_SATS),
+                ));
+            }
 
             let (tx, tx_hash, proposal_id) = {
                 let state = read_lock_or_503!(server.state);
@@ -1534,6 +1540,12 @@ async fn handle_request(
             };
             let sender = sk.address();
             let fee = vote_req.fee.unwrap_or(ultradag_coin::constants::MIN_FEE_SATS);
+            if fee < ultradag_coin::constants::MIN_FEE_SATS {
+                return Ok(error_response(
+                    StatusCode::BAD_REQUEST,
+                    &format!("fee too low: minimum {} sats (0.0001 UDAG)", ultradag_coin::constants::MIN_FEE_SATS),
+                ));
+            }
 
             let (tx, tx_hash) = {
                 let state = read_lock_or_503!(server.state);
@@ -1859,15 +1871,22 @@ async fn handle_request(
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid signature"));
             }
 
-            // Validate against current state
+            let tx_hash = tx.hash();
+
+            // Atomic validation + mempool insertion (hold both locks to prevent TOCTOU)
             {
                 let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
+
                 let sender = tx.from();
                 let balance = state.balance(&sender);
                 let total_cost = tx.total_cost();
-                if balance < total_cost {
+                let pc = pending_cost(&mp, &sender);
+                let total_needed = pc.saturating_add(total_cost);
+                if balance < total_needed {
                     return Ok(error_response(StatusCode::BAD_REQUEST,
-                        &format!("insufficient balance: need {} sats, have {} sats", total_cost, balance)));
+                        &format!("insufficient balance: need {} sats (incl. {} pending), have {} sats",
+                            total_needed, pc, balance)));
                 }
                 // Check nonce isn't stale (already confirmed)
                 let expected_nonce = state.nonce(&sender);
@@ -1875,14 +1894,8 @@ async fn handle_request(
                     return Ok(error_response(StatusCode::BAD_REQUEST,
                         &format!("nonce too low: expected >= {}, got {}", expected_nonce, tx.nonce())));
                 }
-                drop(state);
-            }
 
-            let tx_hash = tx.hash();
-
-            // Insert into mempool
-            {
-                let mut mp = write_lock_or_503!(server.mempool);
+                // Insert into mempool while still holding the locks
                 if !mp.insert(tx.clone()) {
                     return Ok(error_response(StatusCode::CONFLICT, "transaction rejected by mempool (duplicate or fee too low)"));
                 }

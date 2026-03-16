@@ -36,7 +36,7 @@ pub mod limits {
     use super::*;
 
     pub const TX: RateLimit = RateLimit::new("tx", 100, 60);           // 100 tx/min (testnet)
-    pub const FAUCET: RateLimit = RateLimit::new("faucet", 1, 5);    // 1 request/5s (testnet)
+    pub const FAUCET: RateLimit = RateLimit::new("faucet", 1, 600);   // 1 request/10min
     pub const STAKE: RateLimit = RateLimit::new("stake", 5, 60);      // 5 stake/min
     pub const UNSTAKE: RateLimit = RateLimit::new("unstake", 5, 60);  // 5 unstake/min
     pub const PROPOSAL: RateLimit = RateLimit::new("proposal", 5, 60); // 5 proposal/min

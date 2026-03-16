@@ -840,3 +840,107 @@ fn test_27_slash_policy_is_explicit() {
         "Slashed validator below MIN_STAKE must be immediately removed from active set"
     );
 }
+
+/// test_28: delegate_to_self_rejected
+/// Verifies that apply_delegate_tx rejects self-delegation (from == validator).
+/// Self-delegation would inflate effective_stake without additional economic risk.
+#[test]
+fn test_28_delegate_to_self_rejected() {
+    let mut state = StateEngine::new_with_genesis();
+    let sk = SecretKey::from_bytes([0xAA; 32]);
+    let addr = sk.address();
+
+    // Fund and stake so address is a valid validator
+    state.faucet_credit(&addr, MIN_STAKE_SATS * 3).unwrap();
+    let stake_tx = make_stake_tx(&sk, MIN_STAKE_SATS, 0);
+    state.apply_stake_tx(&stake_tx).unwrap();
+    state.recalculate_active_set();
+    assert!(state.is_active_validator(&addr), "Should be an active validator");
+
+    // Try to delegate to self — should fail
+    let mut delegate_tx = DelegateTx {
+        from: addr,
+        validator: addr, // self-delegation
+        amount: MIN_DELEGATION_SATS,
+        nonce: 1,
+        pub_key: sk.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    delegate_tx.signature = sk.sign(&delegate_tx.signable_bytes());
+
+    let result = state.apply_delegate_tx(&delegate_tx);
+    assert!(result.is_err(), "Self-delegation must be rejected");
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(
+        err_msg.contains("cannot delegate to self"),
+        "Error should mention self-delegation, got: {}",
+        err_msg
+    );
+
+    // Verify no delegation was created
+    assert!(
+        state.delegation_account(&addr).is_none(),
+        "No delegation account should exist after rejected self-delegation"
+    );
+}
+
+/// test_29: pre_staking_reward_distribution_deterministic
+/// Verifies that distribute_round_rewards gives each producer the correct
+/// pre-staking reward (equal split) regardless of HashSet iteration order.
+#[test]
+fn test_29_pre_staking_reward_distribution_deterministic() {
+    use std::collections::HashSet;
+
+    let sk1 = SecretKey::from_bytes([0x01; 32]);
+    let sk2 = SecretKey::from_bytes([0x02; 32]);
+    let sk3 = SecretKey::from_bytes([0x03; 32]);
+    let sk4 = SecretKey::from_bytes([0x04; 32]);
+
+    let addresses = vec![sk1.address(), sk2.address(), sk3.address(), sk4.address()];
+
+    // Run the same distribution twice on independent state engines
+    // and verify they produce identical results.
+    let mut balances_run1 = Vec::new();
+    let mut balances_run2 = Vec::new();
+
+    for run_balances in [&mut balances_run1, &mut balances_run2] {
+        let mut state = StateEngine::new_with_genesis();
+        // No staking — pre-staking fallback path
+        // Set configured_validator_count so the pre-staking path
+        // knows how many validators to split among
+        state.set_configured_validator_count(4);
+
+        let mut producers: HashSet<Address> = HashSet::new();
+        for addr in &addresses {
+            producers.insert(*addr);
+        }
+
+        state.distribute_round_rewards(0, &producers).unwrap();
+
+        for addr in &addresses {
+            run_balances.push(state.balance(addr));
+        }
+    }
+
+    // Both runs must produce identical balances
+    assert_eq!(balances_run1, balances_run2,
+        "Pre-staking reward distribution must be deterministic");
+
+    // Each producer should get an equal share of the validator pool
+    let expected_per_producer = validator_pool(0) / 4;
+    for (i, balance) in balances_run1.iter().enumerate() {
+        assert_eq!(
+            *balance, expected_per_producer,
+            "Producer {} should get {}, got {}",
+            i, expected_per_producer, balance
+        );
+    }
+
+    // Verify total minted does not exceed the block reward
+    let total_minted: u64 = balances_run1.iter().sum();
+    assert!(
+        total_minted <= block_reward(0),
+        "Total minted {} should not exceed block_reward {}",
+        total_minted, block_reward(0)
+    );
+}

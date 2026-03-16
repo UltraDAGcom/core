@@ -364,6 +364,54 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn handshake_fails_gracefully_on_immediate_close() {
+        // Initiator side: peer closes connection immediately after connect.
+        // Handshake should return an error (Io or Snow), not panic.
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let server_handle = tokio::spawn(async move {
+            let (server_stream, _) = listener.accept().await.unwrap();
+            // Drop the server stream immediately to simulate a connection that closes
+            drop(server_stream);
+        });
+
+        let mut client = TcpStream::connect(addr).await.unwrap();
+        let result = handshake_initiator(&mut client, None).await;
+
+        // Must be an error, not a panic
+        assert!(result.is_err(), "Handshake should fail when peer closes connection");
+
+        server_handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn handshake_fails_gracefully_on_garbage_data() {
+        // Responder receives garbage instead of a valid Noise handshake message.
+        // Should return an error, not panic.
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let client_handle = tokio::spawn(async move {
+            let mut client = TcpStream::connect(addr).await.unwrap();
+            // Send garbage: a 2-byte length prefix followed by random bytes
+            let garbage = b"\x00\x10GARBAGE_DATA_HERE";
+            client.write_all(garbage).await.unwrap();
+            client.flush().await.unwrap();
+            // Keep connection alive briefly so responder can read
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        });
+
+        let (mut server, _) = listener.accept().await.unwrap();
+        let result = handshake_responder(&mut server, None).await;
+
+        // Must be an error (Snow protocol error on invalid handshake), not a panic
+        assert!(result.is_err(), "Handshake should fail on garbage data");
+
+        client_handle.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn transport_encrypt_decrypt_roundtrip() {
         let (mut server, mut client) = tcp_pair().await;
 
