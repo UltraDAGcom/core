@@ -1261,6 +1261,16 @@ impl StateEngine {
                 "target is not a validator (insufficient stake)".to_string(),
             ));
         }
+        // Reject delegation to a validator who is unstaking (in cooldown).
+        // Their stake will drop to 0 after cooldown, leaving delegators stranded
+        // earning no rewards until they manually undelegate.
+        if let Some(stake) = self.stake_accounts.get(&tx.validator) {
+            if stake.unlock_at_round.is_some() {
+                return Err(CoinError::ValidationError(
+                    "target validator is unstaking (in cooldown)".to_string(),
+                ));
+            }
+        }
         // One delegation per address
         if self.delegation_accounts.contains_key(&tx.from) {
             return Err(CoinError::ValidationError(
@@ -1387,55 +1397,6 @@ impl StateEngine {
     /// The validator was credited the full effective-stake-proportional reward.
     /// Delegators' share is deducted from validator and credited to delegators
     /// minus the validator's commission.
-    /// Distribute delegation rewards for a validator's delegators.
-    ///
-    /// ROUNDING NOTE: Integer division means small amounts of dust (< 1 sat per delegator
-    /// per round) remain with the validator. Over millions of rounds this creates a small
-    /// measurable advantage for validators with many small delegators. This is a known
-    /// economic property, not a bug — the alternative (fractional sats) requires arbitrary
-    /// precision and complicates consensus. The magnitude is negligible: with 100 delegators,
-    /// max dust per round is 99 sats (0.0000099 UDAG).
-    pub fn distribute_delegation_rewards(&mut self, validator: &Address, total_reward: u64) {
-        if total_reward == 0 {
-            return;
-        }
-        let effective = self.effective_stake_of(validator);
-        if effective == 0 {
-            return;
-        }
-        let commission_percent = self.stake_accounts
-            .get(validator)
-            .map(|s| s.commission_percent)
-            .unwrap_or(crate::constants::DEFAULT_COMMISSION_PERCENT);
-
-        // Collect delegator info (avoid borrow issues)
-        let delegators: Vec<(Address, u64)> = self.delegation_accounts.iter()
-            .filter(|(_, d)| d.validator == *validator && d.unlock_at_round.is_none())
-            .map(|(addr, d)| (*addr, d.delegated))
-            .collect();
-
-        for (delegator, delegated) in delegators {
-            // delegator_share = total_reward * (delegated / effective_stake)
-            let delegator_share = ((total_reward as u128)
-                .saturating_mul(delegated as u128)
-                / effective as u128) as u64;
-            if delegator_share == 0 {
-                continue;
-            }
-            // commission = delegator_share * commission_percent / 100
-            let commission = delegator_share.saturating_mul(commission_percent as u64) / 100;
-            let net_reward = delegator_share.saturating_sub(commission);
-            if net_reward > 0 {
-                // Debit from validator (who received the full coinbase)
-                // Best-effort: if validator balance is somehow insufficient, skip
-                if self.balance(validator) >= net_reward {
-                    let _ = self.debit(validator, net_reward);
-                    self.credit(&delegator, net_reward);
-                }
-            }
-        }
-    }
-
     pub fn credit(&mut self, address: &Address, amount: u64) {
         let account = self.accounts.entry(*address).or_default();
         account.balance = account.balance.saturating_add(amount);
@@ -1942,6 +1903,10 @@ impl StateEngine {
 
     /// Load state from a snapshot (for fast-sync from checkpoint).
     pub fn load_snapshot(&mut self, snapshot: crate::state::persistence::StateSnapshot) {
+        // Preserve configured_validator_count across fast-sync — it's set from CLI
+        // --validators N and not part of the snapshot. Without this, pre-staking reward
+        // calculation would fall back to dynamic counting, potentially causing coinbase mismatch.
+        let saved_configured = self.configured_validator_count;
         self.accounts = snapshot.accounts.into_iter().collect();
         self.stake_accounts = snapshot.stake_accounts.into_iter().collect();
         self.active_validator_set = snapshot.active_validator_set;
@@ -1955,6 +1920,7 @@ impl StateEngine {
         self.council_members = snapshot.council_members.into_iter().collect();
         self.treasury_balance = snapshot.treasury_balance;
         self.delegation_accounts = snapshot.delegation_accounts.into_iter().collect();
+        self.configured_validator_count = saved_configured;
     }
 
     /// Save state to redb database (ACID, crash-safe).

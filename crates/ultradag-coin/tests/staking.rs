@@ -944,3 +944,174 @@ fn test_29_pre_staking_reward_distribution_deterministic() {
         total_minted, block_reward(0)
     );
 }
+
+/// test_30: delegate_to_unstaking_validator_rejected
+/// Verifies that delegation to a validator in unstake cooldown is rejected.
+/// Delegating to an exiting validator would leave delegators stranded with no rewards.
+#[test]
+fn test_30_delegate_to_unstaking_validator_rejected() {
+    let mut state = StateEngine::new_with_genesis();
+    let validator_sk = SecretKey::from_bytes([0xBB; 32]);
+    let delegator_sk = SecretKey::from_bytes([0xCC; 32]);
+    let val_addr = validator_sk.address();
+    let del_addr = delegator_sk.address();
+
+    // Fund validator, stake, activate
+    state.faucet_credit(&val_addr, MIN_STAKE_SATS * 3).unwrap();
+    let stake_tx = make_stake_tx(&validator_sk, MIN_STAKE_SATS, 0);
+    state.apply_stake_tx(&stake_tx).unwrap();
+    state.recalculate_active_set();
+    assert!(state.is_active_validator(&val_addr));
+
+    // Validator begins unstaking
+    let unstake_tx = make_unstake_tx(&validator_sk, 1);
+    state.apply_unstake_tx(&unstake_tx, 100).unwrap();
+
+    // Fund delegator
+    state.faucet_credit(&del_addr, MIN_DELEGATION_SATS * 2).unwrap();
+
+    // Try to delegate to unstaking validator — should fail
+    let mut delegate_tx = DelegateTx {
+        from: del_addr,
+        validator: val_addr,
+        amount: MIN_DELEGATION_SATS,
+        nonce: 0,
+        pub_key: delegator_sk.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    delegate_tx.signature = delegator_sk.sign(&delegate_tx.signable_bytes());
+
+    let result = state.apply_delegate_tx(&delegate_tx);
+    assert!(result.is_err(), "Delegation to unstaking validator must be rejected");
+    let err = format!("{}", result.unwrap_err());
+    assert!(err.contains("unstaking"), "Error should mention unstaking, got: {}", err);
+}
+
+/// test_31: slash_cascade_supply_invariant
+/// Verifies that slashing a validator with delegators maintains supply invariant.
+/// Total supply must decrease by exactly (validator_slash + sum(delegator_slashes)).
+#[test]
+fn test_31_slash_cascade_supply_invariant() {
+    let mut state = StateEngine::new_with_genesis();
+    let validator_sk = SecretKey::from_bytes([0xDD; 32]);
+    let delegator1_sk = SecretKey::from_bytes([0xEE; 32]);
+    let delegator2_sk = SecretKey::from_bytes([0xFF; 32]);
+    let val_addr = validator_sk.address();
+    let del1_addr = delegator1_sk.address();
+    let del2_addr = delegator2_sk.address();
+
+    // Fund and stake validator
+    state.faucet_credit(&val_addr, MIN_STAKE_SATS * 3).unwrap();
+    let stake_tx = make_stake_tx(&validator_sk, MIN_STAKE_SATS, 0);
+    state.apply_stake_tx(&stake_tx).unwrap();
+    state.recalculate_active_set();
+
+    // Fund and delegate two delegators
+    state.faucet_credit(&del1_addr, MIN_DELEGATION_SATS * 5).unwrap();
+    let mut del1_tx = DelegateTx {
+        from: del1_addr,
+        validator: val_addr,
+        amount: MIN_DELEGATION_SATS * 2,
+        nonce: 0,
+        pub_key: delegator1_sk.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    del1_tx.signature = delegator1_sk.sign(&del1_tx.signable_bytes());
+    state.apply_delegate_tx(&del1_tx).unwrap();
+
+    state.faucet_credit(&del2_addr, MIN_DELEGATION_SATS * 5).unwrap();
+    let mut del2_tx = DelegateTx {
+        from: del2_addr,
+        validator: val_addr,
+        amount: MIN_DELEGATION_SATS * 3,
+        nonce: 0,
+        pub_key: delegator2_sk.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    del2_tx.signature = delegator2_sk.sign(&del2_tx.signable_bytes());
+    state.apply_delegate_tx(&del2_tx).unwrap();
+
+    let supply_before = state.total_supply();
+    let validator_stake = state.stake_of(&val_addr);
+    let del1_delegated = state.delegation_account(&del1_addr).unwrap().delegated;
+    let del2_delegated = state.delegation_account(&del2_addr).unwrap().delegated;
+    let total_at_risk = validator_stake + del1_delegated + del2_delegated;
+
+    // Slash the validator (50%)
+    state.slash(&val_addr);
+
+    let supply_after = state.total_supply();
+    let slash_pct = state.governance_params().slash_percent as u64;
+    let expected_burned = total_at_risk.saturating_mul(slash_pct) / 100;
+
+    // Supply should decrease by the burned amount
+    assert_eq!(
+        supply_before - supply_after,
+        expected_burned,
+        "Supply decrease must equal total burned: validator={}, del1={}, del2={}, pct={}",
+        validator_stake, del1_delegated, del2_delegated, slash_pct
+    );
+
+    // Delegators should have half their delegated amount remaining
+    let del1_after = state.delegation_account(&del1_addr).map(|d| d.delegated).unwrap_or(0);
+    let del2_after = state.delegation_account(&del2_addr).map(|d| d.delegated).unwrap_or(0);
+    assert_eq!(del1_after, del1_delegated / 2, "Delegator 1 should be slashed 50%");
+    assert_eq!(del2_after, del2_delegated / 2, "Delegator 2 should be slashed 50%");
+}
+
+/// test_32: commission_edge_cases
+/// Verifies commission at 0% (all rewards to delegators) and 100% (all to validator).
+#[test]
+fn test_32_commission_edge_cases() {
+    let mut state = StateEngine::new_with_genesis();
+    let validator_sk = SecretKey::from_bytes([0xA1; 32]);
+    let val_addr = validator_sk.address();
+
+    // Fund, stake
+    state.faucet_credit(&val_addr, MIN_STAKE_SATS * 3).unwrap();
+    let stake_tx = make_stake_tx(&validator_sk, MIN_STAKE_SATS, 0);
+    state.apply_stake_tx(&stake_tx).unwrap();
+
+    // Set commission to 0%
+    let mut set_comm = SetCommissionTx {
+        from: val_addr,
+        commission_percent: 0,
+        nonce: 1,
+        pub_key: validator_sk.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    set_comm.signature = validator_sk.sign(&set_comm.signable_bytes());
+    state.apply_set_commission_tx(&set_comm).unwrap();
+    assert_eq!(state.stake_account(&val_addr).unwrap().commission_percent, 0);
+
+    // Set commission to 100%
+    let mut set_comm_max = SetCommissionTx {
+        from: val_addr,
+        commission_percent: 100,
+        nonce: 2,
+        pub_key: validator_sk.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    set_comm_max.signature = validator_sk.sign(&set_comm_max.signable_bytes());
+    state.apply_set_commission_tx(&set_comm_max).unwrap();
+    assert_eq!(state.stake_account(&val_addr).unwrap().commission_percent, 100);
+}
+
+/// test_33: configured_validator_count_survives_load_snapshot
+/// Verifies that load_snapshot preserves the CLI-configured validator count.
+#[test]
+fn test_33_configured_validator_count_survives_load_snapshot() {
+    let mut state = StateEngine::new_with_genesis();
+    state.set_configured_validator_count(21);
+    assert_eq!(state.configured_validator_count(), Some(21));
+
+    let snapshot = state.snapshot();
+
+    // Load snapshot should preserve configured_validator_count
+    state.load_snapshot(snapshot);
+    assert_eq!(
+        state.configured_validator_count(),
+        Some(21),
+        "configured_validator_count must survive load_snapshot"
+    );
+}

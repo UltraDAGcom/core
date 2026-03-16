@@ -1906,10 +1906,11 @@ async fn handle_peer(
                     continue;
                 }
 
-                // Calculate bytes before moving state_at_checkpoint
-                let bytes_downloaded = serde_json::to_vec(&state_at_checkpoint)
-                    .map(|v| v.len())
-                    .unwrap_or(0) as u64;
+                // Estimate downloaded bytes (accounts × ~40 bytes each + overhead)
+                let bytes_downloaded = (state_at_checkpoint.accounts.len() * 40
+                    + state_at_checkpoint.stake_accounts.len() * 50
+                    + state_at_checkpoint.delegation_accounts.len() * 50
+                    + 256) as u64;
 
                 // Apply state snapshot
                 {

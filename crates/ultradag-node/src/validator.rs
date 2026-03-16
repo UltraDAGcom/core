@@ -477,7 +477,9 @@ pub async fn validator_loop(
 
             // Record metrics
             let duration_ms = checkpoint_start.elapsed().as_millis() as u64;
-            let size_bytes = serde_json::to_vec(&checkpoint).map(|v| v.len()).unwrap_or(0) as u64;
+            // Estimate checkpoint size from signature count (avoids pulling in extra serialization deps).
+            // Each signature is ~128 bytes (32 addr + 32 pubkey + 64 sig), plus ~104 bytes header.
+            let size_bytes = (104 + checkpoint.signatures.len() * 128) as u64;
             server.checkpoint_metrics.record_checkpoint_produced(duration_ms, size_bytes, checkpoint_round);
 
             info!("Produced checkpoint at round {} ({}ms, {} bytes)", checkpoint_round, duration_ms, size_bytes);
