@@ -11,7 +11,7 @@ fn four_validators_perfect_network() {
         delivery_policy: DeliveryPolicy::Perfect,
         seed: 1,
         txs_per_round: 0,
-        check_every_round: true, scenario: None,
+        check_every_round: true, scenario: None, max_finality_lag: 50,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);
@@ -33,7 +33,7 @@ fn four_validators_with_transactions() {
         delivery_policy: DeliveryPolicy::Perfect,
         seed: 42,
         txs_per_round: 20,
-        check_every_round: true, scenario: None,
+        check_every_round: true, scenario: None, max_finality_lag: 50,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);
@@ -50,7 +50,7 @@ fn single_validator() {
         delivery_policy: DeliveryPolicy::Perfect,
         seed: 7,
         txs_per_round: 0,
-        check_every_round: true, scenario: None,
+        check_every_round: true, scenario: None, max_finality_lag: 50,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);

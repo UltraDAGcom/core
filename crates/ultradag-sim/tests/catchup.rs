@@ -1,4 +1,4 @@
-use ultradag_sim::harness::{SimConfig, SimHarness, Scenario};
+use ultradag_sim::harness::{SimConfig, SimHarness};
 use ultradag_sim::network::DeliveryPolicy;
 use ultradag_sim::validator::SimValidator;
 use ultradag_coin::SecretKey;
@@ -16,7 +16,7 @@ fn late_joiner_converges() {
         delivery_policy: DeliveryPolicy::Perfect,
         seed: 42,
         txs_per_round: 0,
-        check_every_round: false, scenario: None,
+        check_every_round: false, scenario: None, max_finality_lag: 50,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);
@@ -90,7 +90,7 @@ fn late_joiner_converges() {
         delivery_policy: DeliveryPolicy::Perfect,
         seed: 100,
         txs_per_round: 0,
-        check_every_round: true, scenario: None,
+        check_every_round: true, scenario: None, max_finality_lag: 50,
     };
 
     // Manually run rounds 51-100
@@ -114,7 +114,7 @@ fn late_joiner_converges() {
         }
 
         // Check invariants
-        let result = invariants::check_all(&harness.validators, &[]);
+        let result = invariants::check_all(&harness.validators, &[], round, 50);
         assert!(result.is_ok(), "Post-join round {} failed: {:?}", round, result.err());
     }
 }

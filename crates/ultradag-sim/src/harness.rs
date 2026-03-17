@@ -36,6 +36,8 @@ pub struct SimConfig {
     pub check_every_round: bool,
     /// Optional scenario for scripted transaction injection.
     pub scenario: Option<Scenario>,
+    /// Maximum allowed finality lag in rounds. Default: 50.
+    pub max_finality_lag: u64,
 }
 
 /// Result of a simulation run.
@@ -123,6 +125,33 @@ impl SimHarness {
             }
         }
 
+        // Byzantine strategy-specific setup (identical on ALL validators)
+        for (i, strategy) in config.byzantine.iter().enumerate() {
+            let byz_index = config.num_honest + i;
+            match strategy {
+                ByzantineStrategy::RewardGambler { puppet_address, .. } => {
+                    let funding = MIN_STAKE_SATS + MIN_DELEGATION_SATS;
+                    for v in &mut validators {
+                        let _ = v.state.faucet_credit(puppet_address, funding);
+                    }
+                }
+                ByzantineStrategy::GovernanceTakeover => {
+                    let attacker_addr = validators[byz_index].address;
+                    let honest_addrs: Vec<Address> = validators.iter()
+                        .filter(|v| v.honest).take(2).map(|v| v.address).collect();
+                    for v in &mut validators {
+                        let _ = v.state.add_council_member(attacker_addr, CouncilSeatCategory::Technical);
+                        for addr in &honest_addrs {
+                            let _ = v.state.add_council_member(*addr, CouncilSeatCategory::Technical);
+                        }
+                        v.override_governance_param_unchecked("voting_period_rounds", 20);
+                        v.override_governance_param_unchecked("execution_delay_rounds", 10);
+                    }
+                }
+                _ => {}
+            }
+        }
+
         let network = VirtualNetwork::new(total, config.delivery_policy.clone(), config.seed);
 
         Self {
@@ -172,7 +201,8 @@ impl SimHarness {
                     }
                     Some(strategy) => {
                         let strategy = strategy.clone();
-                        let results = produce_vertices(&strategy, &mut self.validators[i], round);
+                        let num_vals = self.validators.len();
+                        let results = produce_vertices(&strategy, &mut self.validators[i], round, num_vals);
                         for (vertex, targets) in results {
                             match targets {
                                 None => self.network.broadcast(i, vertex),
@@ -229,7 +259,7 @@ impl SimHarness {
 
             // 8. Invariant checking
             if config.check_every_round || round == config.num_rounds {
-                if let Err(e) = invariants::check_all(&self.validators, &self.known_equivocators) {
+                if let Err(e) = invariants::check_all(&self.validators, &self.known_equivocators, round, config.max_finality_lag) {
                     violations.push(format!("Round {}: {}", round, e));
                     if config.check_every_round {
                         eprintln!("INVARIANT VIOLATION at round {} (seed: 0x{:X}):", round, self.seed);

@@ -12,7 +12,7 @@ fn cross_feature_convergence() {
         seed: 400,
         txs_per_round: 10,
         check_every_round: true,
-        scenario: Some(Scenario::CrossFeature),
+        scenario: Some(Scenario::CrossFeature), max_finality_lag: 50,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);
@@ -30,7 +30,7 @@ fn cross_feature_lossy_network() {
         seed: 401,
         txs_per_round: 10,
         check_every_round: true,
-        scenario: Some(Scenario::CrossFeature),
+        scenario: Some(Scenario::CrossFeature), max_finality_lag: 50,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);

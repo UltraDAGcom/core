@@ -11,7 +11,7 @@ fn delegation_rewards_converge() {
         seed: 200,
         txs_per_round: 0,
         check_every_round: true,
-        scenario: Some(Scenario::DelegationRewards),
+        scenario: Some(Scenario::DelegationRewards), max_finality_lag: 50,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);
@@ -28,7 +28,7 @@ fn delegation_with_reorder() {
         seed: 201,
         txs_per_round: 5,
         check_every_round: true,
-        scenario: Some(Scenario::DelegationRewards),
+        scenario: Some(Scenario::DelegationRewards), max_finality_lag: 50,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);

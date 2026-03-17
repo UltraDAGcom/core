@@ -11,7 +11,7 @@ fn epoch_transition_active_set_converges() {
         seed: 500,
         txs_per_round: 0,
         check_every_round: true,
-        scenario: Some(Scenario::EpochTransition),
+        scenario: Some(Scenario::EpochTransition), max_finality_lag: 50,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);

@@ -11,7 +11,7 @@ fn staking_lifecycle_supply_holds() {
         seed: 100,
         txs_per_round: 0,
         check_every_round: true,
-        scenario: Some(Scenario::StakingLifecycle),
+        scenario: Some(Scenario::StakingLifecycle), max_finality_lag: 50,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);
@@ -28,7 +28,7 @@ fn staking_with_reorder() {
         seed: 101,
         txs_per_round: 5,
         check_every_round: true,
-        scenario: Some(Scenario::StakingLifecycle),
+        scenario: Some(Scenario::StakingLifecycle), max_finality_lag: 50,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);
