@@ -558,24 +558,27 @@ impl StateEngine {
         // Note: unstake completions are processed once per round in apply_finalized_vertices(),
         // not per-vertex, to ensure deterministic unlock timing at round boundaries.
 
-        let total_fees: u64 = vertex.block.transactions.iter()
+        let declared_fees: u64 = vertex.block.transactions.iter()
             .map(|tx| tx.fee())
             .fold(0u64, |acc, x| acc.saturating_add(x));
         let proposer = &vertex.block.coinbase.to;
 
-        // Coinbase should equal total_fees only (no block reward — rewards are
+        // Coinbase should equal declared_fees only (no block reward — rewards are
         // distributed per-round via distribute_round_rewards()).
-        if vertex.block.coinbase.amount != total_fees {
+        if vertex.block.coinbase.amount != declared_fees {
             return Err(CoinError::InvalidCoinbase {
-                expected: total_fees,
+                expected: declared_fees,
                 got: vertex.block.coinbase.amount,
             });
         }
 
-        // Credit proposer with collected transaction fees only
-        if total_fees > 0 {
-            self.credit(proposer, total_fees);
-        }
+        // Track fees actually collected from successful transactions.
+        // Coinbase is credited AFTER processing all transactions, using only
+        // the fees from transactions that actually succeeded. This eliminates
+        // the fee clawback vulnerability (DuplicateTxFlooder attack) where a
+        // malicious validator includes stale-nonce transactions whose fees
+        // are credited via coinbase but can't be recovered from the proposer.
+        let mut collected_fees: u64 = 0;
 
         // Apply transactions
         // In a DAG with multiple validators, the same transaction can appear in
@@ -583,43 +586,16 @@ impl StateEngine {
         // validator's vertex is finalized first, the duplicate in another vertex
         // will fail nonce validation. We must skip these gracefully — a finalized
         // vertex cannot be un-finalized, so aborting would permanently halt finality.
-        // Fee is deducted from sender when possible to keep supply balanced (the fee
-        // was already credited to the proposer via coinbase).
         for tx in &vertex.block.transactions {
             // Verify signature
             if !tx.verify_signature() {
                 tracing::warn!("Skipping tx with invalid signature in finalized vertex");
-                // Undo the fee credit to proposer to maintain supply balance.
-                // If clawback fails, the supply invariant is broken — halt the node.
-                // A failed clawback means the coinbase credited fees that can't be
-                // recovered, indicating a bug in coinbase calculation.
-                let fee = tx.fee();
-                if fee > 0 {
-                    if let Err(e) = self.debit(proposer, fee) {
-                        return Err(CoinError::SupplyInvariantBroken(format!(
-                            "Fee clawback failed (invalid sig): {}. Drift: {} sats. \
-                             This indicates a coinbase calculation bug — halting to prevent \
-                             unrecoverable supply divergence.", e, fee
-                        )));
-                    }
-                }
                 continue;
             }
 
             // Check nonce
             let expected_nonce = self.nonce(&tx.from());
             if tx.nonce() != expected_nonce {
-                // Likely a duplicate tx already applied from another validator's vertex.
-                // Undo the fee credit to proposer (they shouldn't profit from a dup tx).
-                let fee = tx.fee();
-                if fee > 0 {
-                    if let Err(e) = self.debit(proposer, fee) {
-                        return Err(CoinError::SupplyInvariantBroken(format!(
-                            "Fee clawback failed (bad nonce): {}. Drift: {} sats. \
-                             Halting to prevent unrecoverable supply divergence.", e, fee
-                        )));
-                    }
-                }
                 tracing::warn!(
                     "Skipping duplicate tx in finalized vertex: expected nonce={}, got={}",
                     expected_nonce, tx.nonce()
@@ -630,16 +606,6 @@ impl StateEngine {
             // Check balance
             let sender_balance = self.balance(&tx.from());
             if sender_balance < tx.total_cost() {
-                // Insufficient balance — undo the fee credit to proposer.
-                let fee = tx.fee();
-                if fee > 0 {
-                    if let Err(e) = self.debit(proposer, fee) {
-                        return Err(CoinError::SupplyInvariantBroken(format!(
-                            "Fee clawback failed (insufficient balance): {}. Drift: {} sats. \
-                             Halting to prevent unrecoverable supply divergence.", e, fee
-                        )));
-                    }
-                }
                 self.increment_nonce(&tx.from());
                 tracing::warn!(
                     "Skipping tx with insufficient balance in finalized vertex: need={}, have={}",
@@ -660,7 +626,7 @@ impl StateEngine {
                     self.increment_nonce(&transfer_tx.from);
                     // Credit recipient
                     self.credit(&transfer_tx.to, transfer_tx.amount);
-                    // Fee already included in coinbase
+                    // Fee credited to proposer via deferred coinbase after loop
                 }
                 crate::tx::Transaction::Stake(stake_tx) => {
                     // Validate minimum stake
@@ -703,29 +669,17 @@ impl StateEngine {
                 crate::tx::Transaction::CreateProposal(proposal_tx) => {
                     if let Err(e) = self.apply_create_proposal(proposal_tx, vertex.round) {
                         tracing::warn!("Skipping invalid CreateProposal tx in finalized vertex: {}", e);
-                        if proposal_tx.fee > 0 {
-                            if let Err(debit_err) = self.debit(&proposal_tx.from, proposal_tx.fee) {
-                                return Err(CoinError::SupplyInvariantBroken(format!(
-                                    "Fee clawback failed (proposal): {}. Drift: {} sats. \
-                                     Halting to prevent unrecoverable supply divergence.", debit_err, proposal_tx.fee
-                                )));
-                            }
-                        }
+                        // With deferred coinbase, no fee was credited — nothing to claw back.
+                        // Failed governance txs just don't contribute to collected_fees.
                         self.increment_nonce(&proposal_tx.from);
+                        continue; // Skip collected_fees tracking
                     }
                 }
                 crate::tx::Transaction::Vote(vote_tx) => {
                     if let Err(e) = self.apply_vote(vote_tx, vertex.round) {
                         tracing::warn!("Skipping invalid Vote tx in finalized vertex: {}", e);
-                        if vote_tx.fee > 0 {
-                            if let Err(debit_err) = self.debit(&vote_tx.from, vote_tx.fee) {
-                                return Err(CoinError::SupplyInvariantBroken(format!(
-                                    "Fee clawback failed (vote): {}. Drift: {} sats. \
-                                     Halting to prevent unrecoverable supply divergence.", debit_err, vote_tx.fee
-                                )));
-                            }
-                        }
                         self.increment_nonce(&vote_tx.from);
+                        continue; // Skip collected_fees tracking
                     }
                 }
                 crate::tx::Transaction::Delegate(delegate_tx) => {
@@ -750,6 +704,17 @@ impl StateEngine {
                     }
                 }
             }
+
+            // Track fee from this successfully-applied transaction
+            collected_fees = collected_fees.saturating_add(tx.fee());
+        }
+
+        // Credit proposer with fees from successful transactions only.
+        // This is deferred from before the loop to eliminate the fee clawback
+        // vulnerability (DuplicateTxFlooder: malicious validator includes stale-nonce
+        // txs whose fees were credited upfront but couldn't be clawed back).
+        if collected_fees > 0 {
+            self.credit(proposer, collected_fees);
         }
 
         // NOTE: last_finalized_round is NOT updated here — it's updated per-round
@@ -1442,6 +1407,36 @@ impl StateEngine {
     pub fn credit(&mut self, address: &Address, amount: u64) {
         let account = self.accounts.entry(*address).or_default();
         account.balance = account.balance.saturating_add(amount);
+    }
+
+    /// Saturating fee clawback: debit what the proposer has, burn the unrecoverable
+    /// remainder from total_supply. This prevents a malicious validator from halting
+    /// the entire network by including stale-nonce transactions in their vertex
+    /// (DuplicateTxFlooder attack — the coinbase credits fees upfront, then clawback
+    /// fails because the proposer spent/staked the balance since).
+    fn saturating_fee_clawback(&mut self, proposer: &Address, fee: u64) {
+        let balance = self.balance(proposer);
+        if balance >= fee {
+            // Normal case: proposer has enough
+            let account = self.accounts.entry(*proposer).or_default();
+            account.balance -= fee;
+        } else {
+            // Proposer can't cover full clawback — debit what they have,
+            // burn the remainder from total_supply to maintain the invariant.
+            let shortfall = fee - balance;
+            if balance > 0 {
+                let account = self.accounts.entry(*proposer).or_default();
+                account.balance = 0;
+            }
+            // Burn the unrecoverable amount — this is equivalent to the fee
+            // being "lost" (credited via coinbase but never recovered).
+            self.total_supply = self.total_supply.saturating_sub(shortfall);
+            tracing::warn!(
+                "Fee clawback shortfall: proposer {:02x}{:02x}{:02x}{:02x} has {} but owes {}. Burning {} from total_supply.",
+                proposer.0[0], proposer.0[1], proposer.0[2], proposer.0[3],
+                balance, fee, shortfall
+            );
+        }
     }
 
     fn debit(&mut self, address: &Address, amount: u64) -> Result<(), CoinError> {

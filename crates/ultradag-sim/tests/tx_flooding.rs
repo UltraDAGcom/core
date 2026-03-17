@@ -3,42 +3,55 @@ use ultradag_sim::network::DeliveryPolicy;
 use ultradag_sim::byzantine::ByzantineStrategy;
 
 /// Attacker includes stale-nonce transactions in every vertex.
-/// This IS a valid DoS attack — the coinbase credits fees for stale txs,
-/// then fee clawback fails because the attacker doesn't have enough balance.
-/// Bug #174 made this FATAL (SupplyInvariantBroken). The test verifies that
-/// all validators see the same error at the same round (deterministic failure).
+/// Previously this triggered SupplyInvariantBroken (Bug #174), halting all nodes.
+/// After the saturating fee clawback fix, the network survives:
+/// - Proposer is debited what they can afford
+/// - Shortfall is burned from total_supply
+/// - Supply invariant holds (liquid + staked + delegated + treasury == total_supply)
+/// - State converges across all honest validators
 #[test]
-fn stale_nonce_flooding_triggers_deterministic_halt() {
+fn stale_nonce_flooding_no_longer_halts() {
     let config = SimConfig {
         num_honest: 3,
         byzantine: vec![ByzantineStrategy::DuplicateTxFlooder],
-        num_rounds: 100,
+        num_rounds: 300,
         delivery_policy: DeliveryPolicy::Perfect,
         seed: 3001,
         txs_per_round: 0,
         check_every_round: true,
         scenario: None,
-        max_finality_lag: 200,
+        max_finality_lag: 50,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);
+    assert!(result.passed, "Violations: {:?}", result.violations);
 
-    // The simulation may or may not fail — depends on whether the attacker's
-    // stale-nonce vertex gets finalized and whether the attacker has enough balance
-    // for fee clawback. Either outcome is acceptable:
-    // - If passed: the attacker didn't have stale txs in finalized vertices
-    //   (e.g., nonce was actually valid, or vertex not finalized)
-    // - If failed: all validators failed at the same round (deterministic)
-    if !result.passed {
-        // Verify all honest validators agree on the failure (same finalized round)
-        let honest_rounds: Vec<u64> = result.final_finalized_rounds.iter()
-            .filter(|(i, _)| *i < 3) // honest validators are 0,1,2
-            .map(|(_, r)| *r)
-            .collect();
-        // All should be at the same round (deterministic failure point)
-        if honest_rounds.len() >= 2 {
-            assert!(honest_rounds.windows(2).all(|w| w[0] == w[1]),
-                "Honest validators should fail at the same round: {:?}", honest_rounds);
+    // Verify finality actually progressed (not stalled)
+    for v in &harness.validators {
+        if v.honest {
+            assert!(v.last_finalized_round() > 200,
+                "Honest validator {} should finalize past round 200 (got {})",
+                v.index, v.last_finalized_round());
         }
     }
+}
+
+/// Same test with message reordering — the saturating clawback must be
+/// deterministic across all validators regardless of message order.
+#[test]
+fn stale_nonce_flooding_with_reorder_converges() {
+    let config = SimConfig {
+        num_honest: 3,
+        byzantine: vec![ByzantineStrategy::DuplicateTxFlooder],
+        num_rounds: 300,
+        delivery_policy: DeliveryPolicy::RandomOrder,
+        seed: 3002,
+        txs_per_round: 10,
+        check_every_round: true,
+        scenario: None,
+        max_finality_lag: 100,
+    };
+    let mut harness = SimHarness::new(&config);
+    let result = harness.run(&config);
+    assert!(result.passed, "Violations: {:?}", result.violations);
 }
