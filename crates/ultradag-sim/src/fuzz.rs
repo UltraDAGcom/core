@@ -8,6 +8,7 @@ use ultradag_coin::block::merkle_root;
 use crate::validator::SimValidator;
 use crate::network::{VirtualNetwork, DeliveryPolicy};
 use crate::invariants;
+use crate::properties;
 use crate::txgen;
 
 // === Action types ===
@@ -121,6 +122,7 @@ pub fn execute_fuzz(
 
         if round.is_multiple_of(10) || round == plans.len() as u64 {
             invariants::check_safety_invariants(&validators, &known_equivocators)?;
+            properties::check_all_properties(&validators)?;
         }
     }
 
