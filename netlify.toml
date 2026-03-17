@@ -1,9 +1,10 @@
 [build]
   publish = "site/docs"
-  command = "mkdocs build"
+  command = "pip install -r requirements.txt && mkdocs build --clean"
 
 [build.environment]
   PYTHON_VERSION = "3.11"
+  PIP_DISABLE_PIP_VERSION_CHECK = "1"
 
 [[redirects]]
   from = "/docs/*"
