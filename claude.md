@@ -18,6 +18,7 @@
 - **19 sim tests passing** (11 base + 8 scenario). All deterministic via `ChaCha8Rng` seeded from config.
 - **Master invariant verified** under staking, delegation, governance execution, commission splits, and equivocation slashing with random message reordering and message loss.
 - **governance_with_reorder passes** — confirms `tick_governance` executes at the same logical point on all nodes even when vertices arrive in different order (sorted by `(round, hash)` before application).
+- **Adversarial attack simulation (March 17, 2026)**: 5 active exploitation strategies (RewardGambler, GovernanceTakeover, DuplicateTxFlooder, FinalityStaller, SelectiveEquivocator). New invariant checks: reward bounds, finality liveness. 32 total sim tests. Key findings: (1) DuplicateTxFlooder confirms Bug #174 is correct — stale-nonce fee clawback failure halts all nodes (intended DoS defense). (2) FinalityStaller + message loss at BFT boundary stalls finality (correct BFT behavior). (3) SelectiveEquivocator requires rebroadcast for detection. All invariants hold under all non-DoS attack strategies.
 
 **Cryptographic, Persistence & Economics Deep Audit (March 17, 2026):**
 - **Hash collision: CreateProposalTx::hash() title/description (Bug #181)** — Missing length delimiters for variable-length fields. `title="AB" desc="CD"` and `title="ABC" desc="D"` produced identical hashes, enabling mempool eviction attacks. Fix: u32 LE length prefix before all variable-length fields.
