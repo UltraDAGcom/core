@@ -564,9 +564,9 @@ All RPC responses include:
 
 - `X-Content-Type-Options: nosniff`
 - `Cache-Control: no-store`
-- `Access-Control-Max-Age: 3600`
+- `Access-Control-Max-Age: 3600` (on OPTIONS preflight responses only)
 
-CORS headers are included for browser-based wallet access.
+CORS headers (`Access-Control-Allow-Origin: *`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`) are included on all responses for browser-based wallet access.
 
 ---
 

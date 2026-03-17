@@ -185,7 +185,7 @@ The data directory contains:
 | `finality.bin` | Finality tracker state |
 | `state.redb` | Account balances, stakes, governance (ACID database) |
 | `mempool.json` | Pending transactions |
-| `checkpoints/` | Checkpoint snapshots for fast-sync |
+| `checkpoint_*.bin` | Checkpoint snapshots for fast-sync (flat files) |
 
 !!! warning "Backup before upgrades"
     Always back up your data directory before upgrading the node binary. While UltraDAG supports in-place upgrades, having a backup protects against unforeseen issues.

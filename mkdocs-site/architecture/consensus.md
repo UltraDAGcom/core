@@ -42,13 +42,13 @@ struct DagVertex {
     validator: Address,              // Address of the producing validator
     pub_key: [u8; 32],              // Ed25519 public key of the producer
     signature: Signature,            // Ed25519 signature over signable_bytes()
-    timestamp: u64,                  // Unix timestamp (informational)
     topo_level: u64,                 // Computed on insert, not serialized
+    // Note: timestamp lives in block.header.timestamp (i64)
 }
 ```
 
 !!! note "Hash computation"
-    The vertex hash is **not stored** — it is computed via `DagVertex::hash()`. The `signable_bytes()` method produces `NETWORK_ID || b"vertex" || block.hash() || parent_hashes || round || validator`, and the hash is `blake3(signable_bytes())`.
+    The vertex hash is **not stored** — it is computed via `DagVertex::hash()` which delegates to `block.hash()` (the block header hash). The `signable_bytes()` method (used for Ed25519 signing) is different: `NETWORK_ID || b"vertex" || block.hash() || parent_hashes || round || validator`. The hash and signable_bytes are distinct computations.
 
 ---
 

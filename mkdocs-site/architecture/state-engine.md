@@ -54,7 +54,7 @@ Delegators have delegation records:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `delegated_amount` | `u64` | Amount delegated in sats |
+| `delegated` | `u64` | Amount delegated in sats |
 | `validator` | `Address` | Target validator address |
 | `unlock_at_round` | `Option<u64>` | Set when undelegate is initiated |
 
@@ -162,7 +162,7 @@ UltraDAG uses [redb](https://docs.rs/redb) as its embedded ACID database. redb p
 | `votes` | `&[u8]` | `u8` | Governance votes |
 | `metadata` | `&str` | `&[u8]` | Total supply, latest round, state root, configured_validator_count |
 | `active_validators` | `u64` | `&[u8; 32]` | Active validator set |
-| `council_members` | `[u8; 32]` | `&[u8]` | Council membership with seat category |
+| `council_members` | `[u8; 32]` | `u8` | Council membership (seat category byte) |
 
 ### Transaction Safety
 

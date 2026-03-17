@@ -50,7 +50,7 @@ See the [Quick Start](getting-started/quickstart.md) for full instructions.
 Use the faucet endpoint:
 
 ```bash
-curl -X POST http://localhost:10333/faucet -H "Content-Type: application/json" -d '{"address":"YOUR_ADDRESS","amount":100000000}'
+curl -X POST http://localhost:10333/faucet -H "Content-Type: application/json" -d '{"address":"YOUR_ADDRESS","amount":10000000000}'
 ```
 
 The faucet distributes up to 100 UDAG per request, rate limited to 1 request per 10 minutes.

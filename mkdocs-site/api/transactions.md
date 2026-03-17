@@ -95,7 +95,7 @@ Send UDAG from one address to another.
 | `to` | `Address` | Recipient address |
 | `amount` | `u64` | Amount in sats |
 | `fee` | `u64` | Transaction fee in sats (>= 10,000) |
-| `memo` | `Option<String>` | Optional memo (max 256 bytes) |
+| `memo` | `Option<Vec<u8>>` | Optional memo (max 256 bytes) |
 
 **signable_bytes:**
 

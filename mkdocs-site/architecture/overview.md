@@ -139,8 +139,8 @@ The fundamental unit of the DAG. Each vertex contains:
 - `round: u64`: monotonically increasing round number
 - `parent_hashes: Vec<[u8; 32]>`: parent vertex hashes (up to `MAX_PARENTS=64`)
 - `block: Block`: contains the coinbase transaction and a list of user transactions
-- `timestamp: u64`: wall-clock time (informational, not consensus-critical)
 - `signature: Signature`: Ed25519 signature over the vertex content
+- `topo_level: u64`: topological level (computed on insert, not persisted)
 
 The vertex hash is not stored as a field — it is computed via `DagVertex::hash()` using Blake3.
 

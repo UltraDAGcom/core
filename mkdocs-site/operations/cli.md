@@ -85,19 +85,19 @@ ultradag-node --port 9333 --validate --testnet
 ### Local 4-Node Testnet
 
 ```bash
-# Terminal 1
-ultradag-node --port 9333 --validate --validators 4 --seed 1 --no-bootstrap
+# Terminal 1 (first node, no seeds needed)
+ultradag-node --port 9333 --validate --validators 4 --no-bootstrap
 
 # Terminal 2
-ultradag-node --port 9334 --validate --validators 4 --seed 2 \
+ultradag-node --port 9334 --validate --validators 4 \
   --seed 127.0.0.1:9333 --no-bootstrap
 
 # Terminal 3
-ultradag-node --port 9335 --validate --validators 4 --seed 3 \
+ultradag-node --port 9335 --validate --validators 4 \
   --seed 127.0.0.1:9333 --no-bootstrap
 
 # Terminal 4
-ultradag-node --port 9336 --validate --validators 4 --seed 4 \
+ultradag-node --port 9336 --validate --validators 4 \
   --seed 127.0.0.1:9333 --no-bootstrap
 ```
 

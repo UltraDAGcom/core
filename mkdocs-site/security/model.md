@@ -32,7 +32,7 @@ Blake3 is used for:
 - **Address derivation**: `address = blake3(ed25519_public_key)`
 - **Vertex hashing**: `hash = blake3(author || round || parents || txs || timestamp)`
 - **State root**: canonical byte hashing of the entire state
-- **Parent selection scoring**: `blake3(candidate_hash || author_key)` for deterministic selection
+- **Parent selection scoring**: `blake3(proposer || candidate_hash)` for deterministic selection
 
 ### Why These Choices
 

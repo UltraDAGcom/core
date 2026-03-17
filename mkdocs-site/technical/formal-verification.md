@@ -194,7 +194,7 @@ The TLA+ specification abstracts away:
 - Clock synchronization
 - Memory management and persistence
 
-These aspects are tested through the 977+ core test suite, 80+ simulation tests, and 14 Jepsen fault injection tests rather than formal verification.
+These aspects are tested through the 977 core test suite, 80+ simulation tests, and 14 Jepsen fault injection tests rather than formal verification.
 
 ---
 
