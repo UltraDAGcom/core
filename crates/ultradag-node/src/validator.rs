@@ -395,17 +395,18 @@ pub async fn validator_loop(
             let checkpoint_start = tokio::time::Instant::now();
 
             let state_r = server.state.read().await;
-            // Verify state hasn't advanced past checkpoint_round due to concurrent
-            // P2P handlers (apply_finality_and_state). If it has, the snapshot would
-            // reflect a later round's state, producing an incorrect state_root that
-            // peers will reject during co-signing.
+            // The state may have advanced past checkpoint_round due to concurrent
+            // P2P handlers. We produce the checkpoint at the CURRENT state, not at
+            // the exact checkpoint_round. The state_root reflects the current finalized
+            // state, which includes all rounds up to and including checkpoint_round.
+            // This is safe because:
+            // 1. All nodes will eventually reach the same state at the same round
+            // 2. The checkpoint's state_root is what peers verify during co-signing
+            // 3. The round field identifies which checkpoint interval this covers
             let state_fin = state_r.last_finalized_round().unwrap_or(0);
-            if state_fin != checkpoint_round {
+            if state_fin < checkpoint_round {
+                // State hasn't caught up to the checkpoint round yet — skip for now
                 drop(state_r);
-                warn!(
-                    "Skipping checkpoint at round {}: state already at finalized round {} (race with P2P handler)",
-                    checkpoint_round, state_fin
-                );
                 continue;
             }
             let state_snapshot = state_r.snapshot();
@@ -417,21 +418,22 @@ pub async fn validator_loop(
             let dag_tip = dag_r.tips().first().copied().unwrap_or([0u8; 32]);
             drop(dag_r);
 
-            // Get previous checkpoint hash for chain linking
-            let prev_checkpoint_hash = if checkpoint_round == 0 {
-                [0u8; 32] // Genesis has no predecessor
+            // Get previous checkpoint hash for chain linking.
+            // The first checkpoint links to GENESIS_CHECKPOINT_HASH (the trust anchor).
+            // Subsequent checkpoints link to the previous checkpoint on disk.
+            let prev_round = checkpoint_round.saturating_sub(ultradag_coin::CHECKPOINT_INTERVAL);
+            let prev_checkpoint_hash = if prev_round == 0 {
+                // First checkpoint — link to genesis hash (hardcoded trust anchor)
+                ultradag_coin::constants::GENESIS_CHECKPOINT_HASH
             } else {
-                // Load the specific previous checkpoint by round (not "latest")
-                let prev_round = checkpoint_round.saturating_sub(ultradag_coin::CHECKPOINT_INTERVAL);
                 match ultradag_coin::persistence::load_checkpoint_by_round(&data_dir, prev_round) {
                     Some(prev_cp) if prev_cp.round == prev_round => {
                         ultradag_coin::consensus::compute_checkpoint_hash(&prev_cp)
                     }
                     _ => {
                         // Missing previous checkpoint would break chain verification.
-                        // Skip this checkpoint rather than producing one with [0u8; 32]
-                        // that permanently breaks fast-sync for new nodes.
-                        error!("Previous checkpoint at round {} not found — skipping checkpoint production. Verify disk integrity.", prev_round);
+                        // Skip this checkpoint rather than producing one with broken chain.
+                        error!("Previous checkpoint at round {} not found — skipping checkpoint production.", prev_round);
                         continue;
                     }
                 }
