@@ -4,3 +4,4 @@ pub mod byzantine;
 pub mod harness;
 pub mod invariants;
 pub mod txgen;
+pub mod fuzz;

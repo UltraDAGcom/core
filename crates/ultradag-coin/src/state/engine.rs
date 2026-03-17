@@ -1414,6 +1414,7 @@ impl StateEngine {
     /// the entire network by including stale-nonce transactions in their vertex
     /// (DuplicateTxFlooder attack — the coinbase credits fees upfront, then clawback
     /// fails because the proposer spent/staked the balance since).
+    #[allow(dead_code)]
     fn saturating_fee_clawback(&mut self, proposer: &Address, fee: u64) {
         let balance = self.balance(proposer);
         if balance >= fee {

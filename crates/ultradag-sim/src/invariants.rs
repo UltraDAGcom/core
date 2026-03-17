@@ -291,6 +291,24 @@ pub fn check_all(
     }
 }
 
+/// Safety-only invariants (no liveness check). Used by proptest fuzzing
+/// where random Skip actions legitimately stall finality.
+pub fn check_safety_invariants(
+    validators: &[SimValidator],
+    known_equivocators: &[Address],
+) -> Result<(), String> {
+    let mut violations = Vec::new();
+    if let Err(e) = check_state_convergence(validators) { violations.push(e); }
+    if let Err(e) = check_supply_invariant(validators) { violations.push(e); }
+    if let Err(e) = check_finality_monotonicity(validators) { violations.push(e); }
+    if let Err(e) = check_no_double_finalization(validators) { violations.push(e); }
+    if let Err(e) = check_equivocation_detected(validators, known_equivocators) { violations.push(e); }
+    if let Err(e) = check_stake_consistency(validators) { violations.push(e); }
+    if let Err(e) = check_governance_consistency(validators) { violations.push(e); }
+    if let Err(e) = check_council_consistency(validators) { violations.push(e); }
+    if violations.is_empty() { Ok(()) } else { Err(violations.join("\n")) }
+}
+
 fn hex_short(bytes: &[u8; 32]) -> String {
     bytes.iter().take(8).map(|b| format!("{:02x}", b)).collect()
 }

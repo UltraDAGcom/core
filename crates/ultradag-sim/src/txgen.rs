@@ -166,3 +166,19 @@ pub fn generate_vote_tx(
     tx.signature = sk.sign(&tx.signable_bytes());
     Transaction::Vote(tx)
 }
+
+pub fn generate_transfer_to(
+    sk: &SecretKey,
+    to: Address,
+    amount: u64,
+    nonce: u64,
+) -> Option<Transaction> {
+    if amount == 0 { return None; }
+    let mut tx = TransferTx {
+        from: sk.address(), to, amount, fee: MIN_FEE_SATS, nonce,
+        pub_key: sk.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]), memo: None,
+    };
+    tx.signature = sk.sign(&tx.signable_bytes());
+    Some(Transaction::Transfer(tx))
+}
