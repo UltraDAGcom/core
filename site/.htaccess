@@ -1,0 +1,15 @@
+# Ensure main site serves from root
+DirectoryIndex index.html
+
+# Rewrite rules for clean URLs
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Handle docs directory first (before general rewrite)
+RewriteRule ^docs/?$ docs/index.html [L]
+RewriteRule ^docs/(.*)$ docs/$1 [L]
+
+# General rewrite for other pages (skip docs)
+RewriteCond %{REQUEST_URI} !^/docs/
+RewriteRule ^([^/]+)/?$ $1.html [L]
