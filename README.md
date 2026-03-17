@@ -3,11 +3,23 @@
 [![Bug Bounty](https://img.shields.io/badge/Bug%20Bounty-500k%20UDAG-success)](./docs/security/bug-bounty/PROGRAM.md)
 [![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./docs/security/POLICY.md)
 [![Testnet](https://img.shields.io/badge/Testnet-Live-green)](https://ultradag-node-1.fly.dev/status)
+[![Documentation](https://img.shields.io/badge/Documentation-Latest-blue)](https://docs.ultradag.com)
 [![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-informational)](./LICENSE)
 
 A DAG-BFT cryptocurrency for permissioned networks and IoT applications. Built in Rust.
 
 **Ed25519 signatures. DAG-BFT consensus. Blake3 hashing. 21M max supply. Validator staking.**
+
+## 📚 Documentation
+
+**[📖 Full Documentation → https://docs.ultradag.com](https://docs.ultradag.com)**
+
+Comprehensive guides covering:
+- **Getting Started**: Quick start, Docker setup, validator configuration
+- **Architecture**: DAG-BFT consensus, P2P network, state engine
+- **API Reference**: RPC endpoints, transaction format, SDKs
+- **Operations**: Node management, monitoring, security
+- **Tokenomics**: Supply, emission, staking, governance
 
 ## 🔒 Security & Bug Bounty
 

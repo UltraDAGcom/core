@@ -1,0 +1,94 @@
+site_name: UltraDAG Documentation
+site_url: https://ultradag.com/docs/
+repo_url: https://github.com/UltraDAGcom/core
+repo_name: UltraDAGcom/core
+site_description: Documentation for UltraDAG — a lightweight DAG-BFT cryptocurrency for IoT and machine-to-machine micropayments.
+
+docs_dir: mkdocs-site
+site_dir: site/docs
+
+theme:
+  name: material
+  custom_dir: mkdocs-overrides
+  palette:
+    scheme: slate
+    primary: custom
+    accent: custom
+  font:
+    text: Inter
+    code: JetBrains Mono
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+    - toc.integrate
+
+extra_css:
+  - stylesheets/ultradag.css
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - pymdownx.arithmatex:
+      generic: true
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Quick Start: getting-started/quickstart.md
+    - Docker Guide: getting-started/docker.md
+    - Run a Validator: getting-started/validator.md
+  - Architecture:
+    - Overview: architecture/overview.md
+    - DAG-BFT Consensus: architecture/consensus.md
+    - P2P Network: architecture/network.md
+    - State Engine: architecture/state-engine.md
+  - Tokenomics:
+    - Supply & Emission: tokenomics/supply.md
+    - Staking & Delegation: tokenomics/staking.md
+    - Governance: tokenomics/governance.md
+  - API Reference:
+    - RPC Endpoints: api/rpc.md
+    - Transaction Format: api/transactions.md
+    - SDKs: api/sdks.md
+  - Node Operations:
+    - Node Operator Guide: operations/node-guide.md
+    - Validator Handbook: operations/validator-handbook.md
+    - Monitoring: operations/monitoring.md
+    - CLI Reference: operations/cli.md
+  - Security:
+    - Security Model: security/model.md
+    - Bug Bounty: security/bug-bounty.md
+    - Audit Reports: security/audits.md
+  - Technical Deep Dives:
+    - Formal Verification: technical/formal-verification.md
+    - Checkpoint Protocol: technical/checkpoints.md
+    - Noise Encryption: technical/noise-protocol.md
+    - Simulation Harness: technical/simulation.md
+  - FAQ: faq.md

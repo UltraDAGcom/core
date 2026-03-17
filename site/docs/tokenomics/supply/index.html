@@ -1,0 +1,2231 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Documentation for UltraDAG — a lightweight DAG-BFT cryptocurrency for IoT and machine-to-machine micropayments.">
+      
+      
+      
+        <link rel="canonical" href="https://ultradag.com/docs/tokenomics/supply/">
+      
+      
+        <link rel="prev" href="../../architecture/state-engine/">
+      
+      
+        <link rel="next" href="../staking/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.5">
+    
+    
+      
+        <title>Supply & Emission - UltraDAG Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../stylesheets/ultradag.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#supply-emission" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+<!-- Unified site navigation bar replacing MkDocs header -->
+<header class="md-header" data-md-component="header">
+  <div class="ultradag-site-nav" id="ultradag-nav">
+    <a href="../index.html" class="udn-logo">
+      <div class="udn-logo-mark"></div>
+      UltraDAG
+    </a>
+    <ul class="udn-links">
+      <li><a href="../index.html">Home</a></li>
+      <li><a href="../whitepaper.html">Whitepaper</a></li>
+      <li><a class="udn-active" href="./">Docs</a></li>
+      <li><a href="../explorer.html">Explorer</a></li>
+      <li><a href="../blog/index.html">Blog</a></li>
+      <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+      <li><a href="../network.html" class="udn-cta">Live Network</a></li>
+      <li><a href="../dashboard.html" class="udn-cta">Dashboard</a></li>
+    </ul>
+    <div class="udn-right">
+      <!-- Hamburger for mobile -->
+      <button class="udn-hamburger" id="udn-hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </div>
+</header>
+<!-- Mobile dropdown -->
+<div class="udn-mobile-menu" id="udn-mobile-menu">
+  <ul>
+    <li><a href="../index.html">Home</a></li>
+    <li><a href="../whitepaper.html">Whitepaper</a></li>
+    <li><a href="./">Docs</a></li>
+    <li><a href="../explorer.html">Explorer</a></li>
+    <li><a href="../blog/index.html">Blog</a></li>
+    <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+    <li><a href="../network.html" class="udn-cta">Live Network</a></li>
+    <li><a href="../dashboard.html" class="udn-cta">Dashboard</a></li>
+  </ul>
+</div>
+<script>
+(function(){
+  var btn=document.getElementById('udn-hamburger');
+  var menu=document.getElementById('udn-mobile-menu');
+  if(btn&&menu){btn.addEventListener('click',function(){btn.classList.toggle('active');menu.classList.toggle('active')})}
+  var nav=document.getElementById('ultradag-nav');
+  window.addEventListener('scroll',function(){if(nav){var p=nav.closest('.md-header');if(p)p.classList.toggle('md-header--shadow',window.scrollY>0)}});
+})();
+</script>
+
+    <div class="md-container" data-md-component="container">
+      
+      
+
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../getting-started/quickstart/" class="md-tabs__link">
+          
+  
+  
+  Getting Started
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../architecture/overview/" class="md-tabs__link">
+          
+  
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  Tokenomics
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../api/rpc/" class="md-tabs__link">
+          
+  
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../operations/node-guide/" class="md-tabs__link">
+          
+  
+  
+  Node Operations
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../security/model/" class="md-tabs__link">
+          
+  
+  
+  Security
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../technical/formal-verification/" class="md-tabs__link">
+          
+  
+  
+  Technical Deep Dives
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../faq/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  FAQ
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="UltraDAG Documentation" class="md-nav__button md-logo" aria-label="UltraDAG Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    UltraDAG Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/UltraDAGcom/core" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    UltraDAGcom/core
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/docker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/validator/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Run a Validator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/consensus/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DAG-BFT Consensus
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/network/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    P2P Network
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/state-engine/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    State Engine
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tokenomics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tokenomics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Supply & Emission
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Supply & Emission
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#maximum-supply" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Maximum Supply
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#emission-schedule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Emission Schedule
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Emission Schedule">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#block-reward" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Block Reward
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#halving-interval" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Halving Interval
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#full-emission-timeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full Emission Timeline
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#genesis-allocations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Genesis Allocations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reward-distribution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reward Distribution
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Reward Distribution">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#distribution-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Distribution Flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#validator-rewards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validator Rewards
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#council-rewards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Council Rewards
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#per-round-protocol-distribution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-Round Protocol Distribution
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fee-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fee Handling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#supply-cap-enforcement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supply Cap Enforcement
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Supply Cap Enforcement">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#minting-cap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Minting Cap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#supply-invariant" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Supply Invariant
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#slashing-is-deflationary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Slashing is Deflationary
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#comparison-with-bitcoin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparison with Bitcoin
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../staking/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Staking & Delegation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../governance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Governance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/rpc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    RPC Endpoints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/transactions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Transaction Format
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/sdks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SDKs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Node Operations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Node Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/node-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Node Operator Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/validator-handbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validator Handbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/monitoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Security
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/bug-bounty/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bug Bounty
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../security/audits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit Reports
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Technical Deep Dives
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Technical Deep Dives
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../technical/formal-verification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Formal Verification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../technical/checkpoints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Checkpoint Protocol
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../technical/noise-protocol/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Noise Encryption
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../technical/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation Harness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FAQ
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="supply-emission">Supply &amp; Emission<a class="headerlink" href="#supply-emission" title="Permanent link">&para;</a></h1>
+<p>UltraDAG has a fixed maximum supply of 21 million UDAG with a Bitcoin-style halving schedule. This page covers the emission curve, genesis allocations, and supply enforcement.</p>
+<hr />
+<h2 id="maximum-supply">Maximum Supply<a class="headerlink" href="#maximum-supply" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Max supply</td>
+<td>21,000,000 UDAG</td>
+</tr>
+<tr>
+<td>Smallest unit</td>
+<td>1 sat = 0.00000001 UDAG</td>
+</tr>
+<tr>
+<td>Sats per UDAG</td>
+<td>100,000,000</td>
+</tr>
+<tr>
+<td>Max supply in sats</td>
+<td>2,100,000,000,000,000</td>
+</tr>
+</tbody>
+</table>
+<p>The maximum supply is a hard protocol constant — no governance proposal can increase it.</p>
+<hr />
+<h2 id="emission-schedule">Emission Schedule<a class="headerlink" href="#emission-schedule" title="Permanent link">&para;</a></h2>
+<h3 id="block-reward">Block Reward<a class="headerlink" href="#block-reward" title="Permanent link">&para;</a></h3>
+<p>New UDAG is minted each round (not per vertex) according to a halving schedule:</p>
+<table>
+<thead>
+<tr>
+<th>Era</th>
+<th>Rounds</th>
+<th>Reward per Round</th>
+<th>Cumulative Emission</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>0 — 10,499,999</td>
+<td>1.00000000 UDAG</td>
+<td>10,500,000 UDAG</td>
+</tr>
+<tr>
+<td>2</td>
+<td>10,500,000 — 20,999,999</td>
+<td>0.50000000 UDAG</td>
+<td>15,750,000 UDAG</td>
+</tr>
+<tr>
+<td>3</td>
+<td>21,000,000 — 31,499,999</td>
+<td>0.25000000 UDAG</td>
+<td>18,375,000 UDAG</td>
+</tr>
+<tr>
+<td>4</td>
+<td>31,500,000 — 41,999,999</td>
+<td>0.12500000 UDAG</td>
+<td>19,687,500 UDAG</td>
+</tr>
+<tr>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<td>64</td>
+<td>...</td>
+<td>&lt; 1 sat</td>
+<td>21,000,000 UDAG</td>
+</tr>
+</tbody>
+</table>
+<h3 id="halving-interval">Halving Interval<a class="headerlink" href="#halving-interval" title="Permanent link">&para;</a></h3>
+<div class="arithmatex">\[
+\text{halving\_interval} = 10{,}500{,}000 \text{ rounds}
+\]</div>
+<p>At 5-second rounds:</p>
+<div class="arithmatex">\[
+10{,}500{,}000 \times 5\text{s} = 52{,}500{,}000\text{s} \approx 1.66 \text{ years}
+\]</div>
+<h3 id="full-emission-timeline">Full Emission Timeline<a class="headerlink" href="#full-emission-timeline" title="Permanent link">&para;</a></h3>
+<p>The emission curve follows a geometric series. Over 64 halvings (~106 years), the total minted supply asymptotically approaches 21,000,000 UDAG:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Era  1: +10,500,000.00 UDAG  (50.00% of max)
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>Era  2:  +5,250,000.00 UDAG  (75.00% of max)
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>Era  3:  +2,625,000.00 UDAG  (87.50% of max)
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>Era  4:  +1,312,500.00 UDAG  (93.75% of max)
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>Era  5:    +656,250.00 UDAG  (96.88% of max)
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>...
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>Era 64:          &lt; 1 sat      (100.00% of max)
+</code></pre></div>
+<div class="admonition info">
+<p class="admonition-title">Reward precision</p>
+<p>When the halved reward drops below 1 sat (the smallest representable unit), the reward becomes 0 and emission stops permanently. This occurs after approximately 64 halvings.</p>
+</div>
+<hr />
+<h2 id="genesis-allocations">Genesis Allocations<a class="headerlink" href="#genesis-allocations" title="Permanent link">&para;</a></h2>
+<p>At genesis (round 0), the following allocations are made:</p>
+<table>
+<thead>
+<tr>
+<th>Allocation</th>
+<th>Amount</th>
+<th>Percentage</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dev fund</td>
+<td>1,050,000 UDAG</td>
+<td>5%</td>
+<td>Protocol development and maintenance</td>
+</tr>
+<tr>
+<td>Treasury</td>
+<td>2,100,000 UDAG</td>
+<td>10%</td>
+<td>DAO-controlled via TreasurySpend proposals</td>
+</tr>
+<tr>
+<td>Faucet</td>
+<td>1,000,000 UDAG</td>
+<td>~4.76%</td>
+<td>Testnet distribution only</td>
+</tr>
+<tr>
+<td><strong>Total genesis</strong></td>
+<td><strong>4,150,000 UDAG</strong></td>
+<td><strong>~19.76%</strong></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Testnet-only faucet</p>
+<p>The 1,000,000 UDAG faucet allocation exists only on testnet. On mainnet, the genesis allocation is the 1,050,000 UDAG dev fund plus the 2,100,000 UDAG treasury (3,150,000 UDAG total). The faucet address and its balance do not exist in the mainnet genesis state.</p>
+</div>
+<hr />
+<h2 id="reward-distribution">Reward Distribution<a class="headerlink" href="#reward-distribution" title="Permanent link">&para;</a></h2>
+<p>Each round, newly minted UDAG is distributed as follows:</p>
+<h3 id="distribution-flow">Distribution Flow<a class="headerlink" href="#distribution-flow" title="Permanent link">&para;</a></h3>
+<pre class="mermaid"><code>graph TD
+    M[Minted Reward] --&gt; V[Validator Pool]
+    M --&gt; C[Council Pool: council_emission_percent]
+
+    V --&gt; A1[Active Validator 1]
+    V --&gt; A2[Active Validator 2]
+    V --&gt; A3[Active Validator ...]
+    V --&gt; AN[Active Validator N]
+
+    C --&gt; CS[Council Seats]</code></pre>
+<h3 id="validator-rewards">Validator Rewards<a class="headerlink" href="#validator-rewards" title="Permanent link">&para;</a></h3>
+<p>The remainder after council emission (default 10%, governable 0-30%) is distributed to validators:</p>
+<ul>
+<li><strong>Active validators</strong> (producing vertices): receive rewards proportional to effective stake</li>
+<li><strong>Passive stakers</strong> (staked but not in top 21): receive 20% of what an equivalent active validator would earn</li>
+</ul>
+<div class="arithmatex">\[
+\text{validator\_reward}_i = \text{round\_reward} \times (1 - \frac{\text{council\_emission\_percent}}{100}) \times \frac{\text{effective\_stake}_i}{\sum \text{effective\_stakes}}
+\]</div>
+<h3 id="council-rewards">Council Rewards<a class="headerlink" href="#council-rewards" title="Permanent link">&para;</a></h3>
+<p>10% of the round reward (default, governable 0-30%) goes to the Council of 21:</p>
+<div class="arithmatex">\[
+\text{council\_share} = \text{round\_reward} \times 0.1
+\]</div>
+<p>This is distributed equally among occupied council seats.</p>
+<hr />
+<h2 id="per-round-protocol-distribution">Per-Round Protocol Distribution<a class="headerlink" href="#per-round-protocol-distribution" title="Permanent link">&para;</a></h2>
+<div class="admonition warning">
+<p class="admonition-title">Per-round, not per-vertex</p>
+<p>Rewards are minted <strong>once per finalized round</strong>, not once per vertex. In a round with multiple finalized vertices from different validators, the protocol mints exactly one round reward. This prevents inflation variance based on the number of vertices produced.</p>
+</div>
+<p>The distribution sequence each round:</p>
+<ol>
+<li>Calculate the current era's reward: <code>reward = initial_reward &gt;&gt; (round / halving_interval)</code></li>
+<li>Cap at remaining supply: <code>reward = min(reward, MAX_SUPPLY - total_supply)</code></li>
+<li>Mint <code>reward</code> sats into existence (increment <code>total_supply</code>)</li>
+<li>Distribute <code>(100 - council_emission_percent)%</code> to validator pool (proportional to effective stake)</li>
+<li>Distribute <code>council_emission_percent%</code> to council pool (equal per seat)</li>
+<li>Verify supply invariant</li>
+</ol>
+<hr />
+<h2 id="fee-handling">Fee Handling<a class="headerlink" href="#fee-handling" title="Permanent link">&para;</a></h2>
+<p>Transaction fees are <strong>not</strong> part of the emission — they come from existing circulating supply:</p>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fee collection</td>
+<td>Fees are collected from the transaction sender</td>
+</tr>
+<tr>
+<td>Fee destination</td>
+<td>Fees go to the vertex producer via deferred coinbase (collected from successful txs only)</td>
+</tr>
+<tr>
+<td>Coinbase</td>
+<td>Vertex coinbase contains collected fees only (no minted reward)</td>
+</tr>
+<tr>
+<td>Fee-exempt operations</td>
+<td>Stake, Unstake, Delegate, Undelegate, SetCommission</td>
+</tr>
+<tr>
+<td>Minimum fee</td>
+<td>10,000 sats (0.0001 UDAG) for non-exempt transactions</td>
+</tr>
+</tbody>
+</table>
+<p>Minted rewards are distributed separately via <code>distribute_round_rewards()</code>. Fees are included in the vertex producer's coinbase independently.</p>
+<hr />
+<h2 id="supply-cap-enforcement">Supply Cap Enforcement<a class="headerlink" href="#supply-cap-enforcement" title="Permanent link">&para;</a></h2>
+<p>The protocol enforces the supply cap at multiple levels:</p>
+<h3 id="minting-cap">Minting Cap<a class="headerlink" href="#minting-cap" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kd">let</span><span class="w"> </span><span class="n">reward</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">base_reward</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="p">(</span><span class="n">current_round</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">HALVING_INTERVAL</span><span class="p">);</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kd">let</span><span class="w"> </span><span class="n">capped</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">std</span><span class="p">::</span><span class="n">cmp</span><span class="p">::</span><span class="n">min</span><span class="p">(</span><span class="n">reward</span><span class="p">,</span><span class="w"> </span><span class="n">MAX_SUPPLY_SATS</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">total_supply</span><span class="p">);</span>
+</code></pre></div>
+<p>If <code>total_supply</code> equals <code>MAX_SUPPLY_SATS</code>, no new UDAG is minted. The protocol continues operating on fees only.</p>
+<h3 id="supply-invariant">Supply Invariant<a class="headerlink" href="#supply-invariant" title="Permanent link">&para;</a></h3>
+<p>After every state transition:</p>
+<div class="arithmatex">\[
+\text{liquid} + \text{staked} + \text{delegated} + \text{treasury} = \text{total\_supply} \leq \text{MAX\_SUPPLY}
+\]</div>
+<p>Violation triggers immediate node halt (exit code 101).</p>
+<h3 id="slashing-is-deflationary">Slashing is Deflationary<a class="headerlink" href="#slashing-is-deflationary" title="Permanent link">&para;</a></h3>
+<p>When a validator is slashed for equivocation, the slashed amount is <strong>burned</strong> — removed from <code>total_supply</code>. This makes slashing deflationary:</p>
+<div class="arithmatex">\[
+\text{total\_supply}_{\text{new}} = \text{total\_supply}_{\text{old}} - \text{slashed\_amount}
+\]</div>
+<p>Burned supply can never be re-minted. The effective max supply decreases permanently with each slash event.</p>
+<hr />
+<h2 id="comparison-with-bitcoin">Comparison with Bitcoin<a class="headerlink" href="#comparison-with-bitcoin" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>UltraDAG</th>
+<th>Bitcoin</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Max supply</td>
+<td>21,000,000</td>
+<td>21,000,000</td>
+</tr>
+<tr>
+<td>Smallest unit</td>
+<td>sat (10^-8)</td>
+<td>sat (10^-8)</td>
+</tr>
+<tr>
+<td>Halving interval</td>
+<td>10,500,000 rounds (~1.66 yr)</td>
+<td>210,000 blocks (~4 yr)</td>
+</tr>
+<tr>
+<td>Initial reward</td>
+<td>1 UDAG/round</td>
+<td>50 BTC/block</td>
+</tr>
+<tr>
+<td>Full emission</td>
+<td>~106 years</td>
+<td>~140 years</td>
+</tr>
+<tr>
+<td>Deflation mechanism</td>
+<td>Slashing burns</td>
+<td>Lost coins</td>
+</tr>
+<tr>
+<td>Fee model</td>
+<td>Min fee + exempt staking ops</td>
+<td>Market-driven fees</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../staking/">Staking &amp; Delegation</a> — how rewards are earned</li>
+<li><a href="../governance/">Governance</a> — council reward allocation</li>
+<li><a href="../../architecture/state-engine/">State Engine</a> — supply invariant enforcement</li>
+</ul>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+<footer class="ultradag-footer">
+  <div class="udf-inner">
+    <div class="udf-top">
+      <div class="udf-brand">
+        <div class="udf-logo">
+          <div class="udn-logo-mark"></div>
+          <span>UltraDAG</span>
+        </div>
+        <p class="udf-tagline">The simplest production-ready DAG chain.<br>Fast BFT finality for machine-to-machine micropayments.</p>
+        <div class="udf-social">
+          <a href="https://github.com/UltraDAGcom/core" target="_blank" aria-label="GitHub">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+          </a>
+          <a href="https://twitter.com/ultradag" target="_blank" aria-label="Twitter">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path></svg>
+          </a>
+        </div>
+      </div>
+      <div class="udf-links-grid">
+        <div class="udf-col">
+          <h4>Product</h4>
+          <ul>
+            <li><a href="../network.html">Live Network</a></li>
+            <li><a href="../dashboard.html">Dashboard</a></li>
+            <li><a href="../consensus-viz.html">Consensus Demo</a></li>
+            <li><a href="../whitepaper.html">Whitepaper</a></li>
+          </ul>
+        </div>
+        <div class="udf-col">
+          <h4>Developers</h4>
+          <ul>
+            <li><a href="./">Documentation</a></li>
+            <li><a href="api/rpc/">API Reference</a></li>
+            <li><a href="api/sdks/">SDK Quickstart</a></li>
+            <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+          </ul>
+        </div>
+        <div class="udf-col">
+          <h4>Resources</h4>
+          <ul>
+            <li><a href="../blog/index.html">Blog</a></li>
+            <li><a href="getting-started/quickstart/">Quick Start</a></li>
+            <li><a href="tokenomics/staking/">Staking Guide</a></li>
+            <li><a href="faq/">FAQ & Support</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="udf-bottom">
+      <div class="udf-legal">
+        <span>&copy; 2026 UltraDAG</span>
+        <span class="udf-sep">&bull;</span>
+        <span>Licensed under BUSL-1.1</span>
+        <span class="udf-sep">&bull;</span>
+        <span>Converts to MIT March 2030</span>
+      </div>
+      <div class="udf-status">
+        <div class="udf-status-dot"></div>
+        <span>All systems operational</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link", "toc.integrate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
