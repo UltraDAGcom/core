@@ -13,7 +13,10 @@
 - **Master invariant**: all honest validators that finalize the same round produce identical `compute_state_root()` output.
 - **Components**: `VirtualNetwork` (Perfect/RandomOrder/Drop/Partition/Lossy delivery), `SimValidator` (real DAG/finality/state), `ByzantineStrategy` (Equivocator/Withholder/Crash/TimestampManipulator), `SimHarness` (driver), `Invariants` (convergence/supply/monotonicity), `TxGen` (deterministic random transactions).
 - **Tests**: 4-validator perfect (100 rounds), 4-validator with 20 tx/round (200 rounds), single validator, random message reorder (200 rounds), 100-seed sweep, 2-2 partition heal (200 rounds), equivocator detection + supply check, 21-validator stress with 5% loss and 50 tx/round (1000 rounds), mixed Byzantine (2/7), late-joiner convergence.
-- **All tests passing.** Deterministic via `ChaCha8Rng` seeded from config — any failure is reproducible by seed.
+- **Scenario extensions**: StakingLifecycle (stake/unstake/commission, 500 rounds), DelegationRewards (delegate/commission splits/undelegate, 300 rounds), GovernanceParameterChange (proposal/vote/execute ParameterChange with shortened timing, 200 rounds), CrossFeature (stake+delegate+governance+equivocation simultaneously, 500 rounds), EpochTransition (forced active set recalculation).
+- **New invariant checks**: stake consistency (total_staked, total_delegated match), governance consistency (params, proposal IDs match), council consistency (member count/set match).
+- **19 sim tests passing** (11 base + 8 scenario). All deterministic via `ChaCha8Rng` seeded from config.
+- **Master invariant verified** under staking, delegation, governance execution, commission splits, and equivocation slashing with random message reordering and message loss.
 
 **Cryptographic, Persistence & Economics Deep Audit (March 17, 2026):**
 - **Hash collision: CreateProposalTx::hash() title/description (Bug #181)** — Missing length delimiters for variable-length fields. `title="AB" desc="CD"` and `title="ABC" desc="D"` produced identical hashes, enabling mempool eviction attacks. Fix: u32 LE length prefix before all variable-length fields.
