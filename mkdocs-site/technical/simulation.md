@@ -61,12 +61,12 @@ Controls message delivery between simulated validators:
 |--------------|----------|
 | `Perfect` | All messages delivered immediately in order |
 | `RandomOrder` | Messages delivered but in random order |
-| `Drop(rate)` | Messages dropped with probability `rate` |
-| `Partition(groups)` | Messages only delivered within partition groups |
-| `Lossy(rate)` | Random message loss at the specified rate |
+| `Drop { probability }` | Messages dropped with the given probability (0.0-1.0) |
+| `Partition { split, heal_after_rounds }` | Messages between groups dropped; validators split at index `split`, healing after N rounds |
+| `Lossy { drop_probability }` | Combined reorder + drop at the specified rate |
 
 ```rust
-let network = VirtualNetwork::new(DeliveryMode::Lossy(0.05)); // 5% loss
+let network = VirtualNetwork::new(num_validators, DeliveryPolicy::Lossy { drop_probability: 0.05 }, seed);
 ```
 
 ### SimValidator
@@ -75,14 +75,15 @@ A lightweight wrapper around real consensus components:
 
 ```rust
 struct SimValidator {
+    index: usize,
+    sk: SecretKey,
     address: Address,
-    keypair: Keypair,
     dag: BlockDag,
     finality: FinalityTracker,
     state: StateEngine,
     mempool: Mempool,
-    is_byzantine: bool,
-    strategy: Option<ByzantineStrategy>,
+    honest: bool,
+    finality_history: Vec<(u64, [u8; 32])>,
 }
 ```
 
@@ -95,9 +96,14 @@ Strategies for Byzantine validators:
 | Strategy | Behavior |
 |----------|----------|
 | `Equivocator` | Produces two different vertices per round (conflicting content) |
-| `Withholder` | Produces vertices but does not broadcast them |
-| `Crash` | Stops producing after a configured round |
+| `Withholder` | Produces vertices but withholds them from targeted peers |
+| `Crash` | Stops producing entirely |
 | `TimestampManipulator` | Produces vertices with manipulated timestamps |
+| `RewardGambler` | Attempts to game reward distribution using a puppet address |
+| `GovernanceTakeover` | Attempts to take over governance via malicious proposals |
+| `DuplicateTxFlooder` | Floods the network with duplicate transactions |
+| `FinalityStaller` | Attempts to stall finality progress |
+| `SelectiveEquivocator` | Selectively equivocates to target specific rounds |
 
 ```rust
 let strategy = ByzantineStrategy::Equivocator;
@@ -139,7 +145,7 @@ Automated checks run after every round:
 
 ## Test Suite
 
-### Base Consensus Tests (11 tests)
+### Base Consensus Tests (sample)
 
 | Test | Configuration | Rounds | Validates |
 |------|--------------|--------|-----------|
@@ -155,7 +161,7 @@ Automated checks run after every round:
 | Late-joiner convergence | 1 node joins at round 50 | 200 | Late join converges |
 | Governance with reorder | RandomOrder + governance | 200 | tick_governance deterministic under reorder |
 
-### Scenario Tests (8 tests)
+### Scenario Tests (sample)
 
 | Scenario | Description | Rounds |
 |----------|-------------|--------|
@@ -168,7 +174,7 @@ Automated checks run after every round:
 | DelegationWithLoss | Delegation under 5% message loss | 400 |
 | GovernanceStress | Multiple proposals + votes under adversarial conditions | 300 |
 
-**Total: 19 simulation tests**, all passing, all deterministic.
+**Total: 80+ simulation tests**, all passing, all deterministic.
 
 ---
 
@@ -237,7 +243,7 @@ fn test_my_scenario() {
         validators: 4,
         byzantine: vec![(2, ByzantineStrategy::Withholder)],
         rounds: 200,
-        delivery: DeliveryMode::Lossy(0.03),
+        delivery: DeliveryPolicy::Lossy(0.03),
         seed: 42,
         tx_per_round: 10,
     };

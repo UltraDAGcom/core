@@ -70,14 +70,19 @@ Messages use a simple framing protocol:
 
 | Message | Direction | Purpose |
 |---------|-----------|---------|
-| `Hello` | Bidirectional | Initial handshake, exchange node info and DAG state |
+| `Hello` / `HelloAck` | Bidirectional | Initial handshake, exchange version, height, listen port |
 | `DagProposal` | Broadcast | New DAG vertex produced by this validator |
-| `GetDagVertices` | Request | Request specific vertices by hash |
+| `GetDagVertices` | Request | Request vertices by round range `{from_round, max_count}` |
 | `DagVertices` | Response | Batch of requested vertices |
+| `GetParents` | Request | Request specific vertices by hash (for resolving missing parents) |
+| `ParentVertices` | Response | Requested parent vertices |
 | `NewTx` | Broadcast | New transaction for mempool inclusion |
+| `GetPeers` / `Peers` | Bidirectional | Peer discovery via gossip |
+| `GetRoundHashes` / `RoundHashes` | Request/Response | Round-level hash comparison for sync |
 | `CheckpointProposal` | Broadcast | Propose a new checkpoint |
-| `CheckpointVote` | Broadcast | Co-sign a checkpoint proposal |
-| `CheckpointSync` | Response | Full checkpoint with state snapshot |
+| `CheckpointSignatureMsg` | Broadcast | Co-sign a checkpoint: `{round, checkpoint_hash, signature}` |
+| `GetCheckpoint` | Request | Request latest checkpoint for fast-sync |
+| `CheckpointSync` | Response | Full checkpoint with state snapshot and suffix vertices |
 | `EquivocationEvidence` | Broadcast | Two conflicting vertices from same validator+round |
 | `Ping` / `Pong` | Bidirectional | Keepalive and latency measurement |
 
@@ -88,16 +93,12 @@ The `Hello` message is exchanged immediately after the Noise handshake:
 ```rust
 struct Hello {
     version: u32,
-    network_id: [u8; 32],
-    latest_round: u64,
-    latest_finalized_round: u64,
-    checkpoint_hash: Option<Hash>,
-    validator: bool,
-    peer_count: u32,
+    height: u64,        // Current DAG round
+    listen_port: u16,   // P2P listen port for reverse connections
 }
 ```
 
-The `network_id` field provides domain separation — testnet and mainnet nodes will not connect to each other.
+Network domain separation is handled at the Noise handshake level via `NETWORK_ID` — testnet and mainnet nodes use different identity binding prefixes.
 
 ---
 
@@ -126,10 +127,11 @@ sequenceDiagram
 
 **Orphan resolution**: If a received vertex references a parent hash that is not yet known:
 
-1. The vertex is held in an orphan buffer
-2. A `GetDagVertices` request is sent for the missing parent
-3. When the parent arrives, the orphan is re-processed
-4. This recurses until all ancestors are resolved or found in local state
+1. The vertex is held in an orphan buffer (capped at 1000 entries / 50MB, with per-peer cap of 100)
+2. A `GetParents { hashes }` request is sent for the missing parent hashes (capped at 32 per request)
+3. The peer responds with `ParentVertices` containing the requested vertices
+4. When the parent arrives, `resolve_orphans()` attempts to flush buffered orphans
+5. This recurses until all ancestors are resolved or found in local state
 
 ### Checkpoint Sync (Fast-Sync)
 
@@ -197,35 +199,28 @@ A peer exceeding 500 messages in any 60-second window is temporarily throttled.
 
 | Message Type | Cooldown |
 |-------------|----------|
+| `GetDagVertices` | 2 seconds per peer |
+| `GetRoundHashes` | 10 seconds per peer |
 | `DagProposal` | 1 per round per validator |
-| `NewTx` | 100 per 10 seconds per peer |
-| `GetDagVertices` | 10 per 10 seconds per peer |
-| `CheckpointSync` | 1 per 60 seconds per peer |
-| `Ping` | 1 per 5 seconds per peer |
 
 ### Violation Handling
 
-Rate limit violations are handled progressively:
-
-1. **First violation**: message is dropped silently
-2. **Repeated violations**: peer is temporarily banned (5 minutes)
-3. **Persistent abuse**: peer is permanently banned for the session
+Peers exceeding the aggregate limit (500 messages / 60 seconds) are disconnected with a warning log. There is no progressive ban system — the connection is closed immediately and the peer must reconnect.
 
 ---
 
 ## Bootstrap Nodes
 
-New nodes discover the network through bootstrap nodes. The testnet has 5 hardcoded bootstrap addresses:
+New nodes discover the network through bootstrap nodes. The testnet has 4 hardcoded bootstrap addresses (dedicated IPv4):
 
 ```
-ultradag-node-1.fly.dev:9333
-ultradag-node-2.fly.dev:9333
-ultradag-node-3.fly.dev:9333
-ultradag-node-4.fly.dev:9333
-ultradag-node-5.fly.dev:9333
+206.51.242.223:9333   # ultradag-node-1
+137.66.57.226:9333    # ultradag-node-2
+169.155.54.169:9333   # ultradag-node-3
+169.155.55.151:9333   # ultradag-node-4
 ```
 
-After connecting to bootstrap nodes, the node learns additional peer addresses through the `Hello` message exchange and peer gossip. The `--no-bootstrap` flag disables automatic bootstrap connections (useful for isolated local testnets).
+After connecting to bootstrap nodes, the node learns additional peer addresses through `GetPeers`/`Peers` gossip. The `--no-bootstrap` flag disables automatic bootstrap connections (useful for isolated local testnets). Exponential backoff retry (2, 4, 8, 16, 32 seconds) is used for bootstrap connections.
 
 ---
 
@@ -243,11 +238,9 @@ Peers are discovered through:
 
 | Parameter | Default |
 |-----------|---------|
-| Max outgoing connections | 32 |
-| Max incoming connections | 64 |
-| Total connection limit | 96 |
-| Connection timeout | 10 seconds |
-| Idle timeout | 300 seconds |
+| Max incoming connections | 16 (`MAX_INBOUND_PEERS`) |
+| Handshake timeout | 10 seconds |
+| Read timeout | 30 seconds (per message) |
 
 ### Reconnection
 

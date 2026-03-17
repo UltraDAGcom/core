@@ -77,7 +77,7 @@ stateDiagram-v2
 | Quorum | 10% of council seats | 5-100% |
 | Supermajority | 66% of votes cast | 51-100% |
 | Voting period | 120,960 rounds (~3.5 days) | 1,000-1,000,000 rounds |
-| Execution delay | 2,016 rounds (~2.8 hours) | 100-100,000 rounds |
+| Execution delay | 2,016 rounds (~2.8 hours) | 2,016-100,000 rounds |
 | Max active proposals | 20 | 1-100 |
 
 !!! note "Snapshot quorum"
@@ -144,11 +144,11 @@ The following 10 parameters can be modified via `ParameterChange` proposals:
 | Parameter | Default | Min | Max | Description |
 |-----------|---------|-----|-----|-------------|
 | `min_fee_sats` | 10,000 | 1 | 100,000,000 | Minimum transaction fee |
-| `min_stake_to_propose` | 50,000 UDAG | 0 | 1,000,000 UDAG | Minimum stake for proposal creation |
+| `min_stake_to_propose` | 10,000 UDAG | 1 sat | 1,000,000 UDAG | Minimum stake for proposal creation |
 | `quorum_numerator` | 10 | 5 | 100 | Quorum percentage |
 | `approval_numerator` | 66 | 51 | 100 | Supermajority percentage |
 | `voting_period_rounds` | 120,960 | 1,000 | 1,000,000 | Voting period length |
-| `execution_delay_rounds` | 2,016 | 100 | 100,000 | Delay before execution |
+| `execution_delay_rounds` | 2,016 | 2,016 | 100,000 | Delay before execution |
 | `max_active_proposals` | 20 | 1 | 100 | Concurrent proposal limit |
 | `observer_reward_percent` | 20 | 0 | 100 | Passive staking reward rate |
 | `council_emission_percent` | 10 | 0 | 30 | Council's share of emission |
@@ -231,7 +231,7 @@ curl http://localhost:10333/governance/config
 ```json
 {
   "min_fee_sats": 10000,
-  "min_stake_to_propose": 5000000000000,
+  "min_stake_to_propose": 1000000000000,
   "quorum_numerator": 10,
   "approval_numerator": 66,
   "voting_period_rounds": 120960,

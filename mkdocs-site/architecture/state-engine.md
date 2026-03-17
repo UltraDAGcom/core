@@ -44,8 +44,9 @@ Validators have an additional stake account:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `staked_amount` | `u64` | Amount staked in sats |
-| `commission_percent` | `u8` | Delegation commission (0-100%) |
+| `staked` | `u64` | Amount staked in sats |
+| `unlock_at_round` | `Option<u64>` | Set when unstake is initiated |
+| `commission_percent` | `u8` | Delegation commission (0-100%, default 10) |
 
 ### Delegation Accounts
 
@@ -53,7 +54,7 @@ Delegators have delegation records:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `amount` | `u64` | Amount delegated in sats |
+| `delegated_amount` | `u64` | Amount delegated in sats |
 | `validator` | `Address` | Target validator address |
 | `unlock_at_round` | `Option<u64>` | Set when undelegate is initiated |
 
@@ -104,7 +105,7 @@ Before processing transactions, the protocol executes per-round actions:
 5. **Governance execution**: execute any proposals past their execution delay
 
 !!! note "Per-round, not per-vertex"
-    Rewards are minted once per round, not once per vertex. If multiple vertices are finalized in the same round, the protocol actions execute only for the first vertex in deterministic order.
+    Rewards are minted once per round, not once per vertex. `distribute_round_rewards()` runs once per finalized round at the round boundary in `apply_finalized_vertices()`, collecting all vertex producers for that round first, then distributing rewards proportionally to all stakers.
 
 ### 2. Transaction Validation
 
@@ -128,7 +129,7 @@ Validated transactions are applied atomically:
 | **Delegate** | Move from balance to delegated, create DelegationAccount |
 | **Undelegate** | Begin cooldown, set unlock_at_round |
 | **SetCommission** | Update commission_percent on StakeAccount |
-| **CreateProposal** | Create governance proposal, deduct deposit |
+| **CreateProposal** | Create governance proposal, collect fee, increment nonce |
 | **Vote** | Record vote on proposal |
 
 ### 4. Invariant Check
@@ -154,13 +155,14 @@ UltraDAG uses [redb](https://docs.rs/redb) as its embedded ACID database. redb p
 
 | Table | Key | Value | Purpose |
 |-------|-----|-------|---------|
-| `accounts` | `Address` | `(balance, nonce)` | Account balances |
-| `stakes` | `Address` | `StakeAccount` | Validator stake records |
-| `delegations` | `(delegator, validator)` | `DelegationAccount` | Delegation records |
-| `proposals` | `u64` | `Proposal` | Governance proposals |
-| `votes` | `(proposal_id, address)` | `Vote` | Governance votes |
-| `metadata` | `String` | `Vec<u8>` | Total supply, latest round, state root |
-| `checkpoints` | `u64` | `Checkpoint` | Checkpoint snapshots |
+| `accounts` | `[u8; 32]` | `(u64, u64)` | Account balances (balance, nonce) |
+| `stakes_v2` | `[u8; 32]` | `&[u8]` (postcard) | Validator stake records (includes commission_percent) |
+| `delegations` | `[u8; 32]` | `&[u8]` (postcard) | Delegation records (keyed by delegator address) |
+| `proposals` | `u64` | `&[u8]` | Governance proposals |
+| `votes` | `&[u8]` | `u8` | Governance votes |
+| `metadata` | `&str` | `&[u8]` | Total supply, latest round, state root, configured_validator_count |
+| `active_validators` | `u64` | `&[u8; 32]` | Active validator set |
+| `council_members` | `[u8; 32]` | `&[u8]` | Council membership with seat category |
 
 ### Transaction Safety
 

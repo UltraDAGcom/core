@@ -16,7 +16,7 @@ UltraDAG has undergone extensive multi-pass auditing, resulting in 188+ bugs fou
 | Critical bugs fixed | 15+ |
 | High severity bugs fixed | 20+ |
 | Audit passes completed | 12+ |
-| Tests passing | 977 |
+| Tests passing | 836+ (core) + 64 (sim) |
 | Jepsen fault injection tests | 14 |
 | Unsafe Rust instances | 0 |
 | Cargo audit vulnerabilities | 0 |
@@ -169,10 +169,10 @@ UltraDAG achieves **100% safe Rust** — no `unsafe` blocks, no manual memory ma
 | Fault injection tests | 49 |
 | Jepsen fault injection | 14 |
 | Adversarial integration | 5 |
-| Simulation tests (ultradag-sim) | 19 |
+| Simulation tests (ultradag-sim) | 64 |
 | RPC tests | 25 |
 | SDK tests | 146 |
-| **Total** | **977+** |
+| **Total** | **1,000+** |
 
 ### Jepsen Fault Injection
 
@@ -189,7 +189,7 @@ UltraDAG achieves **100% safe Rust** — no `unsafe` blocks, no manual memory ma
 
 ### Simulation Harness
 
-19 deterministic simulation tests run real consensus logic with a virtual network:
+64 deterministic simulation tests run real consensus logic with a virtual network:
 
 - Base consensus convergence (100-1000 rounds)
 - Staking lifecycle with commission
@@ -225,7 +225,7 @@ See [Formal Verification](../technical/formal-verification.md) for full details.
 | Transport encryption | All P2P traffic encrypted (Noise protocol) |
 | Rate limiting | Per-IP, per-peer, per-endpoint |
 | Formal verification | 32.9M states, zero violations |
-| Test coverage | 977 tests passing |
+| Test coverage | 900+ tests passing (core + sim) |
 | Arithmetic safety | Saturating operations throughout |
 
 ---

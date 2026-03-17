@@ -30,11 +30,11 @@ title: UltraDAG — Lightweight DAG-BFT for IoT Micropayments
 
     Bitcoin-style fixed supply with halving every ~1.66 years. Sound money for machines.
 
--   **977 Tests Passing**
+-   **836 Tests Passing**
 
     ---
 
-    Comprehensive test suite including 14 Jepsen fault-injection tests and TLA+ formal verification over 32.6M states.
+    Comprehensive test suite including 14 Jepsen fault-injection tests and TLA+ formal verification over 32.6 million states.
 
 </div>
 
@@ -52,7 +52,7 @@ Automatic pruning keeps node storage bounded at ~1000 rounds of DAG history. New
 The entire node compiles to a sub-2 MB binary with minimal dependencies. Ed25519 signatures and Blake3 hashing keep CPU overhead low. The Noise protocol encrypts all P2P traffic with forward secrecy — critical for untrusted network environments.
 
 ### Formally Verified
-The consensus protocol is specified in TLA+ and model-checked across 32.9 million states with zero invariant violations. Six safety properties are verified including BFT safety, equivocation detection, and round monotonicity.
+The consensus protocol is specified in TLA+ and model-checked across 32.6 million states with zero invariant violations. Six safety properties are verified including BFT safety, equivocation detection, and round monotonicity.
 
 ---
 
@@ -116,11 +116,11 @@ Four additional SDKs are available for [Python, JavaScript, Go, and Rust](api/sd
 
 ## Contributing
 
-UltraDAG is open source under the MIT license. Contributions are welcome:
+UltraDAG is open source under the BUSL-1.1 (Business Source License). Contributions are welcome:
 
 1. Fork the [repository](https://github.com/UltraDAGcom/core)
 2. Create a feature branch
-3. Ensure all 977 tests pass: `cargo test --workspace`
+3. Ensure all 836 tests pass: `cargo test --workspace`
 4. Submit a pull request
 
 See the [Bug Bounty](security/bug-bounty.md) program for security-related contributions.

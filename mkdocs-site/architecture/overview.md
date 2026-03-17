@@ -41,7 +41,6 @@ graph TB
         State[StateEngine]
         Mempool[Mempool]
         Validator[ValidatorSet]
-        Governance[GovernanceEngine]
     end
 
     subgraph "ultradag-sim (testing)"
@@ -65,7 +64,6 @@ graph TB
     DAG --> Finality
     Finality --> State
     State --> Validator
-    State --> Governance
     VNet --> DAG
     SDK --> RPC
 ```
@@ -136,13 +134,15 @@ sequenceDiagram
 
 The fundamental unit of the DAG. Each vertex contains:
 
-- `author`: Ed25519 public key of the producing validator
-- `round`: monotonically increasing round number
-- `parents`: set of parent vertex hashes (up to `MAX_PARENTS=64`)
-- `transactions`: batch of transactions included in this vertex
-- `timestamp`: wall-clock time (informational, not consensus-critical)
-- `signature`: Ed25519 signature over the vertex content
-- `hash`: Blake3 hash serving as the vertex identifier
+- `validator: Address`: address of the producing validator
+- `pub_key: [u8; 32]`: Ed25519 public key of the producing validator
+- `round: u64`: monotonically increasing round number
+- `parent_hashes: Vec<[u8; 32]>`: parent vertex hashes (up to `MAX_PARENTS=64`)
+- `block: Block`: contains the coinbase transaction and a list of user transactions
+- `timestamp: u64`: wall-clock time (informational, not consensus-critical)
+- `signature: Signature`: Ed25519 signature over the vertex content
+
+The vertex hash is not stored as a field — it is computed via `DagVertex::hash()` using Blake3.
 
 ### BlockDag
 
@@ -154,7 +154,7 @@ The in-memory DAG structure. Holds vertices from the current window (after pruni
 
 ### FinalityTracker
 
-Determines when vertices achieve BFT finality. Uses `BitVec` for O(1) per-vertex coverage tracking. A vertex is finalized when validators holding >2/3 of total stake have it as an ancestor.
+Determines when vertices achieve BFT finality. Uses `BitVec` for O(1) per-vertex coverage tracking. A vertex is finalized when more than 2/3 of known validators (by count, not stake) have it as an ancestor. The BFT threshold is `ceil(2n/3)` by validator count.
 
 ### StateEngine
 
@@ -179,33 +179,48 @@ ultradag/
 ├── crates/
 │   ├── ultradag-coin/       # Consensus, state, tokenomics
 │   │   ├── src/
-│   │   │   ├── dag/         # BlockDag, DagVertex, parent selection
-│   │   │   ├── finality/    # FinalityTracker, BitVec coverage
-│   │   │   ├── state/       # StateEngine, accounts, persistence
-│   │   │   ├── staking/     # Stake, delegation, epochs
-│   │   │   ├── governance/  # Council, proposals, voting
-│   │   │   ├── mempool/     # Transaction pool
-│   │   │   ├── types/       # Shared types, crypto primitives
+│   │   │   ├── address/     # Address type, derivation
+│   │   │   ├── block/       # Block, BlockHeader, merkle root
+│   │   │   ├── block_producer/ # Block/vertex creation
+│   │   │   ├── consensus/   # dag.rs, finality.rs, vertex.rs, ordering.rs, checkpoint.rs, epoch.rs, validator_set.rs, persistence.rs
+│   │   │   ├── governance/  # Council, proposals, voting, params
+│   │   │   ├── persistence/ # redb persistence (db.rs)
+│   │   │   ├── state/       # StateEngine (engine.rs)
+│   │   │   ├── tx/          # Transaction types, mempool
+│   │   │   ├── constants.rs # All protocol constants
+│   │   │   ├── error.rs     # CoinError type
 │   │   │   └── lib.rs
 │   │   └── Cargo.toml
 │   ├── ultradag-network/    # P2P, Noise, sync
 │   │   ├── src/
-│   │   │   ├── transport/   # TCP + Noise encryption
-│   │   │   ├── sync/        # DAG sync, checkpoint sync
-│   │   │   ├── messages/    # Wire protocol types
-│   │   │   ├── rate_limit/  # Per-peer rate limiting
+│   │   │   ├── node/        # server.rs (NodeServer, P2P handlers)
+│   │   │   ├── peer/        # connection.rs, noise.rs, registry.rs
+│   │   │   ├── protocol/    # message.rs (wire protocol types)
+│   │   │   ├── bootstrap.rs # Testnet bootstrap nodes
+│   │   │   ├── metrics.rs   # Checkpoint metrics
 │   │   │   └── lib.rs
 │   │   └── Cargo.toml
 │   ├── ultradag-node/       # Binary, CLI, RPC
 │   │   ├── src/
-│   │   │   ├── rpc/         # HTTP API handlers
-│   │   │   ├── cli/         # Argument parsing
-│   │   │   └── main.rs
+│   │   │   ├── bin/         # loadtest.rs
+│   │   │   ├── main.rs      # CLI parsing, node init, shutdown
+│   │   │   ├── rpc.rs       # HTTP API handlers
+│   │   │   ├── rate_limit.rs # RPC rate limiting
+│   │   │   ├── validator.rs # Validator loop
+│   │   │   └── lib.rs
 │   │   └── Cargo.toml
 │   ├── ultradag-sim/        # Simulation harness
 │   │   ├── src/
-│   │   │   ├── network/     # VirtualNetwork
-│   │   │   ├── byzantine/   # Byzantine strategies
+│   │   │   ├── p2p/         # Virtual P2P network
+│   │   │   ├── byzantine.rs # Byzantine strategies
+│   │   │   ├── fuzz.rs      # Fuzz testing
+│   │   │   ├── harness.rs   # Test harness
+│   │   │   ├── invariants.rs # Invariant checking
+│   │   │   ├── network.rs   # VirtualNetwork
+│   │   │   ├── oracle.rs    # Test oracle
+│   │   │   ├── properties.rs # Property-based tests
+│   │   │   ├── txgen.rs     # Transaction generation
+│   │   │   ├── validator.rs # Simulated validator
 │   │   │   └── lib.rs
 │   │   └── Cargo.toml
 │   └── ultradag-sdk/        # Rust SDK
@@ -233,7 +248,7 @@ UltraDAG follows strict code organization conventions:
 - **Inline unit tests** — every module has `#[cfg(test)]` tests
 - **Integration tests** — cross-module tests live in `tests/`
 - **No unsafe code** — zero instances of `unsafe` in the entire codebase
-- **Comprehensive testing** — 977 tests across all crates
+- **Comprehensive testing** — 836 tests across the core workspace
 
 ---
 

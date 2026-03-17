@@ -74,11 +74,12 @@ At genesis (round 0), the following allocations are made:
 | Allocation | Amount | Percentage | Purpose |
 |-----------|--------|------------|---------|
 | Dev fund | 1,050,000 UDAG | 5% | Protocol development and maintenance |
+| Treasury | 2,100,000 UDAG | 10% | DAO-controlled via TreasurySpend proposals |
 | Faucet | 1,000,000 UDAG | ~4.76% | Testnet distribution only |
-| **Total genesis** | **2,050,000 UDAG** | **~9.76%** | |
+| **Total genesis** | **4,150,000 UDAG** | **~19.76%** | |
 
 !!! note "Testnet-only faucet"
-    The 1,000,000 UDAG faucet allocation exists only on testnet. On mainnet, the genesis allocation is limited to the 1,050,000 UDAG dev fund. The faucet address and its balance do not exist in the mainnet genesis state.
+    The 1,000,000 UDAG faucet allocation exists only on testnet. On mainnet, the genesis allocation is the 1,050,000 UDAG dev fund plus the 2,100,000 UDAG treasury (3,150,000 UDAG total). The faucet address and its balance do not exist in the mainnet genesis state.
 
 ---
 
@@ -90,8 +91,8 @@ Each round, newly minted UDAG is distributed as follows:
 
 ```mermaid
 graph TD
-    M[Minted Reward] --> V[Validator Pool: 90%]
-    M --> C[Council Pool: 10%]
+    M[Minted Reward] --> V[Validator Pool]
+    M --> C[Council Pool: council_emission_percent]
 
     V --> A1[Active Validator 1]
     V --> A2[Active Validator 2]
@@ -103,13 +104,13 @@ graph TD
 
 ### Validator Rewards
 
-90% of the round reward (default, governable 70-100%) is distributed to validators:
+The remainder after council emission (default 10%, governable 0-30%) is distributed to validators:
 
 - **Active validators** (producing vertices): receive rewards proportional to effective stake
 - **Passive stakers** (staked but not in top 21): receive 20% of what an equivalent active validator would earn
 
 $$
-\text{validator\_reward}_i = \text{round\_reward} \times 0.9 \times \frac{\text{effective\_stake}_i}{\sum \text{effective\_stakes}}
+\text{validator\_reward}_i = \text{round\_reward} \times (1 - \frac{\text{council\_emission\_percent}}{100}) \times \frac{\text{effective\_stake}_i}{\sum \text{effective\_stakes}}
 $$
 
 ### Council Rewards
@@ -134,8 +135,8 @@ The distribution sequence each round:
 1. Calculate the current era's reward: `reward = initial_reward >> (round / halving_interval)`
 2. Cap at remaining supply: `reward = min(reward, MAX_SUPPLY - total_supply)`
 3. Mint `reward` sats into existence (increment `total_supply`)
-4. Distribute 90% to validator pool (proportional to effective stake)
-5. Distribute 10% to council pool (equal per seat)
+4. Distribute `(100 - council_emission_percent)%` to validator pool (proportional to effective stake)
+5. Distribute `council_emission_percent%` to council pool (equal per seat)
 6. Verify supply invariant
 
 ---
@@ -147,14 +148,12 @@ Transaction fees are **not** part of the emission — they come from existing ci
 | Aspect | Behavior |
 |--------|----------|
 | Fee collection | Fees are collected from the transaction sender |
-| Fee destination | Fees go to the block reward pool for the round |
-| Coinbase | Fees are added to the round's reward distribution |
+| Fee destination | Fees go to the vertex producer via deferred coinbase (collected from successful txs only) |
+| Coinbase | Vertex coinbase contains collected fees only (no minted reward) |
 | Fee-exempt operations | Stake, Unstake, Delegate, Undelegate, SetCommission |
 | Minimum fee | 10,000 sats (0.0001 UDAG) for non-exempt transactions |
 
-$$
-\text{total\_round\_distribution} = \text{minted\_reward} + \text{collected\_fees}
-$$
+Minted rewards are distributed separately via `distribute_round_rewards()`. Fees are included in the vertex producer's coinbase independently.
 
 ---
 

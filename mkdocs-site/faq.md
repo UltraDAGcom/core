@@ -26,7 +26,7 @@ Not exactly. UltraDAG uses a **Directed Acyclic Graph** (DAG) instead of a linea
 
 ### Is UltraDAG open source?
 
-Yes. The full codebase is available at [github.com/UltraDAGcom/core](https://github.com/UltraDAGcom/core) under the MIT license.
+Yes. The full codebase is available at [github.com/UltraDAGcom/core](https://github.com/UltraDAGcom/core) under the BUSL-1.1 license.
 
 ---
 

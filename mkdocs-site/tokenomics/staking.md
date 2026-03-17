@@ -36,9 +36,8 @@ To become a validator:
 curl -X POST http://localhost:10333/stake \
   -H "Content-Type: application/json" \
   -d '{
-    "from": "YOUR_ADDRESS",
-    "amount": 1000000000000,
-    "private_key": "YOUR_PRIVATE_KEY"
+    "secret_key": "YOUR_SECRET_KEY",
+    "amount": 1000000000000
   }'
 ```
 
@@ -51,7 +50,7 @@ The active validator set is determined at each **epoch boundary** (every 210,000
 
 1. All staked addresses are ranked by **effective stake** (own stake + delegations)
 2. The top 21 become active validators for the next epoch
-3. Ties are broken by address hash (deterministic)
+3. Ties are broken by address bytes ascending (deterministic)
 
 ```mermaid
 graph TD
@@ -130,10 +129,9 @@ Token holders who don't want to run a validator can **delegate** their UDAG to a
 curl -X POST http://localhost:10333/delegate \
   -H "Content-Type: application/json" \
   -d '{
-    "from": "DELEGATOR_ADDRESS",
+    "secret_key": "DELEGATOR_SECRET_KEY",
     "validator": "VALIDATOR_ADDRESS",
-    "amount": 10000000000,
-    "private_key": "DELEGATOR_PRIVATE_KEY"
+    "amount": 10000000000
   }'
 ```
 
@@ -142,8 +140,8 @@ curl -X POST http://localhost:10333/delegate \
 | Parameter | Value |
 |-----------|-------|
 | Minimum delegation | 100 UDAG (10,000,000,000 sats) |
-| Maximum delegations per address | Unlimited |
-| Delegation to multiple validators | Supported |
+| Delegations per address | 1 (one active delegation at a time) |
+| Delegation to multiple validators | Not supported (use multiple wallets) |
 | Re-delegation | Undelegate + Delegate (cooldown applies) |
 
 ### Commission
@@ -178,9 +176,8 @@ $$
 curl -X POST http://localhost:10333/set-commission \
   -H "Content-Type: application/json" \
   -d '{
-    "from": "VALIDATOR_ADDRESS",
-    "commission_percent": 15,
-    "private_key": "VALIDATOR_PRIVATE_KEY"
+    "secret_key": "VALIDATOR_SECRET_KEY",
+    "commission_percent": 15
   }'
 ```
 
@@ -214,23 +211,18 @@ Both unstaking and undelegating have a **2,016 round cooldown** (~2.8 hours at 5
 4. After cooldown expires: funds automatically return to liquid balance
 
 ```bash
-# Unstake
+# Unstake (unstakes everything, no amount field)
 curl -X POST http://localhost:10333/unstake \
   -H "Content-Type: application/json" \
   -d '{
-    "from": "VALIDATOR_ADDRESS",
-    "amount": 500000000000,
-    "private_key": "VALIDATOR_PRIVATE_KEY"
+    "secret_key": "VALIDATOR_SECRET_KEY"
   }'
 
-# Undelegate
+# Undelegate (undelegates everything, no amount or validator field)
 curl -X POST http://localhost:10333/undelegate \
   -H "Content-Type: application/json" \
   -d '{
-    "from": "DELEGATOR_ADDRESS",
-    "validator": "VALIDATOR_ADDRESS",
-    "amount": 5000000000,
-    "private_key": "DELEGATOR_PRIVATE_KEY"
+    "secret_key": "DELEGATOR_SECRET_KEY"
   }'
 ```
 
@@ -266,7 +258,7 @@ $$
 - All slashed amounts are burned (deflationary)
 
 !!! danger "Delegation risk"
-    Delegating to a validator exposes you to slashing risk. Choose validators carefully based on their track record, infrastructure reliability, and operational practices. Diversifying delegations across multiple validators reduces risk.
+    Delegating to a validator exposes you to slashing risk. Choose validators carefully based on their track record, infrastructure reliability, and operational practices. Each address can only delegate to one validator — use multiple wallets to diversify across validators.
 
 ### Slash Detection
 

@@ -20,19 +20,15 @@ curl http://localhost:10333/status
 
 ```json
 {
-  "round": 1542,
-  "finalized_round": 1540,
+  "dag_round": 1542,
+  "last_finalized_round": 1540,
   "peers": 4,
-  "validator": true,
-  "address": "a1b2c3d4...",
   "total_supply": 1050154200000000,
   "total_supply_udag": 10501542.0,
   "total_staked": 50000000000000,
   "active_stakers": 5,
   "mempool_size": 3,
-  "dag_vertices": 7710,
-  "dag_round": 1542,
-  "version": "0.1.0"
+  "dag_vertices": 7710
 }
 ```
 
@@ -104,8 +100,7 @@ curl http://localhost:10333/keygen
 ```json
 {
   "address": "e7f8a9b0c1d2...",
-  "public_key": "3a4b5c6d7e8f...",
-  "private_key": "9f8e7d6c5b4a...",
+  "secret_key": "9f8e7d6c5b4a...",
   "warning": "TESTNET ONLY"
 }
 ```
@@ -264,7 +259,7 @@ curl http://localhost:10333/stake/a1b2c3d4...
   "commission_percent": 10,
   "effective_stake": 1500000000000,
   "delegator_count": 3,
-  "is_active": true
+  "is_active_validator": true
 }
 ```
 
@@ -393,7 +388,7 @@ curl -X POST http://localhost:10333/vote \
   -d '{
     "secret_key": "9f8e7d6c...",
     "proposal_id": 1,
-    "approve": true,
+    "vote": true,
     "fee": 10000
   }'
 ```
@@ -528,7 +523,7 @@ curl http://localhost:10333/metrics/json
 
 | Endpoint | Limit | Window |
 |----------|-------|--------|
-| `/tx` | 10 | per minute |
+| `/tx` | 100 | per minute |
 | `/faucet` | 1 | per 10 minutes |
 | `/stake` | 5 | per minute |
 | `/unstake` | 5 | per minute |
@@ -538,7 +533,7 @@ curl http://localhost:10333/metrics/json
 | `/proposal` | 5 | per minute |
 | `/vote` | 10 | per minute |
 | `/keygen` | 10 | per minute |
-| Global | 100 | per minute |
+| Global | 1000 | per minute |
 
 Rate limits are applied per client IP. Behind a reverse proxy (e.g., Fly.io), the real client IP is extracted from `Fly-Client-IP` or `X-Forwarded-For` headers (trusted proxies only).
 
@@ -546,7 +541,7 @@ Rate limits are applied per client IP. Behind a reverse proxy (e.g., Fly.io), th
 
 ## Testnet-Gated Endpoints
 
-The following 7 endpoints accept private keys in the request body and are **disabled in mainnet mode** (`--testnet false`). They return HTTP 410 GONE with a message directing users to `/tx/submit`:
+The following 10 endpoints accept private keys in the request body and are **disabled in mainnet mode** (`--testnet false`). They return HTTP 410 GONE with a message directing users to `/tx/submit`:
 
 | Endpoint | Mainnet Alternative |
 |----------|-------------------|
@@ -555,6 +550,9 @@ The following 7 endpoints accept private keys in the request body and are **disa
 | `/unstake` | `/tx/submit` (pre-signed UnstakeTx) |
 | `/delegate` | `/tx/submit` (pre-signed DelegateTx) |
 | `/undelegate` | `/tx/submit` (pre-signed UndelegateTx) |
+| `/set-commission` | `/tx/submit` (pre-signed SetCommissionTx) |
+| `/proposal` | `/tx/submit` (pre-signed CreateProposalTx) |
+| `/vote` | `/tx/submit` (pre-signed VoteTx) |
 | `/faucet` | N/A (no faucet on mainnet) |
 | `/keygen` | Client-side via [SDK](sdks.md) |
 

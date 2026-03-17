@@ -52,7 +52,7 @@ services:
       --port 9333
       --validate
       --validators 4
-      --seed 1
+      --no-bootstrap
       --data-dir /data
       --testnet
     ports:
@@ -69,7 +69,7 @@ services:
       --port 9333
       --validate
       --validators 4
-      --seed 2
+      --seed node1:9333
       --data-dir /data
       --testnet
     ports:
@@ -86,7 +86,7 @@ services:
       --port 9333
       --validate
       --validators 4
-      --seed 3
+      --seed node1:9333
       --data-dir /data
       --testnet
     ports:
@@ -103,7 +103,7 @@ services:
       --port 9333
       --validate
       --validators 4
-      --seed 4
+      --seed node1:9333
       --data-dir /data
       --testnet
     ports:
@@ -155,7 +155,7 @@ Configure node behavior through environment variables:
 | `RPC_PORT` | P2P + 1000 | RPC server port |
 | `DATA_DIR` | `./data` | State persistence directory |
 | `VALIDATORS` | `1` | Expected validator count (for deterministic genesis) |
-| `SEED` | random | Deterministic keypair seed (testing only) |
+| `SEED` | (none) | Seed peer address (`host:port`) to connect to on startup |
 | `CLEAN_STATE` | `false` | Delete existing state on startup |
 
 !!! tip "Log levels"
@@ -202,23 +202,21 @@ cd core
 docker build -t ultradag-node .
 ```
 
-The Dockerfile uses a multi-stage build:
+The Dockerfile downloads a pre-built binary from GitHub Releases (built by CI on every push to `main`):
 
 ```dockerfile title="Dockerfile"
-# Build stage
-FROM rust:1.75-slim AS builder
-WORKDIR /build
-COPY . .
-RUN cargo build --release -p ultradag-node
-
-# Runtime stage
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /build/target/release/ultradag-node /usr/local/bin/
+RUN apt-get update && apt-get install -y ca-certificates curl && rm -rf /var/lib/apt/lists/*
+
+# Download pre-built binary from GitHub Releases
+RUN curl -L -o /usr/local/bin/ultradag-node \
+    https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node && \
+    chmod +x /usr/local/bin/ultradag-node
+
 ENTRYPOINT ["ultradag-node"]
 ```
 
-The resulting image is minimal — the runtime stage contains only the < 2 MB binary plus base system libraries.
+The resulting image is minimal — it contains only the < 2 MB binary plus base system libraries. Deployment takes ~60 seconds per node (vs 15+ minutes with source compilation).
 
 ---
 
@@ -303,7 +301,7 @@ docker run --network ultradag-net ...
 UltraDAG is designed to run within 128-512 MB. If memory grows beyond this:
 
 1. Check `RUST_LOG` — `trace` level can cause memory growth from log buffering
-2. Ensure pruning is not disabled (`--pruning-depth 0` disables pruning)
+2. Ensure pruning is not disabled (use `--archive` to disable pruning; note that `--pruning-depth 0` is rejected)
 3. Check for stuck checkpoint sync with `/health/detailed`
 
 ---

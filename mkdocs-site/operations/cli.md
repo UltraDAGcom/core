@@ -31,7 +31,7 @@ ultradag-node [FLAGS] [OPTIONS]
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--validate` | `false` | Enable validator mode. The node will produce DAG vertices each round. |
+| `--validate` | `true` | Enable validator mode. The node will produce DAG vertices each round. Set to `false` for observer mode. |
 | `--pkey <HEX>` | (none) | Validator private key as a 64-character hex string. Takes priority over key file. |
 | `--validator-key <FILE>` | (none) | Path to a file containing trusted validator addresses (one per line). Only listed addresses count toward quorum and finality. |
 | `--validators <N>` | auto | Fix the expected validator count for quorum calculation. Prevents phantom validator inflation. Must be >= 1. |

@@ -13,7 +13,7 @@ UltraDAG provides 4 official SDKs for interacting with the network. All SDKs sup
 | SDK | Language | Install | Tests |
 |-----|----------|---------|-------|
 | Python | Python 3.8+ | `pip install ultradag` | 41 |
-| JavaScript | Node.js / Browser | `npm install @ultradag/sdk` | 55 |
+| JavaScript | Node.js / Browser | `npm install ultradag` | 55 |
 | Rust | Rust 1.70+ | `cargo add ultradag-sdk` | 14 |
 | Go | Go 1.21+ | `go get github.com/ultradag/sdk-go/ultradag` | 36 |
 
@@ -112,7 +112,7 @@ python -m pytest tests/ -v
 ### Installation
 
 ```bash
-npm install @ultradag/sdk
+npm install ultradag
 ```
 
 Dependencies: `@noble/ed25519` (signatures), `blake3` (hashing).
@@ -120,7 +120,7 @@ Dependencies: `@noble/ed25519` (signatures), `blake3` (hashing).
 ### Quick Start
 
 ```javascript
-import { UltraDagClient, Keypair } from '@ultradag/sdk';
+import { UltraDagClient, Keypair } from 'ultradag';
 
 // Connect to a node
 const client = new UltraDagClient('https://ultradag-node-1.fly.dev');
@@ -154,7 +154,7 @@ console.log(`Transfer tx: ${txHash}`);
 ### Client-Side Signing (Mainnet)
 
 ```javascript
-import { Keypair, TransferTx } from '@ultradag/sdk';
+import { Keypair, TransferTx } from 'ultradag';
 
 const keypair = Keypair.fromSecretKey('your_secret_key_hex');
 

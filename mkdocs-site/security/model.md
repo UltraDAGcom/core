@@ -150,7 +150,7 @@ This is verified after **every state transition** in release builds (not just de
 | `/faucet` | 1 | per 10 minutes |
 | `/stake`, `/unstake` | 5 each | per minute |
 | `/delegate`, `/undelegate` | 5 each | per minute |
-| Global | 100 | per minute |
+| Global | 1,000 | per minute |
 
 ### Per-Peer P2P Limits
 

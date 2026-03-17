@@ -162,7 +162,7 @@ sequenceDiagram
 | Field | Purpose |
 |-------|---------|
 | `checkpoint` | The signed checkpoint |
-| `suffix_vertices` | Recent DAG vertices since the checkpoint (max 600) |
+| `suffix_vertices` | Recent DAG vertices since the checkpoint (max 500) |
 | `state_at_checkpoint` | Full state snapshot at checkpoint time |
 | `checkpoint_chain` | Full chain of checkpoints back to genesis |
 

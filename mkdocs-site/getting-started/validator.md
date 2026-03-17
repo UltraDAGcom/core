@@ -32,8 +32,7 @@ curl http://localhost:10333/keygen
 ```json
 {
   "address": "e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8",
-  "public_key": "3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b",
-  "private_key": "9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a39281706f5e4d3c2b1a0"
+  "secret_key": "9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a39281706f5e4d3c2b1a0"
 }
 ```
 
@@ -54,14 +53,14 @@ chmod 600 validator.key
 On the testnet, use the faucet to get initial funds:
 
 ```bash
-curl -X POST http://localhost:10333/faucet -H "Content-Type: application/json" -d '{"address":"e7f8a9b0c1d2...","amount":100000000}'
+curl -X POST http://localhost:10333/faucet -H "Content-Type: application/json" -d '{"address":"e7f8a9b0c1d2...","amount":10000000000}'
 ```
 
 ```json
 {
   "tx_hash": "abc123...",
-  "amount": 100000000000,
-  "message": "Sent 1000 UDAG to e7f8a9b0c1d2..."
+  "amount": 10000000000,
+  "message": "Sent 100 UDAG to e7f8a9b0c1d2..."
 }
 ```
 
@@ -84,18 +83,7 @@ cargo run --release -p ultradag-node -- \
   --port 9333 \
   --validate \
   --pkey 9f8e7d6c5b4a... \
-  --auto-stake \
-  --testnet
-```
-
-Or using the key file:
-
-```bash
-cargo run --release -p ultradag-node -- \
-  --port 9333 \
-  --validate \
-  --validator-key validator.key \
-  --auto-stake \
+  --auto-stake 10000 \
   --testnet
 ```
 
@@ -104,13 +92,13 @@ cargo run --release -p ultradag-node -- \
 | Flag | Purpose |
 |------|---------|
 | `--validate` | Enable validator mode (produce vertices) |
-| `--pkey` | Provide private key directly (alternative to `--validator-key`) |
-| `--validator-key` | Path to file containing private key |
-| `--auto-stake` | Automatically stake all available balance on startup |
+| `--pkey` | Provide private key directly (64-char hex Ed25519 secret key) |
+| `--validator-key` | Path to **allowlist file** of trusted validator addresses (one address per line). Only listed validators count toward quorum/finality. |
+| `--auto-stake <UDAG>` | Automatically stake the specified amount of UDAG on startup (e.g., `--auto-stake 10000`) |
 | `--testnet` | Connect to testnet (enables faucet and testnet endpoints) |
 
 !!! tip "Key priority"
-    If both `--pkey` and `--validator-key` are provided, `--pkey` takes precedence. If neither is provided, a new keypair is generated automatically.
+    `--pkey` takes priority over a key file on disk (`validator.key`). If neither is provided, a new keypair is generated automatically. Note: `--validator-key` is NOT a private key file -- it is the permissioned validator allowlist.
 
 ---
 
@@ -129,7 +117,7 @@ curl http://localhost:10333/stake/e7f8a9b0c1d2...
   "commission_percent": 10,
   "effective_stake": 1000000000000,
   "delegator_count": 0,
-  "is_active": true
+  "is_active_validator": true
 }
 ```
 
@@ -146,7 +134,7 @@ curl http://localhost:10333/validators
       "address": "e7f8a9b0c1d2...",
       "effective_stake": 1000000000000,
       "commission_percent": 10,
-      "is_active": true
+      "is_active_validator": true
     }
   ],
   "total_staked": 1000000000000,
@@ -167,9 +155,8 @@ If you prefer to stake manually rather than using `--auto-stake`:
 curl -X POST http://localhost:10333/stake \
   -H "Content-Type: application/json" \
   -d '{
-    "from": "e7f8a9b0c1d2...",
-    "amount": 1000000000000,
-    "private_key": "9f8e7d6c5b4a..."
+    "secret_key": "9f8e7d6c5b4a...",
+    "amount": 1000000000000
   }'
 ```
 
@@ -187,9 +174,7 @@ curl -X POST http://localhost:10333/stake \
 curl -X POST http://localhost:10333/unstake \
   -H "Content-Type: application/json" \
   -d '{
-    "from": "e7f8a9b0c1d2...",
-    "amount": 500000000000,
-    "private_key": "9f8e7d6c5b4a..."
+    "secret_key": "9f8e7d6c5b4a..."
   }'
 ```
 
@@ -265,9 +250,8 @@ As a validator, you earn commission on delegated stake:
 curl -X POST http://localhost:10333/set-commission \
   -H "Content-Type: application/json" \
   -d '{
-    "from": "e7f8a9b0c1d2...",
-    "commission_percent": 15,
-    "private_key": "9f8e7d6c5b4a..."
+    "secret_key": "9f8e7d6c5b4a...",
+    "commission_percent": 15
   }'
 ```
 

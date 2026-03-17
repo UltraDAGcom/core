@@ -36,18 +36,19 @@ Each vertex in the DAG contains:
 
 ```rust
 struct DagVertex {
-    author: PublicKey,       // Ed25519 public key of the producer
-    round: u64,              // Monotonically increasing round number
-    parents: Vec<Hash>,      // Parent vertex hashes (up to MAX_PARENTS)
-    transactions: Vec<Transaction>,  // Batch of transactions
-    timestamp: u64,          // Unix timestamp (informational)
-    signature: Signature,    // Ed25519 signature over content
-    hash: Hash,              // Blake3(author || round || parents || txs || timestamp)
+    block: Block,                    // Contains coinbase + transactions
+    parent_hashes: Vec<[u8; 32]>,   // Parent vertex hashes (up to MAX_PARENTS)
+    round: u64,                      // Monotonically increasing round number
+    validator: Address,              // Address of the producing validator
+    pub_key: [u8; 32],              // Ed25519 public key of the producer
+    signature: Signature,            // Ed25519 signature over signable_bytes()
+    timestamp: u64,                  // Unix timestamp (informational)
+    topo_level: u64,                 // Computed on insert, not serialized
 }
 ```
 
 !!! note "Hash computation"
-    The vertex hash is computed as `blake3(author || round || sorted_parents || transactions || timestamp)`. Parents are sorted before hashing to ensure deterministic hash computation regardless of insertion order.
+    The vertex hash is **not stored** — it is computed via `DagVertex::hash()`. The `signable_bytes()` method produces `NETWORK_ID || b"vertex" || block.hash() || parent_hashes || round || validator`, and the hash is `blake3(signable_bytes())`.
 
 ---
 
@@ -76,7 +77,7 @@ The optimistic gate enables **responsive finality** — when the network is heal
 
 When producing a vertex for round $r+1$, the validator selects parents from round $r$ vertices:
 
-1. **Scoring**: each candidate parent is scored using `blake3(candidate_hash || author_key)`
+1. **Scoring**: each candidate parent is scored using `blake3(proposer || candidate_hash)`
 2. **Selection**: top `K_PARENTS` (default: 32) by score, capped at `MAX_PARENTS` (64)
 3. **Determinism**: the Blake3 scoring ensures all honest validators select similar parent sets
 
@@ -94,20 +95,20 @@ When producing a vertex for round $r+1$, the validator selects parents from roun
 
 ### Finality Condition
 
-A vertex $v$ from round $r$ is **finalized** when validators holding more than 2/3 of total stake have $v$ as an ancestor. Formally:
+A vertex $v$ from round $r$ is **finalized** when more than 2/3 of known validators (by count, not stake) have $v$ as an ancestor. The threshold is `ceil(2n/3)` where $n$ is the number of known validators. Formally:
 
 $$
-\text{finalized}(v) \iff \sum_{i : v \in \text{ancestors}(v_i)} \text{stake}_i > \frac{2}{3} \sum \text{stakes}
+\text{finalized}(v) \iff |\{i : v \in \text{ancestors}(v_i)\}| \geq \lceil 2n/3 \rceil
 $$
 
 ### Implementation: BitVec Coverage
 
-Tracking ancestry naively would require traversing the full DAG for each vertex. UltraDAG uses a `BitVec`-based optimization for O(1) amortized coverage checking:
+Tracking ancestry naively would require traversing the full DAG for each vertex. UltraDAG uses a `BitVec`-based optimization stored on `BlockDag.descendant_validators` (a `HashMap<Hash, BitVec>` with `ValidatorIndex` for `Address <-> usize` mapping) for O(1) amortized coverage checking:
 
-1. Each vertex maintains a `BitVec` of length $n$ (validator count)
+1. Each vertex has an associated `BitVec` of length $n$ (validator count), stored in `BlockDag.descendant_validators`
 2. When validator $i$ produces a vertex with $v$ as an ancestor, bit $i$ is set
-3. A vertex is finalized when the set bits represent >2/3 of total stake
-4. BitVec inheritance: a new vertex inherits the union of its parents' BitVecs
+3. A vertex is finalized when the count of set bits reaches `ceil(2n/3)` (checked via `count_ones()`)
+4. BitVec inheritance: when a new vertex is inserted, its parents' BitVecs are updated via BFS upward through ancestors
 
 This makes finality checking constant-time per vertex, regardless of DAG depth.
 
@@ -222,7 +223,7 @@ Pruning only removes vertices that are **deeply finalized** — finalized for at
 
 ### Pruning Process
 
-1. After each finalized round, check if any vertices fall below the pruning horizon
+1. Every 50 rounds in the validator loop, check if any vertices fall below the pruning horizon
 2. Remove eligible vertices from the in-memory `BlockDag`
 3. The `redb` state database retains the computed state — no data loss
 
@@ -241,7 +242,7 @@ Pruning only removes vertices that are **deeply finalized** — finalized for at
 | `PRUNING_HORIZON` | 1,000 rounds | Rounds before vertex pruning |
 | `EPOCH_LENGTH` | 210,000 rounds | Validator set recalculation interval |
 | `MAX_VALIDATORS` | 21 | Maximum active validators |
-| `BFT_THRESHOLD` | 2/3 | Finality threshold (>2/3 by stake) |
+| `BFT_THRESHOLD` | ceil(2n/3) | Finality threshold (>2/3 by validator count) |
 
 ---
 

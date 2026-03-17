@@ -87,15 +87,10 @@ For a more realistic setup, run a 4-node local testnet:
 # run-local-testnet.sh
 
 # Start 4 validator nodes
-for i in 1 2 3 4; do
-  PORT=$((9332 + i))
-  cargo run --release -p ultradag-node -- \
-    --port $PORT \
-    --validate \
-    --validators 4 \
-    --seed $i \
-    --testnet &
-done
+cargo run --release -p ultradag-node -- --port 9333 --validate --validators 4 --testnet &
+cargo run --release -p ultradag-node -- --port 9334 --validate --validators 4 --seed 127.0.0.1:9333 --testnet &
+cargo run --release -p ultradag-node -- --port 9335 --validate --validators 4 --seed 127.0.0.1:9333 --testnet &
+cargo run --release -p ultradag-node -- --port 9336 --validate --validators 4 --seed 127.0.0.1:9333 --testnet &
 
 echo "Testnet running. RPC ports: 10333, 10334, 10335, 10336"
 echo "Press Ctrl+C to stop all nodes"
@@ -109,8 +104,8 @@ chmod +x run-local-testnet.sh
 ./run-local-testnet.sh
 ```
 
-!!! info "Deterministic seeds"
-    The `--seed` flag generates deterministic keypairs for testing. Seed 1-4 will always produce the same addresses, making test scripts reproducible.
+!!! info "Seed peers"
+    The `--seed` flag specifies peer addresses (`host:port`) for the node to connect to on startup. The first node starts without `--seed` and subsequent nodes connect to it.
 
 ---
 
@@ -140,13 +135,10 @@ curl http://localhost:10333/status
 
 ```json
 {
-  "round": 42,
-  "finalized_round": 40,
+  "dag_round": 42,
+  "last_finalized_round": 40,
   "peers": 3,
-  "validator": true,
-  "address": "a1b2c3d4e5f6...",
-  "total_supply": 1050042000000000,
-  "version": "0.1.0"
+  "total_supply": 1050042000000000
 }
 ```
 
@@ -159,8 +151,7 @@ curl http://localhost:10333/keygen
 ```json
 {
   "address": "e7f8a9b0c1d2...",
-  "public_key": "3a4b5c6d7e8f...",
-  "private_key": "9f8e7d6c5b4a..."
+  "secret_key": "9f8e7d6c5b4a..."
 }
 ```
 
@@ -170,14 +161,14 @@ curl http://localhost:10333/keygen
 ### Get Testnet UDAG from Faucet
 
 ```bash
-curl -X POST http://localhost:10333/faucet -H "Content-Type: application/json" -d '{"address":"e7f8a9b0c1d2...","amount":100000000}'
+curl -X POST http://localhost:10333/faucet -H "Content-Type: application/json" -d '{"address":"e7f8a9b0c1d2...","amount":10000000000}'
 ```
 
 ```json
 {
   "tx_hash": "abc123...",
-  "amount": 100000000000,
-  "message": "Sent 1000 UDAG to e7f8a9b0c1d2..."
+  "amount": 10000000000,
+  "message": "Sent 100 UDAG to e7f8a9b0c1d2..."
 }
 ```
 
@@ -203,10 +194,10 @@ curl http://localhost:10333/balance/e7f8a9b0c1d2...
 curl -X POST http://localhost:10333/tx \
   -H "Content-Type: application/json" \
   -d '{
-    "from": "e7f8a9b0c1d2...",
+    "secret_key": "9f8e7d6c5b4a...",
     "to": "1a2b3c4d5e6f...",
     "amount": 50000000000,
-    "private_key": "9f8e7d6c5b4a..."
+    "fee": 10000
   }'
 ```
 
@@ -218,7 +209,7 @@ curl -X POST http://localhost:10333/tx \
 ```
 
 !!! note "Testnet signing"
-    The `/tx` endpoint accepts `private_key` for testnet convenience. For mainnet, sign transactions client-side and submit via `/tx/submit`. See [Transaction Format](../api/transactions.md).
+    The `/tx` endpoint accepts `secret_key` for testnet convenience. For mainnet, sign transactions client-side and submit via `/tx/submit`. See [Transaction Format](../api/transactions.md).
 
 ---
 
@@ -230,7 +221,7 @@ Verify everything works:
 cargo test --workspace
 ```
 
-This runs all 977 tests across the 5 crates, including consensus simulation, state engine invariants, and P2P protocol tests.
+This runs all 836 tests across the crates, including consensus simulation, state engine invariants, and P2P protocol tests.
 
 ---
 

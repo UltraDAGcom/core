@@ -17,7 +17,7 @@ UltraDAG supports 8 transaction types, all signed with Ed25519. This page specif
 | `Unstake` | `b"unstake"` | Begin unstaking cooldown | No |
 | `Delegate` | `b"delegate"` | Delegate UDAG to a validator | No |
 | `Undelegate` | `b"undelegate"` | Begin undelegation cooldown | No |
-| `SetCommission` | `b"setcommission"` | Set validator commission rate | No |
+| `SetCommission` | `b"set_commission"` | Set validator commission rate | No |
 | `CreateProposal` | `b"proposal"` | Create a governance proposal | Yes |
 | `Vote` | `b"vote"` | Vote on a governance proposal | Yes |
 
@@ -204,7 +204,7 @@ Set the validator's commission rate for delegated rewards.
 **signable_bytes:**
 
 ```
-NETWORK_ID || b"setcommission" || from(32) || commission_percent(1) || nonce(8 LE)
+NETWORK_ID || b"set_commission" || from(32) || commission_percent(1) || nonce(8 LE)
 ```
 
 **Validation rules:**
@@ -316,7 +316,7 @@ Transactions are protected from replay through three mechanisms:
 Using the JavaScript SDK as reference:
 
 ```javascript
-import { Keypair, Transaction } from '@ultradag/sdk';
+import { Keypair, Transaction } from 'ultradag';
 
 // Generate or load keypair
 const keypair = Keypair.generate();

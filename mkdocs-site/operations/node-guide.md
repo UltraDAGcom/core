@@ -55,7 +55,7 @@ All configuration is done through CLI flags:
 | `--port` | `9333` | P2P listening port |
 | `--rpc-port` | P2P + 1000 | HTTP RPC port |
 | `--seed` | (bootstrap) | Seed peer addresses (`host:port`, repeatable) |
-| `--validate` | `false` | Enable validator mode |
+| `--validate` | `true` | Enable validator mode (set to `false` for observer) |
 | `--round-ms` | `5000` | Round duration in milliseconds |
 | `--validators` | auto | Expected validator count (fixes quorum threshold) |
 | `--validator-key` | none | Path to allowlist file (one address per line) |
@@ -267,7 +267,7 @@ ExecStart=/usr/local/bin/ultradag-node \
   --port 9333 \
   --validate \
   --data-dir /var/lib/ultradag \
-  --pkey-file /etc/ultradag/validator.key
+  --pkey YOUR_VALIDATOR_KEY_HEX
 Restart=on-failure
 RestartSec=10
 LimitNOFILE=65536

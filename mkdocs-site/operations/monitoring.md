@@ -81,49 +81,44 @@ Returns component-level diagnostics:
 curl http://localhost:10333/metrics
 ```
 
-Returns metrics in Prometheus exposition format:
+Returns checkpoint metrics in Prometheus exposition format. The `/metrics` endpoint currently exports checkpoint-related metrics:
 
 ```
-# HELP ultradag_dag_round Current DAG round
-# TYPE ultradag_dag_round gauge
-ultradag_dag_round 15420
+# HELP checkpoint_produced_total Total number of checkpoints produced by this node
+# TYPE checkpoint_produced_total counter
+checkpoint_produced_total 154
 
-# HELP ultradag_finalized_round Last finalized round
-# TYPE ultradag_finalized_round gauge
-ultradag_finalized_round 15418
+# HELP checkpoint_production_duration_ms Duration of last checkpoint production in milliseconds
+# TYPE checkpoint_production_duration_ms gauge
+checkpoint_production_duration_ms 42
 
-# HELP ultradag_finality_lag Rounds between DAG tip and last finalized
-# TYPE ultradag_finality_lag gauge
-ultradag_finality_lag 2
+# HELP checkpoint_size_bytes Size of last checkpoint in bytes
+# TYPE checkpoint_size_bytes gauge
+checkpoint_size_bytes 5000
 
-# HELP ultradag_peer_count Connected peers
-# TYPE ultradag_peer_count gauge
-ultradag_peer_count 4
+# HELP checkpoint_cosigned_total Total number of checkpoints co-signed by this node
+# TYPE checkpoint_cosigned_total counter
+checkpoint_cosigned_total 300
 
-# HELP ultradag_mempool_size Pending transactions in mempool
-# TYPE ultradag_mempool_size gauge
-ultradag_mempool_size 7
+# HELP checkpoint_quorum_reached_total Total number of checkpoints that reached quorum
+# TYPE checkpoint_quorum_reached_total counter
+checkpoint_quorum_reached_total 152
 
-# HELP ultradag_total_supply Total UDAG supply in sats
-# TYPE ultradag_total_supply gauge
-ultradag_total_supply 1050154200000000
+# HELP checkpoint_validation_failures_total Total number of checkpoint validation failures
+# TYPE checkpoint_validation_failures_total counter
+checkpoint_validation_failures_total 0
 
-# HELP ultradag_total_staked Total staked UDAG in sats
-# TYPE ultradag_total_staked gauge
-ultradag_total_staked 50000000000000
+# HELP fast_sync_success_total Total number of successful fast-syncs
+# TYPE fast_sync_success_total counter
+fast_sync_success_total 1
 
-# HELP ultradag_checkpoint_latest Latest checkpoint round
-# TYPE ultradag_checkpoint_latest gauge
-ultradag_checkpoint_latest 15400
-
-# HELP ultradag_checkpoint_production_total Checkpoints produced
-# TYPE ultradag_checkpoint_production_total counter
-ultradag_checkpoint_production_total 154
-
-# HELP ultradag_checkpoint_quorum_total Checkpoints reaching quorum
-# TYPE ultradag_checkpoint_quorum_total counter
-ultradag_checkpoint_quorum_total 152
+# HELP checkpoint_persist_success_total Total number of successful checkpoint persists
+# TYPE checkpoint_persist_success_total counter
+checkpoint_persist_success_total 154
 ```
+
+!!! note "DAG and state metrics"
+    For DAG round, finality lag, peer count, mempool size, and supply metrics, use the `/status` endpoint (JSON) or `/health/detailed` endpoint. These are not currently exported in Prometheus format but can be scraped via a custom exporter wrapping `/status`.
 
 ### JSON Metrics
 
@@ -223,6 +218,9 @@ Recommended Grafana dashboard layout:
 ## Alert Thresholds
 
 ### Recommended Alerts
+
+!!! note "Custom exporter required"
+    The alert rules below assume a custom Prometheus exporter that scrapes the `/status` JSON endpoint and re-exports the values as Prometheus gauges with an `ultradag_` prefix. The built-in `/metrics` endpoint only exports checkpoint metrics.
 
 ```yaml title="alert_rules.yml"
 groups:
