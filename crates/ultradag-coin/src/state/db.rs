@@ -162,8 +162,27 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
     txn.commit()?;
     drop(db);
 
+    // Fsync the temp file to ensure committed data is durable on disk before rename.
+    // redb commits to its own WAL, but we need the OS to flush the file data
+    // so that rename doesn't point to a partially-written database after a crash.
+    if let Ok(f) = std::fs::File::open(&tmp_path) {
+        let _ = f.sync_all();
+    }
+
     // Atomic rename
-    std::fs::rename(&tmp_path, path)?;
+    if let Err(e) = std::fs::rename(&tmp_path, path) {
+        // Clean up temp file on rename failure to avoid stale state
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(PersistenceError::Io(e));
+    }
+
+    // Fsync parent directory to ensure the rename is durable
+    if let Some(parent) = path.parent() {
+        if let Ok(dir) = std::fs::File::open(parent) {
+            let _ = dir.sync_all();
+        }
+    }
+
     Ok(())
 }
 
@@ -262,16 +281,18 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
     }
     // Legacy databases without DELEGATIONS table will have empty delegation_accounts
 
-    // Council members
+    // Council members (graceful fallback for legacy databases without this table)
     let mut council_members = std::collections::HashMap::new();
-    let cm_table = txn.open_table(COUNCIL_MEMBERS)?;
-    for entry in cm_table.iter()? {
-        let (k, v) = entry?;
-        let addr = Address(*k.value());
-        if let Some(category) = u8_to_council_category(v.value()) {
-            council_members.insert(addr, category);
+    if let Ok(cm_table) = txn.open_table(COUNCIL_MEMBERS) {
+        for entry in cm_table.iter()? {
+            let (k, v) = entry?;
+            let addr = Address(*k.value());
+            if let Some(category) = u8_to_council_category(v.value()) {
+                council_members.insert(addr, category);
+            }
         }
     }
+    // Legacy databases without COUNCIL_MEMBERS table will have empty council_members
 
     let mut engine = StateEngine::from_parts(
         accounts,

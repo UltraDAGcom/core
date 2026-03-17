@@ -2,6 +2,7 @@
 /// Proves cryptographic primitives are implemented correctly with no shortcuts.
 
 use ultradag_coin::{Address, SecretKey, Signature, Transaction, TransferTx, DagVertex, Block, BlockHeader, CoinbaseTx};
+use ultradag_coin::governance::{CreateProposalTx, VoteTx, ProposalType};
 use std::collections::HashSet;
 
 // ============================================================================
@@ -525,4 +526,181 @@ fn transaction_hash_includes_all_fields() {
     println!("✓ Transaction hash includes all fields");
 }
 
+// ============================================================================
+// Part 1.5 — Hash Collision Resistance: Variable-Length Field Delimiting
+// ============================================================================
+
+/// Verifies that CreateProposalTx::hash() uses length-delimited variable fields.
+/// Without length delimiters, title="AB" + desc="CD" would hash identically to
+/// title="ABC" + desc="D" — a hash collision enabling mempool/tx_index confusion.
+#[test]
+fn proposal_hash_no_title_description_collision() {
+    let sk = SecretKey::generate();
+
+    let make_proposal = |title: &str, desc: &str| -> CreateProposalTx {
+        let mut tx = CreateProposalTx {
+            from: sk.address(),
+            proposal_id: 1,
+            title: title.to_string(),
+            description: desc.to_string(),
+            proposal_type: ProposalType::TextProposal,
+            fee: 10_000,
+            nonce: 0,
+            pub_key: sk.verifying_key().to_bytes(),
+            signature: Signature([0u8; 64]),
+        };
+        tx.signature = sk.sign(&tx.signable_bytes());
+        tx
+    };
+
+    // These two proposals must have DIFFERENT hashes despite concatenated bytes
+    // being identical without length delimiters: "AB" + "CD" vs "ABC" + "D"
+    let tx1 = make_proposal("AB", "CD");
+    let tx2 = make_proposal("ABC", "D");
+    assert_ne!(tx1.hash(), tx2.hash(),
+        "title='AB' desc='CD' must hash differently from title='ABC' desc='D'");
+
+    // Also test: "A" + "BCD" vs "AB" + "CD"
+    let tx3 = make_proposal("A", "BCD");
+    assert_ne!(tx1.hash(), tx3.hash(),
+        "Different title/desc split must produce different hash");
+    assert_ne!(tx2.hash(), tx3.hash(),
+        "All three splits must produce different hashes");
+}
+
+/// Verifies ParameterChange proposals with swapped param/value boundaries
+/// produce different hashes.
+#[test]
+fn proposal_hash_no_param_value_collision() {
+    let sk = SecretKey::generate();
+
+    let make_param_change = |param: &str, value: &str| -> CreateProposalTx {
+        let mut tx = CreateProposalTx {
+            from: sk.address(),
+            proposal_id: 1,
+            title: "test".to_string(),
+            description: "test".to_string(),
+            proposal_type: ProposalType::ParameterChange {
+                param: param.to_string(),
+                new_value: value.to_string(),
+            },
+            fee: 10_000,
+            nonce: 0,
+            pub_key: sk.verifying_key().to_bytes(),
+            signature: Signature([0u8; 64]),
+        };
+        tx.signature = sk.sign(&tx.signable_bytes());
+        tx
+    };
+
+    // param="min_fee" value="100" vs param="min_fee1" value="00"
+    let tx1 = make_param_change("min_fee", "100");
+    let tx2 = make_param_change("min_fee1", "00");
+    assert_ne!(tx1.hash(), tx2.hash(),
+        "param/value boundary shift must produce different hash");
+}
+
+/// Verifies TransferTx hash includes type discriminator, preventing
+/// cross-type hash collisions in mempool and tx_index.
+#[test]
+fn transfer_hash_includes_type_discriminator() {
+    let sk = SecretKey::from_bytes([7u8; 32]);
+
+    // Create a TransferTx
+    let mut transfer = TransferTx {
+        from: sk.address(),
+        to: Address::ZERO,
+        amount: 100,
+        fee: 10,
+        nonce: 0,
+        pub_key: sk.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+        memo: None,
+    };
+    transfer.signature = sk.sign(&transfer.signable_bytes());
+    let tx = Transaction::Transfer(transfer);
+
+    // Hash should be deterministic
+    assert_eq!(tx.hash(), tx.hash());
+
+    // Manually compute what the hash would be WITHOUT the type discriminator
+    let hash_without_discriminator = {
+        let mut hasher = blake3::Hasher::new();
+        // Intentionally omit b"transfer" prefix
+        if let Transaction::Transfer(ref t) = tx {
+            hasher.update(&t.from.0);
+            hasher.update(&t.to.0);
+            hasher.update(&t.amount.to_le_bytes());
+            hasher.update(&t.fee.to_le_bytes());
+            hasher.update(&t.nonce.to_le_bytes());
+        }
+        *hasher.finalize().as_bytes()
+    };
+
+    // The actual hash MUST differ from hash without discriminator
+    assert_ne!(tx.hash(), hash_without_discriminator,
+        "TransferTx hash must include type discriminator");
+}
+
+/// Verifies VoteTx hash includes type discriminator.
+#[test]
+fn vote_hash_includes_type_discriminator() {
+    let sk = SecretKey::from_bytes([7u8; 32]);
+    let mut vote = VoteTx {
+        from: sk.address(),
+        proposal_id: 1,
+        vote: true,
+        fee: 10_000,
+        nonce: 0,
+        pub_key: sk.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    vote.signature = sk.sign(&vote.signable_bytes());
+
+    // Manually compute hash without discriminator
+    let hash_without = {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&vote.from.0);
+        hasher.update(&vote.proposal_id.to_le_bytes());
+        hasher.update(&[1u8]);
+        hasher.update(&vote.fee.to_le_bytes());
+        hasher.update(&vote.nonce.to_le_bytes());
+        *hasher.finalize().as_bytes()
+    };
+
+    assert_ne!(vote.hash(), hash_without,
+        "VoteTx hash must include type discriminator");
+}
+
+/// Verifies DagVertex signable_bytes includes "vertex" type discriminator,
+/// preventing cross-type signature reuse with transactions or checkpoints.
+#[test]
+fn vertex_signable_bytes_include_type_discriminator() {
+    let sk = SecretKey::generate();
+    let vertex = make_test_vertex(&sk, 1, 0, vec![]);
+    let sb = vertex.signable_bytes();
+
+    let nid = ultradag_coin::constants::NETWORK_ID;
+    // After NETWORK_ID, the next bytes must be "vertex"
+    assert_eq!(&sb[nid.len()..nid.len() + 6], b"vertex",
+        "Vertex signable_bytes must include 'vertex' type discriminator after NETWORK_ID");
+
+    // Verify a signature created with the old format (no discriminator) fails
+    let old_format_bytes = {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(nid);
+        // Omit b"vertex" — old format
+        buf.extend_from_slice(&vertex.block.hash());
+        for p in &vertex.parent_hashes {
+            buf.extend_from_slice(p);
+        }
+        buf.extend_from_slice(&vertex.round.to_le_bytes());
+        buf.extend_from_slice(&vertex.validator.0);
+        buf
+    };
+
+    // The actual signable_bytes must differ from old format
+    assert_ne!(sb, old_format_bytes,
+        "Signable bytes with discriminator must differ from old format");
+}
 

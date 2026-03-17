@@ -72,8 +72,8 @@ fn make_vertex_unique(
 
 #[test]
 fn test_blockdag_persistence() {
-    let temp_dir = std::env::temp_dir();
-    let path = temp_dir.join("test_dag_persistence.json");
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let path = temp_dir.path().join("test_dag_persistence.bin");
     
     // Create DAG with some vertices
     let mut dag = BlockDag::new();
@@ -103,14 +103,12 @@ fn test_blockdag_persistence() {
     assert!(loaded_dag.get(&v1_hash).is_some());
     assert!(loaded_dag.get(&v2_hash).is_some());
     
-    // Cleanup
-    std::fs::remove_file(&path).ok();
 }
 
 #[test]
 fn test_finality_tracker_persistence() {
-    let temp_dir = std::env::temp_dir();
-    let path = temp_dir.join("test_finality_persistence.json");
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let path = temp_dir.path().join("test_finality_persistence.bin");
     
     // Create finality tracker with validators
     let mut finality = FinalityTracker::new(3);
@@ -132,14 +130,12 @@ fn test_finality_tracker_persistence() {
     // They must be rebuilt from DAG after loading.
     assert_eq!(loaded_finality.validator_count(), 0);
     
-    // Cleanup
-    std::fs::remove_file(&path).ok();
 }
 
 #[test]
 fn test_state_engine_persistence() {
-    let temp_dir = std::env::temp_dir();
-    let path = temp_dir.join("test_state_persistence.json");
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let path = temp_dir.path().join("test_state_persistence.redb");
     
     // Create state engine and apply some vertices
     let mut state = StateEngine::new();
@@ -163,15 +159,13 @@ fn test_state_engine_persistence() {
     assert_eq!(loaded_state.balance(&sk2.address()), 0);
     assert_eq!(loaded_state.total_supply(), state.total_supply());
     
-    // Cleanup
-    std::fs::remove_file(&path).ok();
 }
 
 #[test]
 fn test_mempool_persistence() {
     use ultradag_coin::constants::MIN_FEE_SATS;
-    let temp_dir = std::env::temp_dir();
-    let path = temp_dir.join("test_mempool_persistence.json");
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let path = temp_dir.path().join("test_mempool_persistence.bin");
     
     // Create mempool with some transactions
     let mut mempool = Mempool::new();
@@ -200,17 +194,15 @@ fn test_mempool_persistence() {
     assert!(loaded_mempool.contains(&tx2.hash()));
     assert!(loaded_mempool.contains(&tx3.hash()));
     
-    // Cleanup
-    std::fs::remove_file(&path).ok();
 }
 
 #[test]
 fn test_complete_node_state_persistence() {
-    let temp_dir = std::env::temp_dir();
-    let dag_path = temp_dir.join("test_node_dag.bin");
-    let finality_path = temp_dir.join("test_node_finality.bin");
-    let state_path = temp_dir.join("test_node_state.json");
-    let mempool_path = temp_dir.join("test_node_mempool.json");
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let dag_path = temp_dir.path().join("test_node_dag.bin");
+    let finality_path = temp_dir.path().join("test_node_finality.bin");
+    let state_path = temp_dir.path().join("test_node_state.redb");
+    let mempool_path = temp_dir.path().join("test_node_mempool.bin");
     
     // Create complete node state
     let mut dag = BlockDag::new();
@@ -268,9 +260,4 @@ fn test_complete_node_state_persistence() {
     assert_eq!(loaded_mempool.len(), 1);
     assert!(loaded_mempool.contains(&tx.hash()));
     
-    // Cleanup
-    std::fs::remove_file(&dag_path).ok();
-    std::fs::remove_file(&finality_path).ok();
-    std::fs::remove_file(&state_path).ok();
-    std::fs::remove_file(&mempool_path).ok();
 }

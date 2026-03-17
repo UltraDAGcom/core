@@ -181,8 +181,12 @@ impl Transaction {
 
 impl TransferTx {
     /// Compute the transaction hash (its unique identifier).
+    /// Includes a type discriminator to prevent cross-type hash collisions
+    /// (e.g., a TransferTx and VoteTx with aligned field bytes producing the
+    /// same hash, which would break mempool deduplication and tx_index lookups).
     pub fn hash(&self) -> [u8; 32] {
         let mut hasher = blake3::Hasher::new();
+        hasher.update(b"transfer");
         hasher.update(&self.from.0);
         hasher.update(&self.to.0);
         hasher.update(&self.amount.to_le_bytes());

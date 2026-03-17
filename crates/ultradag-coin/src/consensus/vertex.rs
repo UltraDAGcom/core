@@ -49,10 +49,13 @@ impl DagVertex {
     }
 
     /// Bytes that are signed by the validator.
-    /// Includes network identifier to prevent cross-network replay attacks.
+    /// Includes network identifier to prevent cross-network replay attacks,
+    /// and a type discriminator to prevent cross-type signature reuse
+    /// (a vertex signature can never be valid for a transaction or checkpoint).
     pub fn signable_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         buf.extend_from_slice(crate::constants::NETWORK_ID);
+        buf.extend_from_slice(b"vertex");
         buf.extend_from_slice(&self.block.hash());
         for parent in &self.parent_hashes {
             buf.extend_from_slice(parent);

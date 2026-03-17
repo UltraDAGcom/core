@@ -167,7 +167,12 @@ impl StateEngine {
             total_round_reward
         };
 
-        let total_stake = self.total_staked().saturating_add(self.total_delegated());
+        // Total effective stake must match distribute_round_rewards denominator:
+        // sum of effective_stake_of() for all stakers, which excludes undelegating amounts.
+        let total_stake: u64 = self.stake_accounts.iter()
+            .filter(|(_, s)| s.staked > 0)
+            .map(|(addr, _)| self.effective_stake_of(addr))
+            .fold(0u64, |acc, x| acc.saturating_add(x));
         let own_effective = self.effective_stake_of(proposer);
 
         let base_reward = if total_stake > 0 && own_effective > 0 {
@@ -176,10 +181,11 @@ impl StateEngine {
                 .saturating_mul(own_effective as u128)
                 / total_stake as u128) as u64;
             // Observer penalty: staked but not in the active validator set
+            // Uses the governable parameter, not the hardcoded constant.
             if !self.active_validator_set.is_empty()
                 && !self.active_validator_set.contains(proposer)
             {
-                proportional * crate::constants::OBSERVER_REWARD_PERCENT / 100
+                proportional * self.governance_params.observer_reward_percent / 100
             } else {
                 proportional
             }
@@ -288,7 +294,16 @@ impl StateEngine {
             return Ok(());
         }
 
-        let total_effective_stake = self.total_staked().saturating_add(self.total_delegated());
+        // Total effective stake = sum of all validators' effective stake.
+        // Must match what we use in the per-validator loop below (effective_stake_of)
+        // which excludes undelegating delegations (unlock_at_round.is_some()).
+        // Using total_staked() + total_delegated() was wrong because total_delegated()
+        // includes undelegating amounts, creating a denominator larger than the sum of
+        // numerators — causing under-emission proportional to undelegating volume.
+        let total_effective_stake: u64 = self.stake_accounts.iter()
+            .filter(|(_, s)| s.staked > 0)
+            .map(|(addr, _)| self.effective_stake_of(addr))
+            .fold(0u64, |acc, x| acc.saturating_add(x));
 
         if total_effective_stake > 0 {
             // --- Staking active: distribute proportionally to all stakers ---
@@ -314,11 +329,13 @@ impl StateEngine {
                     .saturating_mul(*effective as u128)
                     / total_effective_stake as u128) as u64;
 
-                // Active producers get 100%, passive stakers get observer rate (20%)
+                // Active producers get 100%, passive stakers get observer rate
+                // Uses the governable parameter, not the hardcoded constant.
+                let observer_pct = self.governance_params.observer_reward_percent;
                 let validator_share = if producers.contains(validator) {
                     proportional
                 } else {
-                    proportional * crate::constants::OBSERVER_REWARD_PERCENT / 100
+                    proportional * observer_pct / 100
                 };
 
                 if validator_share == 0 {
@@ -1798,6 +1815,11 @@ impl StateEngine {
     /// Get the current governance parameters (may differ from constants if changed via proposals).
     pub fn governance_params(&self) -> &crate::governance::GovernanceParams {
         &self.governance_params
+    }
+
+    /// Get mutable access to governance parameters (for testing).
+    pub fn governance_params_mut(&mut self) -> &mut crate::governance::GovernanceParams {
+        &mut self.governance_params
     }
 
     /// Iterate all accounts (for redb persistence).

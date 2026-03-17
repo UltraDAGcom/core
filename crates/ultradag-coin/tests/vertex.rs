@@ -160,16 +160,20 @@ fn signable_bytes_covers_all_fields() {
     let v = make_vertex(50, 3, parents.clone(), &sk);
     let sb = v.signable_bytes();
 
-    // Should contain: network_id(19) + block_hash(32) + parent1(32) + parent2(32) + round(8) + validator(32)
+    // Should contain: network_id(19) + "vertex"(6) + block_hash(32) + parent1(32) + parent2(32) + round(8) + validator(32)
     let nid_len = ultradag_coin::constants::NETWORK_ID.len();
-    let expected_len = nid_len + 32 + 32 * parents.len() + 8 + 32;
+    let disc_len = b"vertex".len();
+    let expected_len = nid_len + disc_len + 32 + 32 * parents.len() + 8 + 32;
     assert_eq!(sb.len(), expected_len);
 
     // Verify network ID is at the start
     assert_eq!(&sb[0..nid_len], ultradag_coin::constants::NETWORK_ID);
 
+    // Verify type discriminator follows
+    assert_eq!(&sb[nid_len..nid_len + disc_len], b"vertex");
+
     // Verify block hash follows
-    let off = nid_len;
+    let off = nid_len + disc_len;
     assert_eq!(&sb[off..off + 32], &v.block.hash());
 
     // Verify parents are included

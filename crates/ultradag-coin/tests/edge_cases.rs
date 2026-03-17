@@ -251,8 +251,7 @@ fn fee_sum_computed_before_tx_application() {
 #[test]
 fn crash_recovery_state_behind_dag() {
     let sk = SecretKey::generate();
-    let tmp = std::env::temp_dir().join("ultradag_test_crash_recovery");
-    std::fs::create_dir_all(&tmp).unwrap();
+    let tmp = tempfile::TempDir::new().unwrap();
 
     // Create a state at round 5
     let mut state = StateEngine::new();
@@ -260,7 +259,7 @@ fn crash_recovery_state_behind_dag() {
         let v = make_vertex(&sk, r, r, vec![], vec![]);
         state.apply_vertex(&v).unwrap();
     }
-    state.save(&tmp.join("state.redb")).unwrap();
+    state.save(&tmp.path().join("state.redb")).unwrap();
 
     // Create a DAG at round 9 (state saved at round 5, crashed before saving at 10)
     let mut dag = BlockDag::new();
@@ -268,11 +267,11 @@ fn crash_recovery_state_behind_dag() {
         let v = make_vertex(&sk, r, r, vec![], vec![]);
         dag.insert(v);
     }
-    dag.save(&tmp.join("dag.bin")).unwrap();
+    dag.save(&tmp.path().join("dag.bin")).unwrap();
 
     // Load both back
-    let loaded_state = StateEngine::load(&tmp.join("state.redb")).unwrap();
-    let loaded_dag = BlockDag::load(&tmp.join("dag.bin")).unwrap();
+    let loaded_state = StateEngine::load(&tmp.path().join("state.redb")).unwrap();
+    let loaded_dag = BlockDag::load(&tmp.path().join("dag.bin")).unwrap();
 
     // State is behind DAG — state at round 5, DAG at round 9
     assert_eq!(loaded_state.last_finalized_round(), Some(5));
@@ -280,16 +279,13 @@ fn crash_recovery_state_behind_dag() {
 
     // The node would re-apply vertices from round 6-9 from the DAG via peer sync
     // This is safe because apply_vertex is idempotent per round
-
-    std::fs::remove_dir_all(&tmp).ok();
 }
 
 /// Test 4: State ahead of DAG is impossible in practice but verify load works
 #[test]
 fn state_ahead_of_dag_detected() {
     let sk = SecretKey::generate();
-    let tmp = std::env::temp_dir().join("ultradag_test_state_ahead");
-    std::fs::create_dir_all(&tmp).unwrap();
+    let tmp = tempfile::TempDir::new().unwrap();
 
     // State at round 5
     let mut state = StateEngine::new();
@@ -297,7 +293,7 @@ fn state_ahead_of_dag_detected() {
         let v = make_vertex(&sk, r, r, vec![], vec![]);
         state.apply_vertex(&v).unwrap();
     }
-    state.save(&tmp.join("state.redb")).unwrap();
+    state.save(&tmp.path().join("state.redb")).unwrap();
 
     // DAG at round 2 (corrupted/incomplete)
     let mut dag = BlockDag::new();
@@ -305,32 +301,29 @@ fn state_ahead_of_dag_detected() {
         let v = make_vertex(&sk, r, r, vec![], vec![]);
         dag.insert(v);
     }
-    dag.save(&tmp.join("dag.bin")).unwrap();
+    dag.save(&tmp.path().join("dag.bin")).unwrap();
 
-    let loaded_state = StateEngine::load(&tmp.join("state.redb")).unwrap();
-    let loaded_dag = BlockDag::load(&tmp.join("dag.bin")).unwrap();
+    let loaded_state = StateEngine::load(&tmp.path().join("state.redb")).unwrap();
+    let loaded_dag = BlockDag::load(&tmp.path().join("dag.bin")).unwrap();
 
     // State is ahead — this scenario doesn't crash, just results in stale DAG
     // Peer sync will fill in the missing DAG vertices
     assert_eq!(loaded_state.last_finalized_round(), Some(5));
     assert_eq!(loaded_dag.current_round(), 2);
-
-    std::fs::remove_dir_all(&tmp).ok();
 }
 
 /// Test 5: Corrupt dag.bin — verified does not panic
 #[test]
 fn corrupt_dag_bin_does_not_panic() {
-    let tmp = std::env::temp_dir().join("ultradag_test_corrupt");
-    std::fs::create_dir_all(&tmp).unwrap();
-    let path = tmp.join("dag.bin");
+    let tmp = tempfile::TempDir::new().unwrap();
+    let path = tmp.path().join("dag.bin");
 
     std::fs::write(&path, "{ invalid json!!!").unwrap();
 
     let result = BlockDag::load(&path);
-    assert!(result.is_err(), "Loading corrupt JSON should return error, not panic");
+    assert!(result.is_err(), "Loading corrupt data should return error, not panic");
 
-    // Also test truncated JSON
+    // Also test truncated data
     std::fs::write(&path, r#"{"vertices":[{"key":[1,2"#).unwrap();
     let result2 = BlockDag::load(&path);
     assert!(result2.is_err());
@@ -339,18 +332,15 @@ fn corrupt_dag_bin_does_not_panic() {
     std::fs::write(&path, "").unwrap();
     let result3 = BlockDag::load(&path);
     assert!(result3.is_err());
-
-    std::fs::remove_dir_all(&tmp).ok();
 }
 
 /// Test: Leftover .tmp file from crash during save
 #[test]
 fn leftover_tmp_file_from_crash() {
-    let tmp = std::env::temp_dir().join("ultradag_test_tmp_leftover");
-    std::fs::create_dir_all(&tmp).unwrap();
+    let tmp = tempfile::TempDir::new().unwrap();
 
-    let path = tmp.join("state.redb");
-    let tmp_path = tmp.join("state.tmp");
+    let path = tmp.path().join("state.redb");
+    let tmp_path = tmp.path().join("state.tmp");
 
     // Simulate a crash that left a .tmp file
     std::fs::write(&tmp_path, r#"{"partial":"data"}"#).unwrap();
@@ -364,8 +354,6 @@ fn leftover_tmp_file_from_crash() {
     // The .tmp may or may not exist depending on OS rename behavior — but loading works
     let loaded = StateEngine::load(&path);
     assert!(loaded.is_ok());
-
-    std::fs::remove_dir_all(&tmp).ok();
 }
 
 // ============================================================================

@@ -63,9 +63,14 @@ impl CreateProposalTx {
 
     pub fn hash(&self) -> [u8; 32] {
         let mut hasher = blake3::Hasher::new();
+        hasher.update(b"proposal");
         hasher.update(&self.from.0);
         hasher.update(&self.proposal_id.to_le_bytes());
+        // Length-delimit variable-length fields to prevent concatenation collisions.
+        // Without this, title="AB" desc="CD" would hash identically to title="ABC" desc="D".
+        hasher.update(&(self.title.len() as u32).to_le_bytes());
         hasher.update(self.title.as_bytes());
+        hasher.update(&(self.description.len() as u32).to_le_bytes());
         hasher.update(self.description.as_bytes());
         match &self.proposal_type {
             ProposalType::TextProposal => {
@@ -73,7 +78,10 @@ impl CreateProposalTx {
             }
             ProposalType::ParameterChange { param, new_value } => {
                 hasher.update(&[1]);
+                // Length-delimit to prevent param="a" value="bc" == param="ab" value="c"
+                hasher.update(&(param.len() as u32).to_le_bytes());
                 hasher.update(param.as_bytes());
+                hasher.update(&(new_value.len() as u32).to_le_bytes());
                 hasher.update(new_value.as_bytes());
             }
             ProposalType::CouncilMembership { action, address, category } => {
@@ -136,6 +144,7 @@ impl VoteTx {
 
     pub fn hash(&self) -> [u8; 32] {
         let mut hasher = blake3::Hasher::new();
+        hasher.update(b"vote");
         hasher.update(&self.from.0);
         hasher.update(&self.proposal_id.to_le_bytes());
         hasher.update(&[if self.vote { 1 } else { 0 }]);
