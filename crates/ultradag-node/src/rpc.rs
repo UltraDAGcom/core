@@ -1000,7 +1000,7 @@ async fn handle_request(
                 return Ok(error_response(StatusCode::BAD_REQUEST, "amount must be greater than 0"));
             }
 
-            // Cap faucet amount at 50,000 UDAG per request
+            // Cap faucet amount at 100 UDAG per request
             const MAX_FAUCET_SATS: u64 = 100 * ultradag_coin::COIN; // 100 UDAG
             if faucet_req.amount > MAX_FAUCET_SATS {
                 return Ok(error_response(
@@ -1972,11 +1972,16 @@ async fn handle_request(
                         &format!("insufficient balance: need {} sats (incl. {} pending), have {} sats",
                             total_needed, pc, balance)));
                 }
-                // Check nonce isn't stale (already confirmed)
+                // Check nonce isn't stale and isn't too far ahead.
+                // A nonce gap > 100 would waste mempool slots with unexecutable txs.
                 let expected_nonce = state.nonce(&sender);
                 if tx.nonce() < expected_nonce {
                     return Ok(error_response(StatusCode::BAD_REQUEST,
                         &format!("nonce too low: expected >= {}, got {}", expected_nonce, tx.nonce())));
+                }
+                if tx.nonce() > expected_nonce.saturating_add(100) {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!("nonce too far ahead: expected near {}, got {}", expected_nonce, tx.nonce())));
                 }
 
                 // Insert into mempool while still holding the locks

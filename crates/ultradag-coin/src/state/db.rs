@@ -165,8 +165,18 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
     // Fsync the temp file to ensure committed data is durable on disk before rename.
     // redb commits to its own WAL, but we need the OS to flush the file data
     // so that rename doesn't point to a partially-written database after a crash.
-    if let Ok(f) = std::fs::File::open(&tmp_path) {
-        let _ = f.sync_all();
+    match std::fs::File::open(&tmp_path) {
+        Ok(f) => {
+            if let Err(e) = f.sync_all() {
+                tracing::error!("Failed to fsync redb temp file before rename: {}", e);
+                let _ = std::fs::remove_file(&tmp_path);
+                return Err(e.into());
+            }
+        }
+        Err(e) => {
+            tracing::error!("Failed to open redb temp file for fsync: {}", e);
+            return Err(e.into());
+        }
     }
 
     // Atomic rename
