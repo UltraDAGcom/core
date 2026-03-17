@@ -563,8 +563,15 @@ impl StateEngine {
             .fold(0u64, |acc, x| acc.saturating_add(x));
         let proposer = &vertex.block.coinbase.to;
 
-        // Coinbase should equal declared_fees only (no block reward — rewards are
-        // distributed per-round via distribute_round_rewards()).
+        // Coinbase validation: declared_fees is the UPPER BOUND on what the proposer
+        // will receive. The actual credit (collected_fees) may be less if some
+        // transactions fail validation (stale nonce, insufficient balance, etc.).
+        //
+        // We validate coinbase.amount == declared_fees here (honest proposers always
+        // set this correctly). A malicious proposer who inflates coinbase.amount
+        // beyond declared_fees would be caught. A proposer who sets it BELOW
+        // declared_fees would also be caught. The actual credit to the proposer
+        // happens after transaction processing and may be less.
         if vertex.block.coinbase.amount != declared_fees {
             return Err(CoinError::InvalidCoinbase {
                 expected: declared_fees,
@@ -573,11 +580,14 @@ impl StateEngine {
         }
 
         // Track fees actually collected from successful transactions.
-        // Coinbase is credited AFTER processing all transactions, using only
-        // the fees from transactions that actually succeeded. This eliminates
-        // the fee clawback vulnerability (DuplicateTxFlooder attack) where a
-        // malicious validator includes stale-nonce transactions whose fees
-        // are credited via coinbase but can't be recovered from the proposer.
+        // Proposer is credited collected_fees (≤ declared_fees) AFTER the loop.
+        // The difference (declared_fees - collected_fees) represents fees from
+        // failed transactions that were never debited from senders. This amount
+        // is not credited to anyone — it simply doesn't enter the economy.
+        // The coinbase.amount field in the block is the declared maximum, not
+        // the actual credit. This is intentional: the proposer cannot predict
+        // which transactions will fail at finalization time (nonces may change
+        // between vertex production and finality).
         let mut collected_fees: u64 = 0;
 
         // Apply transactions
@@ -744,8 +754,8 @@ impl StateEngine {
 
         // Supply invariant check — FATAL. Any violation means state is corrupt and the node
         // must halt immediately. On mainnet, supply drift is unrecoverable without a hard fork.
-        // Fee clawback failures now also return SupplyInvariantBroken (see above), so this
-        // check is the last line of defense.
+        // With deferred coinbase (Bug #189 fix), fee clawback is no longer needed — the
+        // proposer is only credited collected_fees from successful transactions.
         {
             let liquid: u64 = self.accounts.values().map(|a| a.balance).fold(0u64, |acc, x| acc.saturating_add(x));
             let staked: u64 = self.stake_accounts.values().map(|s| s.staked).fold(0u64, |acc, x| acc.saturating_add(x));
