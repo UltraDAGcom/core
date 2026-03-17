@@ -4,6 +4,7 @@ members = [
     "crates/ultradag-network",
     "crates/ultradag-node",
     "sdk/rust",
+    "crates/ultradag-sim",
 ]
 resolver = "2"
 
