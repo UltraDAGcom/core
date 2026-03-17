@@ -388,6 +388,9 @@ pub async fn validator_loop(
         let interval = ultradag_coin::CHECKPOINT_INTERVAL;
         let first_crossed = ((last_checkpoint_round / interval) + 1) * interval;
         let mut cp_round = first_crossed;
+        if current_finalized >= first_crossed && current_finalized >= interval {
+            debug!("Checkpoint check: current_finalized={} first_crossed={} last_checkpoint_round={}", current_finalized, first_crossed, last_checkpoint_round);
+        }
         while cp_round <= current_finalized {
             let checkpoint_round = cp_round;
             cp_round += interval;
