@@ -6,6 +6,7 @@ members = [
     "sdk/rust",
     "crates/ultradag-sim",
 ]
+exclude = ["crates/ultradag-coin/fuzz"]
 resolver = "2"
 
 [workspace.package]

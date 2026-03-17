@@ -1,0 +1,40 @@
+[package]
+name = "ultradag-coin-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+ultradag-coin = { path = ".." }
+postcard = "=1.1.3"
+
+[[bin]]
+name = "fuzz_message_decode"
+path = "fuzz_targets/fuzz_message_decode.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_vertex_decode"
+path = "fuzz_targets/fuzz_vertex_decode.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_transaction_decode"
+path = "fuzz_targets/fuzz_transaction_decode.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_checkpoint_decode"
+path = "fuzz_targets/fuzz_checkpoint_decode.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_state_snapshot_decode"
+path = "fuzz_targets/fuzz_state_snapshot_decode.rs"
+doc = false
