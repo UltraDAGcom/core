@@ -8,6 +8,13 @@
 
 ## Recent Updates (March 2026)
 
+**Deterministic DAG-BFT Simulation Harness (March 17, 2026):**
+- **New `ultradag-sim` crate** — Tests consensus and state logic by running multiple validators in-process with a virtual network. Uses REAL `BlockDag`, `FinalityTracker`, `StateEngine`, `Mempool` from `ultradag-coin` — only the network is simulated. No TCP, no Tokio, no async.
+- **Master invariant**: all honest validators that finalize the same round produce identical `compute_state_root()` output.
+- **Components**: `VirtualNetwork` (Perfect/RandomOrder/Drop/Partition/Lossy delivery), `SimValidator` (real DAG/finality/state), `ByzantineStrategy` (Equivocator/Withholder/Crash/TimestampManipulator), `SimHarness` (driver), `Invariants` (convergence/supply/monotonicity), `TxGen` (deterministic random transactions).
+- **Tests**: 4-validator perfect (100 rounds), 4-validator with 20 tx/round (200 rounds), single validator, random message reorder (200 rounds), 100-seed sweep, 2-2 partition heal (200 rounds), equivocator detection + supply check, 21-validator stress with 5% loss and 50 tx/round (1000 rounds), mixed Byzantine (2/7), late-joiner convergence.
+- **All tests passing.** Deterministic via `ChaCha8Rng` seeded from config — any failure is reproducible by seed.
+
 **Cryptographic, Persistence & Economics Deep Audit (March 17, 2026):**
 - **Hash collision: CreateProposalTx::hash() title/description (Bug #181)** — Missing length delimiters for variable-length fields. `title="AB" desc="CD"` and `title="ABC" desc="D"` produced identical hashes, enabling mempool eviction attacks. Fix: u32 LE length prefix before all variable-length fields.
 - **Hash collision: cross-type hash() discriminators (Bug #182)** — TransferTx, VoteTx, CreateProposalTx `hash()` lacked type discriminator bytes. Crafted cross-type collisions could evict legitimate transactions from mempool. Fix: added `b"transfer"`, `b"proposal"`, `b"vote"` prefixes.
