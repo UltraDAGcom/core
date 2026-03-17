@@ -77,7 +77,7 @@ pub fn generate_transfer(
 /// Generate up to `count` random transfers, updating account balances/nonces optimistically.
 pub fn generate_round_transactions(
     rng: &mut ChaCha8Rng,
-    accounts: &mut Vec<(SecretKey, u64, u64)>,
+    accounts: &mut [(SecretKey, u64, u64)],
     count: usize,
 ) -> Vec<Transaction> {
     let mut txs = Vec::new();
