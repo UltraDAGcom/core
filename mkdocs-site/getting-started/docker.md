@@ -1,0 +1,315 @@
+---
+title: Docker Guide
+---
+
+# Docker Guide
+
+Run UltraDAG nodes using Docker for easy deployment and reproducible environments.
+
+---
+
+## Single Node
+
+Pull and run a single node:
+
+```bash
+docker run -d \
+  --name ultradag \
+  -p 9333:9333 \
+  -p 10333:10333 \
+  -v ultradag-data:/data \
+  ghcr.io/ultradagcom/ultradag-node:latest \
+  --port 9333 \
+  --validate \
+  --data-dir /data \
+  --testnet
+```
+
+This exposes:
+
+- **Port 9333**: P2P protocol
+- **Port 10333**: RPC API
+
+Verify the node is running:
+
+```bash
+curl http://localhost:10333/status
+```
+
+---
+
+## 4-Node Local Testnet
+
+Use Docker Compose to run a complete local testnet:
+
+```yaml title="docker-compose.yml"
+version: "3.8"
+
+services:
+  node1:
+    image: ghcr.io/ultradagcom/ultradag-node:latest
+    command: >
+      --port 9333
+      --validate
+      --validators 4
+      --seed 1
+      --data-dir /data
+      --testnet
+    ports:
+      - "9333:9333"
+      - "10333:10333"
+    volumes:
+      - node1-data:/data
+    environment:
+      - RUST_LOG=info
+
+  node2:
+    image: ghcr.io/ultradagcom/ultradag-node:latest
+    command: >
+      --port 9333
+      --validate
+      --validators 4
+      --seed 2
+      --data-dir /data
+      --testnet
+    ports:
+      - "9334:9333"
+      - "10334:10333"
+    volumes:
+      - node2-data:/data
+    environment:
+      - RUST_LOG=info
+
+  node3:
+    image: ghcr.io/ultradagcom/ultradag-node:latest
+    command: >
+      --port 9333
+      --validate
+      --validators 4
+      --seed 3
+      --data-dir /data
+      --testnet
+    ports:
+      - "9335:9333"
+      - "10335:10333"
+    volumes:
+      - node3-data:/data
+    environment:
+      - RUST_LOG=info
+
+  node4:
+    image: ghcr.io/ultradagcom/ultradag-node:latest
+    command: >
+      --port 9333
+      --validate
+      --validators 4
+      --seed 4
+      --data-dir /data
+      --testnet
+    ports:
+      - "9336:9333"
+      - "10336:10333"
+    volumes:
+      - node4-data:/data
+    environment:
+      - RUST_LOG=info
+
+volumes:
+  node1-data:
+  node2-data:
+  node3-data:
+  node4-data:
+```
+
+Start the network:
+
+```bash
+docker compose up -d
+```
+
+Check all nodes:
+
+```bash
+for port in 10333 10334 10335 10336; do
+  echo "--- Node on port $port ---"
+  curl -s http://localhost:$port/status | jq .round
+done
+```
+
+Stop and clean up:
+
+```bash
+docker compose down -v   # -v removes volumes (fresh state)
+```
+
+---
+
+## Environment Variables
+
+Configure node behavior through environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RUST_LOG` | `info` | Log level (`trace`, `debug`, `info`, `warn`, `error`) |
+| `PORT` | `9333` | P2P listening port |
+| `RPC_PORT` | P2P + 1000 | RPC server port |
+| `DATA_DIR` | `./data` | State persistence directory |
+| `VALIDATORS` | `1` | Expected validator count (for deterministic genesis) |
+| `SEED` | random | Deterministic keypair seed (testing only) |
+| `CLEAN_STATE` | `false` | Delete existing state on startup |
+
+!!! tip "Log levels"
+    Use `RUST_LOG=ultradag_coin=debug,ultradag_network=info` for fine-grained control. The `trace` level is very verbose and should only be used for debugging specific issues.
+
+---
+
+## Volume Mounting for Persistence
+
+The node stores all state in the data directory. Mount a volume to persist across container restarts:
+
+```bash
+docker run -d \
+  --name ultradag \
+  -v /path/on/host:/data \
+  ghcr.io/ultradagcom/ultradag-node:latest \
+  --data-dir /data \
+  --validate \
+  --testnet
+```
+
+The data directory contains:
+
+| File | Purpose |
+|------|---------|
+| `dag.bin` | Serialized DAG vertices |
+| `finality.bin` | Finality tracker state |
+| `state.redb` | Account balances, stakes, governance (ACID database) |
+| `mempool.json` | Pending transactions |
+| `checkpoints/` | Checkpoint snapshots for fast-sync |
+
+!!! warning "Backup before upgrades"
+    Always back up your data directory before upgrading the node binary. While UltraDAG supports in-place upgrades, having a backup protects against unforeseen issues.
+
+---
+
+## Building the Docker Image
+
+Build locally from the repository:
+
+```bash
+git clone https://github.com/UltraDAGcom/core.git
+cd core
+docker build -t ultradag-node .
+```
+
+The Dockerfile uses a multi-stage build:
+
+```dockerfile title="Dockerfile"
+# Build stage
+FROM rust:1.75-slim AS builder
+WORKDIR /build
+COPY . .
+RUN cargo build --release -p ultradag-node
+
+# Runtime stage
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /build/target/release/ultradag-node /usr/local/bin/
+ENTRYPOINT ["ultradag-node"]
+```
+
+The resulting image is minimal — the runtime stage contains only the < 2 MB binary plus base system libraries.
+
+---
+
+## Production Deployment
+
+For production Docker deployments:
+
+### Resource Limits
+
+```yaml
+services:
+  ultradag:
+    image: ghcr.io/ultradagcom/ultradag-node:latest
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    restart: unless-stopped
+```
+
+### Health Checks
+
+```yaml
+services:
+  ultradag:
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10333/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+```
+
+### Networking
+
+For validators, ensure the P2P port is reachable from the internet:
+
+```yaml
+services:
+  ultradag:
+    ports:
+      - "9333:9333"    # P2P - must be publicly accessible
+      - "127.0.0.1:10333:10333"  # RPC - bind to localhost only
+```
+
+!!! warning "RPC security"
+    Never expose the RPC port to the public internet without authentication. The testnet RPC includes endpoints like `/keygen` and `/faucet` that should not be publicly accessible in production.
+
+---
+
+## Troubleshooting
+
+### Container exits immediately
+
+Check logs:
+
+```bash
+docker logs ultradag
+```
+
+Common causes:
+
+- Port already in use — change the host port mapping
+- Corrupted state — set `CLEAN_STATE=true` to start fresh
+- Missing data directory permissions — ensure the volume is writable
+
+### Node not finding peers
+
+If running a local testnet, ensure all containers are on the same Docker network:
+
+```bash
+docker network create ultradag-net
+docker run --network ultradag-net ...
+```
+
+### High memory usage
+
+UltraDAG is designed to run within 128-512 MB. If memory grows beyond this:
+
+1. Check `RUST_LOG` — `trace` level can cause memory growth from log buffering
+2. Ensure pruning is not disabled (`--pruning-depth 0` disables pruning)
+3. Check for stuck checkpoint sync with `/health/detailed`
+
+---
+
+## Next Steps
+
+- [Run a Validator](validator.md) — stake UDAG and earn rewards
+- [Node Operator Guide](../operations/node-guide.md) — detailed operational guidance
+- [Monitoring](../operations/monitoring.md) — set up Prometheus and Grafana

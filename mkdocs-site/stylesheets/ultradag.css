@@ -1,0 +1,357 @@
+/* ================================================================
+   UltraDAG Docs — Site Integration Styles
+   Matches the main site (index.html) nav/footer exactly
+   ================================================================ */
+
+/* -- Import main site fonts -- */
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Cormorant:wght@300;400;600&family=Syne:wght@400;600;700&display=swap');
+
+:root {
+  --udn-bg: #0a0e1a;
+  --udn-bg2: #0e1322;
+  --udn-bg3: #131a2b;
+  --udn-border: #1a2540;
+  --udn-border2: #223050;
+  --udn-dim: #2e4060;
+  --udn-muted: #4a6488;
+  --udn-subtle: #7090b8;
+  --udn-body: #94b8d8;
+  --udn-bright: #c8e0f4;
+  --udn-white: #edf4fb;
+  --udn-accent: #3d9be9;
+  --udn-accent2: #1a6fb5;
+  --udn-success: #34d399;
+  --udn-glow: rgba(61,155,233,0.15);
+  --udn-glow2: rgba(61,155,233,0.06);
+}
+
+/* -- Material theme color overrides -- */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #3d9be9;
+  --md-primary-bg-color: #0a0e1a;
+  --md-accent-fg-color: #3d9be9;
+  --md-default-bg-color: #0e1322;
+}
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #1a6fb5;
+  --md-primary-bg-color: #ffffff;
+  --md-accent-fg-color: #3d9be9;
+}
+
+/* ================================================================
+   HEADER — exact match to main site nav
+   ================================================================ */
+
+.md-header {
+  height: 64px;
+  background: rgba(10, 14, 26, 0.92) !important;
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid transparent !important;
+  box-shadow: none !important;
+  transition: border-color 0.3s, background 0.3s;
+}
+.md-header--shadow {
+  border-bottom-color: var(--udn-border) !important;
+  box-shadow: none !important;
+}
+
+.ultradag-site-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 48px;
+  height: 64px;
+  width: 100%;
+}
+
+/* Logo — Cormorant serif, matches main site */
+.udn-logo {
+  font-family: 'Cormorant', serif;
+  font-size: 22px;
+  font-weight: 300;
+  letter-spacing: 0.08em;
+  color: var(--udn-white) !important;
+  text-decoration: none !important;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.udn-logo:hover { color: var(--udn-accent) !important; }
+.udn-logo-mark {
+  width: 28px; height: 28px;
+  border: 1px solid var(--udn-accent);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  position: relative; flex-shrink: 0;
+}
+.udn-logo-mark::after {
+  content: '';
+  width: 8px; height: 8px;
+  background: var(--udn-accent);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--udn-accent);
+}
+
+/* Nav links — DM Mono, matches main site exactly */
+.udn-links {
+  display: flex; align-items: center;
+  gap: 32px; list-style: none;
+  margin: 0; padding: 0;
+}
+.udn-links li { position: relative; }
+.udn-links a {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px; font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--udn-subtle) !important;
+  text-decoration: none !important;
+  transition: color 0.2s;
+  padding: 20px 0;
+  display: block; position: relative;
+}
+/* Hover underline animation — matches main site */
+.udn-links a::after {
+  content: '';
+  position: absolute; bottom: 0; left: 0;
+  width: 0; height: 1px;
+  background: var(--udn-accent);
+  transition: width 0.3s ease;
+}
+.udn-links a:hover { color: var(--udn-white) !important; }
+.udn-links a:hover::after { width: 100%; }
+.udn-links a.udn-active { color: var(--udn-accent) !important; }
+.udn-links a.udn-active::after { width: 100%; }
+
+/* CTA buttons — matches main site */
+.udn-cta {
+  color: var(--udn-white) !important;
+  background: rgba(61,155,233,0.08) !important;
+  border: 1px solid rgba(61,155,233,0.25) !important;
+  padding: 8px 16px !important;
+  border-radius: 3px !important;
+  font-weight: 500 !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 0 0 0 rgba(61,155,233,0);
+}
+.udn-cta:hover {
+  background: rgba(61,155,233,0.15) !important;
+  border-color: rgba(61,155,233,0.4) !important;
+  box-shadow: 0 0 12px rgba(61,155,233,0.15);
+  transform: translateY(-1px);
+}
+.udn-cta::after { display: none !important; }
+.udn-links li:has(.udn-cta) { margin-left: -16px; }
+.udn-links li:has(.udn-cta) + li:has(.udn-cta) { margin-left: -20px; }
+
+/* Right-side controls */
+.udn-right {
+  display: flex; align-items: center; gap: 8px;
+}
+.udn-right .md-header__button {
+  color: var(--udn-subtle) !important;
+  cursor: pointer; width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+}
+.udn-right .md-header__button:hover { color: var(--udn-white) !important; }
+.udn-right .md-header__option { display: flex; align-items: center; }
+.udn-right .md-option { display: none; }
+
+/* ================================================================
+   TABS — the doc section submenu below the header
+   ================================================================ */
+
+.md-tabs {
+  background: var(--udn-bg2) !important;
+  border-bottom: 1px solid var(--udn-border) !important;
+  color: var(--udn-subtle);
+}
+.md-tabs__link {
+  font-family: 'DM Mono', monospace !important;
+  font-size: 11px !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+  color: var(--udn-subtle) !important;
+  opacity: 1 !important;
+  transition: color 0.2s;
+}
+.md-tabs__link:hover { color: var(--udn-white) !important; }
+.md-tabs__item--active .md-tabs__link {
+  color: var(--udn-accent) !important;
+}
+
+/* ================================================================
+   HAMBURGER & MOBILE MENU
+   ================================================================ */
+
+.udn-hamburger {
+  display: none; flex-direction: column; gap: 5px;
+  cursor: pointer; padding: 8px; background: none; border: none;
+  z-index: 101;
+}
+.udn-hamburger span {
+  width: 24px; height: 2px;
+  background: var(--udn-white);
+  transition: all 0.3s; border-radius: 2px;
+}
+.udn-hamburger.active span:nth-child(1) { transform: rotate(45deg) translate(7px,7px); }
+.udn-hamburger.active span:nth-child(2) { opacity: 0; }
+.udn-hamburger.active span:nth-child(3) { transform: rotate(-45deg) translate(7px,-7px); }
+
+.udn-mobile-menu {
+  position: fixed; top: 64px; left: 0; right: 0;
+  background: rgba(10,14,26,0.98);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--udn-border);
+  z-index: 199; max-height: 0; overflow: hidden;
+  transition: max-height 0.3s ease, padding 0.3s ease;
+  padding: 0 24px;
+}
+.udn-mobile-menu.active { max-height: 500px; padding: 24px; }
+.udn-mobile-menu ul {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 20px;
+}
+.udn-mobile-menu a {
+  font-family: 'DM Mono', monospace;
+  font-size: 14px; letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--udn-subtle) !important;
+  text-decoration: none !important;
+  display: block; padding: 8px 0;
+}
+.udn-mobile-menu a:hover { color: var(--udn-white) !important; }
+
+@media (max-width: 900px) {
+  .udn-links { display: none; }
+  .udn-hamburger { display: flex; }
+  .ultradag-site-nav { padding: 0 24px; }
+}
+@media (min-width: 901px) {
+  .udn-mobile-menu { display: none; }
+}
+
+/* ================================================================
+   FOOTER — matches main site footer exactly
+   ================================================================ */
+
+/* Hide default Material footer */
+.md-footer { display: none !important; }
+
+.ultradag-footer {
+  position: relative; z-index: 1;
+  border-top: 1px solid var(--udn-border);
+  background: var(--udn-bg);
+  margin-top: 120px;
+}
+.udf-inner { max-width: 1200px; margin: 0 auto; padding: 64px 48px 32px; }
+.udf-top {
+  display: grid; grid-template-columns: 1.2fr 2fr;
+  gap: 80px; margin-bottom: 48px;
+}
+.udf-brand { max-width: 320px; }
+.udf-logo { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.udf-logo span {
+  font-family: 'Cormorant', serif;
+  font-size: 24px; font-weight: 300;
+  color: var(--udn-white); letter-spacing: 0.06em;
+}
+.udf-tagline {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px; line-height: 1.7;
+  color: var(--udn-subtle); margin-bottom: 24px;
+}
+.udf-social { display: flex; gap: 16px; }
+.udf-social a {
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--udn-border); border-radius: 50%;
+  color: var(--udn-muted) !important; transition: all 0.2s;
+  text-decoration: none !important;
+}
+.udf-social a:hover {
+  border-color: var(--udn-accent);
+  color: var(--udn-accent) !important;
+  background: var(--udn-glow2);
+}
+.udf-links-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; }
+.udf-col h4 {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--udn-accent);
+  margin-bottom: 16px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--udn-border2);
+}
+.udf-col ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.udf-col a {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px; color: var(--udn-subtle) !important;
+  text-decoration: none !important; transition: color 0.2s;
+}
+.udf-col a:hover { color: var(--udn-white) !important; }
+.udf-bottom {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: 32px; border-top: 1px solid var(--udn-border);
+}
+.udf-legal {
+  display: flex; align-items: center; gap: 12px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px; color: var(--udn-dim);
+}
+.udf-sep { color: var(--udn-border2); }
+.udf-status {
+  display: flex; align-items: center; gap: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px; color: var(--udn-subtle);
+}
+.udf-status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--udn-success);
+  box-shadow: 0 0 8px var(--udn-success);
+  animation: udf-pulse 2s infinite;
+}
+@keyframes udf-pulse { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
+
+/* Footer responsive */
+@media (max-width: 768px) {
+  .udf-top { grid-template-columns: 1fr; gap: 32px; }
+  .udf-links-grid { grid-template-columns: 1fr 1fr; }
+  .udf-inner { padding: 40px 24px 24px; }
+  .udf-bottom { flex-direction: column; gap: 12px; text-align: center; }
+  .udf-legal { flex-wrap: wrap; justify-content: center; }
+}
+@media (max-width: 480px) {
+  .udf-links-grid { grid-template-columns: 1fr; }
+}
+
+/* ================================================================
+   LIGHT MODE OVERRIDES
+   ================================================================ */
+
+[data-md-color-scheme="default"] .md-header {
+  background: rgba(255,255,255,0.95) !important;
+}
+[data-md-color-scheme="default"] .udn-logo { color: #1a2540 !important; }
+[data-md-color-scheme="default"] .udn-logo:hover { color: var(--udn-accent2) !important; }
+[data-md-color-scheme="default"] .udn-links a { color: #4a6488 !important; }
+[data-md-color-scheme="default"] .udn-links a:hover { color: #1a2540 !important; }
+[data-md-color-scheme="default"] .udn-links a.udn-active { color: var(--udn-accent2) !important; }
+[data-md-color-scheme="default"] .udn-hamburger span { background: #1a2540; }
+[data-md-color-scheme="default"] .md-tabs {
+  background: #f8f9fa !important;
+  border-bottom-color: #e0e0e0 !important;
+}
+[data-md-color-scheme="default"] .md-tabs__link { color: #4a6488 !important; }
+[data-md-color-scheme="default"] .md-tabs__item--active .md-tabs__link { color: var(--udn-accent2) !important; }
+[data-md-color-scheme="default"] .ultradag-footer {
+  background: #fafafa; border-top-color: #e0e0e0;
+}
+[data-md-color-scheme="default"] .udf-logo span { color: #1a2540; }
+[data-md-color-scheme="default"] .udf-tagline { color: #4a6488; }
+[data-md-color-scheme="default"] .udf-col a { color: #4a6488 !important; }
+[data-md-color-scheme="default"] .udf-col a:hover { color: #1a2540 !important; }
+[data-md-color-scheme="default"] .udf-col h4 { border-bottom-color: #e0e0e0; }
+[data-md-color-scheme="default"] .udf-bottom { border-top-color: #e0e0e0; }
+[data-md-color-scheme="default"] .udf-legal { color: #999; }
+[data-md-color-scheme="default"] .udf-social a { border-color: #e0e0e0; color: #999 !important; }
