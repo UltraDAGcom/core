@@ -1,3 +1,3 @@
-# Handle docs-new directory - serve from docs/ directory as test
-/docs-new/ /docs/index.html 200
-/docs-new/* /docs/:splat 200
+# Handle docs directory - serve from docs/ directory
+/docs/ /docs/index.html 200
+/docs/* /docs/:splat 200
