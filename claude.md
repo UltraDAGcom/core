@@ -23,6 +23,7 @@
   - **BFT boundary: Equivocation + message loss at exactly ceil(2n/3) honest validators stalls finality permanently.** Correct BFT behavior — operational guidance: run with n > 3f+1, not exactly 3f+1.
   - **Split-delivery equivocation stalls finality without rebroadcast/gossip.** Each half sees only one vertex, never detects equivocation. DAG fragments. `stuck_threshold` (100 rounds) should resolve this but doesn't — potential liveness bug worth investigating.
   - Reward gambling, governance takeover without quorum, finality stalling with f < n/3, selective equivocation, combined attacks — all invariants hold.
+- **Property-based adversarial fuzzing (March 17, 2026)**: proptest generates random sequences of 12 Byzantine action types + random transaction injections (stake, unstake, delegate, transfer). 200 cases × 5 configs = 1000 unique adversarial scenarios. Zero safety invariant violations. Proptest auto-shrinks failures to minimal reproducing cases. 38 total sim tests.
 
 **Cryptographic, Persistence & Economics Deep Audit (March 17, 2026):**
 - **Hash collision: CreateProposalTx::hash() title/description (Bug #181)** — Missing length delimiters for variable-length fields. `title="AB" desc="CD"` and `title="ABC" desc="D"` produced identical hashes, enabling mempool eviction attacks. Fix: u32 LE length prefix before all variable-length fields.
