@@ -1,18 +1,18 @@
-use ultradag_sim::harness::{SimConfig, SimHarness};
+use ultradag_sim::harness::{SimConfig, SimHarness, Scenario};
 use ultradag_sim::network::DeliveryPolicy;
 use ultradag_sim::byzantine::ByzantineStrategy;
 
-/// 1 equivocator among 4 validators. Equivocation should be detected.
 #[test]
-fn equivocator_detected() {
+fn cross_feature_convergence() {
     let config = SimConfig {
-        num_honest: 3,
+        num_honest: 5,
         byzantine: vec![ByzantineStrategy::Equivocator],
-        num_rounds: 100,
+        num_rounds: 500,
         delivery_policy: DeliveryPolicy::Perfect,
-        seed: 777,
-        txs_per_round: 0,
-        check_every_round: true, scenario: None,
+        seed: 400,
+        txs_per_round: 10,
+        check_every_round: true,
+        scenario: Some(Scenario::CrossFeature),
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);
@@ -20,17 +20,17 @@ fn equivocator_detected() {
     assert!(result.equivocations_detected > 0, "Should detect equivocation");
 }
 
-/// 1 equivocator among 4 validators with transactions. Supply invariant must hold.
 #[test]
-fn equivocator_with_transactions_supply_holds() {
+fn cross_feature_lossy_network() {
     let config = SimConfig {
-        num_honest: 3,
+        num_honest: 5,
         byzantine: vec![ByzantineStrategy::Equivocator],
-        num_rounds: 200,
-        delivery_policy: DeliveryPolicy::Perfect,
-        seed: 888,
+        num_rounds: 500,
+        delivery_policy: DeliveryPolicy::Lossy { drop_probability: 0.1 },
+        seed: 401,
         txs_per_round: 10,
-        check_every_round: true, scenario: None,
+        check_every_round: true,
+        scenario: Some(Scenario::CrossFeature),
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);

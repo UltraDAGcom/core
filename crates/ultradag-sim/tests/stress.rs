@@ -12,7 +12,7 @@ fn twenty_one_validators_heavy_load() {
         delivery_policy: DeliveryPolicy::Lossy { drop_probability: 0.05 },
         seed: 2024,
         txs_per_round: 50,
-        check_every_round: false,
+        check_every_round: false, scenario: None,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);
@@ -29,7 +29,7 @@ fn mixed_byzantine_within_tolerance() {
         delivery_policy: DeliveryPolicy::RandomOrder,
         seed: 3030,
         txs_per_round: 10,
-        check_every_round: true,
+        check_every_round: true, scenario: None,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);

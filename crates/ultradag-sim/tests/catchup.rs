@@ -1,4 +1,4 @@
-use ultradag_sim::harness::{SimConfig, SimHarness};
+use ultradag_sim::harness::{SimConfig, SimHarness, Scenario};
 use ultradag_sim::network::DeliveryPolicy;
 use ultradag_sim::validator::SimValidator;
 use ultradag_coin::SecretKey;
@@ -16,7 +16,7 @@ fn late_joiner_converges() {
         delivery_policy: DeliveryPolicy::Perfect,
         seed: 42,
         txs_per_round: 0,
-        check_every_round: false,
+        check_every_round: false, scenario: None,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);
@@ -83,14 +83,14 @@ fn late_joiner_converges() {
     harness.byzantine_strategies.push(None);
     harness.network = ultradag_sim::network::VirtualNetwork::new(5, DeliveryPolicy::Perfect, 100);
 
-    let config2 = SimConfig {
+    let _config2 = SimConfig {
         num_honest: 5,
         byzantine: vec![],
         num_rounds: 50,
         delivery_policy: DeliveryPolicy::Perfect,
         seed: 100,
         txs_per_round: 0,
-        check_every_round: true,
+        check_every_round: true, scenario: None,
     };
 
     // Manually run rounds 51-100

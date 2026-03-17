@@ -14,7 +14,7 @@ fn partition_and_heal() {
         },
         seed: 999,
         txs_per_round: 5,
-        check_every_round: true,
+        check_every_round: true, scenario: None,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);

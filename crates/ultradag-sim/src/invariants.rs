@@ -125,6 +125,86 @@ pub fn check_equivocation_detected(
     Ok(())
 }
 
+/// Check staking consistency across honest validators at the same finalized round.
+pub fn check_stake_consistency(validators: &[SimValidator]) -> Result<(), String> {
+    let mut by_round: HashMap<u64, Vec<(usize, u64, u64)>> = HashMap::new();
+    for v in validators.iter().filter(|v| v.honest) {
+        let round = v.last_finalized_round();
+        if round > 0 {
+            by_round.entry(round).or_default().push((
+                v.index,
+                v.state.total_staked(),
+                v.state.all_delegations().map(|(_, d)| d.delegated).fold(0u64, |a, d| a.saturating_add(d)),
+            ));
+        }
+    }
+    for (round, entries) in &by_round {
+        if entries.len() < 2 { continue; }
+        let (_, first_staked, first_delegated) = entries[0];
+        for &(idx, staked, delegated) in &entries[1..] {
+            if staked != first_staked || delegated != first_delegated {
+                return Err(format!(
+                    "Stake consistency failed at round {}: v{} staked={}/delegated={} vs v{} staked={}/delegated={}",
+                    round, entries[0].0, first_staked, first_delegated, idx, staked, delegated,
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Check governance consistency across honest validators at the same finalized round.
+pub fn check_governance_consistency(validators: &[SimValidator]) -> Result<(), String> {
+    let mut by_round: HashMap<u64, Vec<(usize, u64, u64)>> = HashMap::new();
+    for v in validators.iter().filter(|v| v.honest) {
+        let round = v.last_finalized_round();
+        if round > 0 {
+            by_round.entry(round).or_default().push((
+                v.index,
+                v.state.governance_params().min_fee_sats,
+                v.state.next_proposal_id(),
+            ));
+        }
+    }
+    for (round, entries) in &by_round {
+        if entries.len() < 2 { continue; }
+        let (_, first_fee, first_pid) = entries[0];
+        for &(idx, fee, pid) in &entries[1..] {
+            if fee != first_fee || pid != first_pid {
+                return Err(format!(
+                    "Governance consistency failed at round {}: v{} min_fee={}/next_id={} vs v{} min_fee={}/next_id={}",
+                    round, entries[0].0, first_fee, first_pid, idx, fee, pid,
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Check council consistency across honest validators at the same finalized round.
+pub fn check_council_consistency(validators: &[SimValidator]) -> Result<(), String> {
+    let mut by_round: HashMap<u64, Vec<(usize, usize)>> = HashMap::new();
+    for v in validators.iter().filter(|v| v.honest) {
+        let round = v.last_finalized_round();
+        if round > 0 {
+            by_round.entry(round).or_default().push((v.index, v.state.council_member_count()));
+        }
+    }
+    for (round, entries) in &by_round {
+        if entries.len() < 2 { continue; }
+        let (_, first_count) = entries[0];
+        for &(idx, count) in &entries[1..] {
+            if count != first_count {
+                return Err(format!(
+                    "Council consistency failed at round {}: v{} count={} vs v{} count={}",
+                    round, entries[0].0, first_count, idx, count,
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Run all invariant checks.
 pub fn check_all(
     validators: &[SimValidator],
@@ -145,6 +225,15 @@ pub fn check_all(
         violations.push(e);
     }
     if let Err(e) = check_equivocation_detected(validators, known_equivocators) {
+        violations.push(e);
+    }
+    if let Err(e) = check_stake_consistency(validators) {
+        violations.push(e);
+    }
+    if let Err(e) = check_governance_consistency(validators) {
+        violations.push(e);
+    }
+    if let Err(e) = check_council_consistency(validators) {
         violations.push(e);
     }
 

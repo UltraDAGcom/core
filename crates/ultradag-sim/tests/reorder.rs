@@ -11,7 +11,7 @@ fn random_message_order_converges() {
         delivery_policy: DeliveryPolicy::RandomOrder,
         seed: 123,
         txs_per_round: 10,
-        check_every_round: true,
+        check_every_round: true, scenario: None,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);
@@ -29,7 +29,7 @@ fn random_order_multi_seed() {
             delivery_policy: DeliveryPolicy::RandomOrder,
             seed,
             txs_per_round: 5,
-            check_every_round: false,
+            check_every_round: false, scenario: None,
         };
         let mut harness = SimHarness::new(&config);
         let result = harness.run(&config);

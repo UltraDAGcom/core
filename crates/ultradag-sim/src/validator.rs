@@ -201,4 +201,28 @@ impl SimValidator {
     pub fn add_transaction(&mut self, tx: Transaction) {
         self.mempool.insert(tx);
     }
+
+    /// Override a governance parameter directly (bypasses validation bounds).
+    /// Must be called identically on ALL validators before any rounds run.
+    pub fn override_governance_param_unchecked(&mut self, param: &str, value: u64) {
+        let params = self.state.governance_params_mut();
+        match param {
+            "voting_period_rounds" => params.voting_period_rounds = value,
+            "execution_delay_rounds" => params.execution_delay_rounds = value,
+            "min_fee_sats" => params.min_fee_sats = value,
+            "min_stake_to_propose" => params.min_stake_to_propose = value,
+            "quorum_numerator" => params.quorum_numerator = value,
+            "approval_numerator" => params.approval_numerator = value,
+            "max_active_proposals" => params.max_active_proposals = value,
+            "observer_reward_percent" => params.observer_reward_percent = value,
+            "council_emission_percent" => params.council_emission_percent = value,
+            "slash_percent" => params.slash_percent = value,
+            _ => panic!("Unknown governance param: {}", param),
+        }
+    }
+
+    /// Add a council member. Must be called identically on ALL validators.
+    pub fn add_council_member(&mut self, address: Address, category: ultradag_coin::governance::CouncilSeatCategory) {
+        let _ = self.state.add_council_member(address, category);
+    }
 }
