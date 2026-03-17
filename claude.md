@@ -8,6 +8,21 @@
 
 ## Recent Updates (March 2026)
 
+**Cryptographic, Persistence & Economics Deep Audit (March 17, 2026):**
+- **Hash collision: CreateProposalTx::hash() title/description (Bug #181)** — Missing length delimiters for variable-length fields. `title="AB" desc="CD"` and `title="ABC" desc="D"` produced identical hashes, enabling mempool eviction attacks. Fix: u32 LE length prefix before all variable-length fields.
+- **Hash collision: cross-type hash() discriminators (Bug #182)** — TransferTx, VoteTx, CreateProposalTx `hash()` lacked type discriminator bytes. Crafted cross-type collisions could evict legitimate transactions from mempool. Fix: added `b"transfer"`, `b"proposal"`, `b"vote"` prefixes.
+- **Domain separation: DagVertex signable_bytes (Bug #183)** — Vertex `signable_bytes()` lacked type discriminator. Theoretical cross-type signature reuse between vertices and transactions. Fix: added `b"vertex"` discriminator. Breaking change.
+- **CRITICAL: No fsync before rename in persistence (Bug #184)** — `save()`, `atomic_write()`, `save_checkpoint()`, `save_checkpoint_state()`, and `save_to_redb()` all used `fs::write()` + `fs::rename()` without `fsync()`. On crash, temp file could be empty/partial on disk; rename atomically replaces good file with garbage. Fix: `write_and_fsync()` helper + `fsync_directory()` after rename.
+- **COUNCIL_MEMBERS table backward compat (Bug #185)** — `load_from_redb()` used `.open_table()?` which fails on legacy databases. Fix: `if let Ok(table)` pattern matching DELEGATIONS table.
+- **CONSENSUS-CRITICAL: Undelegating amounts inflate reward denominator (Bug #186)** — `distribute_round_rewards()` used `total_staked() + total_delegated()` which includes undelegating delegations, but per-validator `effective_stake_of()` excludes them. Under-emission proportional to undelegating volume. Fix: denominator = `sum(effective_stake_of(v))`.
+- **CONSENSUS-CRITICAL: compute_validator_reward same denominator bug (Bug #187)** — Same mismatch as #186. Fix: identical denominator computation.
+- **Governance: observer_reward_percent parameter ignored (Bug #188)** — Both reward functions used hardcoded `OBSERVER_REWARD_PERCENT` constant instead of `governance_params.observer_reward_percent`. Council ParameterChange proposals had no effect. Fix: read from governance_params.
+- **list_checkpoints O(N) deserialization → O(1) filename parsing** — Extracted round from filename `checkpoint_NNNNNNNNNN.bin` instead of deserializing every file.
+- **Test isolation** — Fixed parallel test collisions from shared temp directories. All use `tempfile::TempDir::new()`.
+- **40 new tests**: 15 economics (reward distribution, halving, delegation, slashing, commission), 10 redb persistence (roundtrip, corruption detection, governance params), 10 persistence unit (fsync, checkpoint), 5 crypto (hash collision prevention, domain separation).
+- **977 tests passing**, 0 failed, 14 ignored (jepsen). Zero clippy warnings.
+- **Breaking change** — Vertex `signable_bytes()` changed. Clean testnet restart required.
+
 **P2P & RPC Hardening + Eclipse Fix + All SDK Signing (March 16, 2026):**
 - **CRITICAL: Fresh node eclipse attack fixed (Bug #175)** — `CheckpointSync` handler skipped chain verification for fresh nodes with zero local checkpoints. Attacker could fabricate entire state with own validator set, sign checkpoint, and fresh node accepted it. Fix: `CheckpointSync` message now carries `checkpoint_chain: Vec<Checkpoint>` field. Sender includes full local checkpoint chain. Receiver builds hash-to-checkpoint map from both local and peer-provided checkpoints, then ALWAYS verifies chain back to `GENESIS_CHECKPOINT_HASH` (hardcoded, unforgeable). Chain verification is never skipped.
 - **Encrypted chunk amplification fix (Bug #176)** — In `recv_encrypted`, a peer claiming large `total_len` (4MB) but sending tiny 1-byte chunks caused ~4M decrypt operations (each acquiring noise mutex). Fix: `max_chunks = (total_len / 64) + 128` cap rejects pathological fragmentation.
@@ -1367,7 +1382,7 @@ cargo test --workspace
 
 Run `cargo test --workspace --release` to verify:
 ```
-test result: ok. 937 passed; 0 failed; 14 ignored
+test result: ok. 977 passed; 0 failed; 14 ignored
 ```
 
 ### Test Breakdown by Crate:
