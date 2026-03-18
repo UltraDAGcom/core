@@ -897,6 +897,36 @@ async fn handle_request(
             )
         }
 
+        (&Method::GET, ["fee-estimate"]) => {
+            let state = read_lock_or_503!(server.state);
+            let mp = read_lock_or_503!(server.mempool);
+            let min_fee = state.governance_params().min_fee_sats;
+            let mempool_size = mp.len();
+            let mempool_capacity: usize = 10_000;
+            let usage_percent = if mempool_capacity > 0 {
+                (mempool_size * 100) / mempool_capacity
+            } else {
+                0
+            };
+            let (recommended_fee, congestion) = if usage_percent >= 80 {
+                (min_fee.saturating_mul(5), "high")
+            } else if usage_percent >= 50 {
+                (min_fee.saturating_mul(2), "medium")
+            } else {
+                (min_fee, "low")
+            };
+            json_response(
+                StatusCode::OK,
+                &serde_json::json!({
+                    "min_fee_sats": min_fee,
+                    "recommended_fee_sats": recommended_fee,
+                    "mempool_size": mempool_size,
+                    "mempool_capacity": mempool_capacity,
+                    "congestion": congestion,
+                }),
+            )
+        }
+
         (&Method::GET, ["mempool"]) => {
             let mp = read_lock_or_503!(server.mempool);
             let txs: Vec<serde_json::Value> = mp.best(100).iter().map(|tx| {

@@ -1,10 +1,21 @@
 use std::collections::{HashMap, HashSet};
+use std::net::IpAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, warn};
+use tokio::time::Instant;
+use tracing::{debug, info, warn};
 
 use crate::peer::connection::PeerWriter;
 use crate::protocol::Message;
+
+/// Maximum ban duration in seconds (1 hour).
+const MAX_BAN_DURATION_SECS: u64 = 3600;
+
+/// Tracks a banned IP with exponential backoff.
+struct BanEntry {
+    banned_until: Instant,
+    ban_count: u32,
+}
 
 /// Tracks known and connected peers with write handles for broadcasting.
 #[derive(Clone)]
@@ -21,6 +32,9 @@ pub struct PeerRegistry {
     /// Addresses currently being connected to (prevents TOCTOU race in try_connect_peer).
     /// A task sets this before TCP connect and clears it after writer is added or on failure.
     connecting: Arc<RwLock<HashSet<String>>>,
+    /// Banned IPs with exponential backoff. Duration doubles on each ban,
+    /// capped at MAX_BAN_DURATION_SECS (1 hour).
+    banned_peers: Arc<RwLock<HashMap<IpAddr, BanEntry>>>,
 }
 
 impl PeerRegistry {
@@ -31,6 +45,41 @@ impl PeerRegistry {
             connected_listen_addrs: Arc::new(RwLock::new(HashSet::new())),
             writer_to_listen: Arc::new(RwLock::new(HashMap::new())),
             connecting: Arc::new(RwLock::new(HashSet::new())),
+            banned_peers: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Ban an IP address with exponential backoff.
+    /// Duration = min(2^ban_count seconds, 3600 seconds).
+    /// Each subsequent ban doubles the duration, up to 1 hour max.
+    pub async fn ban_peer(&self, ip: IpAddr) {
+        let mut bans = self.banned_peers.write().await;
+        let ban_count = bans.get(&ip).map(|e| e.ban_count.saturating_add(1)).unwrap_or(1);
+        let duration_secs = (1u64 << ban_count.min(31)).min(MAX_BAN_DURATION_SECS);
+        let banned_until = Instant::now() + std::time::Duration::from_secs(duration_secs);
+        info!("Banning peer {} for {}s (ban #{}).", ip, duration_secs, ban_count);
+        bans.insert(ip, BanEntry { banned_until, ban_count });
+    }
+
+    /// Check if an IP is currently banned. Returns true if banned and ban has not expired.
+    pub async fn is_banned(&self, ip: IpAddr) -> bool {
+        let bans = self.banned_peers.read().await;
+        if let Some(entry) = bans.get(&ip) {
+            Instant::now() < entry.banned_until
+        } else {
+            false
+        }
+    }
+
+    /// Remove expired bans to free memory. Called periodically from heartbeat.
+    pub async fn cleanup_expired_bans(&self) {
+        let mut bans = self.banned_peers.write().await;
+        let now = Instant::now();
+        let before = bans.len();
+        bans.retain(|_, entry| now < entry.banned_until);
+        let removed = before - bans.len();
+        if removed > 0 {
+            debug!("Cleaned up {} expired bans, {} remaining", removed, bans.len());
         }
     }
 
@@ -250,5 +299,64 @@ mod tests {
         let result = reg.send_to("nonexistent", &msg).await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), std::io::ErrorKind::NotConnected);
+    }
+
+    #[tokio::test]
+    async fn ban_peer_and_check() {
+        let reg = PeerRegistry::new();
+        let ip: IpAddr = "192.168.1.100".parse().unwrap();
+        assert!(!reg.is_banned(ip).await);
+        reg.ban_peer(ip).await;
+        assert!(reg.is_banned(ip).await);
+    }
+
+    #[tokio::test]
+    async fn ban_peer_exponential_backoff() {
+        let reg = PeerRegistry::new();
+        let ip: IpAddr = "10.0.0.1".parse().unwrap();
+        // First ban: 2^1 = 2s
+        reg.ban_peer(ip).await;
+        // Second ban: 2^2 = 4s
+        reg.ban_peer(ip).await;
+        {
+            let bans = reg.banned_peers.read().await;
+            let entry = bans.get(&ip).unwrap();
+            assert_eq!(entry.ban_count, 2);
+        }
+        assert!(reg.is_banned(ip).await);
+    }
+
+    #[tokio::test]
+    async fn cleanup_expired_bans() {
+        let reg = PeerRegistry::new();
+        let ip: IpAddr = "10.0.0.2".parse().unwrap();
+        // Manually insert an already-expired ban
+        {
+            let mut bans = reg.banned_peers.write().await;
+            bans.insert(ip, super::BanEntry {
+                banned_until: Instant::now() - std::time::Duration::from_secs(1),
+                ban_count: 1,
+            });
+        }
+        assert!(!reg.is_banned(ip).await);
+        reg.cleanup_expired_bans().await;
+        let bans = reg.banned_peers.read().await;
+        assert!(bans.is_empty());
+    }
+
+    #[tokio::test]
+    async fn ban_duration_capped_at_one_hour() {
+        let reg = PeerRegistry::new();
+        let ip: IpAddr = "10.0.0.3".parse().unwrap();
+        // Simulate many bans to reach the cap
+        for _ in 0..40 {
+            reg.ban_peer(ip).await;
+        }
+        let bans = reg.banned_peers.read().await;
+        let entry = bans.get(&ip).unwrap();
+        // Duration should be capped at 3600s even with high ban_count
+        let max_duration = std::time::Duration::from_secs(super::MAX_BAN_DURATION_SECS);
+        let time_remaining = entry.banned_until.duration_since(Instant::now());
+        assert!(time_remaining <= max_duration);
     }
 }

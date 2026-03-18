@@ -364,6 +364,13 @@ impl NodeServer {
             let (stream, addr) = listener.accept().await?;
             let addr_str = addr.to_string();
 
+            // Reject banned IPs immediately before any processing
+            if self.peers.is_banned(addr.ip()).await {
+                debug!("Rejecting connection from banned IP {}", addr_str);
+                drop(stream);
+                continue;
+            }
+
             // Reject self-connections from loopback addresses.
             // Inbound connections have ephemeral source ports, so we only check IP.
             // The IP dedup check below handles non-loopback self-connections.
@@ -421,6 +428,7 @@ impl NodeServer {
 
             info!("Incoming connection from {}", addr_str);
 
+            let remote_ip_addr = addr.ip();
             let state = self.state.clone();
             let mempool = self.mempool.clone();
             let dag = self.dag.clone();
@@ -451,7 +459,8 @@ impl NodeServer {
                         Some(result.transport)
                     }
                     Ok(Err(e)) => {
-                        warn!("Noise handshake failed with {}: {}", addr_str, e);
+                        warn!("Noise handshake failed with {}: {}, banning", addr_str, e);
+                        peers.ban_peer(remote_ip_addr).await;
                         return;
                     }
                     Err(_) => {
@@ -542,6 +551,9 @@ impl NodeServer {
                     let remaining = peers.connected_count().await;
                     info!("Heartbeat: removed {} dead peers, {} remaining", dead.len(), remaining);
                 }
+
+                // Clean up expired peer bans
+                peers.cleanup_expired_bans().await;
 
                 // Reconnect to seeds if peer count is low
                 let peer_count = peers.connected_count().await;
@@ -1035,8 +1047,11 @@ async fn handle_peer(
             message_count = 1;
             window_start = Instant::now();
         } else if message_count > MAX_MESSAGES_PER_WINDOW {
-            warn!("Peer {} exceeded message rate limit ({} msgs in {}s), disconnecting",
+            warn!("Peer {} exceeded message rate limit ({} msgs in {}s), disconnecting and banning",
                 peer_addr, message_count, elapsed.as_secs());
+            if let Ok(sock_addr) = peer_addr.parse::<std::net::SocketAddr>() {
+                peers.ban_peer(sock_addr.ip()).await;
+            }
             return Ok(());
         }
 
@@ -1048,8 +1063,11 @@ async fn handle_peer(
         match msg {
             Message::Hello { version, height, listen_port } => {
                 if version != PROTOCOL_VERSION {
-                    warn!("Peer {} sent Hello with unsupported protocol version {} (expected {}), disconnecting",
+                    warn!("Peer {} sent Hello with unsupported protocol version {} (expected {}), disconnecting and banning",
                         peer_addr, version, PROTOCOL_VERSION);
+                    if let Ok(sock_addr) = peer_addr.parse::<std::net::SocketAddr>() {
+                        peers.ban_peer(sock_addr.ip()).await;
+                    }
                     return Ok(());
                 }
                 let our_round = dag.read().await.current_round();
@@ -1122,8 +1140,11 @@ async fn handle_peer(
 
             Message::HelloAck { version, height } => {
                 if version != PROTOCOL_VERSION {
-                    warn!("Peer {} sent HelloAck with unsupported protocol version {} (expected {}), disconnecting",
+                    warn!("Peer {} sent HelloAck with unsupported protocol version {} (expected {}), disconnecting and banning",
                         peer_addr, version, PROTOCOL_VERSION);
+                    if let Ok(sock_addr) = peer_addr.parse::<std::net::SocketAddr>() {
+                        peers.ban_peer(sock_addr.ip()).await;
+                    }
                     return Ok(());
                 }
                 // Track highest network round seen (see Hello handler for rationale on fetch_max)
