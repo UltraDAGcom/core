@@ -36,7 +36,7 @@ export function useWalletBalances(wallets: Wallet[], connected: boolean) {
             balance: bal?.balance ?? 0,
             nonce: bal?.nonce ?? 0,
             staked: stake?.staked ?? 0,
-            delegated: deleg?.delegated_amount ?? 0,
+            delegated: deleg?.delegated ?? 0,
             is_active_validator: stake?.is_active_validator ?? false,
             commission_percent: stake?.commission_percent ?? 10,
           });
@@ -61,7 +61,7 @@ export function useWalletBalances(wallets: Wallet[], connected: boolean) {
 
   useEffect(() => {
     fetchAll();
-    intervalRef.current = setInterval(fetchAll, 30_000);
+    intervalRef.current = setInterval(fetchAll, 10_000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };

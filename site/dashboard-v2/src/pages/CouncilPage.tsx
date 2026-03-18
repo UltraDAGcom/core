@@ -9,11 +9,22 @@ interface CouncilMember {
   category: string;
 }
 
+interface SeatInfo {
+  available: number;
+  filled: number;
+  max: number;
+}
+
 interface CouncilData {
   members: CouncilMember[];
   total_seats: number;
   filled_seats: number;
+  member_count: number;
+  max_members: number;
   emission_percent: number;
+  per_member_reward_sats: number;
+  per_member_reward_udag: number;
+  seats: Record<string, SeatInfo>;
 }
 
 export function CouncilPage() {
@@ -50,41 +61,92 @@ export function CouncilPage() {
   }
 
   const members = council?.members ?? [];
+  const memberCount = council?.member_count ?? members.length;
+  const maxMembers = council?.max_members ?? 21;
+  const openSeats = maxMembers - memberCount;
+  const perMemberReward = council?.per_member_reward_udag ?? 0;
+  const emissionPercent = council?.emission_percent ?? 10;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-page-enter">
       <h1 className="text-2xl font-bold text-white">Council of 21</h1>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="rounded-lg bg-dag-card border border-dag-border p-4">
+          <span className="text-dag-muted text-xs block mb-1">Members</span>
+          <span className="text-white font-bold text-xl font-mono">{memberCount}<span className="text-dag-muted text-sm font-normal">/{maxMembers}</span></span>
+        </div>
+        <div className="rounded-lg bg-dag-card border border-dag-border p-4">
+          <span className="text-dag-muted text-xs block mb-1">Open Seats</span>
+          <span className={`font-bold text-xl font-mono ${openSeats > 0 ? 'text-dag-green' : 'text-dag-muted'}`}>{openSeats}</span>
+        </div>
+        <div className="rounded-lg bg-dag-card border border-dag-border p-4">
+          <span className="text-dag-muted text-xs block mb-1">Per-member Reward</span>
+          <span className="text-white font-bold text-xl font-mono">{perMemberReward}<span className="text-dag-muted text-sm font-normal"> UDAG/round</span></span>
+        </div>
+        <div className="rounded-lg bg-dag-card border border-dag-border p-4">
+          <span className="text-dag-muted text-xs block mb-1">Emission</span>
+          <span className="text-dag-accent font-bold text-xl font-mono">{emissionPercent}%</span>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card title="Seat Categories">
-          <CouncilSeatGrid members={members} />
-          <div className="mt-4 pt-4 border-t border-dag-border grid grid-cols-3 gap-3 text-sm">
-            <div>
-              <span className="text-dag-muted block text-xs">Total Seats</span>
-              <span className="text-white font-bold">{council?.total_seats ?? 21}</span>
-            </div>
-            <div>
-              <span className="text-dag-muted block text-xs">Filled</span>
-              <span className="text-white font-bold">{council?.filled_seats ?? members.length}</span>
-            </div>
-            <div>
-              <span className="text-dag-muted block text-xs">Emission</span>
-              <span className="text-white font-bold">{council?.emission_percent ?? 10}%</span>
-            </div>
-          </div>
+          <CouncilSeatGrid members={members} seats={council?.seats} />
         </Card>
 
         {govConfig && (
           <Card title="Governance Parameters">
-            <div className="space-y-2">
-              {Object.entries(govConfig).map(([key, value]) => (
-                <div key={key} className="flex items-center justify-between text-sm">
-                  <span className="text-dag-muted">{key.replace(/_/g, ' ')}</span>
-                  <span className="text-white font-mono text-xs">
-                    {typeof value === 'number' ? value.toLocaleString() : String(value)}
-                  </span>
+            <div className="space-y-4">
+              {/* Derived percentages */}
+              {(() => {
+                const pctKeys = ['quorum_percent', 'approval_percent'];
+                const pctEntries = Object.entries(govConfig).filter(([k]) => pctKeys.includes(k));
+                return pctEntries.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    {pctEntries.map(([key, value]) => (
+                      <div key={key} className="bg-dag-bg/50 rounded-lg p-3 text-center">
+                        <span className="text-dag-muted text-xs block mb-1">{key.replace(/_/g, ' ')}</span>
+                        <span className="text-white font-bold text-lg">
+                          {typeof value === 'number' ? `${value}%` : `${value}%`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
+
+              {/* Governable params tag list */}
+              {Array.isArray(govConfig.governable_params) && (
+                <div>
+                  <span className="text-dag-muted text-xs block mb-2">Governable parameters</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(govConfig.governable_params as string[]).map((param) => (
+                      <span
+                        key={param}
+                        className="inline-block px-2 py-0.5 rounded-full bg-dag-accent/15 text-dag-accent text-xs font-medium"
+                      >
+                        {param.replace(/_/g, ' ')}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
+
+              {/* Raw numeric params */}
+              <div className="space-y-2">
+                {Object.entries(govConfig)
+                  .filter(([key]) => !['quorum_percent', 'approval_percent', 'governable_params'].includes(key))
+                  .map(([key, value]) => (
+                    <div key={key} className="flex items-center justify-between text-sm">
+                      <span className="text-dag-muted">{key.replace(/_/g, ' ')}</span>
+                      <span className="text-white font-mono text-xs">
+                        {typeof value === 'number' ? value.toLocaleString() : String(value)}
+                      </span>
+                    </div>
+                  ))}
+              </div>
             </div>
           </Card>
         )}

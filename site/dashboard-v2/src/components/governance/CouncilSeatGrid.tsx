@@ -1,10 +1,10 @@
-const SEAT_CONFIG: { category: string; max: number; color: string }[] = [
-  { category: 'Technical', max: 7, color: 'bg-dag-blue' },
-  { category: 'Business', max: 4, color: 'bg-dag-green' },
-  { category: 'Legal', max: 3, color: 'bg-dag-yellow' },
-  { category: 'Academic', max: 3, color: 'bg-dag-purple' },
-  { category: 'Community', max: 2, color: 'bg-dag-red' },
-  { category: 'Foundation', max: 2, color: 'bg-[#f97316]' },
+const SEAT_CONFIG: { category: string; key: string; max: number; color: string }[] = [
+  { category: 'Technical', key: 'technical', max: 7, color: 'bg-dag-blue' },
+  { category: 'Business', key: 'business', max: 4, color: 'bg-dag-green' },
+  { category: 'Legal', key: 'legal', max: 3, color: 'bg-dag-yellow' },
+  { category: 'Academic', key: 'academic', max: 3, color: 'bg-dag-purple' },
+  { category: 'Community', key: 'community', max: 2, color: 'bg-dag-red' },
+  { category: 'Foundation', key: 'foundation', max: 2, color: 'bg-[#f97316]' },
 ];
 
 interface CouncilMember {
@@ -12,15 +12,24 @@ interface CouncilMember {
   category: string;
 }
 
-interface CouncilSeatGridProps {
-  members: CouncilMember[];
+interface SeatInfo {
+  available: number;
+  filled: number;
+  max: number;
 }
 
-export function CouncilSeatGrid({ members }: CouncilSeatGridProps) {
+interface CouncilSeatGridProps {
+  members: CouncilMember[];
+  seats?: Record<string, SeatInfo>;
+}
+
+export function CouncilSeatGrid({ members, seats }: CouncilSeatGridProps) {
   return (
     <div className="space-y-3">
-      {SEAT_CONFIG.map(({ category, max, color }) => {
-        const filled = members.filter(m => m.category === category).length;
+      {SEAT_CONFIG.map(({ category, key, max: defaultMax, color }) => {
+        const seatData = seats?.[key];
+        const filled = seatData ? seatData.filled : members.filter(m => m.category === category).length;
+        const max = seatData ? seatData.max : defaultMax;
         return (
           <div key={category} className="flex items-center gap-3">
             <span className="text-sm text-dag-muted w-24">{category}</span>
@@ -28,16 +37,16 @@ export function CouncilSeatGrid({ members }: CouncilSeatGridProps) {
               {Array.from({ length: max }).map((_, i) => (
                 <div
                   key={i}
-                  className={`w-4 h-4 rounded-full border ${
+                  className={`w-4 h-4 rounded-full border transition-all duration-300 ${
                     i < filled
-                      ? `${color} border-transparent`
+                      ? `${color} border-transparent shadow-[0_0_6px_rgba(255,255,255,0.15)]`
                       : 'bg-dag-surface border-dag-border'
                   }`}
                   title={i < filled ? `Seat ${i + 1} filled` : `Seat ${i + 1} empty`}
                 />
               ))}
             </div>
-            <span className="text-xs text-dag-muted">{filled}/{max}</span>
+            <span className="text-xs text-dag-muted font-mono">{filled}/{max}</span>
           </div>
         );
       })}

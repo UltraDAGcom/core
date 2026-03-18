@@ -1,11 +1,142 @@
 import { useState } from 'react';
-import { Plus, Download, Wallet as WalletIcon, ShieldAlert } from 'lucide-react';
+import { Plus, Download, KeyRound, Wallet as WalletIcon, ShieldAlert, X } from 'lucide-react';
 import { WalletCard, WalletDetail } from '../components/wallet/WalletCard';
 import { CreateKeystoreModal } from '../components/wallet/CreateKeystoreModal';
 import { AddWalletModal } from '../components/wallet/AddWalletModal';
 import { Pagination } from '../components/shared/Pagination';
+import { changePassword } from '../lib/keystore';
 import type { Wallet } from '../lib/keystore';
 import type { WalletBalance } from '../hooks/useWalletBalances';
+
+function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [currentPw, setCurrentPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  if (!open) return null;
+
+  const handleClose = () => {
+    setCurrentPw('');
+    setNewPw('');
+    setConfirmPw('');
+    setError('');
+    setSuccess(false);
+    onClose();
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess(false);
+
+    if (newPw.length < 8) {
+      setError('New password must be at least 8 characters.');
+      return;
+    }
+    if (newPw !== confirmPw) {
+      setError('New passwords do not match.');
+      return;
+    }
+    if (currentPw === newPw) {
+      setError('New password must be different from current password.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const ok = await changePassword(currentPw, newPw);
+      if (ok) {
+        setSuccess(true);
+        setCurrentPw('');
+        setNewPw('');
+        setConfirmPw('');
+      } else {
+        setError('Current password is incorrect.');
+      }
+    } catch {
+      setError('Failed to change password.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-dag-card border border-dag-border rounded-xl shadow-2xl w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-semibold text-white">Change Password</h2>
+          <button onClick={handleClose} className="text-dag-muted hover:text-white transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs text-dag-muted mb-1">Current Password</label>
+            <input
+              type="password"
+              value={currentPw}
+              onChange={(e) => setCurrentPw(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg bg-dag-bg border border-dag-border text-white text-sm focus:outline-none focus:border-dag-accent"
+              autoFocus
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-dag-muted mb-1">New Password (min 8 characters)</label>
+            <input
+              type="password"
+              value={newPw}
+              onChange={(e) => setNewPw(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg bg-dag-bg border border-dag-border text-white text-sm focus:outline-none focus:border-dag-accent"
+              required
+              minLength={8}
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-dag-muted mb-1">Confirm New Password</label>
+            <input
+              type="password"
+              value={confirmPw}
+              onChange={(e) => setConfirmPw(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg bg-dag-bg border border-dag-border text-white text-sm focus:outline-none focus:border-dag-accent"
+              required
+              minLength={8}
+            />
+          </div>
+          {error && (
+            <div className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+              {error}
+            </div>
+          )}
+          {success && (
+            <div className="text-green-400 text-xs bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
+              Password changed successfully.
+            </div>
+          )}
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-4 py-2 rounded-lg bg-slate-700 text-slate-200 text-sm font-medium hover:bg-slate-600 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 rounded-lg bg-dag-accent text-white text-sm font-medium hover:bg-dag-accent/80 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Changing...' : 'Change Password'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 const WALLETS_PER_PAGE = 8;
 
@@ -38,6 +169,7 @@ export function WalletPage({
 }: WalletPageProps) {
   const [showKeystoreModal, setShowKeystoreModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showChangePwModal, setShowChangePwModal] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<number | null>(null);
   const [page, setPage] = useState(1);
 
@@ -134,6 +266,13 @@ export function WalletPage({
         </div>
         <div className="flex gap-2">
           <button
+            onClick={() => setShowChangePwModal(true)}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700 text-slate-200 text-xs font-medium hover:bg-slate-600 transition-colors"
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            Change Password
+          </button>
+          <button
             onClick={handleExport}
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700 text-slate-200 text-xs font-medium hover:bg-slate-600 transition-colors"
           >
@@ -211,6 +350,11 @@ export function WalletPage({
         onClose={() => setShowAddModal(false)}
         onGenerate={onGenerateKeypair}
         onAdd={onAddWallet}
+      />
+
+      <ChangePasswordModal
+        open={showChangePwModal}
+        onClose={() => setShowChangePwModal(false)}
       />
     </div>
   );

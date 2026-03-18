@@ -13,6 +13,11 @@ export interface NodeStatus {
   active_accounts: number;
   total_vertices: number;
   validators: number;
+  dag_tips: number;
+  finalized_count: number;
+  treasury_balance: number;
+  memory_usage_bytes: number;
+  uptime_seconds: number;
 }
 
 export function useNode() {
@@ -34,9 +39,14 @@ export function useNode() {
         active_stakers: s.active_stakers ?? 0,
         mempool_size: s.mempool_size ?? 0,
         peer_count: s.peer_count ?? 0,
-        active_accounts: s.active_accounts ?? 0,
-        total_vertices: s.total_vertices ?? 0,
-        validators: s.validators ?? 0,
+        active_accounts: s.account_count ?? s.active_accounts ?? 0,
+        total_vertices: s.dag_vertices ?? s.total_vertices ?? 0,
+        validators: s.validator_count ?? s.validators ?? 0,
+        dag_tips: s.dag_tips ?? 0,
+        finalized_count: s.finalized_count ?? 0,
+        treasury_balance: s.treasury_balance ?? 0,
+        memory_usage_bytes: s.memory_usage_bytes ?? 0,
+        uptime_seconds: s.uptime_seconds ?? 0,
       });
       setConnected(true);
       setNodeUrl(getNodeUrl());
@@ -59,7 +69,7 @@ export function useNode() {
 
   useEffect(() => {
     connect();
-    intervalRef.current = setInterval(fetchStatus, 30_000);
+    intervalRef.current = setInterval(fetchStatus, 5_000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };

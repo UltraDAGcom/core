@@ -53,6 +53,7 @@ export function AddressPage() {
   if (loading) return <div className="text-slate-500 py-8 text-center">Loading address...</div>;
 
   const balanceSats = Number(balance?.balance ?? 0);
+  const balanceDelegated = Number(balance?.delegated ?? 0);
   const nonce = Number(balance?.nonce ?? 0);
   const stakedSats = Number(stake?.staked ?? 0);
   const isActiveValidator = stake?.is_active_validator === true;
@@ -88,11 +89,17 @@ export function AddressPage() {
             {formatUdag(balanceSats)} <span className="text-sm text-slate-400">UDAG</span>
           </p>
           <p className="text-xs text-slate-500 mt-1">{balanceSats.toLocaleString()} sats</p>
-          <div className="mt-3 pt-3 border-t border-slate-700">
+          <div className="mt-3 pt-3 border-t border-slate-700 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-slate-500">Nonce</span>
               <span className="font-mono text-slate-300">{nonce}</span>
             </div>
+            {balanceDelegated > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Delegated</span>
+                <span className="font-mono text-slate-300">{formatUdag(balanceDelegated)} UDAG</span>
+              </div>
+            )}
           </div>
         </div>
 

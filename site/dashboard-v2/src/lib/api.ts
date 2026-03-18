@@ -76,6 +76,34 @@ export function formatUdag(sats: number): string {
   return (sats / 100_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }
 
+export function bytesToHex(bytes: number[]): string {
+  return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export function formatProposalType(pt: unknown): string {
+  if (typeof pt === 'string') return pt;
+  if (pt && typeof pt === 'object') {
+    const key = Object.keys(pt)[0];
+    if (key === 'CouncilMembership') {
+      const v = (pt as Record<string, Record<string, unknown>>)[key];
+      const addr = Array.isArray(v.address) ? shortAddr(bytesToHex(v.address as number[])) : shortAddr(String(v.address));
+      return `Council: ${v.action} ${v.category} (${addr})`;
+    }
+    if (key === 'ParameterChange') {
+      const v = (pt as Record<string, Record<string, unknown>>)[key];
+      return `Param: ${v.param} → ${v.value}`;
+    }
+    if (key === 'TreasurySpend') {
+      const v = (pt as Record<string, Record<string, unknown>>)[key];
+      const addr = Array.isArray(v.recipient) ? shortAddr(bytesToHex(v.recipient as number[])) : shortAddr(String(v.recipient));
+      return `Treasury: ${formatUdag(v.amount as number)} to ${addr}`;
+    }
+    if (key === 'Text') return 'Text';
+    return key;
+  }
+  return String(pt);
+}
+
 export function shortHash(hash: string): string {
   if (!hash || hash.length < 12) return hash || '';
   return hash.slice(0, 8) + '...' + hash.slice(-4);

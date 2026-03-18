@@ -16,7 +16,13 @@ export function SearchResultPage() {
       try {
         if (!isConnected()) await connectToNode();
 
-        // Try tx hash first
+        // If it looks like a round number, navigate directly
+        if (/^\d+$/.test(query)) {
+          navigate(`/round/${query}`, { replace: true });
+          return;
+        }
+
+        // Try tx hash first (64-hex queries)
         setStatus('Checking transaction...');
         try {
           await getTx(query);
@@ -46,7 +52,7 @@ export function SearchResultPage() {
           // not an address
         }
 
-        setError(`No results found for "${query}". The hash does not match any known transaction, vertex, or address.`);
+        setError(`No results found for "${query}". The query does not match any known transaction, vertex, address, or round number.`);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Search failed');
       }

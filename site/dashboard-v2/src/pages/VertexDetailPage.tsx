@@ -46,9 +46,12 @@ export function VertexDetailPage() {
 
   const round = Number(vertex.round ?? 0);
   const validator = String(vertex.validator ?? '');
-  const coinbase = vertex.coinbase as Record<string, unknown> | undefined;
-  const parents = (vertex.parents ?? vertex.parent_hashes ?? []) as string[];
+  const parentCount = Number(vertex.parent_count ?? 0);
   const transactions = (vertex.transactions ?? []) as Array<Record<string, unknown>>;
+  // Reward: API returns coinbase.amount (sats), fall back to legacy vertex.reward fields
+  const coinbase = vertex.coinbase as Record<string, unknown> | undefined;
+  const rewardSats = coinbase?.amount != null ? Number(coinbase.amount) : vertex.reward != null ? Number(vertex.reward) : null;
+  const rewardDisplay = rewardSats != null ? `${formatUdag(rewardSats)} UDAG` : '--';
 
   return (
     <div className="space-y-6">
@@ -75,36 +78,16 @@ export function VertexDetailPage() {
             <CopyButton text={validator} />
           </div>
         </InfoRow>
-        {coinbase && (
-          <>
-            <InfoRow label="Coinbase Reward" value={
-              coinbase.reward_udag != null
-                ? `${coinbase.reward_udag} UDAG`
-                : coinbase.reward != null
-                  ? `${formatUdag(Number(coinbase.reward))} UDAG`
-                  : '--'
-            } mono />
-            <InfoRow label="Coinbase Height" value={String(coinbase.height ?? '--')} mono />
-          </>
-        )}
-        <InfoRow label="Parent Count" value={String(parents.length)} mono />
+        <InfoRow label="Reward" value={rewardDisplay} mono />
+        <InfoRow label="Parent Count" value={String(parentCount)} mono />
         <InfoRow label="Transaction Count" value={String(transactions.length)} mono />
       </div>
 
       {/* Parents */}
-      {parents.length > 0 && (
+      {parentCount > 0 && (
         <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-          <h2 className="text-sm font-semibold text-slate-200 mb-3">Parent Vertices ({parents.length})</h2>
-          <div className="space-y-1">
-            {parents.map((parentHash) => (
-              <div key={parentHash} className="flex items-center gap-2">
-                <Link to={`/vertex/${parentHash}`} className="font-mono text-sm text-blue-400 hover:text-blue-300">
-                  {shortHash(parentHash)}
-                </Link>
-                <CopyButton text={parentHash} />
-              </div>
-            ))}
-          </div>
+          <h2 className="text-sm font-semibold text-slate-200 mb-3">Parent Vertices ({parentCount})</h2>
+          <p className="text-sm text-slate-500">{parentCount} parent{parentCount !== 1 ? 's' : ''} (hashes not available in this view)</p>
         </div>
       )}
 
@@ -119,12 +102,13 @@ export function VertexDetailPage() {
                   <th className="py-2 px-3 font-medium">Hash</th>
                   <th className="py-2 px-3 font-medium">Type</th>
                   <th className="py-2 px-3 font-medium">From</th>
+                  <th className="py-2 px-3 font-medium">Amount</th>
                   <th className="py-2 px-3 font-medium">Fee</th>
                 </tr>
               </thead>
               <tbody>
                 {transactions.map((tx, i) => (
-                  <tr key={String(tx.hash ?? i)} className="border-b border-slate-800">
+                  <tr key={String(tx.hash ?? i)} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
                     <td className="py-2 px-3">
                       {tx.hash ? (
                         <div className="flex items-center gap-1">
@@ -140,11 +124,20 @@ export function VertexDetailPage() {
                     <td className="py-2 px-3">
                       <Badge label={String(tx.tx_type ?? tx.type ?? 'unknown')} variant="blue" />
                     </td>
-                    <td className="py-2 px-3 font-mono text-xs text-slate-300">
-                      {tx.from ? shortAddr(String(tx.from)) : '--'}
+                    <td className="py-2 px-3">
+                      {tx.from ? (
+                        <Link to={`/address/${String(tx.from)}`} className="font-mono text-xs text-blue-400 hover:text-blue-300">
+                          {shortAddr(String(tx.from))}
+                        </Link>
+                      ) : (
+                        <span className="text-slate-500 text-xs">--</span>
+                      )}
                     </td>
                     <td className="py-2 px-3 font-mono text-xs text-slate-300">
-                      {tx.fee != null ? formatUdag(Number(tx.fee)) : '--'}
+                      {tx.amount != null ? `${formatUdag(Number(tx.amount))} UDAG` : '--'}
+                    </td>
+                    <td className="py-2 px-3 font-mono text-xs text-slate-300">
+                      {tx.fee != null ? `${formatUdag(Number(tx.fee))} UDAG` : '--'}
                     </td>
                   </tr>
                 ))}

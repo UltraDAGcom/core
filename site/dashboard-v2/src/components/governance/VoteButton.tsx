@@ -20,7 +20,7 @@ export function VoteButton({ proposalId, secretKey, approve, fee, onSuccess }: V
       await postVote({
         secret_key: secretKey,
         proposal_id: proposalId,
-        approve,
+        vote: approve,
         fee,
       });
       onSuccess();

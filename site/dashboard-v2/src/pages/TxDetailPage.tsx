@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
-import { getTx, connectToNode, isConnected, shortAddr, formatUdag } from '../lib/api.ts';
+import { getTx, connectToNode, isConnected, shortAddr, shortHash, formatUdag } from '../lib/api.ts';
 import { CopyButton } from '../components/shared/CopyButton.tsx';
-import { StatusBadge } from '../components/shared/Badge.tsx';
+import { Badge, StatusBadge } from '../components/shared/Badge.tsx';
 
 export function TxDetailPage() {
   const { hash } = useParams<{ hash: string }>();
@@ -49,6 +49,9 @@ export function TxDetailPage() {
   const vertexHash = tx.vertex_hash ? String(tx.vertex_hash) : null;
   const validator = tx.validator ? String(tx.validator) : null;
 
+  // Transaction details may be nested under "transaction" or flat at the top level
+  const txData = (tx.transaction && typeof tx.transaction === 'object') ? tx.transaction as Record<string, unknown> : tx;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -75,7 +78,7 @@ export function TxDetailPage() {
           <InfoRow label="Vertex">
             <div className="flex items-center gap-1">
               <Link to={`/vertex/${vertexHash}`} className="font-mono text-blue-400 hover:text-blue-300 text-sm">
-                {vertexHash.slice(0, 12)}...
+                {shortHash(vertexHash)}
               </Link>
               <CopyButton text={vertexHash} />
             </div>
@@ -91,30 +94,34 @@ export function TxDetailPage() {
             </div>
           </InfoRow>
         )}
-        {tx.tx_type != null && <InfoRow label="Type" value={String(tx.tx_type)} />}
-        {tx.from != null && (
+        {(txData.tx_type ?? txData.type) != null && (
+          <InfoRow label="Type">
+            <Badge label={String(txData.tx_type ?? txData.type)} variant="blue" />
+          </InfoRow>
+        )}
+        {txData.from != null && (
           <InfoRow label="From">
             <div className="flex items-center gap-1">
-              <Link to={`/address/${String(tx.from)}`} className="font-mono text-blue-400 hover:text-blue-300 text-sm">
-                {shortAddr(String(tx.from))}
+              <Link to={`/address/${String(txData.from)}`} className="font-mono text-blue-400 hover:text-blue-300 text-sm">
+                {shortAddr(String(txData.from))}
               </Link>
-              <CopyButton text={String(tx.from)} />
+              <CopyButton text={String(txData.from)} />
             </div>
           </InfoRow>
         )}
-        {tx.to != null && (
+        {txData.to != null && (
           <InfoRow label="To">
             <div className="flex items-center gap-1">
-              <Link to={`/address/${String(tx.to)}`} className="font-mono text-blue-400 hover:text-blue-300 text-sm">
-                {shortAddr(String(tx.to))}
+              <Link to={`/address/${String(txData.to)}`} className="font-mono text-blue-400 hover:text-blue-300 text-sm">
+                {shortAddr(String(txData.to))}
               </Link>
-              <CopyButton text={String(tx.to)} />
+              <CopyButton text={String(txData.to)} />
             </div>
           </InfoRow>
         )}
-        {tx.amount != null && <InfoRow label="Amount" value={`${formatUdag(Number(tx.amount))} UDAG`} mono />}
-        {tx.fee != null && <InfoRow label="Fee" value={`${formatUdag(Number(tx.fee))} UDAG`} mono />}
-        {tx.nonce != null && <InfoRow label="Nonce" value={String(tx.nonce)} mono />}
+        {txData.amount != null && <InfoRow label="Amount" value={`${formatUdag(Number(txData.amount))} UDAG`} mono />}
+        {txData.fee != null && <InfoRow label="Fee" value={`${formatUdag(Number(txData.fee))} UDAG`} mono />}
+        {txData.nonce != null && <InfoRow label="Nonce" value={String(txData.nonce)} mono />}
       </div>
     </div>
   );

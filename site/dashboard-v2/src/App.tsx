@@ -20,6 +20,7 @@ import { useKeystore } from './hooks/useKeystore';
 import { useNode } from './hooks/useNode';
 import { useWalletBalances } from './hooks/useWalletBalances';
 import { getNodeUrl } from './lib/api';
+import { ToastProvider } from './hooks/useToast';
 
 function App() {
   const ks = useKeystore();
@@ -48,7 +49,7 @@ function App() {
   }, []);
 
   return (
-    <>
+    <ToastProvider>
       <Routes>
         <Route
           element={
@@ -132,7 +133,7 @@ function App() {
         onImport={ks.importBlob}
         hasExisting={ks.hasStore}
       />
-    </>
+    </ToastProvider>
   );
 }
 

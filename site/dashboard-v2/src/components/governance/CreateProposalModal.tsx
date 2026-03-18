@@ -65,33 +65,40 @@ export function CreateProposalModal({ wallets, onClose, onSuccess }: CreatePropo
     const feeSats = parseInt(fee, 10);
     if (isNaN(feeSats) || feeSats < 10000) { setError('Minimum fee is 10,000 sats (0.0001 UDAG)'); return; }
 
-    let proposal_type: Record<string, unknown>;
+    const body: Record<string, unknown> = {
+      secret_key: wallet.secret_key,
+      title: title.trim(),
+      description: description.trim(),
+      fee: feeSats,
+    };
+
     if (proposalType === 'Text') {
-      proposal_type = { Text: {} };
+      body.proposal_type = 'text';
     } else if (proposalType === 'ParameterChange') {
       const val = parseInt(paramValue, 10);
       if (isNaN(val)) { setError('Parameter value must be a number'); return; }
-      proposal_type = { ParameterChange: { param: paramName, value: val } };
+      body.proposal_type = 'parameter';
+      body.parameter_name = paramName;
+      body.parameter_value = String(val);
     } else if (proposalType === 'CouncilMembership') {
       if (!councilAddress.trim()) { setError('Council address is required'); return; }
-      proposal_type = { CouncilMembership: { action: councilAction, address: councilAddress, category: councilCategory } };
+      body.proposal_type = 'council_membership';
+      body.council_action = councilAction;
+      body.council_address = councilAddress.trim();
+      body.council_category = councilCategory;
     } else {
       const amt = Math.floor(parseFloat(treasuryAmount) * 100_000_000);
       if (isNaN(amt) || amt <= 0) { setError('Treasury amount must be positive'); return; }
       if (!treasuryRecipient.trim()) { setError('Recipient address is required'); return; }
-      proposal_type = { TreasurySpend: { recipient: treasuryRecipient, amount: amt } };
+      body.proposal_type = 'treasury_spend';
+      body.treasury_recipient = treasuryRecipient.trim();
+      body.treasury_amount = amt;
     }
 
     setLoading(true);
     setError('');
     try {
-      await postProposal({
-        secret_key: wallet.secret_key,
-        title: title.trim(),
-        description: description.trim(),
-        proposal_type,
-        fee: feeSats,
-      });
+      await postProposal(body);
       onSuccess();
       onClose();
     } catch (e: unknown) {

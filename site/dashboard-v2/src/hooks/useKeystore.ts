@@ -1,11 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import * as keystore from '../lib/keystore.ts';
 import type { Wallet } from '../lib/keystore.ts';
+
+const AUTO_LOCK_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+const AUTO_LOCK_CHECK_INTERVAL_MS = 60 * 1000; // check every 60 seconds
 
 export function useKeystore() {
   const [unlocked, setUnlocked] = useState(keystore.isUnlocked());
   const [hasStore, setHasStore] = useState(keystore.hasKeystore());
   const [wallets, setWallets] = useState<Wallet[]>(keystore.getWallets());
+  const lastActivityRef = useRef<number>(Date.now());
+
+  const resetActivity = useCallback(() => {
+    lastActivityRef.current = Date.now();
+  }, []);
 
   useEffect(() => {
     const loaded = keystore.loadFromStorage();
@@ -19,13 +27,26 @@ export function useKeystore() {
     return unsub;
   }, []);
 
-  const create = useCallback(async (password: string) => {
-    await keystore.create(password);
+  // Auto-lock after 15 minutes of inactivity
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (keystore.isUnlocked() && Date.now() - lastActivityRef.current > AUTO_LOCK_TIMEOUT_MS) {
+        keystore.lock();
+      }
+    }, AUTO_LOCK_CHECK_INTERVAL_MS);
+    return () => clearInterval(interval);
   }, []);
 
+  const create = useCallback(async (password: string) => {
+    await keystore.create(password);
+    resetActivity();
+  }, [resetActivity]);
+
   const unlock = useCallback(async (password: string) => {
-    return keystore.unlock(password);
-  }, []);
+    const result = await keystore.unlock(password);
+    resetActivity();
+    return result;
+  }, [resetActivity]);
 
   const lock = useCallback(() => {
     keystore.lock();
@@ -33,11 +54,13 @@ export function useKeystore() {
 
   const addWallet = useCallback(async (name: string, secretKey: string, address: string) => {
     await keystore.addWallet(name, secretKey, address);
-  }, []);
+    resetActivity();
+  }, [resetActivity]);
 
   const removeWallet = useCallback(async (index: number) => {
     await keystore.removeWallet(index);
-  }, []);
+    resetActivity();
+  }, [resetActivity]);
 
   const importBlob = useCallback((json: string) => {
     return keystore.importBlob(json);
@@ -58,6 +81,7 @@ export function useKeystore() {
     removeWallet,
     importBlob,
     exportBlob,
+    resetActivity,
   };
 }
 

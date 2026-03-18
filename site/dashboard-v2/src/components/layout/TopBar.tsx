@@ -35,6 +35,7 @@ export function TopBar({
           <span className="text-xs text-dag-muted font-mono hidden sm:inline">
             {connected ? nodeUrl.replace('https://', '') : 'Disconnected'}
           </span>
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-dag-yellow/20 text-dag-yellow border border-dag-yellow/40">TESTNET</span>
           <span
             className={`w-2 h-2 rounded-full ${
               connected ? 'bg-dag-green animate-pulse' : 'bg-dag-red'

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus } from 'lucide-react';
-import { getProposals, getProposal, formatUdag, shortAddr } from '../lib/api.ts';
+import { Plus, Vote } from 'lucide-react';
+import { getProposals, getProposal, shortAddr, formatProposalType } from '../lib/api.ts';
 import { useKeystore } from '../hooks/useKeystore.ts';
 import { Card } from '../components/shared/Card.tsx';
 import { ProposalCard } from '../components/governance/ProposalCard.tsx';
@@ -16,14 +16,16 @@ interface Proposal {
   title: string;
   description: string;
   status: string;
-  proposal_type: string;
+  proposal_type: unknown;
   proposer: string;
   votes_for: number;
   votes_against: number;
-  snapshot_total_stake: number;
+  snapshot_council_size?: number;
+  snapshot_total_stake?: number;
   voting_ends: number;
-  execute_at_round: number | null;
-  voters?: Array<{ address: string; vote: string; weight: number }>;
+  voting_starts?: number;
+  execute_at_round?: number | null;
+  voters?: Array<{ address: string; vote: string; vote_weight: number; category?: string }>;
 }
 
 export function GovernancePage() {
@@ -85,7 +87,22 @@ export function GovernancePage() {
             {loading ? (
               <p className="text-dag-muted text-sm">Loading proposals...</p>
             ) : proposals.length === 0 ? (
-              <p className="text-dag-muted text-sm">No proposals found.</p>
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-dag-blue/10 border border-dag-blue/20 flex items-center justify-center mb-4">
+                  <Vote className="w-7 h-7 text-dag-blue" />
+                </div>
+                <h4 className="text-white font-medium mb-1">No proposals yet</h4>
+                <p className="text-sm text-dag-muted max-w-xs mb-4">Create the first governance proposal.</p>
+                {unlocked && wallets.length > 0 && (
+                  <button
+                    onClick={() => setShowCreate(true)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-dag-blue text-white text-sm font-medium hover:bg-dag-blue/90 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    New Proposal
+                  </button>
+                )}
+              </div>
             ) : (
               <>
                 <div className="space-y-3">
@@ -95,10 +112,10 @@ export function GovernancePage() {
                       id={p.id}
                       title={p.title}
                       status={p.status}
-                      proposal_type={p.proposal_type}
+                      proposal_type={formatProposalType(p.proposal_type)}
                       votes_for={p.votes_for}
                       votes_against={p.votes_against}
-                      snapshot_total_stake={p.snapshot_total_stake}
+                      council_size={p.snapshot_council_size ?? p.snapshot_total_stake ?? 0}
                       onClick={() => handleSelectProposal(p.id)}
                     />
                   ))}
@@ -113,10 +130,10 @@ export function GovernancePage() {
           {selected ? (
             <Card title={`Proposal #${selected.id}`}>
               <div className="space-y-3">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <StatusBadge status={selected.status} />
                   <span className="text-xs text-dag-muted px-1.5 py-0.5 rounded bg-dag-card border border-dag-border">
-                    {selected.proposal_type}
+                    {formatProposalType(selected.proposal_type)}
                   </span>
                 </div>
                 <h3 className="text-white font-medium">{selected.title}</h3>
@@ -132,12 +149,24 @@ export function GovernancePage() {
                   </div>
                   <div>
                     <span className="text-dag-muted block text-xs">Votes For</span>
-                    <span className="text-dag-green">{formatUdag(selected.votes_for)}</span>
+                    <span className="text-dag-green">{selected.votes_for} vote{selected.votes_for !== 1 ? 's' : ''}</span>
                   </div>
                   <div>
                     <span className="text-dag-muted block text-xs">Votes Against</span>
-                    <span className="text-dag-red">{formatUdag(selected.votes_against)}</span>
+                    <span className="text-dag-red">{selected.votes_against} vote{selected.votes_against !== 1 ? 's' : ''}</span>
                   </div>
+                  {selected.snapshot_council_size != null && (
+                    <div>
+                      <span className="text-dag-muted block text-xs">Council Size</span>
+                      <span className="text-white">{selected.snapshot_council_size} seats</span>
+                    </div>
+                  )}
+                  {selected.execute_at_round != null && (
+                    <div>
+                      <span className="text-dag-muted block text-xs">Executes At</span>
+                      <span className="text-white">Round {selected.execute_at_round.toLocaleString()}</span>
+                    </div>
+                  )}
                 </div>
 
                 {unlocked && wallets.length > 0 && selected.status === 'Active' && (
@@ -154,9 +183,14 @@ export function GovernancePage() {
                       {selected.voters.map(v => (
                         <div key={v.address} className="flex items-center justify-between text-xs">
                           <span className="font-mono text-dag-muted">{shortAddr(v.address)}</span>
-                          <span className={v.vote === 'yes' ? 'text-dag-green' : 'text-dag-red'}>
-                            {v.vote === 'yes' ? 'YES' : 'NO'} ({formatUdag(v.weight)})
-                          </span>
+                          <div className="flex items-center gap-2">
+                            {v.category && (
+                              <span className="text-dag-muted">{v.category}</span>
+                            )}
+                            <span className={v.vote === 'yes' ? 'text-dag-green' : 'text-dag-red'}>
+                              {v.vote === 'yes' ? 'YES' : 'NO'}
+                            </span>
+                          </div>
                         </div>
                       ))}
                     </div>

@@ -25,7 +25,9 @@ export function Layout({ connected, nodeUrl, keystoreUnlocked, onToggleLock }: L
           onToggleLock={onToggleLock}
         />
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          <Outlet />
+          <div className="max-w-7xl mx-auto">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

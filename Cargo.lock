@@ -2690,6 +2690,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "parking_lot",
+ "postcard",
  "rand 0.8.5",
  "reqwest 0.13.2",
  "serde",

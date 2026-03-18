@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { shortAddr, formatUdag } from '../../lib/api';
 
 interface ValidatorCardProps {
@@ -20,9 +21,9 @@ export function ValidatorCard({
   return (
     <div className="rounded-lg bg-dag-surface border border-dag-border p-4 flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="font-mono text-sm text-white" title={address}>
+        <Link to={`/address/${address}`} className="font-mono text-sm text-dag-accent hover:text-white transition-colors" title={address}>
           {shortAddr(address)}
-        </span>
+        </Link>
         {is_active && (
           <span className="text-xs px-2 py-0.5 rounded bg-dag-green/20 text-dag-green border border-dag-green/40">
             Active
