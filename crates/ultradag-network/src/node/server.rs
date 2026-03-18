@@ -2002,7 +2002,49 @@ async fn handle_peer(
                     (active.len() * 2).div_ceil(3)
                 };
 
-                if !active.is_empty() && !checkpoint.is_accepted(&active, quorum) {
+                // Verify quorum signatures against the validator set.
+                //
+                // SECURITY NOTE on pre-staking eclipse attack:
+                // In pre-staking mode (active set empty), the checkpoint's validator
+                // list comes from the attacker-controlled snapshot. An attacker with
+                // 2+ keys can sign a fabricated checkpoint that links to the real
+                // genesis hash. The chain verification passes but the quorum check
+                // is meaningless (attacker controls the "validator" list).
+                //
+                // Defense: use the node's configured validator allowlist (--validator-key)
+                // to verify checkpoint signers. Operators running --validator-key (which
+                // all testnet/mainnet nodes should use) are protected. Nodes without
+                // an allowlist in pre-staking mode accept any checkpoint with 2+ signers.
+                //
+                // Post-staking: the active validator set from the snapshot is used for
+                // quorum (requires >2/3 stake-weighted validators to have signed).
+                if active.is_empty() {
+                    // Pre-staking: require at least 2 distinct valid signers
+                    let signers: std::collections::HashSet<_> = checkpoint.valid_signers().into_iter().collect();
+                    if signers.len() < 2 {
+                        warn!("CheckpointSync pre-staking: need 2+ distinct signers, got {}", signers.len());
+                        checkpoint_metrics.record_fast_sync_failure();
+                        continue;
+                    }
+                    // Cross-check against local finality tracker's known validators.
+                    // If --validator-key was used, the allowlist populates the validator set.
+                    let fin_r = finality.read().await;
+                    let known_count = fin_r.validator_set().len();
+                    if known_count > 0 {
+                        let known_signers = signers.iter()
+                            .filter(|s| fin_r.validator_set().contains(s))
+                            .count();
+                        drop(fin_r);
+                        if known_signers < 2 {
+                            warn!("CheckpointSync: only {}/{} signers are known validators (need ≥2)",
+                                known_signers, signers.len());
+                            checkpoint_metrics.record_fast_sync_failure();
+                            continue;
+                        }
+                    } else {
+                        drop(fin_r);
+                    }
+                } else if !checkpoint.is_accepted(&active, quorum) {
                     warn!("Received CheckpointSync with insufficient signatures ({} valid, need {})",
                         checkpoint.valid_signers().len(), quorum);
                     checkpoint_metrics.record_fast_sync_failure();
