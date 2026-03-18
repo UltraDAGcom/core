@@ -1993,15 +1993,15 @@ function onKeystoreUnlocked() {
   document.getElementById('portfolio-content').style.display = '';
   document.getElementById('send-locked').style.display = 'none';
   document.getElementById('send-content').style.display = '';
-  renderWalletList();
-  renderWalletDetail();
-  populateSendSelects();
-  refreshPortfolio();
-  checkValidatorStatus();
-  populateProposalWallets();
-  document.getElementById('submit-locked').style.display = 'none';
-  document.getElementById('submit-form').style.display = '';
-  if (connected) loadGovernance();
+  try { renderWalletList(); } catch(e) { console.error('onUnlock renderWalletList:', e); }
+  try { renderWalletDetail(); } catch(e) { console.error('onUnlock renderWalletDetail:', e); }
+  try { populateSendSelects(); } catch(e) { console.error('onUnlock populateSendSelects:', e); }
+  try { refreshPortfolio(); } catch(e) { console.error('onUnlock refreshPortfolio:', e); }
+  try { checkValidatorStatus(); } catch(e) { console.error('onUnlock checkValidatorStatus:', e); }
+  try { populateProposalWallets(); } catch(e) { console.error('onUnlock populateProposalWallets:', e); }
+  try { document.getElementById('submit-locked').style.display = 'none'; } catch(e) {}
+  try { document.getElementById('submit-form').style.display = ''; } catch(e) {}
+  if (connected) { try { loadGovernance(); } catch(e) { console.error('onUnlock loadGovernance:', e); } }
 }
 
 function onKeystoreLocked() {
@@ -4561,20 +4561,19 @@ async function doQuickImport() {
     await createKeystore(pw1);
     await addWallet('Imported Wallet', sk, addr);
     hideModal();
-    // Force re-render everything after import
-    renderWalletList();
-    populateSendSelects();
     toast('Key imported and encrypted (' + keystore.wallets.length + ' wallet)', 'ok');
-    // Auto-connect if not already connected, then refresh
-    if (!connected) {
-      await connectNode();
-    }
-    // Refresh all views with the new wallet
-    if (connected) {
-      refreshPortfolio();
-      loadCouncilStatus();
-      loadGovernance();
-    }
+    // Refresh everything — wrap in try/catch so errors don't block the user
+    try { renderWalletList(); } catch(e) { console.error('renderWalletList:', e); }
+    try { populateSendSelects(); } catch(e) { console.error('populateSendSelects:', e); }
+    // Connect and refresh
+    try {
+      if (!connected) await connectNode();
+      if (connected) {
+        refreshPortfolio();
+        loadCouncilStatus();
+        loadGovernance();
+      }
+    } catch(e) { console.error('Post-import refresh:', e); }
   } catch (e) { toast('Import failed: ' + e.message, 'err'); hideModal(); }
 }
 
