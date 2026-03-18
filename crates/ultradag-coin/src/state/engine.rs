@@ -29,6 +29,32 @@ pub struct AccountState {
     pub nonce: u64,
 }
 
+/// Transaction receipt: records whether a finalized transaction succeeded or was skipped.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TxReceipt {
+    /// Round in which the transaction was finalized.
+    pub round: u64,
+    /// Hash of the DagVertex containing this transaction.
+    pub vertex_hash: [u8; 32],
+    /// Whether the transaction was successfully applied.
+    pub success: bool,
+    /// Reason for failure (empty if success).
+    pub error: String,
+}
+
+/// Record of a slashing event, persisted in state for auditability.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SlashRecord {
+    /// Round in which equivocation was detected.
+    pub round: u64,
+    /// Validator that equivocated.
+    pub validator: Address,
+    /// Amount of stake burned.
+    pub slash_amount: u64,
+    /// Amount of delegated stake burned (cascading slash).
+    pub delegated_slash_amount: u64,
+}
+
 
 /// Staking account tracking locked funds and cooldown.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -100,6 +126,13 @@ pub struct StateEngine {
     tx_index: HashMap<[u8; 32], TxLocation>,
     /// Insertion order for FIFO eviction of tx_index entries.
     tx_index_order: VecDeque<[u8; 32]>,
+    /// Transaction receipts: tx_hash → receipt (success/failure + reason).
+    /// Bounded to MAX_TX_INDEX_SIZE entries with FIFO eviction (same as tx_index).
+    tx_receipts: HashMap<[u8; 32], TxReceipt>,
+    /// Permanent record of all slashing events. Unlike DAG evidence_store (prunable),
+    /// this persists in state for auditability. Slashed validators can see proof of
+    /// their equivocation even after DAG pruning.
+    slash_history: Vec<SlashRecord>,
     /// Tracks which validators have produced vertices in each finalized round.
     /// Used for cross-batch equivocation detection: if a validator appears in a
     /// round that was already applied in a previous batch, that's equivocation.
@@ -131,6 +164,8 @@ impl StateEngine {
             delegation_accounts: HashMap::new(),
             tx_index: HashMap::new(),
             tx_index_order: VecDeque::new(),
+            tx_receipts: HashMap::new(),
+            slash_history: Vec::new(),
             applied_validators_per_round: HashMap::new(),
         }
     }
@@ -533,6 +568,28 @@ impl StateEngine {
         self.tx_index_order.push_back(tx_hash);
     }
 
+    /// Record a transaction receipt (success or failure with reason).
+    fn record_receipt(&mut self, tx_hash: [u8; 32], round: u64, vertex_hash: [u8; 32], success: bool, error: &str) {
+        while self.tx_receipts.len() >= MAX_TX_INDEX_SIZE {
+            if let Some(key) = self.tx_receipts.keys().next().copied() {
+                self.tx_receipts.remove(&key);
+            } else { break; }
+        }
+        self.tx_receipts.insert(tx_hash, TxReceipt {
+            round, vertex_hash, success, error: error.to_string(),
+        });
+    }
+
+    /// Get a transaction receipt by hash.
+    pub fn tx_receipt(&self, tx_hash: &[u8; 32]) -> Option<&TxReceipt> {
+        self.tx_receipts.get(tx_hash)
+    }
+
+    /// Get the full slash history (permanent, survives DAG pruning).
+    pub fn slash_history(&self) -> &[SlashRecord] {
+        &self.slash_history
+    }
+
     /// Rebuild the tx_index from DAG vertices after a restart.
     /// This restores /tx/:hash lookups for recently-finalized transactions
     /// that were lost because tx_index is not persisted.
@@ -606,6 +663,7 @@ impl StateEngine {
         // which transactions will fail at finalization time (nonces may change
         // between vertex production and finality).
         let mut collected_fees: u64 = 0;
+        let vertex_hash = vertex.hash();
 
         // Apply transactions
         // In a DAG with multiple validators, the same transaction can appear in
@@ -617,12 +675,15 @@ impl StateEngine {
             // Verify signature
             if !tx.verify_signature() {
                 tracing::warn!("Skipping tx with invalid signature in finalized vertex");
+                self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, "invalid signature");
                 continue;
             }
 
             // Check nonce
             let expected_nonce = self.nonce(&tx.from());
             if tx.nonce() != expected_nonce {
+                self.record_receipt(tx.hash(), vertex.round, vertex_hash, false,
+                    &format!("nonce mismatch: expected {}, got {}", expected_nonce, tx.nonce()));
                 tracing::warn!(
                     "Skipping duplicate tx in finalized vertex: expected nonce={}, got={}",
                     expected_nonce, tx.nonce()
@@ -634,6 +695,8 @@ impl StateEngine {
             let sender_balance = self.balance(&tx.from());
             if sender_balance < tx.total_cost() {
                 self.increment_nonce(&tx.from());
+                self.record_receipt(tx.hash(), vertex.round, vertex_hash, false,
+                    &format!("insufficient balance: need {}, have {}", tx.total_cost(), sender_balance));
                 tracing::warn!(
                     "Skipping tx with insufficient balance in finalized vertex: need={}, have={}",
                     tx.total_cost(), sender_balance
@@ -734,6 +797,7 @@ impl StateEngine {
 
             // Track fee from this successfully-applied transaction
             collected_fees = collected_fees.saturating_add(tx.fee());
+            self.record_receipt(tx.hash(), vertex.round, vertex_hash, true, "");
         }
 
         // Credit proposer with fees from successful transactions only.
@@ -835,7 +899,7 @@ impl StateEngine {
                         "Deterministic slash (intra-batch): validator {} equivocated in round {} ({} vertices)",
                         validator.to_hex(), round, count
                     );
-                    self.slash(validator);
+                    self.slash_at_round(validator, *round);
                 }
             }
 
@@ -850,7 +914,7 @@ impl StateEngine {
                                 "Deterministic slash (cross-batch): validator {} already applied in round {}",
                                 v.validator.to_hex(), v.round
                             );
-                            self.slash(&v.validator);
+                            self.slash_at_round(&v.validator, v.round);
                         }
                     }
                 }
@@ -1272,13 +1336,20 @@ impl StateEngine {
     /// boundary. Security trumps epoch stability — the active set is an optimization
     /// for predictability, not a shield for Byzantine actors.
     pub fn slash(&mut self, addr: &Address) {
+        self.slash_at_round(addr, 0);
+    }
+
+    /// Slash a validator and record the event with the round number.
+    pub fn slash_at_round(&mut self, addr: &Address, round: u64) {
         let slash_pct = self.governance_params.slash_percent;
+        let mut own_slash: u64 = 0;
+        let mut delegated_slash: u64 = 0;
+
         if let Some(stake) = self.stake_accounts.get_mut(addr) {
             let slash_amount = stake.staked.saturating_mul(slash_pct) / 100;
             stake.staked = stake.staked.saturating_sub(slash_amount);
-            // Slashed amount is burned (not credited anywhere)
             self.total_supply = self.total_supply.saturating_sub(slash_amount);
-            // Immediately remove from active set if below minimum stake
+            own_slash = slash_amount;
             if stake.staked < MIN_STAKE_SATS {
                 self.active_validator_set.retain(|a| a != addr);
             }
@@ -1293,11 +1364,21 @@ impl StateEngine {
                 let slash_amount = delegation.delegated.saturating_mul(slash_pct) / 100;
                 delegation.delegated = delegation.delegated.saturating_sub(slash_amount);
                 self.total_supply = self.total_supply.saturating_sub(slash_amount);
-                // Remove empty delegations
+                delegated_slash = delegated_slash.saturating_add(slash_amount);
                 if delegation.delegated == 0 {
                     self.delegation_accounts.remove(&delegator);
                 }
             }
+        }
+
+        // Record slash event for auditability (survives DAG pruning)
+        if own_slash > 0 || delegated_slash > 0 {
+            self.slash_history.push(SlashRecord {
+                round,
+                validator: *addr,
+                slash_amount: own_slash,
+                delegated_slash_amount: delegated_slash,
+            });
         }
     }
 
@@ -1945,6 +2026,8 @@ impl StateEngine {
             delegation_accounts,
             tx_index: HashMap::new(),
             tx_index_order: VecDeque::new(),
+            tx_receipts: HashMap::new(),
+            slash_history: Vec::new(),
             applied_validators_per_round: HashMap::new(),
         }
     }
@@ -2003,6 +2086,8 @@ impl StateEngine {
             delegation_accounts: snapshot.delegation_accounts.into_iter().collect(),
             tx_index: HashMap::new(),
             tx_index_order: VecDeque::new(),
+            tx_receipts: HashMap::new(),
+            slash_history: Vec::new(),
             applied_validators_per_round: HashMap::new(),
         }
     }
