@@ -45,6 +45,14 @@
 - **Transaction receipts + slash history (March 18, 2026):** Bug #202: `TxReceipt` records success/failure with reason for every finalized transaction. Bug #203: `SlashRecord` with round, validator, amounts persists permanently in state (survives DAG pruning). Bug #204: Light client Merkle proofs documented as future architecture requirement (requires Merkle Patricia Trie).
 - **State bloat mitigations + code cleanup (March 18, 2026):** Bugs #193-197: dust account pruning (every 1000 rounds), proposal/vote cleanup (10,000 round retention), stale stake removal, effective_stake caching, dead code removal, eprintln→tracing, step numbering fix.
 - **Pre-staking eclipse defense (March 18, 2026):** Bug #198: checkpoint signers cross-checked against --validator-key allowlist. Bug #199: faucet_credit gated behind #[cfg(not(feature="mainnet"))]. Bug #200: tx_index rebuilt from DAG on startup. Bug #201: u64::MAX epoch sentinel documented.
+- **Council of 21 governance hardening (March 18, 2026):** Full review found 16 issues, 5 fixed:
+  - Bug #216 (HIGH): Slashed validators now lose council seat — proven Byzantine behavior no longer retains governance power.
+  - Bug #217: Category seat capacity checked at proposal creation (not just execution). Self-nominations for full categories rejected immediately.
+  - Bug #218: Council emission display fixed (was using per-vertex math, now per-round).
+  - Bug #219: Remove proposal category validated against actual membership.
+  - Bug #220: /council API response sorted by address.
+  - Live testnet: CouncilMembership proposal #0 created and voted on (Add Foundation member de1807e3...). Visible on all 5 nodes. Awaiting voting period.
+  - Documented design decisions: removed members retain votes on open proposals (valid when cast), quorum 10% with 1-per-seat is low but adjustable via governance, min_stake_to_propose is vestigial (council-only model).
 - **BFT safety proof sketch + final hardening (March 18, 2026):**
   - `docs/security/BFT_SAFETY_PROOF.md` — strengthened formal safety argument with quorum intersection proof, timing attack analysis for stuck parents, leaderless vs Bullshark comparison table, and specific framing for external reviewer engagement. Key claims: (1) ordering deterministic from signed content, (2) no permanent exclusion via quorum intersection (2f+1 + 2f+1 > 3f+1 implies f+1 honest overlap), (3) stuck parent: timing doesn't affect ordering because sort-by-(round, hash) is invariant to when finality is discovered.
   - WAL replay state root verification: documented as non-issue — WAL is dead code, never called in production. Corrupt WAL cannot affect state.
