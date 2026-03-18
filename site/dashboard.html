@@ -4457,15 +4457,19 @@ async function doCreateKeystore() {
   if (pw1.length < 8) { toast('Password too short (min 8 chars)', 'err'); return; }
   if (!/[0-9]/.test(pw1) || !/[a-zA-Z]/.test(pw1)) { toast('Password must contain both letters and numbers', 'err'); return; }
   if (pw1 !== pw2) { toast('Passwords do not match', 'err'); return; }
-  await createKeystore(pw1);
-  hideModal();
+  try {
+    await createKeystore(pw1);
+    hideModal();
+  } catch (e) { toast('Failed: ' + e.message, 'err'); hideModal(); }
 }
 
 async function doUnlockKeystore() {
   const pw = document.getElementById('m-pw').value;
   if (!pw) { toast('Enter your password', 'err'); return; }
-  await unlockKeystore(pw);
-  if (keystore) hideModal();
+  try {
+    await unlockKeystore(pw);
+    if (keystore) hideModal();
+  } catch (e) { toast('Unlock failed: ' + e.message, 'err'); }
 }
 
 async function doGenerateWallet() {
@@ -4551,10 +4555,13 @@ async function doQuickImport() {
   if (pw1.length < 8) { toast('Password too short (min 8 chars)', 'err'); return; }
   if (!/[0-9]/.test(pw1) || !/[a-zA-Z]/.test(pw1)) { toast('Password must contain both letters and numbers', 'err'); return; }
   if (pw1 !== pw2) { toast('Passwords do not match', 'err'); return; }
-  await createKeystore(pw1);
-  await addWallet('Imported Wallet', sk, addr);
-  toast('Key imported and encrypted', 'ok');
-  hideModal();
+  try {
+    await createKeystore(pw1);
+    await addWallet('Imported Wallet', sk, addr);
+    toast('Key imported and encrypted', 'ok');
+    hideModal();
+    populateSendSelects();
+  } catch (e) { toast('Import failed: ' + e.message, 'err'); hideModal(); }
 }
 
 async function doChangePassword() {
