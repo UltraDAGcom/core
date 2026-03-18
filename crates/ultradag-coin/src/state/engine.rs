@@ -115,7 +115,12 @@ impl StateEngine {
             total_supply: 0,
             last_finalized_round: None,
             active_validator_set: Vec::new(),
-            current_epoch: u64::MAX, // sentinel: epoch never initialized
+            // Sentinel: epoch never initialized. On the first vertex, epoch_of(round) will
+            // differ from u64::MAX, triggering recalculate_active_set(). Safe because:
+            // - epoch_of(round) = round / EPOCH_LENGTH_ROUNDS (210,000)
+            // - Maximum epoch = u64::MAX / 210,000 ≈ 8.78×10^13 — never u64::MAX
+            // - EPOCH_LENGTH_ROUNDS is a compile-time constant, not governable
+            current_epoch: u64::MAX,
             proposals: HashMap::new(),
             votes: HashMap::new(),
             council_members: HashMap::new(),
@@ -526,6 +531,22 @@ impl StateEngine {
         }
         self.tx_index.insert(tx_hash, location);
         self.tx_index_order.push_back(tx_hash);
+    }
+
+    /// Rebuild the tx_index from DAG vertices after a restart.
+    /// This restores /tx/:hash lookups for recently-finalized transactions
+    /// that were lost because tx_index is not persisted.
+    pub fn rebuild_tx_index(&mut self, vertices: &[&DagVertex]) {
+        for vertex in vertices {
+            let vertex_hash = vertex.hash();
+            for tx in &vertex.block.transactions {
+                self.index_tx(tx.hash(), TxLocation {
+                    round: vertex.round,
+                    vertex_hash,
+                    validator: vertex.validator,
+                });
+            }
+        }
     }
 
     /// Apply a finalized vertex to the state (convenience for single-vertex tests).

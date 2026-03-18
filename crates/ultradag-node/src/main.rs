@@ -452,6 +452,25 @@ async fn main() {
         }
     }
 
+    // Rebuild tx_index from DAG vertices for /tx/:hash lookups after restart.
+    // Without this, recently-finalized transactions return 404 until new vertices are finalized.
+    {
+        let dag = server.dag.read().await;
+        let mut state = server.state.write().await;
+        let fin_round = state.last_finalized_round().unwrap_or(0);
+        let start_round = fin_round.saturating_sub(100); // Last 100 rounds of history
+        let mut vertices: Vec<&ultradag_coin::DagVertex> = Vec::new();
+        for round in start_round..=fin_round {
+            for v in dag.vertices_in_round(round) {
+                vertices.push(v);
+            }
+        }
+        if !vertices.is_empty() {
+            state.rebuild_tx_index(&vertices);
+            info!("Rebuilt tx_index from {} vertices (rounds {}-{})", vertices.len(), start_round, fin_round);
+        }
+    }
+
     // Start RPC server
     let rpc_port = args.rpc_port.unwrap_or(args.port + 1000);
     let rpc_server = server.clone();
