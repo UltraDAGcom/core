@@ -45,6 +45,12 @@
 - **Transaction receipts + slash history (March 18, 2026):** Bug #202: `TxReceipt` records success/failure with reason for every finalized transaction. Bug #203: `SlashRecord` with round, validator, amounts persists permanently in state (survives DAG pruning). Bug #204: Light client Merkle proofs documented as future architecture requirement (requires Merkle Patricia Trie).
 - **State bloat mitigations + code cleanup (March 18, 2026):** Bugs #193-197: dust account pruning (every 1000 rounds), proposal/vote cleanup (10,000 round retention), stale stake removal, effective_stake caching, dead code removal, eprintln→tracing, step numbering fix.
 - **Pre-staking eclipse defense (March 18, 2026):** Bug #198: checkpoint signers cross-checked against --validator-key allowlist. Bug #199: faucet_credit gated behind #[cfg(not(feature="mainnet"))]. Bug #200: tx_index rebuilt from DAG on startup. Bug #201: u64::MAX epoch sentinel documented.
+- **BFT safety proof sketch + final hardening (March 18, 2026):**
+  - `docs/security/BFT_SAFETY_PROOF.md` — formal safety argument: (1) ordering is deterministic from signed vertex content, (2) finalized vertices propagate to all honest nodes under partial synchrony, (3) stuck parent threshold affects liveness only, not safety. Key insight: ordering is external to DAG topology, making the safety argument simpler than leader-based protocols.
+  - `compute_validator_reward` gated behind `#[cfg(any(test, feature = "rpc-display"))]` — zero production callers, prevents future dual-source-of-truth coupling with `distribute_round_rewards`.
+  - `from_parts`/`from_snapshot` supply invariant check (Bug #212) — catches corrupt data at construction.
+  - Pre-staking checkpoint: cross-check signers against --validator-key allowlist (Bug #213).
+  - Governance same-param overwrite: deterministic (last proposal ID wins), documented as design choice.
 - **Peer banning + fee estimation (March 18, 2026):** Bug #205: exponential backoff ban list (2^n seconds, max 1h). Bug #206: GET /fee-estimate endpoint with congestion-based recommended fee.
 - **Known limitations (architecture decisions, not bugs):**
   - **No light client Merkle proofs** — compute_state_root() covers all state but provides no per-account proofs. Requires Merkle Patricia Trie (fundamental architecture change for future release).
