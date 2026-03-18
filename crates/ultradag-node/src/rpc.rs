@@ -121,12 +121,9 @@ fn next_nonce(state: &StateEngine, mp: &Mempool, sender: &Address) -> u64 {
 }
 
 /// Calculate total cost of pending transactions from a sender in the mempool.
+/// Uses the per-sender index for O(K) lookup instead of O(N) full scan.
 fn pending_cost(mp: &Mempool, sender: &Address) -> u64 {
-    mp.best(MAX_MEMPOOL_SCAN)
-        .iter()
-        .filter(|t| t.from() == *sender)
-        .map(|t| t.total_cost())
-        .fold(0u64, |acc, x| acc.saturating_add(x))
+    mp.pending_cost_for(sender)
 }
 
 #[derive(Serialize, Clone)]

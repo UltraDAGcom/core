@@ -137,6 +137,31 @@ impl Mempool {
         txs.into_iter().take(max).cloned().collect()
     }
 
+    /// Calculate total cost of pending transactions from a specific sender.
+    /// Uses the by_sender index for O(K) where K = sender's pending tx count,
+    /// instead of O(N) scanning the entire mempool.
+    pub fn pending_cost_for(&self, sender: &Address) -> u64 {
+        match self.by_sender.get(sender) {
+            Some(hashes) => hashes.iter()
+                .filter_map(|h| self.txs.get(h))
+                .map(|e| e.tx.total_cost())
+                .fold(0u64, |acc, x| acc.saturating_add(x)),
+            None => 0,
+        }
+    }
+
+    /// Get the next nonce for a sender (max pending nonce + 1, or 0 if no pending txs).
+    pub fn pending_nonce_for(&self, sender: &Address) -> Option<u64> {
+        match self.by_sender.get(sender) {
+            Some(hashes) => hashes.iter()
+                .filter_map(|h| self.txs.get(h))
+                .map(|e| e.tx.nonce())
+                .max()
+                .map(|n| n.saturating_add(1)),
+            None => None,
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.txs.len()
     }
