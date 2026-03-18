@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Coins } from 'lucide-react';
 import { getValidators, getStake, getDelegation, formatUdag, shortAddr, postDelegate, postUndelegate } from '../lib/api';
 import { useKeystore } from '../hooks/useKeystore';
 import { Card } from '../components/shared/Card';
@@ -14,7 +15,7 @@ interface ValidatorInfo {
   effective_stake: number;
   delegator_count: number;
   commission_percent: number;
-  is_active: boolean;
+  is_active?: boolean;
 }
 
 interface StakeInfo {
@@ -33,13 +34,16 @@ interface DelegationInfo {
   name: string;
   delegated_amount: number;
   validator: string;
-  undelegating: boolean;
+  is_undelegating: boolean;
   unlock_at_round: number | null;
 }
 
 export function StakingPage() {
   const { wallets, unlocked } = useKeystore();
   const [validators, setValidators] = useState<ValidatorInfo[]>([]);
+  const [totalStaked, setTotalStaked] = useState(0);
+  const [totalDelegated, setTotalDelegated] = useState(0);
+  const [validatorCount, setValidatorCount] = useState(0);
   const [stakes, setStakes] = useState<StakeInfo[]>([]);
   const [delegations, setDelegations] = useState<DelegationInfo[]>([]);
   const [page, setPage] = useState(1);
@@ -56,8 +60,16 @@ export function StakingPage() {
   const refresh = useCallback(async () => {
     try {
       const v = await getValidators();
-      const list: ValidatorInfo[] = Array.isArray(v) ? v : (v.validators ?? []);
+      const raw: ValidatorInfo[] = Array.isArray(v) ? v : (v.validators ?? []);
+      const list = raw.map((vi: ValidatorInfo) => ({ ...vi, is_active: vi.is_active ?? true }));
       setValidators(list);
+      if (!Array.isArray(v)) {
+        setTotalStaked(v.total_staked ?? 0);
+        setTotalDelegated(v.total_delegated ?? 0);
+        setValidatorCount(v.count ?? list.length);
+      } else {
+        setValidatorCount(list.length);
+      }
     } catch {
       /* ignore */
     }
@@ -74,7 +86,7 @@ export function StakingPage() {
         }
         try {
           const d = await getDelegation(w.address);
-          if (d.delegated_amount > 0 || d.undelegating) {
+          if (d.delegated_amount > 0 || d.is_undelegating) {
             delResults.push({ address: w.address, name: w.name, ...d });
           }
         } catch {
@@ -136,8 +148,24 @@ export function StakingPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-page-enter">
       <h1 className="text-2xl font-bold text-white">Staking & Delegation</h1>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="rounded-lg bg-dag-card border border-dag-border p-4">
+          <span className="text-dag-muted text-xs block mb-1">Total Staked</span>
+          <span className="text-white font-bold text-lg font-mono">{formatUdag(totalStaked)} <span className="text-dag-muted text-sm font-normal">UDAG</span></span>
+        </div>
+        <div className="rounded-lg bg-dag-card border border-dag-border p-4">
+          <span className="text-dag-muted text-xs block mb-1">Total Delegated</span>
+          <span className="text-white font-bold text-lg font-mono">{formatUdag(totalDelegated)} <span className="text-dag-muted text-sm font-normal">UDAG</span></span>
+        </div>
+        <div className="rounded-lg bg-dag-card border border-dag-border p-4">
+          <span className="text-dag-muted text-xs block mb-1">Active Validators</span>
+          <span className="text-dag-green font-bold text-xl font-mono">{validatorCount}</span>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column: forms */}
@@ -246,8 +274,8 @@ export function StakingPage() {
                   <div key={d.address} className="rounded bg-dag-surface border border-dag-border p-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-white">{d.name}</span>
-                      <span className={`text-xs ${d.undelegating ? 'text-dag-yellow' : 'text-dag-blue'}`}>
-                        {d.undelegating ? `Undelegating (round ${d.unlock_at_round})` : 'Active'}
+                      <span className={`text-xs ${d.is_undelegating ? 'text-dag-yellow' : 'text-dag-blue'}`}>
+                        {d.is_undelegating ? `Undelegating (round ${d.unlock_at_round})` : 'Active'}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-sm">
@@ -260,7 +288,7 @@ export function StakingPage() {
                         <span className="text-white font-mono text-xs">{shortAddr(d.validator)}</span>
                       </div>
                     </div>
-                    {!d.undelegating && (
+                    {!d.is_undelegating && (
                       <button
                         onClick={() => handleUndelegate(d.address)}
                         disabled={undelegateLoading === d.address}
@@ -281,7 +309,13 @@ export function StakingPage() {
             {loading ? (
               <p className="text-dag-muted text-sm">Loading validators...</p>
             ) : validators.length === 0 ? (
-              <p className="text-dag-muted text-sm">No validators found.</p>
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-dag-purple/10 border border-dag-purple/20 flex items-center justify-center mb-4">
+                  <Coins className="w-7 h-7 text-dag-purple" />
+                </div>
+                <h4 className="text-white font-medium mb-1">No validators yet</h4>
+                <p className="text-sm text-dag-muted max-w-xs">Stake UDAG to become a validator and earn rewards.</p>
+              </div>
             ) : (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -292,7 +326,7 @@ export function StakingPage() {
                       effective_stake={v.effective_stake}
                       delegator_count={v.delegator_count}
                       commission_percent={v.commission_percent}
-                      is_active={v.is_active}
+                      is_active={v.is_active || false}
                       onDelegate={unlocked && wallets.length > 0 ? () => setDelegateTarget(v.address) : undefined}
                     />
                   ))}
