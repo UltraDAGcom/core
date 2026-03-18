@@ -4561,6 +4561,14 @@ async function doQuickImport() {
     toast('Key imported and encrypted', 'ok');
     hideModal();
     populateSendSelects();
+    // Auto-connect if not already connected
+    if (!connected) {
+      toast('Connecting to network...', 'info');
+      connectNode();
+    } else {
+      refreshPortfolio();
+      loadCouncilStatus();
+    }
   } catch (e) { toast('Import failed: ' + e.message, 'err'); hideModal(); }
 }
 
