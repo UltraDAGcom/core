@@ -857,11 +857,11 @@ impl StateEngine {
     /// When staking is active, uses stake-proportional rewards.
     /// Otherwise splits block reward equally among validators per round (pre-staking mode).
     pub fn apply_finalized_vertices(&mut self, vertices: &[DagVertex]) -> Result<(), CoinError> {
-        // Sort deterministically by (round, hash) so all nodes apply in the same order
-        let mut sorted: Vec<&DagVertex> = vertices.iter().collect();
-        sorted.sort_by(|a, b| {
-            a.round.cmp(&b.round).then_with(|| a.hash().cmp(&b.hash()))
-        });
+        // Sort deterministically by (round, hash) so all nodes apply in the same order.
+        // Precompute hashes to avoid O(N log N) blake3 calls in the comparator.
+        let mut with_hashes: Vec<([u8; 32], &DagVertex)> = vertices.iter().map(|v| (v.hash(), v)).collect();
+        with_hashes.sort_by(|(ha, a), (hb, b)| a.round.cmp(&b.round).then_with(|| ha.cmp(hb)));
+        let sorted: Vec<&DagVertex> = with_hashes.iter().map(|(_, v)| *v).collect();
 
         // Deterministic equivocation detection (defense-in-depth):
         //
@@ -1859,6 +1859,17 @@ impl StateEngine {
         }
 
         // Apply execution effects — track failures to override status
+        //
+        // GOVERNANCE SELF-REFERENCE SAFETY NOTE (Bug #207):
+        // If a ParameterChange modifies `execution_delay_rounds` or `voting_period_rounds`,
+        // the new value only affects FUTURE proposals. This is safe because:
+        // 1. All Active→PassedPending transitions were collected in the first loop above,
+        //    using `self.governance_params.execution_delay_rounds` at the START of this tick.
+        // 2. `apply_change()` below modifies self.governance_params, but those changes only
+        //    take effect in subsequent `tick_governance()` calls.
+        // 3. The `execute_at_round` baked into each proposal at transition time is immutable.
+        // Therefore, reducing execution_delay cannot retroactively rush any proposal that
+        // has already transitioned to PassedPending — their execute_at_round is fixed.
         let mut failed: std::collections::HashMap<u64, String> = std::collections::HashMap::new();
         for (id, proposal_type) in effects {
             match proposal_type {

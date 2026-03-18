@@ -197,6 +197,9 @@ fn test_byzantine_equivocator_detected_and_rejected() {
             ultradag_coin::consensus::dag::DagInsertError::FutureTimestamp => {
                 panic!("Unexpected FutureTimestamp error");
             }
+            ultradag_coin::consensus::dag::DagInsertError::TooLarge => {
+                panic!("Unexpected TooLarge error");
+            }
         }
     }
     

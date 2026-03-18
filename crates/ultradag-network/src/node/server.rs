@@ -1258,6 +1258,10 @@ async fn handle_peer(
                         warn!("Rejected vertex from {} with too many parents (>{MAX_PARENTS})", peer_addr);
                         continue;
                     }
+                    Err(DagInsertError::TooLarge) => {
+                        warn!("Rejected oversized vertex from {} round={}", peer_addr, round);
+                        continue;
+                    }
                     Err(DagInsertError::FutureRound) => {
                         debug!("Skipped vertex from {} round={}: future round", peer_addr, round);
                         continue;
@@ -1424,7 +1428,7 @@ async fn handle_peer(
                                 all_missing_parents.extend(&missing);
                                 failed_vertices.push((hash, vertex));
                             }
-                            Err(DagInsertError::TooManyParents) => {
+                            Err(DagInsertError::TooManyParents) | Err(DagInsertError::TooLarge) => {
                                 // Silently reject
                             }
                             Err(DagInsertError::FutureRound) | Err(DagInsertError::FutureTimestamp) => {

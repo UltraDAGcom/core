@@ -300,6 +300,11 @@ pub const DEFAULT_COMMISSION_PERCENT: u8 = 10;
 /// Maximum commission percentage a validator can charge on delegated rewards.
 pub const MAX_COMMISSION_PERCENT: u8 = 100;
 
+/// Maximum serialized size of a DagVertex in bytes.
+/// Prevents DoS via oversized vertices (10K transactions x 256-byte memos = ~2.5MB).
+/// Set to 1MB — generous for normal use, prevents abuse.
+pub const MAX_VERTEX_BYTES: usize = 1_048_576; // 1 MB
+
 /// Transaction time-to-live in mempool (in seconds).
 /// Transactions older than this are evicted to prevent stale execution.
 /// 1 hour = 3600 seconds.

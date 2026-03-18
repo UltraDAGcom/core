@@ -257,6 +257,19 @@ pub async fn validator_loop(
         );
         vertex.signature = sk.sign(&vertex.signable_bytes());
 
+        // Check vertex size before insertion — locally produced vertices should never
+        // exceed MAX_VERTEX_BYTES, but verify as defense-in-depth.
+        if let Ok(bytes) = postcard::to_allocvec(&vertex) {
+            if bytes.len() > ultradag_coin::constants::MAX_VERTEX_BYTES {
+                warn!(
+                    "Locally produced vertex exceeds MAX_VERTEX_BYTES ({} > {}), skipping",
+                    bytes.len(),
+                    ultradag_coin::constants::MAX_VERTEX_BYTES,
+                );
+                continue;
+            }
+        }
+
         // Insert into DAG using try_insert to catch equivocation races.
         // Between the equivocation check (line 151) and here, a P2P vertex from
         // another node could have been inserted for the same validator+round.

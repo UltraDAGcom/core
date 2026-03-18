@@ -62,6 +62,8 @@ pub enum DagInsertError {
     FutureRound,
     /// Vertex has a timestamp too far in the future (beyond 5 minutes).
     FutureTimestamp,
+    /// Vertex exceeds MAX_VERTEX_BYTES when serialized.
+    TooLarge,
 }
 
 /// Maximum number of parent references allowed per DagVertex.
@@ -283,6 +285,14 @@ impl BlockDag {
             return Err(DagInsertError::TooManyParents);
         }
 
+        // Reject oversized vertices to prevent DoS via transaction/memo stuffing
+        let vertex_size = postcard::to_allocvec(&vertex)
+            .map(|v| v.len())
+            .unwrap_or(0);
+        if vertex_size > crate::constants::MAX_VERTEX_BYTES {
+            return Err(DagInsertError::TooLarge);
+        }
+
         // Reject vertices from Byzantine validators
         if self.is_byzantine(&vertex.validator) {
             return Ok(false);
@@ -369,18 +379,17 @@ impl BlockDag {
     /// Enables unlimited validator scaling by keeping parent count bounded at K
     /// regardless of validator count N. Follows Narwhal's approach.
     pub fn select_parents(&self, proposer: &Address, round: u64, k: usize) -> Vec<[u8; 32]> {
-        let candidates: Vec<[u8; 32]> = self.vertices_in_round(round)
-            .iter()
-            .map(|v| v.hash())
-            .collect();
+        let candidate_hashes = self.hashes_in_round(round);
 
-        if candidates.len() <= k {
-            return candidates;
+        if candidate_hashes.len() <= k {
+            return candidate_hashes.to_vec();
         }
 
         // Deterministic sampling: blake3(proposer || candidate) for uniform scoring.
         // Sort by full 32-byte hash for guaranteed determinism (no collisions).
-        let mut scored: Vec<([u8; 32], [u8; 32])> = candidates
+        // Uses hashes_in_round() to avoid cloning full DagVertex structs and
+        // recomputing blake3 hashes that are already stored in the rounds map.
+        let mut scored: Vec<([u8; 32], [u8; 32])> = candidate_hashes
             .iter()
             .map(|c| {
                 let mut h = blake3::Hasher::new();
