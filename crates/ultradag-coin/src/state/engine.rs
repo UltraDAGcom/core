@@ -294,27 +294,23 @@ impl StateEngine {
             return Ok(());
         }
 
-        // Total effective stake = sum of all validators' effective stake.
-        // Must match what we use in the per-validator loop below (effective_stake_of)
-        // which excludes undelegating delegations (unlock_at_round.is_some()).
-        // Using total_staked() + total_delegated() was wrong because total_delegated()
-        // includes undelegating amounts, creating a denominator larger than the sum of
-        // numerators — causing under-emission proportional to undelegating volume.
-        let total_effective_stake: u64 = self.stake_accounts.iter()
+        // Compute effective stake ONCE per validator and cache results.
+        // effective_stake_of() is O(D) where D = delegation count, so computing it
+        // once here avoids the previous O(S*D) double iteration (total + per-validator).
+        // MUST sort by address for deterministic iteration — HashMap order is
+        // non-deterministic and would cause consensus splits across nodes.
+        let mut validators: Vec<(Address, u64)> = self.stake_accounts.iter()
             .filter(|(_, s)| s.staked > 0)
-            .map(|(addr, _)| self.effective_stake_of(addr))
+            .map(|(addr, _)| (*addr, self.effective_stake_of(addr)))
+            .collect();
+        validators.sort_by_key(|(addr, _)| *addr);
+
+        let total_effective_stake: u64 = validators.iter()
+            .map(|(_, eff)| *eff)
             .fold(0u64, |acc, x| acc.saturating_add(x));
 
         if total_effective_stake > 0 {
             // --- Staking active: distribute proportionally to all stakers ---
-            // Collect all validators (anyone with stake) and their effective stakes.
-            // MUST sort by address for deterministic iteration — HashMap order is
-            // non-deterministic and would cause consensus splits across nodes.
-            let mut validators: Vec<(Address, u64)> = self.stake_accounts.iter()
-                .filter(|(_, s)| s.staked > 0)
-                .map(|(addr, _)| (*addr, self.effective_stake_of(addr)))
-                .collect();
-            validators.sort_by_key(|(addr, _)| *addr);
 
             let mut total_to_mint: u64 = 0;
             let mut credits: Vec<(Address, u64)> = Vec::new();
@@ -902,6 +898,24 @@ impl StateEngine {
         if let Some(fin) = self.last_finalized_round {
             let floor = fin.saturating_sub(1000);
             self.applied_validators_per_round.retain(|round, _| *round >= floor);
+
+            // Periodic state bloat pruning
+            if fin % crate::constants::STATE_PRUNING_INTERVAL == 0 {
+                // Remove zero-balance, zero-nonce accounts (fully drained)
+                let dust_pruned = self.prune_dust_accounts();
+                if dust_pruned > 0 {
+                    tracing::debug!("Pruned {} dust accounts at round {}", dust_pruned, fin);
+                }
+
+                // Remove terminal proposals and their votes
+                let proposals_pruned = self.prune_old_proposals(
+                    fin,
+                    crate::constants::PROPOSAL_RETENTION_ROUNDS,
+                );
+                if proposals_pruned > 0 {
+                    tracing::debug!("Pruned {} old proposals at round {}", proposals_pruned, fin);
+                }
+            }
         }
 
         Ok(())
@@ -1162,6 +1176,10 @@ impl StateEngine {
                 stake.unlock_at_round = None;
                 self.credit(&addr, amount);
             }
+            // Remove empty stake account to prevent unbounded growth.
+            // Safe: stake_of() returns 0 for missing entries, stake_account() returns None,
+            // and all callers handle missing entries gracefully.
+            self.stake_accounts.remove(&addr);
         }
 
         // Process delegation undelegation completions
@@ -1177,6 +1195,51 @@ impl StateEngine {
             self.delegation_accounts.remove(&addr);
             self.credit(&addr, amount);
         }
+    }
+
+    /// Remove accounts with zero balance and zero nonce (fully drained, no history).
+    /// Called periodically (every 1000 finalized rounds) to prevent unbounded account growth.
+    /// Safe because: stake_of() returns 0 for missing entries, stake_account() returns None,
+    /// and all code paths handle missing accounts gracefully via map_or/ok_or.
+    pub fn prune_dust_accounts(&mut self) -> usize {
+        let before = self.accounts.len();
+        self.accounts.retain(|_addr, account| {
+            // Keep if non-zero balance OR non-zero nonce (has transaction history)
+            account.balance > 0 || account.nonce > 0
+        });
+        before - self.accounts.len()
+    }
+
+    /// Remove proposals in terminal states (Executed, Rejected, Failed, Cancelled)
+    /// whose voting period ended more than `retention_rounds` rounds ago.
+    /// Also removes associated votes to prevent unbounded vote map growth.
+    /// Called periodically (every 1000 finalized rounds).
+    pub fn prune_old_proposals(&mut self, current_round: u64, retention_rounds: u64) -> usize {
+        let cutoff = current_round.saturating_sub(retention_rounds);
+        let mut to_remove: Vec<u64> = Vec::new();
+
+        for (id, proposal) in &self.proposals {
+            match &proposal.status {
+                crate::governance::ProposalStatus::Executed
+                | crate::governance::ProposalStatus::Rejected
+                | crate::governance::ProposalStatus::Failed { .. }
+                | crate::governance::ProposalStatus::Cancelled => {
+                    // Remove if the proposal's voting period ended before the cutoff
+                    if proposal.voting_ends <= cutoff {
+                        to_remove.push(*id);
+                    }
+                }
+                _ => {} // Keep Active and PassedPending proposals
+            }
+        }
+
+        for id in &to_remove {
+            self.proposals.remove(id);
+            // Remove all votes for this proposal — votes are keyed by (proposal_id, voter_address)
+            self.votes.retain(|(proposal_id, _), _| proposal_id != id);
+        }
+
+        to_remove.len()
     }
 
     /// Slash a validator's stake (on equivocation).

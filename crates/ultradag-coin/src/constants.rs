@@ -311,6 +311,14 @@ pub const PROPOSAL_TITLE_MAX_BYTES: usize = 128;
 /// Maximum description length in bytes.
 pub const PROPOSAL_DESCRIPTION_MAX_BYTES: usize = 4096;
 
+/// Rounds to retain terminal proposals (Executed/Rejected/Failed/Cancelled) before pruning.
+/// ~14 hours at 5s rounds. Votes for pruned proposals are also removed.
+pub const PROPOSAL_RETENTION_ROUNDS: u64 = 10_000;
+
+/// Interval (in finalized rounds) between state bloat pruning passes.
+/// Dust accounts and old proposals are pruned every this many rounds.
+pub const STATE_PRUNING_INTERVAL: u64 = 1_000;
+
 #[cfg(test)]
 mod tests {
     use super::*;
