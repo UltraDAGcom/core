@@ -3,8 +3,6 @@ use std::io::Write;
 use std::path::Path;
 use serde::{Serialize, Deserialize};
 
-pub mod monotonicity;
-pub mod wal;
 
 /// Persistence error types
 #[derive(Debug, thiserror::Error)]
