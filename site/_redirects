@@ -1,3 +1,7 @@
 # Handle docs directory - serve from docs/ directory
 /docs/ /docs/index.html 200
 /docs/* /docs/:splat 200
+
+# Handle dashboard-v2 directory - serve from dashboard-v2/dist/
+/dashboard-v2/ /dashboard-v2/dist/index.html 200
+/dashboard-v2/* /dashboard-v2/dist/:splat 200
