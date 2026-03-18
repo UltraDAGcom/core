@@ -356,6 +356,11 @@ fn setup_passing_proposal(
     state.apply_vote(&v1, 150).unwrap();
     state.apply_vote(&v2, 200).unwrap();
 
+    // Fix supply invariant: direct apply_create_proposal/apply_vote debit fees
+    // from senders but skip the coinbase credit (no vertex processing path).
+    // Adjust total_supply to match: 3 txs x 10,000 sats = 30,000 sats burned.
+    state.total_supply = state.total_supply.saturating_sub(30_000);
+
     // Stake fillers to activate DAO (need MIN_DAO_VALIDATORS=8 stakers)
     for _ in 0..8 {
         stake_filler(&mut state);
@@ -486,7 +491,7 @@ fn test_changed_params_persist_across_snapshot() {
 
     // Snapshot and restore
     let snapshot = state.snapshot();
-    let restored = StateEngine::from_snapshot(snapshot);
+    let restored = StateEngine::from_snapshot(snapshot).unwrap();
     assert_eq!(restored.governance_params().quorum_numerator, 25);
 }
 
@@ -721,6 +726,9 @@ fn setup_passing_council_membership_proposal(
     let v2 = make_vote_tx(&voter2, 0, true, 10_000, 0);
     state.apply_vote(&v1, 150).unwrap();
     state.apply_vote(&v2, 200).unwrap();
+
+    // Fix supply invariant: direct apply calls debit fees without coinbase credit.
+    state.total_supply = state.total_supply.saturating_sub(30_000);
 
     let voting_ends = state.proposal(0).unwrap().voting_ends;
     (state, voting_ends)

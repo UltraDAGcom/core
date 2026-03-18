@@ -979,7 +979,18 @@ impl StateEngine {
             self.tick_governance(r);
         }
 
-        // Prune old entries from cross-batch equivocation tracker (keep last 1000 rounds)
+        // Prune old entries from cross-batch equivocation tracker (keep last 1000 rounds).
+        //
+        // SECURITY ANALYSIS (Bug #211): The 1000-round pruning window does NOT create
+        // an exploitable gap. The PRIMARY defense is the DAG's try_insert(), which
+        // rejects equivocating vertices at insertion via the validator_round_vertex
+        // secondary index (O(1) check). Once rejected, the equivocating vertex never
+        // enters the DAG and can never be finalized. The only code paths that insert
+        // vertices are try_insert() (P2P) and insert() (local validator, which also
+        // uses try_insert since Bug #69 fix). CheckpointSync suffix vertices also go
+        // through try_insert(). Therefore, no equivocating vertex can enter the DAG
+        // after ANY number of rounds, making the 1000-round window purely defense-in-depth
+        // against theoretical future bugs in the insertion path.
         if let Some(fin) = self.last_finalized_round {
             let floor = fin.saturating_sub(1000);
             self.applied_validators_per_round.retain(|round, _| *round >= floor);
@@ -2003,6 +2014,7 @@ impl StateEngine {
     }
 
     /// Construct StateEngine from individual components (for redb loading).
+    /// Verifies the supply invariant on construction to catch corrupted redb data.
     #[allow(clippy::too_many_arguments)]
     pub fn from_parts(
         accounts: HashMap<Address, AccountState>,
@@ -2019,8 +2031,20 @@ impl StateEngine {
         council_members: HashMap<Address, crate::governance::CouncilSeatCategory>,
         treasury_balance: u64,
         delegation_accounts: HashMap<Address, DelegationAccount>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, CoinError> {
+        // Verify supply invariant before constructing (catch corrupted redb data)
+        let liquid: u64 = accounts.values().map(|a| a.balance).fold(0, |a, b| a.saturating_add(b));
+        let staked: u64 = stake_accounts.values().map(|s| s.staked).fold(0, |a, b| a.saturating_add(b));
+        let delegated: u64 = delegation_accounts.values().map(|d| d.delegated).fold(0, |a, b| a.saturating_add(b));
+        let total = liquid.saturating_add(staked).saturating_add(delegated).saturating_add(treasury_balance);
+        if total != total_supply {
+            return Err(CoinError::SupplyInvariantBroken(format!(
+                "from_parts: liquid={} staked={} delegated={} treasury={} sum={} != total_supply={}",
+                liquid, staked, delegated, treasury_balance, total, total_supply
+            )));
+        }
+
+        Ok(Self {
             accounts,
             stake_accounts,
             active_validator_set,
@@ -2040,7 +2064,7 @@ impl StateEngine {
             tx_receipts: HashMap::new(),
             slash_history: Vec::new(),
             applied_validators_per_round: HashMap::new(),
-        }
+        })
     }
 
     /// Create a snapshot of the current state (for checkpoints).
@@ -2079,8 +2103,20 @@ impl StateEngine {
     }
 
     /// Create a StateEngine from a snapshot (for checkpoint validation without mutating self).
-    pub fn from_snapshot(snapshot: crate::state::persistence::StateSnapshot) -> Self {
-        Self {
+    /// Verifies the supply invariant on construction to catch corrupted snapshot data.
+    pub fn from_snapshot(snapshot: crate::state::persistence::StateSnapshot) -> Result<Self, CoinError> {
+        let liquid: u64 = snapshot.accounts.iter().map(|(_, a)| a.balance).fold(0, |a, b| a.saturating_add(b));
+        let staked: u64 = snapshot.stake_accounts.iter().map(|(_, s)| s.staked).fold(0, |a, b| a.saturating_add(b));
+        let delegated: u64 = snapshot.delegation_accounts.iter().map(|(_, d)| d.delegated).fold(0, |a, b| a.saturating_add(b));
+        let total = liquid.saturating_add(staked).saturating_add(delegated).saturating_add(snapshot.treasury_balance);
+        if total != snapshot.total_supply {
+            return Err(CoinError::SupplyInvariantBroken(format!(
+                "from_snapshot: liquid={} staked={} delegated={} treasury={} sum={} != total_supply={}",
+                liquid, staked, delegated, snapshot.treasury_balance, total, snapshot.total_supply
+            )));
+        }
+
+        Ok(Self {
             accounts: snapshot.accounts.into_iter().collect(),
             stake_accounts: snapshot.stake_accounts.into_iter().collect(),
             active_validator_set: snapshot.active_validator_set,
@@ -2100,7 +2136,7 @@ impl StateEngine {
             tx_receipts: HashMap::new(),
             slash_history: Vec::new(),
             applied_validators_per_round: HashMap::new(),
-        }
+        })
     }
 
     /// Load state from a snapshot (for fast-sync from checkpoint).

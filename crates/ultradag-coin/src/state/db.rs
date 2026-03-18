@@ -319,7 +319,7 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         council_members,
         treasury_balance,
         delegation_accounts,
-    );
+    ).map_err(|e| PersistenceError::Serialization(e.to_string()))?;
 
     // Verify state integrity: recompute state root and compare against stored value.
     // Catches silent corruption from disk errors, partial writes, or software bugs.

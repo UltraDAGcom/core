@@ -70,9 +70,12 @@ pub enum DagInsertError {
 pub const MAX_PARENTS: usize = 64;
 
 /// Target number of parents per vertex for partial parent selection.
-/// Each validator references K random tips instead of all tips, enabling
-/// unlimited validator scaling (removes N=64 ceiling). Follows Narwhal approach.
-/// K=32 provides strong DAG connectivity while keeping parent count manageable.
+/// Each validator references K deterministically-scored parents instead of all parents.
+/// Enables bounded parent selection when validator count exceeds K_PARENTS (32).
+/// With MAX_ACTIVE_VALIDATORS=21, all validators are selected as parents.
+/// Partial selection activates when validator count exceeds 32 (e.g., via future
+/// parameter change). K=32 provides strong DAG connectivity while keeping parent
+/// count manageable. Follows Narwhal's approach.
 pub const K_PARENTS: usize = 32;
 
 /// Number of rounds to keep in memory before pruning older finalized vertices.
@@ -376,8 +379,9 @@ impl BlockDag {
     /// finality (Bug #5 fix: `tips()` returned only childless vertices, typically
     /// just our own last vertex, creating parallel linear chains).
     ///
-    /// Enables unlimited validator scaling by keeping parent count bounded at K
-    /// regardless of validator count N. Follows Narwhal's approach.
+    /// Enables bounded parent selection when validator count exceeds K, keeping
+    /// parent count at K regardless of validator count N. With MAX_ACTIVE_VALIDATORS=21,
+    /// all validators are selected. Partial selection activates above K=32 validators.
     pub fn select_parents(&self, proposer: &Address, round: u64, k: usize) -> Vec<[u8; 32]> {
         let candidate_hashes = self.hashes_in_round(round);
 

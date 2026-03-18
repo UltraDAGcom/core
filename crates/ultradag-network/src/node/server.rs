@@ -2012,7 +2012,14 @@ async fn handle_peer(
 
                 // Fix 1: Use the checkpoint's own state snapshot for validator trust,
                 // not the local state engine (which may be empty on fresh nodes).
-                let checkpoint_state = ultradag_coin::StateEngine::from_snapshot(state_at_checkpoint.clone());
+                let checkpoint_state = match ultradag_coin::StateEngine::from_snapshot(state_at_checkpoint.clone()) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        warn!("CheckpointSync: snapshot failed supply invariant check: {}", e);
+                        checkpoint_metrics.record_fast_sync_failure();
+                        continue;
+                    }
+                };
                 let active = checkpoint_state.active_validators().to_vec();
                 let quorum = if active.is_empty() {
                     // Pre-staking: accept if checkpoint has at least 2 valid signers
@@ -2068,6 +2075,13 @@ async fn handle_peer(
                         }
                     } else {
                         drop(fin_r);
+                        // No validator allowlist AND no active stakers: checkpoint trust
+                        // is entirely attacker-controlled (signers come from attacker's snapshot).
+                        // Refuse the checkpoint and force the operator to use --validator-key.
+                        warn!("REFUSING CheckpointSync: pre-staking mode with no validator allowlist. \
+                            Use --validator-key to specify trusted validators before accepting checkpoints.");
+                        checkpoint_metrics.record_fast_sync_failure();
+                        continue;
                     }
                 } else if !checkpoint.is_accepted(&active, quorum) {
                     warn!("Received CheckpointSync with insufficient signatures ({} valid, need {})",

@@ -718,7 +718,7 @@ fn test_24_stale_epoch_on_load_triggers_recalculation() {
         tampered.council_members().map(|(k, v)| (*k, *v)).collect(),
         tampered.treasury_balance(),
         tampered.all_delegations().map(|(k, v)| (*k, v.clone())).collect(),
-    );
+    ).unwrap();
     tampered_state.save(&state_path).unwrap();
 
     // Reload — should detect stale epoch and recalculate
