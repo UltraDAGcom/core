@@ -6,3 +6,6 @@
 /dashboard/ /dashboard-v2/dist/index.html 200
 /dashboard /dashboard-v2/dist/index.html 200
 /dashboard/* /dashboard-v2/dist/:splat 200
+
+# Handle dashboard assets explicitly
+/dashboard/assets/* /dashboard-v2/dist/assets/:splat 200
