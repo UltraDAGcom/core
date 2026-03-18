@@ -1657,7 +1657,7 @@ impl StateEngine {
         // Council members don't need stake to vote — their seat IS their authority.
         let vote_weight = 1u64;
 
-        // 10. Deduct fee from voter balance
+        // 9. Deduct fee from voter balance
         let balance = self.balance(&tx.from);
         if balance < tx.fee {
             return Err(CoinError::InsufficientBalance {
@@ -1668,10 +1668,10 @@ impl StateEngine {
         }
         self.debit(&tx.from, tx.fee)?;
 
-        // 9. Increment nonce
+        // 10. Increment nonce
         self.increment_nonce(&tx.from);
 
-        // 10. Add vote weight to proposal.votes_for or votes_against
+        // 11. Add vote weight to proposal.votes_for or votes_against
         // Safety: proposal existence was checked at step 4 above; no mutations remove proposals.
         let proposal = self.proposals.get_mut(&tx.proposal_id)
             .ok_or(CoinError::ProposalNotFound)?;
@@ -1681,7 +1681,7 @@ impl StateEngine {
             proposal.votes_against = proposal.votes_against.saturating_add(vote_weight);
         }
 
-        // 11. Insert (proposal_id, from) -> vote into self.votes
+        // 12. Insert (proposal_id, from) -> vote into self.votes
         self.votes.insert((tx.proposal_id, tx.from), tx.vote);
 
         Ok(())

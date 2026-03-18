@@ -6,7 +6,7 @@ use crate::persistence::{self, PersistenceError};
 use crate::state::engine::{AccountState, DelegationAccount, StakeAccount};
 
 /// Serializable snapshot of StateEngine
-/// Uses Vec of tuples instead of HashMap to avoid JSON serialization issues
+/// Uses Vec of tuples instead of HashMap for deterministic serialization order
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StateSnapshot {
     pub accounts: Vec<(Address, AccountState)>,

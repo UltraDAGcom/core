@@ -74,7 +74,7 @@ pub const MAX_PARENTS: usize = 64;
 pub const K_PARENTS: usize = 32;
 
 /// Number of rounds to keep in memory before pruning older finalized vertices.
-/// Keeps last 1000 rounds = ~7 days at 10-second rounds.
+/// Keeps last 1000 rounds = ~1.4 hours at 5-second rounds.
 pub const PRUNING_HORIZON: u64 = 1000;
 
 /// Equivocation evidence stored permanently, separate from the prunable DAG.

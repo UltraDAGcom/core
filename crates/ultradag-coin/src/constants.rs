@@ -127,7 +127,7 @@ pub const OBSERVER_REWARD_PERCENT: u64 = 20;
 /// Council members earn emission rewards instead.
 ///
 /// In production, this would be verified against foundation records.
-/// For now, this is a placeholder for future integration.
+/// Verified via governance (CouncilMembership proposals) rather than external records.
 pub const COUNCIL_FOUNDATION_MEMBERSHIP_REQUIRED: bool = true;
 
 /// Council of 21: Maximum number of council members (fixed at 21).
