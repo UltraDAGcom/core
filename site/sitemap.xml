@@ -31,7 +31,7 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://ultradag.com/dashboard.html</loc>
+    <loc>https://ultradag.com/dashboard/</loc>
     <lastmod>2026-03-12</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
