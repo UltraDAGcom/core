@@ -1680,7 +1680,9 @@ async fn handle_request(
 
         (&Method::GET, ["council"]) => {
             let state = read_lock_or_503!(server.state);
-            let members: Vec<serde_json::Value> = state.council_members()
+            let mut member_pairs: Vec<_> = state.council_members().collect();
+            member_pairs.sort_by_key(|(addr, _)| *addr);
+            let members: Vec<serde_json::Value> = member_pairs.into_iter()
                 .map(|(addr, cat)| serde_json::json!({
                     "address": addr.to_hex(),
                     "category": cat.name(),
@@ -1700,10 +1702,8 @@ async fn handle_request(
                     }),
                 );
             }
-            let validator_count = state.active_validators().len().max(1) as u64;
             let (per_member, total_emission) = state.compute_council_emission(
                 state.last_finalized_round().unwrap_or(0),
-                validator_count,
             );
             json_response(StatusCode::OK, &serde_json::json!({
                 "member_count": members.len(),

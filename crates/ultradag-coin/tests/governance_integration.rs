@@ -956,7 +956,7 @@ fn test_council_membership_new_member_gets_emission() {
 
     // Emission with 3 members (1 genesis + 2 added)
     // Use validator_count=1 to see per-round totals
-    let (per_member_before, total_before) = state.compute_council_emission(100, 1);
+    let (per_member_before, total_before) = state.compute_council_emission(100);
     assert!(per_member_before > 0, "Should have non-zero emission");
     assert_eq!(total_before, per_member_before * 3, "Total should be per_member * 3");
 
@@ -965,7 +965,7 @@ fn test_council_membership_new_member_gets_emission() {
     state.add_council_member(member3.address(), CouncilSeatCategory::Legal).unwrap();
 
     // Emission with 4 members — per_member should decrease, total should stay roughly the same
-    let (per_member_after, total_after) = state.compute_council_emission(100, 1);
+    let (per_member_after, total_after) = state.compute_council_emission(100);
     assert!(per_member_after > 0, "Should have non-zero emission");
     assert!(per_member_after < per_member_before, "Per-member emission should decrease with more members");
     assert_eq!(total_after, per_member_after * 4, "Total should be per_member * 4");

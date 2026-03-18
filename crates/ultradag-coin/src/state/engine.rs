@@ -252,7 +252,7 @@ impl StateEngine {
     /// Since council emission is paid once per vertex (not per round), we divide
     /// the per-round council budget by `active_validator_count` so that the total
     /// council emission across all vertices in a round equals `block_reward * council_percent / 100`.
-    pub fn compute_council_emission(&self, round: u64, active_validator_count: u64) -> (u64, u64) {
+    pub fn compute_council_emission(&self, round: u64) -> (u64, u64) {
         let council_count = self.council_members.len() as u64;
         let council_percent = self.governance_params.council_emission_percent;
         if council_count == 0 || council_percent == 0 {
@@ -260,9 +260,7 @@ impl StateEngine {
         }
         let total_round_reward = crate::constants::block_reward(round);
         let council_total = total_round_reward.saturating_mul(council_percent) / 100;
-        // Divide by validator count so N vertices per round = correct total council emission
-        let per_vertex_total = council_total / active_validator_count.max(1);
-        let per_member = per_vertex_total / council_count;
+        let per_member = council_total / council_count;
         (per_member, per_member.saturating_mul(council_count))
     }
 
@@ -1365,6 +1363,9 @@ impl StateEngine {
                 self.active_validator_set.retain(|a| a != addr);
             }
         }
+        // Slashed validators also lose their council seat — proven Byzantine behavior
+        // should not retain governance power.
+        self.council_members.remove(addr);
         // Also slash delegated stake for this validator (delegators share the risk)
         let delegators: Vec<Address> = self.delegation_accounts.iter()
             .filter(|(_, d)| d.validator == *addr)
@@ -1659,6 +1660,19 @@ impl StateEngine {
             ));
         }
 
+        // 4b. Check category capacity for CouncilMembership Add proposals
+        if let crate::governance::ProposalType::CouncilMembership {
+            action: crate::governance::CouncilAction::Add,
+            ref category, ..
+        } = tx.proposal_type {
+            let current = self.council_members.values().filter(|c| *c == category).count();
+            if current >= category.max_seats() {
+                return Err(CoinError::ValidationError(format!(
+                    "No vacant {} seats ({}/{})", category.name(), current, category.max_seats()
+                )));
+            }
+        }
+
         // 5. Check title length
         if tx.title.len() > crate::constants::PROPOSAL_TITLE_MAX_BYTES {
             return Err(CoinError::ProposalTitleTooLong);
@@ -1904,7 +1918,21 @@ impl StateEngine {
                             }
                         }
                         crate::governance::CouncilAction::Remove => {
-                            if !self.remove_council_member(&address) {
+                            // Validate category matches actual membership
+                            if let Some(actual_cat) = self.council_members.get(&address) {
+                                if *actual_cat != category {
+                                    let reason = format!(
+                                        "CouncilMembership Remove failed: member is {:?}, proposal says {:?}",
+                                        actual_cat, category
+                                    );
+                                    tracing::warn!("Proposal {} execution failed: {}", id, reason);
+                                    failed.insert(id, reason);
+                                } else if !self.remove_council_member(&address) {
+                                    let reason = "CouncilMembership Remove failed: not on council".to_string();
+                                    tracing::warn!("Proposal {} execution failed: {}", id, reason);
+                                    failed.insert(id, reason);
+                                }
+                            } else {
                                 let reason = "CouncilMembership Remove failed: not on council".to_string();
                                 tracing::warn!("Proposal {} execution failed: {}", id, reason);
                                 failed.insert(id, reason);
