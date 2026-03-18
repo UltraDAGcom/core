@@ -1283,6 +1283,8 @@ impl StateEngine {
     /// Credit the faucet amount to the given address by debiting the faucet account.
     /// Returns Err if faucet balance is insufficient.
     /// Does NOT inflate total_supply — this is an internal transfer from faucet to user.
+    /// Testnet only — on mainnet, the faucet has no balance (no genesis prefund).
+    #[cfg(not(feature = "mainnet"))]
     pub fn faucet_credit(&mut self, address: &Address, amount: u64) -> Result<(), CoinError> {
         let faucet_addr = crate::constants::faucet_keypair().address();
         
