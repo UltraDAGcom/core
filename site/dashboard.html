@@ -1965,9 +1965,11 @@ async function saveKeystore() {
 }
 
 async function addWallet(name, secretKey, address) {
-  if (!keystore) return;
+  if (!keystore) { console.error('addWallet: keystore is null'); return; }
+  console.log('addWallet:', name, address.slice(0,8) + '...');
   keystore.wallets.push({ name, secret_key: secretKey, address });
   await saveKeystore();
+  console.log('Wallet added, total:', keystore.wallets.length);
   renderWalletList();
 }
 
@@ -4558,16 +4560,20 @@ async function doQuickImport() {
   try {
     await createKeystore(pw1);
     await addWallet('Imported Wallet', sk, addr);
-    toast('Key imported and encrypted', 'ok');
     hideModal();
+    // Force re-render everything after import
+    renderWalletList();
     populateSendSelects();
-    // Auto-connect if not already connected
+    toast('Key imported and encrypted (' + keystore.wallets.length + ' wallet)', 'ok');
+    // Auto-connect if not already connected, then refresh
     if (!connected) {
-      toast('Connecting to network...', 'info');
-      connectNode();
-    } else {
+      await connectNode();
+    }
+    // Refresh all views with the new wallet
+    if (connected) {
       refreshPortfolio();
       loadCouncilStatus();
+      loadGovernance();
     }
   } catch (e) { toast('Import failed: ' + e.message, 'err'); hideModal(); }
 }
