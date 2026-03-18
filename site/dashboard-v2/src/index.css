@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@theme {
+  --color-dag-green: #22c55e;
+  --color-dag-yellow: #eab308;
+  --color-dag-red: #ef4444;
+  --color-dag-blue: #3b82f6;
+  --color-dag-accent: #3d9be9;
+  --color-dag-purple: #a855f7;
+  --color-dag-bg: #0a0a0f;
+  --color-dag-slate: #0f172a;
+  --color-dag-card: #1e293b;
+  --color-dag-card-hover: #253349;
+  --color-dag-border: #334155;
+  --color-dag-surface: #0f172a;
+  --color-dag-muted: #94a3b8;
+  --color-dag-sidebar: #0d1117;
+  --font-family-mono: ui-monospace, Consolas, 'Courier New', monospace;
+}
+
+body {
+  margin: 0;
+  background: var(--color-dag-bg);
+  color: #e2e8f0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Scrollbar styling for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-dag-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Modal overlay backdrop */
+.modal-backdrop {
+  animation: fadeIn 0.15s ease-out;
+}
+.modal-content {
+  animation: slideUp 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}

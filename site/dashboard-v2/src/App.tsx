@@ -1,0 +1,139 @@
+import { useState, useCallback } from 'react';
+import { Routes, Route } from 'react-router-dom';
+import { Layout } from './components/layout/Layout';
+import { CreateKeystoreModal } from './components/wallet/CreateKeystoreModal';
+import { DashboardPage } from './pages/DashboardPage';
+import { WalletPage } from './pages/WalletPage';
+import { PortfolioPage } from './pages/PortfolioPage';
+import { SendPage } from './pages/SendPage';
+import { StakingPage } from './pages/StakingPage';
+import { GovernancePage } from './pages/GovernancePage';
+import { CouncilPage } from './pages/CouncilPage';
+import { ExplorerPage } from './pages/ExplorerPage';
+import { NetworkPage } from './pages/NetworkPage';
+import { RoundDetailPage } from './pages/RoundDetailPage';
+import { TxDetailPage } from './pages/TxDetailPage';
+import { VertexDetailPage } from './pages/VertexDetailPage';
+import { AddressPage } from './pages/AddressPage';
+import { SearchResultPage } from './pages/SearchResultPage';
+import { useKeystore } from './hooks/useKeystore';
+import { useNode } from './hooks/useNode';
+import { useWalletBalances } from './hooks/useWalletBalances';
+import { getNodeUrl } from './lib/api';
+
+function App() {
+  const ks = useKeystore();
+  const node = useNode();
+  const wb = useWalletBalances(ks.wallets, node.connected);
+  const [showLockModal, setShowLockModal] = useState(false);
+
+  const handleToggleLock = useCallback(() => {
+    if (ks.unlocked) {
+      ks.lock();
+    } else {
+      setShowLockModal(true);
+    }
+  }, [ks]);
+
+  const handleGenerateKeypair = useCallback(async () => {
+    try {
+      const res = await fetch(getNodeUrl() + '/keygen', {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) return null;
+      return res.json();
+    } catch {
+      return null;
+    }
+  }, []);
+
+  return (
+    <>
+      <Routes>
+        <Route
+          element={
+            <Layout
+              connected={node.connected}
+              nodeUrl={node.nodeUrl}
+              keystoreUnlocked={ks.unlocked}
+              onToggleLock={handleToggleLock}
+            />
+          }
+        >
+          <Route
+            index
+            element={<DashboardPage status={node.status} loading={node.loading} />}
+          />
+          <Route
+            path="wallet"
+            element={
+              <WalletPage
+                unlocked={ks.unlocked}
+                hasStore={ks.hasStore}
+                wallets={ks.wallets}
+                balances={wb.balances}
+                onCreate={ks.create}
+                onUnlock={ks.unlock}
+                onImportBlob={ks.importBlob}
+                onAddWallet={ks.addWallet}
+                onRemoveWallet={ks.removeWallet}
+                onExportBlob={ks.exportBlob}
+                onGenerateKeypair={handleGenerateKeypair}
+              />
+            }
+          />
+          <Route
+            path="wallet/portfolio"
+            element={
+              <PortfolioPage
+                unlocked={ks.unlocked}
+                wallets={ks.wallets}
+                balances={wb.balances}
+                totalBalance={wb.totalBalance}
+                totalStaked={wb.totalStaked}
+                totalDelegated={wb.totalDelegated}
+              />
+            }
+          />
+          <Route
+            path="wallet/send"
+            element={
+              <SendPage
+                wallets={ks.wallets}
+                balances={wb.balances}
+                unlocked={ks.unlocked}
+              />
+            }
+          />
+          <Route path="staking" element={<StakingPage />} />
+          <Route path="governance" element={<GovernancePage />} />
+          <Route path="council" element={<CouncilPage />} />
+          <Route path="explorer" element={<ExplorerPage />} />
+          <Route path="network" element={<NetworkPage />} />
+          <Route path="round/:round" element={<RoundDetailPage />} />
+          <Route path="tx/:hash" element={<TxDetailPage />} />
+          <Route path="vertex/:hash" element={<VertexDetailPage />} />
+          <Route path="address/:address" element={<AddressPage />} />
+          <Route path="search/:query" element={<SearchResultPage />} />
+        </Route>
+      </Routes>
+
+      <CreateKeystoreModal
+        open={showLockModal}
+        onClose={() => setShowLockModal(false)}
+        onCreateOrUnlock={async (pw) => {
+          if (ks.hasStore) {
+            return ks.unlock(pw);
+          } else {
+            await ks.create(pw);
+            return true;
+          }
+        }}
+        onImport={ks.importBlob}
+        hasExisting={ks.hasStore}
+      />
+    </>
+  );
+}
+
+export default App;
