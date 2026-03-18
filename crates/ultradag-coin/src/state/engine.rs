@@ -1019,8 +1019,8 @@ impl StateEngine {
         
         // Log warning if below minimum safe validator count
         if self.active_validator_set.len() < crate::constants::MIN_ACTIVE_VALIDATORS {
-            // Using eprintln since tracing may not be available in this crate
-            eprintln!(
+            // Log at warn level — below minimum validators is concerning but not fatal
+            tracing::warn!(
                 "WARNING: Active validator count ({}) below minimum {} for BFT consensus",
                 self.active_validator_set.len(),
                 crate::constants::MIN_ACTIVE_VALIDATORS
@@ -1484,35 +1484,6 @@ impl StateEngine {
 
     /// Saturating fee clawback: debit what the proposer has, burn the unrecoverable
     /// remainder from total_supply. This prevents a malicious validator from halting
-    /// the entire network by including stale-nonce transactions in their vertex
-    /// (DuplicateTxFlooder attack — the coinbase credits fees upfront, then clawback
-    /// fails because the proposer spent/staked the balance since).
-    #[allow(dead_code)]
-    fn saturating_fee_clawback(&mut self, proposer: &Address, fee: u64) {
-        let balance = self.balance(proposer);
-        if balance >= fee {
-            // Normal case: proposer has enough
-            let account = self.accounts.entry(*proposer).or_default();
-            account.balance -= fee;
-        } else {
-            // Proposer can't cover full clawback — debit what they have,
-            // burn the remainder from total_supply to maintain the invariant.
-            let shortfall = fee - balance;
-            if balance > 0 {
-                let account = self.accounts.entry(*proposer).or_default();
-                account.balance = 0;
-            }
-            // Burn the unrecoverable amount — this is equivalent to the fee
-            // being "lost" (credited via coinbase but never recovered).
-            self.total_supply = self.total_supply.saturating_sub(shortfall);
-            tracing::warn!(
-                "Fee clawback shortfall: proposer {:02x}{:02x}{:02x}{:02x} has {} but owes {}. Burning {} from total_supply.",
-                proposer.0[0], proposer.0[1], proposer.0[2], proposer.0[3],
-                balance, fee, shortfall
-            );
-        }
-    }
-
     fn debit(&mut self, address: &Address, amount: u64) -> Result<(), CoinError> {
         let account = self.accounts.entry(*address).or_default();
         if account.balance < amount {
@@ -1792,7 +1763,7 @@ impl StateEngine {
                         Ok(()) => {}
                         Err(e) => {
                             let reason = format!("ParameterChange failed: {}", e);
-                            eprintln!("Proposal {} execution failed: {}", id, reason);
+                            tracing::warn!("Proposal {} execution failed: {}", id, reason);
                             failed.insert(id, reason);
                         }
                     }
@@ -1802,14 +1773,14 @@ impl StateEngine {
                         crate::governance::CouncilAction::Add => {
                             if let Err(e) = self.add_council_member(address, category) {
                                 let reason = format!("CouncilMembership Add failed: {}", e);
-                                eprintln!("Proposal {} execution failed: {}", id, reason);
+                                tracing::warn!("Proposal {} execution failed: {}", id, reason);
                                 failed.insert(id, reason);
                             }
                         }
                         crate::governance::CouncilAction::Remove => {
                             if !self.remove_council_member(&address) {
                                 let reason = "CouncilMembership Remove failed: not on council".to_string();
-                                eprintln!("Proposal {} execution failed: {}", id, reason);
+                                tracing::warn!("Proposal {} execution failed: {}", id, reason);
                                 failed.insert(id, reason);
                             }
                         }
@@ -1821,12 +1792,12 @@ impl StateEngine {
                             "Insufficient treasury: requested {} sats but only {} sats available",
                             amount, self.treasury_balance
                         );
-                        eprintln!("Proposal {} execution failed: {}", id, reason);
+                        tracing::warn!("Proposal {} execution failed: {}", id, reason);
                         failed.insert(id, reason);
                     } else {
                         self.treasury_balance = self.treasury_balance.saturating_sub(amount);
                         self.credit(&recipient, amount);
-                        eprintln!(
+                        tracing::warn!(
                             "TreasurySpend proposal {} executed: {} sats to {}. Treasury remaining: {} sats",
                             id, amount, recipient.to_hex(), self.treasury_balance
                         );
