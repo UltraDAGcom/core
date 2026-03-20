@@ -49,11 +49,9 @@ fn make_vertex_n(
     validator_count: u64,
 ) -> DagVertex {
     let proposer = sk.address();
-    let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
-
     let coinbase = CoinbaseTx {
         to: proposer,
-        amount: total_fees,
+        amount: 0,
         height,
     };
     
@@ -133,18 +131,23 @@ fn test_multi_round_transaction_sequence() {
         state.apply_finalized_vertices(&finalized_vertices).unwrap();
     }
     
-    // Initial balances
-    let r0 = ultradag_coin::constants::block_reward(0) / n;
-    let r1 = ultradag_coin::constants::block_reward(1) / n;
-    let r2 = ultradag_coin::constants::block_reward(2) / n;
+    // Initial balances — with canonical remainder, first sorted address gets +1 per round
+    let reward = ultradag_coin::constants::block_reward(1);
+    let per_producer = reward / n;
+    let remainder = reward.saturating_sub(per_producer.saturating_mul(n));
+    let mut sorted_addrs = vec![addr_a, addr_b, addr_c];
+    sorted_addrs.sort();
+    let first_sorted = sorted_addrs[0];
 
     let initial_a = state.balance(&addr_a);
     let initial_b = state.balance(&addr_b);
     let initial_c = state.balance(&addr_c);
 
-    assert_eq!(initial_a, r0);
-    assert_eq!(initial_b, r1);
-    assert_eq!(initial_c, r2);
+    // Round 1: each gets per_producer, first sorted gets +remainder
+    for (addr, bal) in [(&addr_a, initial_a), (&addr_b, initial_b), (&addr_c, initial_c)] {
+        let expected = if *addr == first_sorted { per_producer + remainder } else { per_producer };
+        assert_eq!(bal, expected, "Initial balance for {:?} incorrect", addr);
+    }
     
     let _initial_supply = state.total_supply();
 
@@ -246,62 +249,35 @@ fn test_multi_round_transaction_sequence() {
     // ========================================================================
     
     // Calculate expected balances
-    let r3 = ultradag_coin::constants::block_reward(3) / n;
-    let r4 = ultradag_coin::constants::block_reward(4) / n;
-    let r5 = ultradag_coin::constants::block_reward(5) / n;
-    let r6 = ultradag_coin::constants::block_reward(6) / n;
-    let r7 = ultradag_coin::constants::block_reward(7) / n;
-    let r8 = ultradag_coin::constants::block_reward(8) / n;
-    let r9 = ultradag_coin::constants::block_reward(9) / n;
-    let r10 = ultradag_coin::constants::block_reward(10) / n;
-    let r11 = ultradag_coin::constants::block_reward(11) / n;
-    let r12 = ultradag_coin::constants::block_reward(12) / n;
-    let r13 = ultradag_coin::constants::block_reward(13) / n;
-    let r14 = ultradag_coin::constants::block_reward(14) / n;
-    let r15 = ultradag_coin::constants::block_reward(15) / n;
-    let r16 = ultradag_coin::constants::block_reward(16) / n;
-    let r17 = ultradag_coin::constants::block_reward(17) / n;
-    let r18 = ultradag_coin::constants::block_reward(18) / n;
-    let r19 = ultradag_coin::constants::block_reward(19) / n;
-    let r20 = ultradag_coin::constants::block_reward(20) / n;
-    
-    // Account A:
-    // - Initial: r0
-    // - Round 2: +r3
-    // - Round 3: -1000 -10 (sent to B) + r6 + 10 (fee back as proposer)
-    // - Round 4: +r9
-    // - Round 5: +r12
-    // - Round 6: +r15
-    // - Round 7: +200 (received from C) + r18
-    let expected_a = r0 + r3 - 1000 - 10 + r6 + 10 + r9 + r12 + r15 + 200 + r18;
-    
-    // Account B:
-    // - Initial: r1
-    // - Round 2: +r4
-    // - Round 3: +1000 (received from A) + r7
-    // - Round 4: +r10
-    // - Round 5: -500 -5 (sent to C) + r13 + 5 (fee back as proposer)
-    // - Round 6: +r16
-    // - Round 7: +r19
-    let expected_b = r1 + r4 + 1000 + r7 + r10 - 500 - 5 + r13 + 5 + r16 + r19;
-    
-    // Account C:
-    // - Initial: r2
-    // - Round 2: +r5
-    // - Round 3: +r8
-    // - Round 4: +r11
-    // - Round 5: +500 (received from B) + r14
-    // - Round 6: +r17
-    // - Round 7: -200 -2 (sent to A) + r20 + 2 (fee back as proposer)
-    let expected_c = r2 + r5 + r8 + r11 + 500 + r14 + r17 - 200 - 2 + r20 + 2;
-    
+    // 7 rounds total (1-7), each distributes per_producer to each + remainder to first sorted.
+    // All block_reward values are identical (well below halving interval).
+    let total_rounds = 7u64;
+    let total_remainder = remainder * total_rounds;
+
+    // Base reward across all rounds for each validator
+    let base = per_producer * total_rounds;
+
+    // Remainder bonus for the first sorted address
+    let bonus = |addr: &ultradag_coin::Address| -> u64 {
+        if *addr == first_sorted { total_remainder } else { 0 }
+    };
+
+    // Account A: base + bonus - 1000 - 10 (sent to B in round 3) + 10 (fee as proposer) + 200 (from C in round 7)
+    let expected_a = base + bonus(&addr_a) - 1000 - 10 + 10 + 200;
+
+    // Account B: base + bonus + 1000 (from A in round 3) - 500 - 5 (sent to C in round 5) + 5 (fee as proposer)
+    let expected_b = base + bonus(&addr_b) + 1000 - 500 - 5 + 5;
+
+    // Account C: base + bonus + 500 (from B in round 5) - 200 - 2 (sent to A in round 7) + 2 (fee as proposer)
+    let expected_c = base + bonus(&addr_c) + 500 - 200 - 2 + 2;
+
     assert_eq!(state.balance(&addr_a), expected_a, "Account A balance incorrect");
     assert_eq!(state.balance(&addr_b), expected_b, "Account B balance incorrect");
     assert_eq!(state.balance(&addr_c), expected_c, "Account C balance incorrect");
-    
-    // Verify total supply is conserved
+
+    // Verify total supply: 7 rounds × full block_reward (per_producer × n + remainder)
     let final_supply = state.total_supply();
-    let expected_supply = r0 + r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8 + r9 + r10 + r11 + r12 + r13 + r14 + r15 + r16 + r17 + r18 + r19 + r20;
+    let expected_supply = (per_producer * n + remainder) * total_rounds;
     assert_eq!(final_supply, expected_supply, "Total supply should be conserved");
     
     // Verify sum of balances equals total supply

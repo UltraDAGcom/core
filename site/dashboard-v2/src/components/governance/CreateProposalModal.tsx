@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { postProposal } from '../../lib/api';
 import type { Wallet } from '../../lib/keystore';
-import { shortAddr } from '../../lib/api';
+import { shortAddr, isValidAddress, normalizeAddress } from '../../lib/api';
 import { X } from 'lucide-react';
 
 const PARAM_OPTIONS = [
@@ -82,16 +82,18 @@ export function CreateProposalModal({ wallets, onClose, onSuccess }: CreatePropo
       body.parameter_value = String(val);
     } else if (proposalType === 'CouncilMembership') {
       if (!councilAddress.trim()) { setError('Council address is required'); return; }
+      if (!isValidAddress(councilAddress.trim())) { setError('Invalid council address (hex or bech32m)'); return; }
       body.proposal_type = 'council_membership';
       body.council_action = councilAction;
-      body.council_address = councilAddress.trim();
+      body.council_address = normalizeAddress(councilAddress.trim());
       body.council_category = councilCategory;
     } else {
       const amt = Math.floor(parseFloat(treasuryAmount) * 100_000_000);
       if (isNaN(amt) || amt <= 0) { setError('Treasury amount must be positive'); return; }
       if (!treasuryRecipient.trim()) { setError('Recipient address is required'); return; }
+      if (!isValidAddress(treasuryRecipient.trim())) { setError('Invalid recipient address (hex or bech32m)'); return; }
       body.proposal_type = 'treasury_spend';
-      body.treasury_recipient = treasuryRecipient.trim();
+      body.treasury_recipient = normalizeAddress(treasuryRecipient.trim());
       body.treasury_amount = amt;
     }
 
@@ -216,7 +218,7 @@ export function CreateProposalModal({ wallets, onClose, onSuccess }: CreatePropo
                   type="text"
                   value={councilAddress}
                   onChange={e => setCouncilAddress(e.target.value)}
-                  placeholder="64-char hex address"
+                  placeholder="hex or bech32m address (tudg1...)"
                   className="mt-1 block w-full rounded bg-dag-card border border-dag-border px-3 py-2 text-sm text-white font-mono"
                 />
               </label>
@@ -241,7 +243,7 @@ export function CreateProposalModal({ wallets, onClose, onSuccess }: CreatePropo
                   type="text"
                   value={treasuryRecipient}
                   onChange={e => setTreasuryRecipient(e.target.value)}
-                  placeholder="64-char hex address"
+                  placeholder="hex or bech32m address (tudg1...)"
                   className="mt-1 block w-full rounded bg-dag-card border border-dag-border px-3 py-2 text-sm text-white font-mono"
                 />
               </label>

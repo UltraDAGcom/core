@@ -54,9 +54,11 @@ pub fn merkle_root(leaves: &[[u8; 32]]) -> [u8; 32] {
     let leaf_count = leaves.len();
     let mut level = leaves.to_vec();
     while level.len() > 1 {
-        if !level.len().is_multiple_of(2) {
-            // SAFETY: level.len() > 1 guarantees last() exists
-            let last = level.last().expect("level has at least 1 element");
+        if level.len() % 2 != 0 {
+            let Some(last) = level.last() else {
+                // Should never happen: loop invariant guarantees at least 1 element
+                return blake3::hash(b"empty").into();
+            };
             level.push(*last);
         }
         level = level

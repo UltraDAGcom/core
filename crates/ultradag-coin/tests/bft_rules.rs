@@ -15,11 +15,9 @@ fn make_vertex(
     txs: Vec<Transaction>,
 ) -> DagVertex {
     let proposer = sk.address();
-    let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
-
     let coinbase = CoinbaseTx {
         to: proposer,
-        amount: total_fees,
+        amount: 0,
         height,
     };
     

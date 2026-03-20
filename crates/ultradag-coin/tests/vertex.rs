@@ -160,10 +160,10 @@ fn signable_bytes_covers_all_fields() {
     let v = make_vertex(50, 3, parents.clone(), &sk);
     let sb = v.signable_bytes();
 
-    // Should contain: network_id(19) + "vertex"(6) + block_hash(32) + parent1(32) + parent2(32) + round(8) + validator(32)
+    // Should contain: network_id(19) + "vertex"(6) + block_hash(32) + parent_count(4) + parent1(32) + parent2(32) + round(8) + validator(20)
     let nid_len = ultradag_coin::constants::NETWORK_ID.len();
     let disc_len = b"vertex".len();
-    let expected_len = nid_len + disc_len + 32 + 32 * parents.len() + 8 + 32;
+    let expected_len = nid_len + disc_len + 32 + 4 + 32 * parents.len() + 8 + 20;
     assert_eq!(sb.len(), expected_len);
 
     // Verify network ID is at the start
@@ -176,15 +176,18 @@ fn signable_bytes_covers_all_fields() {
     let off = nid_len + disc_len;
     assert_eq!(&sb[off..off + 32], &v.block.hash());
 
-    // Verify parents are included
-    assert_eq!(&sb[off + 32..off + 64], &parents[0]);
-    assert_eq!(&sb[off + 64..off + 96], &parents[1]);
+    // Verify parent count prefix (4 bytes LE) then parents are included
+    let poff = off + 32; // after block hash
+    assert_eq!(&sb[poff..poff + 4], &2u32.to_le_bytes());
+    assert_eq!(&sb[poff + 4..poff + 36], &parents[0]);
+    assert_eq!(&sb[poff + 36..poff + 68], &parents[1]);
 
-    // Verify round bytes
-    assert_eq!(&sb[off + 96..off + 104], &3u64.to_le_bytes());
+    // Verify round bytes (after parent_count + parents)
+    let roff = poff + 4 + 32 * parents.len();
+    assert_eq!(&sb[roff..roff + 8], &3u64.to_le_bytes());
 
-    // Verify validator address
-    assert_eq!(&sb[off + 104..off + 136], &sk.address().0);
+    // Verify validator address (20 bytes)
+    assert_eq!(&sb[roff + 8..roff + 28], &sk.address().0);
 }
 
 /// Vertex with valid parent references builds correct DAG topology.

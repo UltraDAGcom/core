@@ -293,6 +293,7 @@ struct PeersResponse {
 #[derive(Serialize)]
 struct BalanceResponse {
     address: String,
+    address_bech32: String,
     balance: u64,
     nonce: u64,
     balance_udag: f64,
@@ -307,6 +308,8 @@ struct BalanceResponse {
     delegated_udag: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     delegated_to: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    delegated_to_bech32: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     delegation_unlock_at_round: Option<u64>,
 }
@@ -396,6 +399,7 @@ struct StakeInfoResponse {
 #[derive(Serialize)]
 struct ValidatorInfo {
     address: String,
+    address_bech32: String,
     staked: u64,
     staked_udag: f64,
     effective_stake: u64,
@@ -690,8 +694,8 @@ async fn handle_request(
         }
 
         (&Method::GET, ["balance", addr_hex]) => {
-            let Some(addr) = Address::from_hex(addr_hex) else {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address hex (need 64 chars)"));
+            let Some(addr) = Address::parse(addr_hex) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address: expected 40-char hex or bech32m (udag1.../tudg1...)"));
             };
             let state = read_lock_or_503!(server.state);
             let balance = state.balance(&addr);
@@ -704,6 +708,7 @@ async fn handle_request(
                 StatusCode::OK,
                 &BalanceResponse {
                     address: addr.to_hex(),
+                    address_bech32: addr.to_bech32(),
                     balance,
                     nonce,
                     balance_udag: balance as f64 / ultradag_coin::SATS_PER_UDAG as f64,
@@ -714,6 +719,7 @@ async fn handle_request(
                     delegated: delegation.map(|d| d.delegated),
                     delegated_udag: delegation.map(|d| d.delegated as f64 / ultradag_coin::SATS_PER_UDAG as f64),
                     delegated_to: delegation.map(|d| d.validator.to_hex()),
+                    delegated_to_bech32: delegation.map(|d| d.validator.to_bech32()),
                     delegation_unlock_at_round: delegation.and_then(|d| d.unlock_at_round),
                 },
             )
@@ -774,8 +780,8 @@ async fn handle_request(
             let sender = sk.address();
 
             // Parse recipient
-            let Some(to) = Address::from_hex(&send_req.to) else {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid to address hex"));
+            let Some(to) = Address::parse(&send_req.to) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid to address: expected 40-char hex or bech32m (udag1.../tudg1...)"));
             };
 
             // Parse and validate memo (if provided)
@@ -897,26 +903,27 @@ async fn handle_request(
         (&Method::GET, ["fee-estimate"]) => {
             let state = read_lock_or_503!(server.state);
             let mp = read_lock_or_503!(server.mempool);
-            let min_fee = state.governance_params().min_fee_sats;
             let mempool_size = mp.len();
             let mempool_capacity: usize = 10_000;
+            let base_fee = state.governance_params().min_fee_sats;
+            let dynamic_fee = state.dynamic_min_fee(mempool_size);
             let usage_percent = if mempool_capacity > 0 {
                 (mempool_size * 100) / mempool_capacity
             } else {
                 0
             };
-            let (recommended_fee, congestion) = if usage_percent >= 80 {
-                (min_fee.saturating_mul(5), "high")
+            let congestion = if usage_percent >= 80 {
+                "high"
             } else if usage_percent >= 50 {
-                (min_fee.saturating_mul(2), "medium")
+                "medium"
             } else {
-                (min_fee, "low")
+                "low"
             };
             json_response(
                 StatusCode::OK,
                 &serde_json::json!({
-                    "min_fee_sats": min_fee,
-                    "recommended_fee_sats": recommended_fee,
+                    "min_fee_sats": base_fee,
+                    "recommended_fee_sats": dynamic_fee,
                     "mempool_size": mempool_size,
                     "mempool_capacity": mempool_capacity,
                     "congestion": congestion,
@@ -989,6 +996,15 @@ async fn handle_request(
                         "commission_percent": t.commission_percent,
                         "nonce": t.nonce,
                     }),
+                    Transaction::BridgeLock(t) => serde_json::json!({
+                        "type": "bridge_lock",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "arb_recipient": hex_encode(&t.arb_recipient),
+                        "amount": t.amount,
+                        "fee": t.fee,
+                        "nonce": t.nonce,
+                    }),
                 }
             }).collect();
             json_response(StatusCode::OK, &txs)
@@ -996,9 +1012,16 @@ async fn handle_request(
 
         (&Method::POST, ["faucet"]) => {
             // TESTNET ONLY: faucet distributes free tokens for testing.
+            // On mainnet builds, faucet_keypair() doesn't exist — return GONE immediately.
+            #[cfg(feature = "mainnet")]
+            {
+                return Ok(error_response(StatusCode::GONE, "faucet disabled on mainnet"));
+            }
+            #[cfg(not(feature = "mainnet"))]
             if !server.testnet_mode {
                 return Ok(error_response(StatusCode::GONE, "faucet disabled on mainnet"));
             }
+            #[cfg(not(feature = "mainnet"))] {
             // Check endpoint-specific rate limit (strict for faucet)
             if !rate_limiter.check_rate_limit(client_ip, limits::FAUCET) {
                 return Ok(error_response(
@@ -1018,8 +1041,8 @@ async fn handle_request(
             let Ok(faucet_req) = serde_json::from_slice::<FaucetRequest>(&body) else {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON body, need: {address, amount}"));
             };
-            let Some(to) = Address::from_hex(&faucet_req.address) else {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address hex"));
+            let Some(to) = Address::parse(&faucet_req.address) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address: expected 40-char hex or bech32m (udag1.../tudg1...)"));
             };
 
             // Reject zero amount
@@ -1096,6 +1119,7 @@ async fn handle_request(
                     "nonce": nonce,
                 }),
             )
+            } // end #[cfg(not(feature = "mainnet"))]
         }
 
         (&Method::GET, ["peers"]) => {
@@ -1288,8 +1312,8 @@ async fn handle_request(
         }
 
         (&Method::GET, ["stake", addr_hex]) => {
-            let Some(addr) = Address::from_hex(addr_hex) else {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address hex"));
+            let Some(addr) = Address::parse(addr_hex) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address: expected 40-char hex or bech32m (udag1.../tudg1...)"));
             };
             let state = read_lock_or_503!(server.state);
             let staked = state.stake_of(&addr);
@@ -1325,6 +1349,7 @@ async fn handle_request(
                 let delegator_count = state.delegators_of(addr).len();
                 ValidatorInfo {
                     address: addr.to_hex(),
+                    address_bech32: addr.to_bech32(),
                     staked,
                     staked_udag: staked as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                     effective_stake: effective,
@@ -1344,10 +1369,18 @@ async fn handle_request(
         (&Method::GET, ["keygen"]) => {
             // TESTNET ONLY: generates keys server-side (server sees private key).
             // Mainnet: use SDK or CLI for offline key generation.
+            #[cfg(feature = "mainnet")]
+            {
+                return Ok(error_response(StatusCode::GONE,
+                    "/keygen disabled on mainnet: generate keys locally using the SDK. Server must never see private keys."));
+            }
+            #[cfg(not(feature = "mainnet"))]
             if !server.testnet_mode {
                 return Ok(error_response(StatusCode::GONE,
                     "/keygen disabled on mainnet: generate keys locally using the SDK. Server must never see private keys."));
             }
+            #[cfg(not(feature = "mainnet"))]
+            {
             if !rate_limiter.check_rate_limit(client_ip, limits::KEYGEN) {
                 return Ok(error_response(
                     StatusCode::TOO_MANY_REQUESTS,
@@ -1362,8 +1395,10 @@ async fn handle_request(
                     "warning": "TESTNET ONLY — never use /keygen for mainnet. The server sees your private key.",
                     "secret_key": hex_encode(&sk.to_bytes()),
                     "address": addr.to_hex(),
+                    "address_bech32": addr.to_bech32(),
                 }),
             )
+            }
         }
 
         // ====== Governance POST endpoints ======
@@ -1429,8 +1464,8 @@ async fn handle_request(
                     let Some(addr_hex) = prop_req.council_address else {
                         return Ok(error_response(StatusCode::BAD_REQUEST, "council_address required (hex address of candidate)"));
                     };
-                    let Some(address) = Address::from_hex(&addr_hex) else {
-                        return Ok(error_response(StatusCode::BAD_REQUEST, "invalid council_address hex"));
+                    let Some(address) = Address::parse(&addr_hex) else {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "invalid council_address: expected 40-char hex or bech32m (udag1.../tudg1...)"));
                     };
                     let Some(cat_str) = prop_req.council_category else {
                         return Ok(error_response(StatusCode::BAD_REQUEST, "council_category required (technical, business, legal, academic, community, foundation)"));
@@ -1448,11 +1483,11 @@ async fn handle_request(
                     let Ok(recipient_bytes) = hex::decode(recipient_hex) else {
                         return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex for treasury_recipient"));
                     };
-                    if recipient_bytes.len() != 32 {
+                    if recipient_bytes.len() != 20 {
                         return Ok(error_response(StatusCode::BAD_REQUEST,
-                            "treasury_recipient must be 32 bytes (64 hex chars)"));
+                            "treasury_recipient must be 20 bytes (40 hex chars)"));
                     }
-                    let mut addr_bytes = [0u8; 32];
+                    let mut addr_bytes = [0u8; 20];
                     addr_bytes.copy_from_slice(&recipient_bytes);
                     let recipient = ultradag_coin::Address(addr_bytes);
                     let Some(amount) = prop_req.treasury_amount else {
@@ -1685,6 +1720,7 @@ async fn handle_request(
             let members: Vec<serde_json::Value> = member_pairs.into_iter()
                 .map(|(addr, cat)| serde_json::json!({
                     "address": addr.to_hex(),
+                    "address_bech32": addr.to_bech32(),
                     "category": cat.name(),
                 }))
                 .collect();
@@ -1770,6 +1806,7 @@ async fn handle_request(
                         .unwrap_or("former member");
                     serde_json::json!({
                         "address": addr.to_hex(),
+                        "address_bech32": addr.to_bech32(),
                         "vote": if *vote { "yes" } else { "no" },
                         "vote_weight": weight,
                         "category": category,
@@ -1803,8 +1840,8 @@ async fn handle_request(
             let Ok(id) = id_str.parse::<u64>() else {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid proposal ID"));
             };
-            let Some(addr) = Address::from_hex(addr_hex) else {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address hex"));
+            let Some(addr) = Address::parse(addr_hex) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address: expected 40-char hex or bech32m (udag1.../tudg1...)"));
             };
             
             let state = read_lock_or_503!(server.state);
@@ -1870,6 +1907,7 @@ async fn handle_request(
                         Transaction::Delegate(_) => "delegate",
                         Transaction::Undelegate(_) => "undelegate",
                         Transaction::SetCommission(_) => "set_commission",
+                        Transaction::BridgeLock(_) => "bridge_lock",
                     },
                     "from": tx.from().to_hex(),
                     "fee": tx.fee(),
@@ -1978,6 +2016,18 @@ async fn handle_request(
                             &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
                     }
                 }
+                Transaction::BridgeLock(t) => {
+                    if t.amount < ultradag_coin::constants::MIN_BRIDGE_AMOUNT_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("minimum bridge amount is {} sats ({} UDAG)",
+                                ultradag_coin::constants::MIN_BRIDGE_AMOUNT_SATS,
+                                ultradag_coin::constants::MIN_BRIDGE_AMOUNT_SATS / ultradag_coin::SATS_PER_UDAG)));
+                    }
+                    if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+                    }
+                }
                 // Unstake, Undelegate — no amount/fee fields to validate
                 Transaction::Unstake(_) | Transaction::Undelegate(_) => {}
             }
@@ -2056,8 +2106,8 @@ async fn handle_request(
             };
             let sender = sk.address();
 
-            let Some(validator_addr) = Address::from_hex(&delegate_req.validator) else {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid validator address hex"));
+            let Some(validator_addr) = Address::parse(&delegate_req.validator) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid validator address: expected 40-char hex or bech32m (udag1.../tudg1...)"));
             };
 
             // Validate: cannot delegate to self (Bug #149)
@@ -2285,8 +2335,8 @@ async fn handle_request(
         }
 
         (&Method::GET, ["delegation", addr_hex]) => {
-            let Some(addr) = Address::from_hex(addr_hex) else {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address hex"));
+            let Some(addr) = Address::parse(addr_hex) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address: expected 40-char hex or bech32m (udag1.../tudg1...)"));
             };
             let state = read_lock_or_503!(server.state);
             match state.delegation_account(&addr) {
@@ -2307,8 +2357,8 @@ async fn handle_request(
         }
 
         (&Method::GET, ["validator", addr_hex, "delegators"]) => {
-            let Some(addr) = Address::from_hex(addr_hex) else {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address hex"));
+            let Some(addr) = Address::parse(addr_hex) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address: expected 40-char hex or bech32m (udag1.../tudg1...)"));
             };
             let state = read_lock_or_503!(server.state);
             let delegators = state.delegators_of(&addr);

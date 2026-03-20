@@ -204,7 +204,7 @@ impl UltraDagClient {
     /// use ultradag_coin::{SecretKey, Address};
     ///
     /// let sk = SecretKey::from_bytes([0x42; 32]);
-    /// let to = Address([0xAB; 32]);
+    /// let to = Address([0xAB; 20]);
     /// let tx = transactions::build_transfer(&sk, to, 1_000_000, 10_000, 0, None);
     ///
     /// let client = UltraDagClient::default_local();

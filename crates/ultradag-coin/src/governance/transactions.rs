@@ -47,7 +47,11 @@ impl CreateProposalTx {
                     crate::governance::CouncilAction::Remove => 1,
                 });
                 buf.extend_from_slice(&address.0);
-                buf.extend_from_slice(category.name().as_bytes());
+                // Length-prefix category name to prevent concatenation ambiguity
+                // (March 2026 audit). Breaking change — requires clean testnet restart.
+                let cat_bytes = category.name().as_bytes();
+                buf.extend_from_slice(&(cat_bytes.len() as u32).to_le_bytes());
+                buf.extend_from_slice(cat_bytes);
             }
             ProposalType::TreasurySpend { recipient, amount } => {
                 buf.push(3);
@@ -91,7 +95,11 @@ impl CreateProposalTx {
                     crate::governance::CouncilAction::Remove => 1,
                 }]);
                 hasher.update(&address.0);
-                hasher.update(category.name().as_bytes());
+                // Length-prefix category name to prevent concatenation ambiguity
+                // (March 2026 audit). Breaking change — requires clean testnet restart.
+                let cat_bytes = category.name().as_bytes();
+                hasher.update(&(cat_bytes.len() as u32).to_le_bytes());
+                hasher.update(cat_bytes);
             }
             ProposalType::TreasurySpend { recipient, amount } => {
                 hasher.update(&[3]);
@@ -105,7 +113,7 @@ impl CreateProposalTx {
     }
 
     pub fn verify_signature(&self) -> bool {
-        let expected_addr = Address(*blake3::hash(&self.pub_key).as_bytes());
+        let expected_addr = Address::from_pubkey(&self.pub_key);
         if expected_addr != self.from {
             return false;
         }
@@ -154,7 +162,7 @@ impl VoteTx {
     }
 
     pub fn verify_signature(&self) -> bool {
-        let expected_addr = Address(*blake3::hash(&self.pub_key).as_bytes());
+        let expected_addr = Address::from_pubkey(&self.pub_key);
         if expected_addr != self.from {
             return false;
         }

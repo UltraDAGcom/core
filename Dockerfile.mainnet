@@ -1,0 +1,27 @@
+FROM rust:1.86-slim AS builder
+
+RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY . .
+
+# Build mainnet binary — this enables mainnet guards:
+# - No faucet (compile-time removed)
+# - Mainnet NETWORK_ID (ultradag-mainnet-v1)
+# - Real GENESIS_CHECKPOINT_HASH (not placeholder)
+# - SecretKey::generate() disabled (must use --pkey)
+RUN cargo build --release --bin ultradag-node --features mainnet
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/target/release/ultradag-node /usr/local/bin/ultradag-node
+ARG CACHEBUST=1
+COPY tools/operations/utilities/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY config/mainnet-validators.txt /etc/ultradag/validators.txt
+
+RUN chmod +x /usr/local/bin/ultradag-node /usr/local/bin/docker-entrypoint.sh && mkdir -p /data
+
+EXPOSE 9333 10333
+ENTRYPOINT ["docker-entrypoint.sh"]

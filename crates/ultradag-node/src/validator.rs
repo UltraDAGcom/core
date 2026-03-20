@@ -80,7 +80,7 @@ pub async fn validator_loop(
         // A new node at round 0 producing vertices while peers are at round 1500+
         // creates orphans, triggers allowlist bans, and wastes bandwidth.
         if !server.sync_complete.load(Ordering::Relaxed) {
-            if timer_fired && consecutive_skips.is_multiple_of(6) {
+            if timer_fired && consecutive_skips % 6 == 0 {
                 let our_round = server.dag.read().await.current_round();
                 info!("Waiting for initial sync to complete (current round: {})", our_round);
             }
@@ -98,7 +98,7 @@ pub async fn validator_loop(
             if peer_count < 2 {
                 if timer_fired {
                     consecutive_skips += 1;
-                    if consecutive_skips.is_multiple_of(6) {
+                    if consecutive_skips % 6 == 0 {
                         warn!("Waiting for peers ({} connected, need ≥2) — skip #{}", peer_count, consecutive_skips);
                     }
                 }

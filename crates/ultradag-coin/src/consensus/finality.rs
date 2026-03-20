@@ -78,7 +78,7 @@ impl FinalityTracker {
     }
 
     /// Evaluate finality for a vertex. Returns true if newly finalized.
-    /// Uses O(1) precomputed descendant validator counts.
+    /// Uses O(1) precomputed descendant validator counts, filtered to active set.
     pub fn check_finality(&mut self, hash: &[u8; 32], dag: &BlockDag) -> bool {
         if self.finalized.contains(hash) {
             return false;
@@ -89,7 +89,8 @@ impl FinalityTracker {
             return false;
         }
 
-        if dag.descendant_validator_count(hash) >= threshold {
+        let active = self.validators.active_addresses();
+        if dag.descendant_validator_count_filtered(hash, active) >= threshold {
             self.finalized.insert(*hash);
             true
         } else {
@@ -123,6 +124,7 @@ impl FinalityTracker {
         let scan_from = dag.pruning_floor();
         let scan_to = dag.current_round();
 
+        let active = self.validators.active_addresses();
         let mut ready: BTreeSet<[u8; 32]> = BTreeSet::new();
         for round in scan_from..=scan_to {
             for hash in dag.hashes_in_round(round) {
@@ -157,7 +159,8 @@ impl FinalityTracker {
                     // Late-arriving vertices (recovered via reconciliation) must still
                     // meet the 2f+1 descendant requirement — auto-finalizing without
                     // threshold would allow injection of malicious vertices.
-                    if dag.descendant_validator_count(hash) >= threshold {
+                    // Filter by active set to avoid counting stale validators.
+                    if dag.descendant_validator_count_filtered(hash, active) >= threshold {
                         ready.insert(*hash);
                     }
                 }
@@ -183,7 +186,7 @@ impl FinalityTracker {
                     if self.finalized.contains(&child) {
                         continue;
                     }
-                    if dag.descendant_validator_count(&child) < threshold {
+                    if dag.descendant_validator_count_filtered(&child, active) < threshold {
                         continue;
                     }
                     if let Some(vertex) = dag.get(&child) {

@@ -48,10 +48,9 @@ fn make_vertex(
     txs: Vec<Transaction>,
     sk: &SecretKey,
 ) -> DagVertex {
-    let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
     let coinbase = CoinbaseTx {
         to: *proposer,
-        amount: total_fees,
+        amount: 0,
         height,
     };
     let block = Block {
@@ -89,10 +88,9 @@ fn make_vertex_with_reward(
     sk: &SecretKey,
     _validator_reward: u64,
 ) -> DagVertex {
-    let total_fees: u64 = txs.iter().map(|tx| tx.fee()).fold(0u64, |a, x| a.saturating_add(x));
     let coinbase = CoinbaseTx {
         to: *proposer,
-        amount: total_fees,
+        amount: 0,
         height,
     };
     let block = Block {

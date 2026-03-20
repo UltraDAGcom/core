@@ -80,15 +80,19 @@ fn different_seeds_different_addresses() {
 fn address_is_blake3_of_pubkey_bytes() {
     let sk = SecretKey::from_bytes([99u8; 32]);
     let pubkey_bytes = sk.verifying_key().to_bytes();
-    let expected = *blake3::hash(&pubkey_bytes).as_bytes();
+    let full_hash = blake3::hash(&pubkey_bytes);
+    let mut expected = [0u8; 20];
+    expected.copy_from_slice(&full_hash.as_bytes()[..20]);
     let addr = sk.address();
 
     assert_eq!(addr.0, expected,
-        "address must be exactly blake3(pubkey_bytes)");
+        "address must be exactly blake3(pubkey_bytes)[..20]");
 
     // NEGATIVE: wrong pubkey → different hash
     let other_sk = SecretKey::from_bytes([100u8; 32]);
-    let other_expected = *blake3::hash(&other_sk.verifying_key().to_bytes()).as_bytes();
+    let other_full_hash = blake3::hash(&other_sk.verifying_key().to_bytes());
+    let mut other_expected = [0u8; 20];
+    other_expected.copy_from_slice(&other_full_hash.as_bytes()[..20]);
     assert_ne!(addr.0, other_expected);
 }
 
@@ -124,15 +128,15 @@ fn address_hex_roundtrip_exact() {
     let addr = sk.address();
     let hex = addr.to_hex();
 
-    assert_eq!(hex.len(), 64, "hex string must be exactly 64 chars");
+    assert_eq!(hex.len(), 40, "hex string must be exactly 40 chars");
 
     let recovered = Address::from_hex(&hex).expect("valid hex must parse");
     assert_eq!(recovered.0, addr.0, "roundtrip must preserve exact bytes");
 
     // NEGATIVE: truncated hex fails
-    assert!(Address::from_hex(&hex[..62]).is_none());
+    assert!(Address::from_hex(&hex[..38]).is_none());
     // NEGATIVE: invalid hex fails
-    let bad_hex = "zz".repeat(32);
+    let bad_hex = "zz".repeat(20);
     assert!(Address::from_hex(&bad_hex).is_none());
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ChevronLeft, Wallet, Shield, Users, Crown } from 'lucide-react';
-import { getBalance, getStake, getDelegation, getCouncil, connectToNode, isConnected, formatUdag } from '../lib/api.ts';
+import { getBalance, getStake, getDelegation, getCouncil, connectToNode, isConnected, formatUdag, fullAddr, shortAddr } from '../lib/api.ts';
 import { CopyButton } from '../components/shared/CopyButton.tsx';
 import { Badge } from '../components/shared/Badge.tsx';
 
@@ -59,7 +59,7 @@ export function AddressPage() {
   const isActiveValidator = stake?.is_active_validator === true;
   const effectiveStake = Number(stake?.effective_stake ?? 0);
   const commission = stake?.commission_percent;
-  const delegatedSats = Number(delegation?.delegated_amount ?? 0);
+  const delegatedSats = Number(delegation?.delegated ?? 0);
   const delegationValidator = delegation?.validator ? String(delegation.validator) : null;
 
   return (
@@ -71,9 +71,14 @@ export function AddressPage() {
         <h1 className="text-xl font-bold text-white">Address</h1>
       </div>
 
-      <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700 rounded-lg p-3">
-        <span className="font-mono text-sm text-slate-200 break-all">{address}</span>
-        {address && <CopyButton text={address} />}
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-sm text-slate-200 break-all">{address ? fullAddr(address) : ''}</span>
+          {address && <CopyButton text={address} />}
+        </div>
+        {address && /^[0-9a-fA-F]{40}$/.test(address) && (
+          <p className="font-mono text-xs text-slate-500 break-all">{address}</p>
+        )}
       </div>
 
       {error && <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">{error}</div>}
@@ -158,7 +163,7 @@ export function AddressPage() {
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-slate-500">Delegated to</span>
                     <Link to={`/address/${delegationValidator}`} className="font-mono text-blue-400 hover:text-blue-300 text-xs">
-                      {delegationValidator.slice(0, 10)}...
+                      {shortAddr(delegationValidator)}
                     </Link>
                   </div>
                   {delegation?.unlock_at_round != null && (

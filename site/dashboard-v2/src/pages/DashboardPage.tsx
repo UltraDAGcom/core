@@ -161,7 +161,7 @@ export function DashboardPage({ status, loading }: DashboardPageProps) {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-sm text-dag-muted mt-1">UltraDAG testnet overview</p>
+        <p className="text-sm text-dag-muted mt-1">UltraDAG network overview</p>
       </div>
 
       {/* Health Banner */}

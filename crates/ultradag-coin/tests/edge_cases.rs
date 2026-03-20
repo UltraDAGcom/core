@@ -45,10 +45,9 @@ fn make_vertex_with_reward_pct(
     _validator_pct: u64, // no longer used — coinbase is fees-only
 ) -> DagVertex {
     let proposer = proposer_sk.address();
-    let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
     let coinbase = ultradag_coin::CoinbaseTx {
         to: proposer,
-        amount: total_fees,
+        amount: 0,
         height,
     };
     let block = ultradag_coin::Block {
@@ -111,10 +110,11 @@ fn coinbase_fees_after_supply_exhaustion() {
     let tx = make_signed_tx(&sender_sk, receiver, 1_000_000, fee, 0);
 
     // Create vertex at post-exhaustion round with a tx that has fees
+    // Coinbase amount is always 0; fees credited via deferred mechanism
     let proposer = proposer_sk.address();
     let coinbase = ultradag_coin::CoinbaseTx {
         to: proposer,
-        amount: fee, // block_reward=0, but fees should still work
+        amount: 0,
         height: post_exhaustion_round,
     };
     let block = ultradag_coin::Block {

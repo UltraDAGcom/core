@@ -16,10 +16,11 @@ import { TxDetailPage } from './pages/TxDetailPage';
 import { VertexDetailPage } from './pages/VertexDetailPage';
 import { AddressPage } from './pages/AddressPage';
 import { SearchResultPage } from './pages/SearchResultPage';
+import { BridgePage } from './pages/BridgePage';
 import { useKeystore } from './hooks/useKeystore';
 import { useNode } from './hooks/useNode';
 import { useWalletBalances } from './hooks/useWalletBalances';
-import { getNodeUrl } from './lib/api';
+import { getNodeUrl, getNetwork, switchNetwork, type NetworkType } from './lib/api';
 import { ToastProvider } from './hooks/useToast';
 
 function App() {
@@ -27,6 +28,14 @@ function App() {
   const node = useNode();
   const wb = useWalletBalances(ks.wallets, node.connected);
   const [showLockModal, setShowLockModal] = useState(false);
+  const [network, setNetwork] = useState<NetworkType>(getNetwork());
+
+  const handleSwitchNetwork = useCallback((net: NetworkType) => {
+    switchNetwork(net);
+    setNetwork(net);
+    // Reconnect to the new network's nodes
+    node.reconnect();
+  }, [node]);
 
   const handleToggleLock = useCallback(() => {
     if (ks.unlocked) {
@@ -38,13 +47,20 @@ function App() {
 
   const handleGenerateKeypair = useCallback(async () => {
     try {
-      const res = await fetch(getNodeUrl() + '/keygen', {
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!res.ok) return null;
-      return res.json();
+      // Client-side key generation — keys never leave the browser
+      const { generateKeypair } = await import('./lib/keygen');
+      return generateKeypair();
     } catch {
-      return null;
+      // Fallback to server keygen (testnet only)
+      try {
+        const res = await fetch(getNodeUrl() + '/keygen', {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) return null;
+        return res.json();
+      } catch {
+        return null;
+      }
     }
   }, []);
 
@@ -57,7 +73,9 @@ function App() {
               connected={node.connected}
               nodeUrl={node.nodeUrl}
               keystoreUnlocked={ks.unlocked}
+              network={network}
               onToggleLock={handleToggleLock}
+              onSwitchNetwork={handleSwitchNetwork}
             />
           }
         >
@@ -106,6 +124,7 @@ function App() {
               />
             }
           />
+          <Route path="bridge" element={<BridgePage />} />
           <Route path="staking" element={<StakingPage />} />
           <Route path="governance" element={<GovernancePage />} />
           <Route path="council" element={<CouncilPage />} />

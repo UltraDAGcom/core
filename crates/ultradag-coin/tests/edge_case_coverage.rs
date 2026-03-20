@@ -299,7 +299,7 @@ fn test_set_commission_above_max_rejected() {
     state.apply_stake_tx(&make_stake_tx(&sk, MIN_STAKE_SATS, 0)).unwrap();
 
     let tx = make_set_commission_tx(&sk, MAX_COMMISSION_PERCENT + 1, 1);
-    let result = state.apply_set_commission_tx(&tx);
+    let result = state.apply_set_commission_tx(&tx, 0);
     assert!(result.is_err(), "Commission above max must be rejected");
 }
 
@@ -311,7 +311,7 @@ fn test_set_commission_not_staking_rejected() {
     state.faucet_credit(&sk.address(), 1_000_000_000).unwrap();
 
     let tx = make_set_commission_tx(&sk, 50, 0);
-    let result = state.apply_set_commission_tx(&tx);
+    let result = state.apply_set_commission_tx(&tx, 0);
     assert!(result.is_err(), "SetCommission by non-staker must be rejected");
 }
 
@@ -1267,7 +1267,7 @@ fn test_zero_commission_all_rewards_to_delegators() {
 
     // Set commission to 0%
     let comm_tx = make_set_commission_tx(&val_sk, 0, 1);
-    state.apply_set_commission_tx(&comm_tx).unwrap();
+    state.apply_set_commission_tx(&comm_tx, 0).unwrap();
 
     state.recalculate_active_set();
 
@@ -1305,7 +1305,7 @@ fn test_full_commission_all_rewards_to_validator() {
 
     // Set commission to 100%
     let comm_tx = make_set_commission_tx(&val_sk, 100, 1);
-    state.apply_set_commission_tx(&comm_tx).unwrap();
+    state.apply_set_commission_tx(&comm_tx, 0).unwrap();
 
     state.recalculate_active_set();
 

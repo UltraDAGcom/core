@@ -57,6 +57,9 @@ impl DagVertex {
         buf.extend_from_slice(crate::constants::NETWORK_ID);
         buf.extend_from_slice(b"vertex");
         buf.extend_from_slice(&self.block.hash());
+        // Parent count prefix added for defense-in-depth (March 2026 audit).
+        // Breaking change — requires clean testnet restart.
+        buf.extend_from_slice(&(self.parent_hashes.len() as u32).to_le_bytes());
         for parent in &self.parent_hashes {
             buf.extend_from_slice(parent);
         }
@@ -72,7 +75,7 @@ impl DagVertex {
             return false;
         };
         // Check pub_key matches validator address
-        let expected_addr = Address(*blake3::hash(&self.pub_key).as_bytes());
+        let expected_addr = Address::from_pubkey(&self.pub_key);
         if expected_addr != self.validator {
             return false;
         }
@@ -97,6 +100,9 @@ impl DagVertex {
         buf.extend_from_slice(&self.block.hash());
         buf.extend_from_slice(&self.round.to_le_bytes());
         buf.extend_from_slice(&self.validator.0);
+        // Parent count prefix added for defense-in-depth (March 2026 audit).
+        // Breaking change — requires clean testnet restart.
+        buf.extend_from_slice(&(self.parent_hashes.len() as u32).to_le_bytes());
         for parent in &self.parent_hashes {
             buf.extend_from_slice(parent);
         }

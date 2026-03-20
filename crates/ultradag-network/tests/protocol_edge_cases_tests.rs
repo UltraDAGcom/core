@@ -393,6 +393,7 @@ fn test_checkpoint_sync_message() {
         treasury_balance: 0,
         delegation_accounts: vec![],
         configured_validator_count: None,
+        bridge_reserve: 0,
     };
 
     let msg = Message::CheckpointSync {

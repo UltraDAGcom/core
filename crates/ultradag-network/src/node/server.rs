@@ -1254,6 +1254,10 @@ async fn handle_peer(
                         }
                         continue;
                     }
+                    Err(DagInsertError::InvalidSignature) => {
+                        warn!("Rejected vertex from {} round={}: invalid signature", peer_addr, round);
+                        continue;
+                    }
                     Err(DagInsertError::TooManyParents) => {
                         warn!("Rejected vertex from {} with too many parents (>{MAX_PARENTS})", peer_addr);
                         continue;
@@ -1427,6 +1431,9 @@ async fn handle_peer(
                             Err(DagInsertError::MissingParents(missing)) => {
                                 all_missing_parents.extend(&missing);
                                 failed_vertices.push((hash, vertex));
+                            }
+                            Err(DagInsertError::InvalidSignature) => {
+                                warn!("Rejected sync vertex from {} round={}: invalid signature", peer_addr, vertex.round);
                             }
                             Err(DagInsertError::TooManyParents) | Err(DagInsertError::TooLarge) => {
                                 // Silently reject

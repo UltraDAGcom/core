@@ -110,7 +110,7 @@ fn parse_identity_payload(payload: &[u8]) -> Result<Option<PeerIdentity>, NoiseE
             }
             let mut pubkey = [0u8; 32];
             pubkey.copy_from_slice(&payload[1..33]);
-            let address = ultradag_coin::Address(*blake3::hash(&pubkey).as_bytes());
+            let address = ultradag_coin::Address::from_pubkey(&pubkey);
             Ok(Some(PeerIdentity {
                 ed25519_pubkey: pubkey,
                 address,

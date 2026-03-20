@@ -39,10 +39,9 @@ fn make_vertex(
     _reward: u64,
 ) -> DagVertex {
     let proposer = proposer_sk.address();
-    let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
     let coinbase = CoinbaseTx {
         to: proposer,
-        amount: total_fees,
+        amount: 0,
         height,
     };
     let block = Block {
@@ -355,14 +354,10 @@ fn test_14_total_emission_invariant_holds_100_rounds() {
             round_vertices.push(v);
         }
 
-        // Sum of all validator rewards in this round should be <= validator pool
-        let total_emitted: u64 = round_vertices.iter()
-            .map(|v| v.block.coinbase.amount)
-            .sum();
-        assert!(
-            total_emitted <= vpool,
-            "Round {}: emitted {} > pool {}", round, total_emitted, vpool
-        );
+        // Coinbase amount is always 0 — rewards distributed via distribute_round_rewards()
+        for v in &round_vertices {
+            assert_eq!(v.block.coinbase.amount, 0, "Round {}: coinbase must be zero", round);
+        }
 
         state.apply_finalized_vertices(&round_vertices).unwrap();
     }
@@ -718,6 +713,7 @@ fn test_24_stale_epoch_on_load_triggers_recalculation() {
         tampered.council_members().map(|(k, v)| (*k, *v)).collect(),
         tampered.treasury_balance(),
         tampered.all_delegations().map(|(k, v)| (*k, v.clone())).collect(),
+        tampered.bridge_reserve(),
     ).unwrap();
     tampered_state.save(&state_path).unwrap();
 
@@ -1081,10 +1077,10 @@ fn test_32_commission_edge_cases() {
         signature: Signature([0u8; 64]),
     };
     set_comm.signature = validator_sk.sign(&set_comm.signable_bytes());
-    state.apply_set_commission_tx(&set_comm).unwrap();
+    state.apply_set_commission_tx(&set_comm, 0).unwrap();
     assert_eq!(state.stake_account(&val_addr).unwrap().commission_percent, 0);
 
-    // Set commission to 100%
+    // Set commission to 100% — must be at least COMMISSION_COOLDOWN_ROUNDS later
     let mut set_comm_max = SetCommissionTx {
         from: val_addr,
         commission_percent: 100,
@@ -1093,7 +1089,7 @@ fn test_32_commission_edge_cases() {
         signature: Signature([0u8; 64]),
     };
     set_comm_max.signature = validator_sk.sign(&set_comm_max.signable_bytes());
-    state.apply_set_commission_tx(&set_comm_max).unwrap();
+    state.apply_set_commission_tx(&set_comm_max, 3_000).unwrap();
     assert_eq!(state.stake_account(&val_addr).unwrap().commission_percent, 100);
 }
 

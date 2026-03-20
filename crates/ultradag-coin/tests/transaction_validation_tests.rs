@@ -6,7 +6,7 @@ fn test_transfer_tx_signable_bytes() {
     let sk = SecretKey::generate();
     let tx = TransferTx {
         from: sk.address(),
-        to: Address([2u8; 32]),
+        to: Address([2u8; 20]),
         amount: 1000,
         fee: 100,
         nonce: 0,
@@ -25,7 +25,7 @@ fn test_transfer_tx_hash() {
     let sk = SecretKey::generate();
     let mut tx = TransferTx {
         from: sk.address(),
-        to: Address([2u8; 32]),
+        to: Address([2u8; 20]),
         amount: 1000,
         fee: 100,
         nonce: 0,
@@ -45,7 +45,7 @@ fn test_transfer_tx_verify_valid() {
     let sk = SecretKey::generate();
     let mut tx = TransferTx {
         from: sk.address(),
-        to: Address([2u8; 32]),
+        to: Address([2u8; 20]),
         amount: 1000,
         fee: 100,
         nonce: 0,
@@ -63,7 +63,7 @@ fn test_transfer_tx_verify_invalid() {
     let sk = SecretKey::generate();
     let tx = TransferTx {
         from: sk.address(),
-        to: Address([2u8; 32]),
+        to: Address([2u8; 20]),
         amount: 1000,
         fee: 100,
         nonce: 0,
@@ -80,7 +80,7 @@ fn test_transfer_tx_total_cost() {
     let sk = SecretKey::generate();
     let tx = TransferTx {
         from: sk.address(),
-        to: Address([2u8; 32]),
+        to: Address([2u8; 20]),
         amount: 1000,
         fee: 100,
         nonce: 0,
@@ -188,7 +188,7 @@ fn test_transaction_enum_hash() {
     let sk = SecretKey::generate();
     let mut tx = TransferTx {
         from: sk.address(),
-        to: Address([2u8; 32]),
+        to: Address([2u8; 20]),
         amount: 1000,
         fee: 100,
         nonce: 0,
@@ -243,7 +243,7 @@ fn test_transaction_different_types() {
     
     let mut transfer = TransferTx {
         from: sk.address(),
-        to: Address([2u8; 32]),
+        to: Address([2u8; 20]),
         amount: 1000,
         fee: 100,
         nonce: 0,

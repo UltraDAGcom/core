@@ -43,6 +43,11 @@ impl ValidatorIndex {
         self.addr_to_idx.get(addr).copied()
     }
 
+    /// Get the address for a given index, if it exists.
+    pub fn get_address(&self, idx: usize) -> Option<&Address> {
+        self.idx_to_addr.get(idx)
+    }
+
     /// Number of indexed validators.
     pub fn len(&self) -> usize {
         self.idx_to_addr.len()
@@ -64,6 +69,8 @@ pub enum DagInsertError {
     FutureTimestamp,
     /// Vertex exceeds MAX_VERTEX_BYTES when serialized.
     TooLarge,
+    /// Vertex has an invalid Ed25519 signature.
+    InvalidSignature,
 }
 
 /// Maximum number of parent references allowed per DagVertex.
@@ -162,6 +169,12 @@ impl BlockDag {
     /// Insert a vertex into the DAG. Returns false if already present.
     /// Does NOT check equivocation — use `try_insert` for untrusted vertices.
     /// The caller must ensure parents are truncated to MAX_PARENTS before calling.
+    /// Insert a vertex into the DAG without signature verification or equivocation checks.
+    ///
+    /// **WARNING**: This method bypasses the safety checks in `try_insert()`.
+    /// Production code should use `try_insert()` instead, which validates signatures,
+    /// enforces MAX_PARENTS, checks for equivocation, and rejects future-round/timestamp
+    /// vertices. This method is retained for test code that constructs pre-validated vertices.
     pub fn insert(&mut self, vertex: DagVertex) -> bool {
         let hash = vertex.hash();
 
@@ -277,6 +290,11 @@ impl BlockDag {
     /// - `Ok(false)` if duplicate hash (already present)
     /// - `Err(reason)` if equivocation detected (same validator + round, different hash)
     pub fn try_insert(&mut self, vertex: DagVertex) -> Result<bool, DagInsertError> {
+        // Verify Ed25519 signature before any other processing
+        if !vertex.verify_signature() {
+            return Err(DagInsertError::InvalidSignature);
+        }
+
         let hash = vertex.hash();
 
         if self.vertices.contains_key(&hash) {
@@ -462,6 +480,24 @@ impl BlockDag {
             .get(hash)
             .map(|bv| bv.count_ones())
             .unwrap_or(0)
+    }
+
+    /// Count descendant validators, filtered to only active validators.
+    /// Without filtering, stale bits from validators no longer in the active set
+    /// are counted, which overcounts and makes finality easier than it should be.
+    pub fn descendant_validator_count_filtered(&self, hash: &[u8; 32], active_set: &HashSet<Address>) -> usize {
+        let Some(bv) = self.descendant_validators.get(hash) else { return 0 };
+        let mut count = 0;
+        for (idx, bit) in bv.iter().enumerate() {
+            if *bit {
+                if let Some(addr) = self.validator_index.get_address(idx) {
+                    if active_set.contains(addr) {
+                        count += 1;
+                    }
+                }
+            }
+        }
+        count
     }
 
     /// Get direct children of a vertex.
@@ -723,6 +759,12 @@ impl BlockDag {
         // in self.rounds, so the per-hash removal above never catches them.
         self.equivocation_vertices.retain(|_, v| v.round >= new_floor);
 
+        // Prune old evidence entries (keep evidence for validators who equivocated in recent rounds)
+        self.evidence_store.retain(|_addr, entries| {
+            entries.retain(|e| e.round >= new_floor);
+            !entries.is_empty()
+        });
+
         // Update pruning floor
         self.pruning_floor = new_floor;
 
@@ -781,7 +823,11 @@ impl BlockDag {
         sorted.sort_by_key(|(_, v)| v.round);
         let genesis: [u8; 32] = [0u8; 32];
         for (_hash, vertex) in &sorted {
-            let val_idx = validator_index.get(&vertex.validator).unwrap();
+            let Some(val_idx) = validator_index.get(&vertex.validator) else {
+                // Vertex references a validator not in the index — skip descendant tracking
+                // This can happen with partially corrupted persisted state
+                continue;
+            };
             let mut queue = VecDeque::new();
             for parent in &vertex.parent_hashes {
                 queue.push_back(*parent);

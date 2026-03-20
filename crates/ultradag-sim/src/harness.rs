@@ -3,7 +3,7 @@ use crate::validator::SimValidator;
 use crate::byzantine::{ByzantineStrategy, produce_vertices};
 use crate::invariants;
 use crate::txgen;
-use ultradag_coin::{SecretKey, Address, MIN_STAKE_SATS, MIN_DELEGATION_SATS};
+use ultradag_coin::{SecretKey, Address, DagVertex, MIN_STAKE_SATS, MIN_DELEGATION_SATS};
 use ultradag_coin::constants::MIN_FEE_SATS;
 use ultradag_coin::governance::{CouncilSeatCategory, ProposalType};
 use ultradag_coin::consensus::sync_epoch_validators;
@@ -171,12 +171,46 @@ impl SimHarness {
     pub fn run(&mut self, config: &SimConfig) -> SimResult {
         let mut violations = Vec::new();
         let mut total_txs: u64 = 0;
+        let mut partition_healed = false;
 
         for round in 1..=config.num_rounds {
             self.current_round = round;
 
             // 1. Deliver pending messages
             self.network.deliver(round);
+
+            // 1b. On partition heal, exchange all DAG vertices between groups.
+            // During partition, cross-group messages are dropped. After healing,
+            // new vertices reference parents the other side never saw. Without
+            // replaying missed vertices, those arrive as MissingParents and finality
+            // stalls. This simulates the real GetDagVertices sync protocol.
+            if !partition_healed {
+                if let DeliveryPolicy::Partition { split, heal_after_rounds } = &config.delivery_policy {
+                    if round >= *heal_after_rounds {
+                        partition_healed = true;
+                        let split = *split;
+                        // Collect all vertices from each validator's DAG
+                        let all_dag_vertices: Vec<Vec<DagVertex>> = self.validators.iter()
+                            .map(|v| v.dag.all_vertices().map(|(_, vtx)| vtx.clone()).collect())
+                            .collect();
+                        // Exchange: group A's vertices go to group B and vice versa
+                        for recipient in 0..self.validators.len() {
+                            for source in 0..self.validators.len() {
+                                if source == recipient { continue; }
+                                let source_in_a = source < split;
+                                let recipient_in_a = recipient < split;
+                                if source_in_a == recipient_in_a { continue; } // same group, already have these
+                                // Sort by round for proper insertion order
+                                let mut vertices = all_dag_vertices[source].clone();
+                                vertices.sort_by_key(|v| v.round);
+                                for vertex in vertices {
+                                    let _ = self.validators[recipient].receive_vertex(vertex);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             // 2. Receive phase
             for i in 0..self.validators.len() {

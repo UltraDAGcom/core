@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { postTx, postFaucet, formatUdag, shortAddr } from '../lib/api.ts';
+import { postTx, postFaucet, formatUdag, shortAddr, fullAddr, prettyAddr, isValidAddress, normalizeAddress } from '../lib/api.ts';
 import { Card } from '../components/shared/Card.tsx';
 import { WalletSelector } from '../components/shared/WalletSelector.tsx';
 import { CopyButton } from '../components/shared/CopyButton.tsx';
@@ -58,14 +58,14 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
     const feeSats = parseInt(fee, 10);
     if (isNaN(sats) || sats <= 0) { setError('Amount must be positive'); return; }
     if (isNaN(feeSats) || feeSats < 10000) { setError('Minimum fee is 10,000 sats'); return; }
-    if (!/^[0-9a-fA-F]{64}$/.test(to.trim())) { setError('Invalid recipient address (64 hex chars)'); return; }
+    if (!isValidAddress(to.trim())) { setError('Invalid recipient address (hex or bech32m)'); return; }
     if (memoBytes > 256) { setError('Memo exceeds 256 bytes'); return; }
 
     setLoading(true);
     try {
       const body: Record<string, unknown> = {
         secret_key: wallet.secret_key,
-        to: to.trim().toLowerCase(),
+        to: normalizeAddress(to.trim()),
         amount: sats,
         fee: feeSats,
       };
@@ -127,7 +127,7 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
               )}
 
               <label className="block">
-                <span className="text-sm text-dag-muted">Recipient Address (64 hex)</span>
+                <span className="text-sm text-dag-muted">Recipient Address (hex or bech32m)</span>
                 <input
                   type="text"
                   value={to}
@@ -233,14 +233,22 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
               <WalletSelector wallets={wallets} selectedIdx={receiveIdx} onChange={setReceiveIdx} />
 
               {receiveWallet && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <span className="text-sm text-dag-muted">Your Address</span>
-                  <div className="flex items-start gap-2 bg-dag-surface border border-dag-border rounded p-3">
-                    <code className="text-sm text-white font-mono break-all flex-1 leading-relaxed">
-                      {receiveWallet.address}
-                    </code>
-                    <CopyButton text={receiveWallet.address} />
+                  <div className="bg-dag-surface border border-dag-border rounded-lg p-4">
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <code className="text-base text-white font-mono leading-relaxed tracking-wide">
+                        {prettyAddr(receiveWallet.address)}
+                      </code>
+                      <CopyButton text={fullAddr(receiveWallet.address)} />
+                    </div>
+                    <div className="flex items-center gap-2 pt-2 border-t border-dag-border/50">
+                      <span className="text-[10px] text-dag-muted uppercase tracking-wider">Hex</span>
+                      <code className="text-[11px] font-mono text-dag-muted break-all">{receiveWallet.address}</code>
+                      <CopyButton text={receiveWallet.address} />
+                    </div>
                   </div>
+                  <p className="text-xs text-dag-muted">Share the address above to receive UDAG. Both formats (bech32m and hex) are accepted.</p>
                 </div>
               )}
             </div>

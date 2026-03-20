@@ -457,18 +457,16 @@ fn unknown_validator_rejected_from_set() {
     let unknown_child = make_vertex(801, 2, vec![h_anchor], &unknown_sk);
     dag.insert(unknown_child);
 
-    // Finality check: the descendant is from an unknown validator
-    // Even with 1 descendant vertex, if the validator isn't registered,
-    // distinct_validators won't include them in the ValidatorSet check.
-    // However, FinalityTracker counts DAG descendant validators regardless
-    // of registration — the threshold is based on registered count.
-    // With threshold=1, the known validator's vertex (the anchor itself)
-    // has 1 descendant validator (unknown). Since threshold=1, it finalizes.
-    // This is correct: the THRESHOLD is based on registered validators,
-    // but descendants are counted from the DAG itself.
+    // Finality check: the descendant is from an unknown validator.
+    // With filtered descendant counting (Issue #6 fix), only descendants from
+    // validators in the active set count toward finality. The unknown validator
+    // is NOT registered, so their descendant doesn't count.
+    // With threshold=1 (one registered validator), the anchor needs 1 active
+    // descendant validator — but the only descendant is from the unknown validator.
+    // So the anchor should NOT finalize.
     let finalized = ft.find_newly_finalized(&dag);
-    assert!(finalized.contains(&h_anchor),
-        "Anchor should be finalized (1 descendant validator >= threshold 1)");
+    assert!(!finalized.contains(&h_anchor),
+        "Anchor should NOT finalize (descendant from unregistered validator doesn't count)");
 
     // NEGATIVE: the finality tracker distinguishes registered from unregistered
     assert!(ft.validator_set().contains(&known_sk.address()));

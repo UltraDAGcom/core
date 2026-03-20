@@ -48,7 +48,7 @@ fn test_mempool_rejects_invalid_transaction() {
     
     let tx = TransferTx {
         from: sk.address(),
-        to: Address([2u8; 32]),
+        to: Address([2u8; 20]),
         amount: 1000,
         fee: 100,
         nonce: 0,

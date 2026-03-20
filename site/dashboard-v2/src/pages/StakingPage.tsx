@@ -32,7 +32,7 @@ interface StakeInfo {
 interface DelegationInfo {
   address: string;
   name: string;
-  delegated_amount: number;
+  delegated: number;
   validator: string;
   is_undelegating: boolean;
   unlock_at_round: number | null;
@@ -86,7 +86,7 @@ export function StakingPage() {
         }
         try {
           const d = await getDelegation(w.address);
-          if (d.delegated_amount > 0 || d.is_undelegating) {
+          if (d.delegated > 0 || d.is_undelegating) {
             delResults.push({ address: w.address, name: w.name, ...d });
           }
         } catch {
@@ -281,7 +281,7 @@ export function StakingPage() {
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div>
                         <span className="text-dag-muted block text-xs">Delegated</span>
-                        <span className="text-white">{formatUdag(d.delegated_amount)} UDAG</span>
+                        <span className="text-white">{formatUdag(d.delegated)} UDAG</span>
                       </div>
                       <div>
                         <span className="text-dag-muted block text-xs">Validator</span>

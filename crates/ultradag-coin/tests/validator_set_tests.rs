@@ -14,9 +14,9 @@ fn validator_set_from(addrs: &[Address]) -> ValidatorSet {
 #[test]
 fn test_validator_set_new() {
     let validators = vec![
-        Address([1u8; 32]),
-        Address([2u8; 32]),
-        Address([3u8; 32]),
+        Address([1u8; 20]),
+        Address([2u8; 20]),
+        Address([3u8; 20]),
     ];
 
     let vset = validator_set_from(&validators);
@@ -25,9 +25,9 @@ fn test_validator_set_new() {
 
 #[test]
 fn test_validator_set_contains() {
-    let addr1 = Address([1u8; 32]);
-    let addr2 = Address([2u8; 32]);
-    let addr3 = Address([99u8; 32]);
+    let addr1 = Address([1u8; 20]);
+    let addr2 = Address([2u8; 20]);
+    let addr3 = Address([99u8; 20]);
 
     let vset = validator_set_from(&[addr1, addr2]);
 
@@ -39,10 +39,10 @@ fn test_validator_set_contains() {
 #[test]
 fn test_validator_set_count() {
     let validators = vec![
-        Address([1u8; 32]),
-        Address([2u8; 32]),
-        Address([3u8; 32]),
-        Address([4u8; 32]),
+        Address([1u8; 20]),
+        Address([2u8; 20]),
+        Address([3u8; 20]),
+        Address([4u8; 20]),
     ];
 
     let vset = validator_set_from(&validators);
@@ -52,9 +52,9 @@ fn test_validator_set_count() {
 #[test]
 fn test_validator_set_quorum() {
     let validators = vec![
-        Address([1u8; 32]),
-        Address([2u8; 32]),
-        Address([3u8; 32]),
+        Address([1u8; 20]),
+        Address([2u8; 20]),
+        Address([3u8; 20]),
     ];
 
     let vset = validator_set_from(&validators);
@@ -65,10 +65,10 @@ fn test_validator_set_quorum() {
 #[test]
 fn test_validator_set_quorum_four_validators() {
     let validators = vec![
-        Address([1u8; 32]),
-        Address([2u8; 32]),
-        Address([3u8; 32]),
-        Address([4u8; 32]),
+        Address([1u8; 20]),
+        Address([2u8; 20]),
+        Address([3u8; 20]),
+        Address([4u8; 20]),
     ];
 
     let vset = validator_set_from(&validators);
@@ -86,7 +86,7 @@ fn test_validator_set_empty() {
 
 #[test]
 fn test_validator_set_single() {
-    let validators = vec![Address([1u8; 32])];
+    let validators = vec![Address([1u8; 20])];
     let vset = validator_set_from(&validators);
     assert_eq!(vset.len(), 1);
     // ceil(2*1/3) = 1  →  formula: (2*1+2)/3 = 4/3 = 1
@@ -95,8 +95,8 @@ fn test_validator_set_single() {
 
 #[test]
 fn test_validator_set_validators_list() {
-    let addr1 = Address([1u8; 32]);
-    let addr2 = Address([2u8; 32]);
+    let addr1 = Address([1u8; 20]);
+    let addr2 = Address([2u8; 20]);
 
     let vset = validator_set_from(&[addr1, addr2]);
     let list = vset.validators();
@@ -126,7 +126,7 @@ fn test_validator_set_quorum_calculation() {
     for n in 1usize..=10 {
         let validators: Vec<Address> = (0..n)
             .map(|i| {
-                let mut addr = [0u8; 32];
+                let mut addr = [0u8; 20];
                 addr[0] = i as u8;
                 Address(addr)
             })

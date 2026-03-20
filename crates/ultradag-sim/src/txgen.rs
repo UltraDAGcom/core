@@ -41,7 +41,7 @@ pub fn generate_transfer(
     };
 
     let to = if recipient_idx == sender_idx {
-        let mut addr_bytes = [0u8; 32];
+        let mut addr_bytes = [0u8; 20];
         rng.fill(&mut addr_bytes);
         Address(addr_bytes)
     } else {

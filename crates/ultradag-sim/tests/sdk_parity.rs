@@ -19,7 +19,7 @@ use ultradag_coin::governance::ProposalType;
 const SECRET_SEED: [u8; 32] = [0x01; 32];
 
 /// Deterministic recipient / validator address used across all SDKs.
-const TO_ADDRESS: [u8; 32] = [0x02; 32];
+const TO_ADDRESS: [u8; 20] = [0x02; 20];
 
 /// Amount: 1 UDAG = 1_000_000_000 sats (note: COIN = 100_000_000, so 10 * COIN would be
 /// 10 UDAG.  The spec says 1_000_000_000 which is 10 UDAG in the UltraDAG unit system,
@@ -71,8 +71,8 @@ fn canonical_transfer_signable_bytes() {
     // Print in machine-readable format for the shell script
     println!("SDK_PARITY:TRANSFER:{}", hex);
 
-    // Verify structure: NETWORK_ID(19) + "transfer"(8) + from(32) + to(32) + amount(8) + fee(8) + nonce(8) = 115
-    assert_eq!(signable.len(), 115, "Transfer signable_bytes length mismatch");
+    // Verify structure: NETWORK_ID(19) + "transfer"(8) + from(20) + to(20) + amount(8) + fee(8) + nonce(8) = 91
+    assert_eq!(signable.len(), 91, "Transfer signable_bytes length mismatch");
 
     // Verify the signature round-trips
     let mut signed_tx = tx;
@@ -102,8 +102,8 @@ fn canonical_stake_signable_bytes() {
 
     println!("SDK_PARITY:STAKE:{}", hex);
 
-    // NETWORK_ID(19) + "stake"(5) + from(32) + amount(8) + nonce(8) = 72
-    assert_eq!(signable.len(), 72, "Stake signable_bytes length mismatch");
+    // NETWORK_ID(19) + "stake"(5) + from(20) + amount(8) + nonce(8) = 60
+    assert_eq!(signable.len(), 60, "Stake signable_bytes length mismatch");
 
     let mut signed_tx = tx;
     signed_tx.signature = sk.sign(&signed_tx.signable_bytes());
@@ -134,8 +134,8 @@ fn canonical_delegate_signable_bytes() {
 
     println!("SDK_PARITY:DELEGATE:{}", hex);
 
-    // NETWORK_ID(19) + "delegate"(8) + from(32) + validator(32) + amount(8) + nonce(8) = 107
-    assert_eq!(signable.len(), 107, "Delegate signable_bytes length mismatch");
+    // NETWORK_ID(19) + "delegate"(8) + from(20) + validator(20) + amount(8) + nonce(8) = 83
+    assert_eq!(signable.len(), 83, "Delegate signable_bytes length mismatch");
 
     let mut signed_tx = tx;
     signed_tx.signature = sk.sign(&signed_tx.signable_bytes());
@@ -166,8 +166,8 @@ fn canonical_vote_signable_bytes() {
 
     println!("SDK_PARITY:VOTE:{}", hex);
 
-    // NETWORK_ID(19) + "vote"(4) + from(32) + proposal_id(8) + vote(1) + fee(8) + nonce(8) = 80
-    assert_eq!(signable.len(), 80, "Vote signable_bytes length mismatch");
+    // NETWORK_ID(19) + "vote"(4) + from(20) + proposal_id(8) + vote(1) + fee(8) + nonce(8) = 68
+    assert_eq!(signable.len(), 68, "Vote signable_bytes length mismatch");
 
     let mut signed_tx = tx;
     signed_tx.signature = sk.sign(&signed_tx.signable_bytes());
@@ -195,8 +195,8 @@ fn canonical_unstake_signable_bytes() {
 
     println!("SDK_PARITY:UNSTAKE:{}", hex);
 
-    // NETWORK_ID(19) + "unstake"(7) + from(32) + nonce(8) = 66
-    assert_eq!(signable.len(), 66, "Unstake signable_bytes length mismatch");
+    // NETWORK_ID(19) + "unstake"(7) + from(20) + nonce(8) = 54
+    assert_eq!(signable.len(), 54, "Unstake signable_bytes length mismatch");
 }
 
 // ---------------------------------------------------------------------------
@@ -220,8 +220,8 @@ fn canonical_undelegate_signable_bytes() {
 
     println!("SDK_PARITY:UNDELEGATE:{}", hex);
 
-    // NETWORK_ID(19) + "undelegate"(10) + from(32) + nonce(8) = 69
-    assert_eq!(signable.len(), 69, "Undelegate signable_bytes length mismatch");
+    // NETWORK_ID(19) + "undelegate"(10) + from(20) + nonce(8) = 57
+    assert_eq!(signable.len(), 57, "Undelegate signable_bytes length mismatch");
 }
 
 // ---------------------------------------------------------------------------
@@ -246,8 +246,8 @@ fn canonical_set_commission_signable_bytes() {
 
     println!("SDK_PARITY:SET_COMMISSION:{}", hex);
 
-    // NETWORK_ID(19) + "set_commission"(14) + from(32) + commission(1) + nonce(8) = 74
-    assert_eq!(signable.len(), 74, "SetCommission signable_bytes length mismatch");
+    // NETWORK_ID(19) + "set_commission"(14) + from(20) + commission(1) + nonce(8) = 62
+    assert_eq!(signable.len(), 62, "SetCommission signable_bytes length mismatch");
 }
 
 // ---------------------------------------------------------------------------

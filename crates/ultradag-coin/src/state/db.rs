@@ -7,14 +7,14 @@ use crate::persistence::PersistenceError;
 use crate::state::engine::{AccountState, DelegationAccount, StakeAccount, StateEngine};
 
 // Table definitions for redb
-const ACCOUNTS: TableDefinition<&[u8; 32], (u64, u64)> = TableDefinition::new("accounts");
-const STAKES: TableDefinition<&[u8; 32], &[u8]> = TableDefinition::new("stakes_v2");
+const ACCOUNTS: TableDefinition<&[u8; 20], (u64, u64)> = TableDefinition::new("accounts");
+const STAKES: TableDefinition<&[u8; 20], &[u8]> = TableDefinition::new("stakes_v2");
 const PROPOSALS: TableDefinition<u64, &[u8]> = TableDefinition::new("proposals");
 const VOTES: TableDefinition<&[u8], u8> = TableDefinition::new("votes");
 const METADATA: TableDefinition<&str, &[u8]> = TableDefinition::new("metadata");
-const ACTIVE_VALIDATORS: TableDefinition<u64, &[u8; 32]> = TableDefinition::new("active_validators");
-const COUNCIL_MEMBERS: TableDefinition<&[u8; 32], u8> = TableDefinition::new("council_members");
-const DELEGATIONS: TableDefinition<&[u8; 32], &[u8]> = TableDefinition::new("delegations");
+const ACTIVE_VALIDATORS: TableDefinition<u64, &[u8; 20]> = TableDefinition::new("active_validators");
+const COUNCIL_MEMBERS: TableDefinition<&[u8; 20], u8> = TableDefinition::new("council_members");
+const DELEGATIONS: TableDefinition<&[u8; 20], &[u8]> = TableDefinition::new("delegations");
 
 impl From<redb::Error> for PersistenceError {
     fn from(e: redb::Error) -> Self {
@@ -115,7 +115,7 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
     {
         let mut table = txn.open_table(VOTES)?;
         for ((id, addr), vote) in engine.all_votes() {
-            let mut key = [0u8; 40];
+            let mut key = [0u8; 28];
             key[..8].copy_from_slice(&id.to_le_bytes());
             key[8..].copy_from_slice(&addr.0);
             table.insert(key.as_slice(), if *vote { 1u8 } else { 0u8 })?;
@@ -151,6 +151,7 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
         }
 
         table.insert("treasury_balance", engine.treasury_balance().to_le_bytes().as_slice())?;
+        table.insert("bridge_reserve", engine.bridge_reserve().to_le_bytes().as_slice())?;
 
         // Compute and store state root for integrity verification on reload.
         // This catches silent corruption from disk errors, partial writes, or bugs.
@@ -262,9 +263,9 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
     for entry in vote_table.iter()? {
         let (k, v) = entry?;
         let key_bytes = k.value();
-        if key_bytes.len() == 40 {
+        if key_bytes.len() == 28 {
             let id = u64::from_le_bytes(key_bytes[..8].try_into().unwrap());
-            let mut addr_bytes = [0u8; 32];
+            let mut addr_bytes = [0u8; 20];
             addr_bytes.copy_from_slice(&key_bytes[8..]);
             let addr = Address(addr_bytes);
             votes.insert((id, addr), v.value() == 1);
@@ -277,6 +278,7 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
     };
 
     let treasury_balance = read_u64(&meta, "treasury_balance")?;
+    let bridge_reserve = read_u64(&meta, "bridge_reserve")?;
 
     // Delegations
     let mut delegation_accounts = std::collections::HashMap::new();
@@ -319,6 +321,7 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         council_members,
         treasury_balance,
         delegation_accounts,
+        bridge_reserve,
     ).map_err(|e| PersistenceError::Serialization(e.to_string()))?;
 
     // Verify state integrity: recompute state root and compare against stored value.

@@ -40,6 +40,9 @@ pub struct StateSnapshot {
     /// to prevent divergence between nodes with different --validators N values.
     #[serde(default)]
     pub configured_validator_count: Option<u64>,
+    /// Bridge reserve: UDAG locked for bridging to Arbitrum.
+    #[serde(default)]
+    pub bridge_reserve: u64,
 }
 
 impl StateSnapshot {

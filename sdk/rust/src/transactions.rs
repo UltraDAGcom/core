@@ -16,7 +16,7 @@
 //! use ultradag_coin::Address;
 //!
 //! let sk = SecretKey::from_bytes([0x42; 32]);
-//! let recipient = Address([0xAB; 32]);
+//! let recipient = Address([0xAB; 20]);
 //! let tx = transactions::build_transfer(&sk, recipient, 1_000_000, 10_000, 0, None);
 //!
 //! let client = UltraDagClient::default_local();

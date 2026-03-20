@@ -11,6 +11,20 @@ import { StatusBadge } from '../components/shared/StatusBadge.tsx';
 
 const PER_PAGE = 10;
 
+// Rust serde serializes enum variants with data as {"VariantName": {fields...}}
+// Unit variants serialize as plain strings. Normalize both cases.
+function normalizeStatus(raw: unknown): { label: string; execute_at_round?: number } {
+  if (typeof raw === 'string') return { label: raw };
+  if (raw && typeof raw === 'object') {
+    const key = Object.keys(raw)[0];
+    const val = (raw as Record<string, Record<string, unknown>>)[key];
+    if (key === 'PassedPending') return { label: 'PassedPending', execute_at_round: val?.execute_at_round as number };
+    if (key === 'Failed') return { label: 'Failed' };
+    return { label: key };
+  }
+  return { label: String(raw) };
+}
+
 interface Proposal {
   id: number;
   title: string;
@@ -39,7 +53,11 @@ export function GovernancePage() {
   const refresh = useCallback(async () => {
     try {
       const data = await getProposals();
-      const list: Proposal[] = Array.isArray(data) ? data : (data?.proposals ?? []);
+      const rawList = Array.isArray(data) ? data : (data?.proposals ?? []);
+      const list: Proposal[] = rawList.map((p: Record<string, unknown>) => {
+        const s = normalizeStatus(p.status);
+        return { ...p, status: s.label, execute_at_round: s.execute_at_round ?? (p.execute_at_round as number | null) } as Proposal;
+      });
       setProposals(list.sort((a, b) => b.id - a.id));
     } catch {
       // ignore
@@ -56,7 +74,8 @@ export function GovernancePage() {
   const handleSelectProposal = async (id: number) => {
     try {
       const detail = await getProposal(id);
-      setSelected(detail);
+      const s = normalizeStatus(detail.status);
+      setSelected({ ...detail, status: s.label, execute_at_round: s.execute_at_round ?? detail.execute_at_round });
     } catch {
       const p = proposals.find(x => x.id === id);
       if (p) setSelected(p);

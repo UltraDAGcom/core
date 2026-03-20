@@ -60,10 +60,9 @@ fn make_vertex(
     txs: Vec<Transaction>,
 ) -> DagVertex {
     let proposer = proposer_sk.address();
-    let total_fees: u64 = txs.iter().map(|tx| tx.fee()).fold(0u64, |acc, x| acc.saturating_add(x));
     let coinbase = CoinbaseTx {
         to: proposer,
-        amount: total_fees,
+        amount: 0,
         height,
     };
     let block = Block {
@@ -370,7 +369,7 @@ fn test_36_commission_calculation_correctness() {
         signature: Signature([0u8; 64]),
     };
     comm_tx.signature = val_sk.sign(&comm_tx.signable_bytes());
-    state.apply_set_commission_tx(&comm_tx).unwrap();
+    state.apply_set_commission_tx(&comm_tx, 0).unwrap();
 
     // Delegate MIN_DELEGATION_SATS (not MIN_STAKE_SATS which is much larger)
     state.apply_delegate_tx(&make_delegate_tx(&del_sk, val, MIN_DELEGATION_SATS, 0)).unwrap();

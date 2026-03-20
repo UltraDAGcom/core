@@ -66,6 +66,10 @@ pub struct StakeAccount {
     /// Commission percentage charged on delegated rewards (0-100).
     #[serde(default = "default_commission")]
     pub commission_percent: u8,
+    /// Round when commission was last changed. Enforces COMMISSION_COOLDOWN_ROUNDS
+    /// between changes to prevent sandwich attacks on delegators.
+    #[serde(default)]
+    pub commission_last_changed: Option<u64>,
 }
 
 fn default_commission() -> u8 {
@@ -129,15 +133,17 @@ pub struct StateEngine {
     /// Transaction receipts: tx_hash → receipt (success/failure + reason).
     /// Bounded to MAX_TX_INDEX_SIZE entries with FIFO eviction (same as tx_index).
     tx_receipts: HashMap<[u8; 32], TxReceipt>,
-    /// Permanent record of all slashing events. Unlike DAG evidence_store (prunable),
-    /// this persists in state for auditability. Slashed validators can see proof of
-    /// their equivocation even after DAG pruning.
+    /// Record of slashing events. In-memory only, lost on restart.
+    /// Capped at 10,000 entries to prevent unbounded growth.
     slash_history: Vec<SlashRecord>,
     /// Tracks which validators have produced vertices in each finalized round.
     /// Used for cross-batch equivocation detection: if a validator appears in a
     /// round that was already applied in a previous batch, that's equivocation.
     /// Pruned to keep only rounds > last_finalized_round - 1000.
     applied_validators_per_round: HashMap<u64, std::collections::HashSet<Address>>,
+    /// Bridge reserve: UDAG locked for bridging to Arbitrum.
+    /// Included in the supply invariant: liquid + staked + delegated + treasury + bridge_reserve == total_supply.
+    bridge_reserve: u64,
 }
 
 impl StateEngine {
@@ -167,6 +173,7 @@ impl StateEngine {
             tx_receipts: HashMap::new(),
             slash_history: Vec::new(),
             applied_validators_per_round: HashMap::new(),
+            bridge_reserve: 0,
         }
     }
 
@@ -272,6 +279,13 @@ impl StateEngine {
     /// - Delegators earn through their validator's effective stake minus commission
     /// - Council members receive their emission share
     /// - Pre-staking fallback: equal split among configured validators (producers only)
+    ///
+    /// **Canonical remainder distribution:** Integer division truncation causes rounding
+    /// dust in each distribution step. Rather than silently burning this dust (~630 UDAG/year),
+    /// the remainder (`pool - sum_of_credits`) is assigned to the first recipient in sorted
+    /// address order. This is deterministic across all nodes (sorted order is canonical) and
+    /// ensures the full allocated pool is distributed every round. This is a standard technique
+    /// used in DeFi reward distribution contracts.
     pub fn distribute_round_rewards(
         &mut self,
         round: u64,
@@ -313,7 +327,13 @@ impl StateEngine {
                         self.credit(member, capped_per);
                     }
                     let actually_minted = capped_per.saturating_mul(members.len() as u64);
-                    self.total_supply = self.total_supply.saturating_add(actually_minted);
+                    // Canonical remainder: assign truncation dust to first member in sorted order.
+                    // This ensures the full council_mint pool is distributed rather than burned.
+                    let council_remainder = council_mint.saturating_sub(actually_minted);
+                    if council_remainder > 0 {
+                        self.credit(&members[0], council_remainder);
+                    }
+                    self.total_supply = self.total_supply.saturating_add(actually_minted.saturating_add(council_remainder));
                 }
             }
             // Validator pool = remainder after council share
@@ -455,6 +475,19 @@ impl StateEngine {
                     actually_minted = actually_minted.saturating_add(*amount);
                 }
             }
+
+            // Canonical remainder: assign truncation dust to the first validator in sorted order.
+            // capped_mint is the intended total distribution (possibly supply-capped).
+            // Integer division across proportional splits loses dust; this reclaims it.
+            let staking_remainder = capped_mint.saturating_sub(actually_minted);
+            if staking_remainder > 0 {
+                // First validator in sorted order (validators is already sorted by address)
+                if let Some((first_addr, _)) = validators.first() {
+                    self.credit(first_addr, staking_remainder);
+                    actually_minted = actually_minted.saturating_add(staking_remainder);
+                }
+            }
+
             self.total_supply = self.total_supply.saturating_add(actually_minted);
         } else {
             // --- Pre-staking fallback: equal split among producers ---
@@ -468,11 +501,20 @@ impl StateEngine {
                 if capped > 0 {
                     let mut sorted_producers: Vec<_> = producers.iter().collect();
                     sorted_producers.sort();
-                    for producer in sorted_producers {
+                    for producer in &sorted_producers {
                         self.credit(producer, capped);
                     }
                     let minted = capped.saturating_mul(producers.len() as u64);
-                    self.total_supply = self.total_supply.saturating_add(minted);
+                    // Canonical remainder: assign truncation dust from `validator_pool / n`
+                    // to the first producer in sorted order. The division loses
+                    // `validator_pool % n` sats; this reclaims the dust rather than burning it.
+                    // Only credit what remains within the supply cap.
+                    let division_dust = validator_pool.saturating_sub(per_producer.saturating_mul(n));
+                    let pre_stake_remainder = division_dust.min(remaining_supply.saturating_sub(minted));
+                    if pre_stake_remainder > 0 {
+                        self.credit(sorted_producers[0], pre_stake_remainder);
+                    }
+                    self.total_supply = self.total_supply.saturating_add(minted.saturating_add(pre_stake_remainder));
                 }
             }
         }
@@ -630,36 +672,27 @@ impl StateEngine {
         // Note: unstake completions are processed once per round in apply_finalized_vertices(),
         // not per-vertex, to ensure deterministic unlock timing at round boundaries.
 
-        let declared_fees: u64 = vertex.block.transactions.iter()
-            .map(|tx| tx.fee())
-            .fold(0u64, |acc, x| acc.saturating_add(x));
         let proposer = &vertex.block.coinbase.to;
 
-        // Coinbase validation: declared_fees is the UPPER BOUND on what the proposer
-        // will receive. The actual credit (collected_fees) may be less if some
-        // transactions fail validation (stale nonce, insufficient balance, etc.).
-        //
-        // We validate coinbase.amount == declared_fees here (honest proposers always
-        // set this correctly). A malicious proposer who inflates coinbase.amount
-        // beyond declared_fees would be caught. A proposer who sets it BELOW
-        // declared_fees would also be caught. The actual credit to the proposer
-        // happens after transaction processing and may be less.
-        if vertex.block.coinbase.amount != declared_fees {
+        // Coinbase validation: coinbase.amount MUST be zero. Transaction fees are
+        // credited to the proposer entirely via the deferred coinbase mechanism
+        // (collected_fees, computed after processing all transactions). This
+        // eliminates the inflation vector where a malicious proposer includes
+        // transactions they know will fail (stale nonces) to inflate declared fees.
+        // With coinbase.amount == 0, there is nothing to declare and nothing to inflate.
+        if vertex.block.coinbase.amount != 0 {
             return Err(CoinError::InvalidCoinbase {
-                expected: declared_fees,
+                expected: 0,
                 got: vertex.block.coinbase.amount,
             });
         }
 
         // Track fees actually collected from successful transactions.
-        // Proposer is credited collected_fees (≤ declared_fees) AFTER the loop.
-        // The difference (declared_fees - collected_fees) represents fees from
-        // failed transactions that were never debited from senders. This amount
-        // is not credited to anyone — it simply doesn't enter the economy.
-        // The coinbase.amount field in the block is the declared maximum, not
-        // the actual credit. This is intentional: the proposer cannot predict
-        // which transactions will fail at finalization time (nonces may change
-        // between vertex production and finality).
+        // Proposer is credited collected_fees AFTER the loop.
+        // Fees from failed transactions (stale nonce, insufficient balance) are
+        // never debited from senders and never credited to anyone — they simply
+        // don't enter the economy. The coinbase.amount field is always 0; the
+        // proposer's fee credit comes entirely from this deferred mechanism.
         let mut collected_fees: u64 = 0;
         let vertex_hash = vertex.hash();
 
@@ -775,6 +808,8 @@ impl StateEngine {
                         tracing::warn!("Skipping invalid Delegate tx in finalized vertex: {}", e);
                         // Delegate txs have zero fee, nothing to undo
                         self.increment_nonce(&delegate_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
                     }
                 }
                 crate::tx::Transaction::Undelegate(undelegate_tx) => {
@@ -782,13 +817,25 @@ impl StateEngine {
                         tracing::warn!("Skipping invalid Undelegate tx in finalized vertex: {}", e);
                         // Undelegate txs have zero fee, nothing to undo
                         self.increment_nonce(&undelegate_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
                     }
                 }
                 crate::tx::Transaction::SetCommission(commission_tx) => {
-                    if let Err(e) = self.apply_set_commission_tx(commission_tx) {
+                    if let Err(e) = self.apply_set_commission_tx(commission_tx, vertex.round) {
                         tracing::warn!("Skipping invalid SetCommission tx in finalized vertex: {}", e);
                         // SetCommission txs have zero fee, nothing to undo
                         self.increment_nonce(&commission_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::BridgeLock(bridge_tx) => {
+                    if let Err(e) = self.apply_bridge_lock_tx(bridge_tx) {
+                        tracing::warn!("Skipping invalid BridgeLock tx in finalized vertex: {}", e);
+                        self.increment_nonce(&bridge_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
                     }
                 }
             }
@@ -839,11 +886,12 @@ impl StateEngine {
             let liquid: u64 = self.accounts.values().map(|a| a.balance).fold(0u64, |acc, x| acc.saturating_add(x));
             let staked: u64 = self.stake_accounts.values().map(|s| s.staked).fold(0u64, |acc, x| acc.saturating_add(x));
             let delegated: u64 = self.delegation_accounts.values().map(|d| d.delegated).fold(0u64, |acc, x| acc.saturating_add(x));
-            let total = liquid.saturating_add(staked).saturating_add(delegated).saturating_add(self.treasury_balance);
+            let total = liquid.saturating_add(staked).saturating_add(delegated)
+                .saturating_add(self.treasury_balance).saturating_add(self.bridge_reserve);
             if total != self.total_supply {
                 return Err(CoinError::SupplyInvariantBroken(format!(
-                    "liquid={} staked={} delegated={} treasury={} sum={} != total_supply={}",
-                    liquid, staked, delegated, self.treasury_balance, total, self.total_supply
+                    "liquid={} staked={} delegated={} treasury={} bridge={} sum={} != total_supply={}",
+                    liquid, staked, delegated, self.treasury_balance, self.bridge_reserve, total, self.total_supply
                 )));
             }
         }
@@ -1180,6 +1228,30 @@ impl StateEngine {
         self.treasury_balance
     }
 
+    pub fn bridge_reserve(&self) -> u64 {
+        self.bridge_reserve
+    }
+
+    /// Apply a BridgeLockTx: debit sender (amount + fee), add amount to bridge reserve.
+    pub fn apply_bridge_lock_tx(&mut self, tx: &crate::tx::BridgeLockTx) -> Result<(), CoinError> {
+        if tx.amount < crate::constants::MIN_BRIDGE_AMOUNT_SATS {
+            return Err(CoinError::ValidationError("below minimum bridge amount".into()));
+        }
+        let total = tx.amount.saturating_add(tx.fee);
+        let bal = self.balance(&tx.from);
+        if bal < total {
+            return Err(CoinError::InsufficientBalance {
+                address: tx.from,
+                required: total,
+                available: bal,
+            });
+        }
+        self.debit(&tx.from, total)?;
+        self.bridge_reserve = self.bridge_reserve.saturating_add(tx.amount);
+        self.increment_nonce(&tx.from);
+        Ok(())
+    }
+
     /// Apply a StakeTx: debit liquid balance, credit stake account.
     pub fn apply_stake_tx(&mut self, tx: &StakeTx) -> Result<(), CoinError> {
         if !tx.verify_signature() {
@@ -1291,16 +1363,39 @@ impl StateEngine {
         }
     }
 
-    /// Remove accounts with zero balance and zero nonce (fully drained, no history).
+    /// Remove economically dead accounts:
+    /// 1. Zero balance + zero nonce (fully drained, no history)
+    /// 2. Balance below DUST_THRESHOLD_SATS + zero nonce (can't pay fees, never transacted)
+    ///
+    /// Accounts in category 2 have their remaining balance burned (subtracted from total_supply)
+    /// to maintain the supply invariant: liquid + staked + delegated + treasury + bridge_reserve == total_supply.
+    ///
     /// Called periodically (every 1000 finalized rounds) to prevent unbounded account growth.
     /// Safe because: stake_of() returns 0 for missing entries, stake_account() returns None,
     /// and all code paths handle missing accounts gracefully via map_or/ok_or.
     pub fn prune_dust_accounts(&mut self) -> usize {
+        let dust_threshold = crate::constants::DUST_THRESHOLD_SATS;
+        let mut burned = 0u64;
         let before = self.accounts.len();
         self.accounts.retain(|_addr, account| {
-            // Keep if non-zero balance OR non-zero nonce (has transaction history)
-            account.balance > 0 || account.nonce > 0
+            if account.balance == 0 && account.nonce == 0 {
+                // Zero balance, never transacted — remove
+                false
+            } else if account.balance < dust_threshold && account.nonce == 0 {
+                // Economically dead dust: balance > 0 but below fee threshold, never transacted.
+                // These accounts can never send a transaction (fee > balance).
+                // Burn the dust to maintain supply invariant.
+                burned = burned.saturating_add(account.balance);
+                false
+            } else {
+                true
+            }
         });
+        // Burn the dust to maintain supply invariant
+        self.total_supply = self.total_supply.saturating_sub(burned);
+        if burned > 0 {
+            tracing::debug!("Burned {} sats of dust from pruned accounts", burned);
+        }
         before - self.accounts.len()
     }
 
@@ -1391,6 +1486,10 @@ impl StateEngine {
                 slash_amount: own_slash,
                 delegated_slash_amount: delegated_slash,
             });
+            // Cap slash history to prevent unbounded growth
+            if self.slash_history.len() > 10_000 {
+                self.slash_history.drain(..self.slash_history.len() - 10_000);
+            }
         }
     }
 
@@ -1523,9 +1622,12 @@ impl StateEngine {
     }
 
     /// Apply a SetCommissionTx: change validator's commission rate.
+    /// `round` is the round of the vertex containing this transaction,
+    /// used to enforce the commission change cooldown.
     pub fn apply_set_commission_tx(
         &mut self,
         tx: &crate::tx::SetCommissionTx,
+        round: u64,
     ) -> Result<(), CoinError> {
         if !tx.verify_signature() {
             return Err(CoinError::InvalidSignature);
@@ -1549,7 +1651,16 @@ impl StateEngine {
                 tx.commission_percent, crate::constants::MAX_COMMISSION_PERCENT
             )));
         }
+        // Enforce commission change cooldown to prevent sandwich attacks
+        if let Some(last_changed) = stake.commission_last_changed {
+            if round.saturating_sub(last_changed) < crate::constants::COMMISSION_COOLDOWN_ROUNDS {
+                return Err(CoinError::ValidationError(
+                    format!("commission can only be changed every {} rounds", crate::constants::COMMISSION_COOLDOWN_ROUNDS)
+                ));
+            }
+        }
         stake.commission_percent = tx.commission_percent;
+        stake.commission_last_changed = Some(round);
         self.increment_nonce(&tx.from);
         Ok(())
     }
@@ -2016,6 +2127,23 @@ impl StateEngine {
         &mut self.governance_params
     }
 
+    /// Compute dynamic minimum fee based on mempool congestion.
+    /// Returns the governance base fee when mempool is at or below 50% capacity.
+    /// Above 50%, fee increases linearly up to 10x at 100% capacity.
+    pub fn dynamic_min_fee(&self, mempool_size: usize) -> u64 {
+        let base = self.governance_params.min_fee_sats;
+        let capacity = 10_000usize; // MAX_MEMPOOL_SIZE
+        if mempool_size <= capacity / 2 {
+            base
+        } else {
+            // Linear increase: at 100% full, fee is 10x base
+            let congestion = (mempool_size - capacity / 2) as u64;
+            let max_congestion = (capacity / 2) as u64;
+            let multiplier = 1 + congestion.saturating_mul(9) / max_congestion.max(1);
+            base.saturating_mul(multiplier)
+        }
+    }
+
     /// Iterate all accounts (for redb persistence).
     pub fn all_accounts(&self) -> impl Iterator<Item = (&Address, &AccountState)> {
         self.accounts.iter()
@@ -2059,16 +2187,18 @@ impl StateEngine {
         council_members: HashMap<Address, crate::governance::CouncilSeatCategory>,
         treasury_balance: u64,
         delegation_accounts: HashMap<Address, DelegationAccount>,
+        bridge_reserve: u64,
     ) -> Result<Self, CoinError> {
         // Verify supply invariant before constructing (catch corrupted redb data)
         let liquid: u64 = accounts.values().map(|a| a.balance).fold(0, |a, b| a.saturating_add(b));
         let staked: u64 = stake_accounts.values().map(|s| s.staked).fold(0, |a, b| a.saturating_add(b));
         let delegated: u64 = delegation_accounts.values().map(|d| d.delegated).fold(0, |a, b| a.saturating_add(b));
-        let total = liquid.saturating_add(staked).saturating_add(delegated).saturating_add(treasury_balance);
+        let total = liquid.saturating_add(staked).saturating_add(delegated)
+            .saturating_add(treasury_balance).saturating_add(bridge_reserve);
         if total != total_supply {
             return Err(CoinError::SupplyInvariantBroken(format!(
-                "from_parts: liquid={} staked={} delegated={} treasury={} sum={} != total_supply={}",
-                liquid, staked, delegated, treasury_balance, total, total_supply
+                "from_parts: liquid={} staked={} delegated={} treasury={} bridge={} sum={} != total_supply={}",
+                liquid, staked, delegated, treasury_balance, bridge_reserve, total, total_supply
             )));
         }
 
@@ -2092,6 +2222,7 @@ impl StateEngine {
             tx_receipts: HashMap::new(),
             slash_history: Vec::new(),
             applied_validators_per_round: HashMap::new(),
+            bridge_reserve,
         })
     }
 
@@ -2127,6 +2258,7 @@ impl StateEngine {
             treasury_balance: self.treasury_balance,
             delegation_accounts,
             configured_validator_count: self.configured_validator_count,
+            bridge_reserve: self.bridge_reserve,
         }
     }
 
@@ -2136,11 +2268,12 @@ impl StateEngine {
         let liquid: u64 = snapshot.accounts.iter().map(|(_, a)| a.balance).fold(0, |a, b| a.saturating_add(b));
         let staked: u64 = snapshot.stake_accounts.iter().map(|(_, s)| s.staked).fold(0, |a, b| a.saturating_add(b));
         let delegated: u64 = snapshot.delegation_accounts.iter().map(|(_, d)| d.delegated).fold(0, |a, b| a.saturating_add(b));
-        let total = liquid.saturating_add(staked).saturating_add(delegated).saturating_add(snapshot.treasury_balance);
+        let total = liquid.saturating_add(staked).saturating_add(delegated)
+            .saturating_add(snapshot.treasury_balance).saturating_add(snapshot.bridge_reserve);
         if total != snapshot.total_supply {
             return Err(CoinError::SupplyInvariantBroken(format!(
-                "from_snapshot: liquid={} staked={} delegated={} treasury={} sum={} != total_supply={}",
-                liquid, staked, delegated, snapshot.treasury_balance, total, snapshot.total_supply
+                "from_snapshot: liquid={} staked={} delegated={} treasury={} bridge={} sum={} != total_supply={}",
+                liquid, staked, delegated, snapshot.treasury_balance, snapshot.bridge_reserve, total, snapshot.total_supply
             )));
         }
 
@@ -2164,6 +2297,7 @@ impl StateEngine {
             tx_receipts: HashMap::new(),
             slash_history: Vec::new(),
             applied_validators_per_round: HashMap::new(),
+            bridge_reserve: snapshot.bridge_reserve,
         })
     }
 
@@ -2186,6 +2320,7 @@ impl StateEngine {
         self.council_members = snapshot.council_members.into_iter().collect();
         self.treasury_balance = snapshot.treasury_balance;
         self.delegation_accounts = snapshot.delegation_accounts.into_iter().collect();
+        self.bridge_reserve = snapshot.bridge_reserve;
         self.configured_validator_count = saved_configured;
     }
 
@@ -2242,13 +2377,11 @@ mod tests {
         txs: Vec<Transaction>,
         sk: &SecretKey,
     ) -> DagVertex {
-        let total_fees: u64 = txs.iter()
-            .map(|tx| tx.fee())
-            .fold(0u64, |acc, x| acc.saturating_add(x));
-        // Coinbase = fees only; block rewards distributed via distribute_round_rewards()
+        // Coinbase amount is always 0; fees credited via deferred mechanism,
+        // block rewards distributed via distribute_round_rewards()
         let coinbase = CoinbaseTx {
             to: *proposer,
-            amount: total_fees,
+            amount: 0,
             height,
         };
         let block = Block {
@@ -2431,6 +2564,7 @@ mod tests {
             staked: 10_000 * crate::constants::COIN,
             unlock_at_round: None,
             commission_percent: 10,
+            commission_last_changed: None,
         });
         // Adjust supply to include staked amount
         state.total_supply = existing_supply.saturating_add(10_000 * crate::constants::COIN);
@@ -2566,11 +2700,12 @@ mod tests {
             let liquid: u64 = state.accounts.values().map(|a| a.balance).fold(0u64, |acc, x| acc.saturating_add(x));
             let staked: u64 = state.stake_accounts.values().map(|s| s.staked).fold(0u64, |acc, x| acc.saturating_add(x));
             let delegated: u64 = state.delegation_accounts.values().map(|d| d.delegated).fold(0u64, |acc, x| acc.saturating_add(x));
-            let total = liquid.saturating_add(staked).saturating_add(delegated).saturating_add(state.treasury_balance());
+            let total = liquid.saturating_add(staked).saturating_add(delegated)
+                .saturating_add(state.treasury_balance()).saturating_add(state.bridge_reserve());
             assert_eq!(
                 total, state.total_supply,
-                "Supply invariant broken at round {}: liquid={} staked={} delegated={} treasury={} supply={}",
-                round, liquid, staked, delegated, state.treasury_balance(), state.total_supply
+                "Supply invariant broken at round {}: liquid={} staked={} delegated={} treasury={} bridge={} supply={}",
+                round, liquid, staked, delegated, state.treasury_balance(), state.bridge_reserve(), state.total_supply
             );
         }
     }
@@ -2690,7 +2825,7 @@ mod tests {
     #[test]
     fn slash_validator_with_no_stake_is_noop() {
         let mut state = StateEngine::new();
-        let validator = Address([99u8; 32]);
+        let validator = Address([99u8; 20]);
         
         let supply_before = state.total_supply();
         

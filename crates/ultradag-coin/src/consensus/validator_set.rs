@@ -119,6 +119,12 @@ impl ValidatorSet {
     pub fn iter(&self) -> impl Iterator<Item = &Address> {
         self.validators.iter()
     }
+
+    /// Get a reference to the active validator address set.
+    /// Used by FinalityTracker to filter descendant bitmaps to only active validators.
+    pub fn active_addresses(&self) -> &HashSet<Address> {
+        &self.validators
+    }
 }
 
 impl Default for ValidatorSet {

@@ -82,7 +82,7 @@ impl Checkpoint {
 
     pub fn verify_signature(&self, sig: &CheckpointSignature) -> bool {
         // Verify pub_key → address mapping
-        let expected_addr = Address(*blake3::hash(&sig.pub_key).as_bytes());
+        let expected_addr = Address::from_pubkey(&sig.pub_key);
         if expected_addr != sig.validator { return false; }
         // Verify Ed25519 signature
         let vk = ed25519_dalek::VerifyingKey::from_bytes(&sig.pub_key).ok();
@@ -115,6 +115,7 @@ pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
     // Core financial state (fixed-size fields)
     hasher.update(&snapshot.total_supply.to_le_bytes());
     hasher.update(&snapshot.treasury_balance.to_le_bytes());
+    hasher.update(&snapshot.bridge_reserve.to_le_bytes());
     hasher.update(&snapshot.current_epoch.to_le_bytes());
     hasher.update(&snapshot.next_proposal_id.to_le_bytes());
 
@@ -148,6 +149,13 @@ pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
             None => { hasher.update(&[0u8]); }
         }
         hasher.update(&[stake.commission_percent]);
+        match stake.commission_last_changed {
+            Some(r) => {
+                hasher.update(&[1u8]);
+                hasher.update(&r.to_le_bytes());
+            }
+            None => { hasher.update(&[0u8]); }
+        }
     }
 
     // Delegation accounts (sorted by address in snapshot())

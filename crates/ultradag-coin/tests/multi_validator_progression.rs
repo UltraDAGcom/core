@@ -49,11 +49,9 @@ fn make_vertex_n(
     validator_count: u64,
 ) -> DagVertex {
     let proposer = sk.address();
-    let total_fees: u64 = txs.iter().map(|tx| tx.fee()).sum();
-
     let coinbase = CoinbaseTx {
         to: proposer,
-        amount: total_fees,
+        amount: 0,
         height,
     };
     
@@ -377,17 +375,28 @@ fn test_state_correctness_with_transactions() {
     assert!(any_finalized, "Round 1 should be finalized");
 
     // Check initial balances after round 1 finalized
-    // Round 1: heights 0, 1, 2 (3 validators, reward split equally)
-    let r0 = ultradag_coin::constants::block_reward(0) / num_v;
-    let r1 = ultradag_coin::constants::block_reward(1) / num_v;
-    let r2 = ultradag_coin::constants::block_reward(2) / num_v;
+    // Round 1: 3 validators share block_reward(1) equally via pre-staking split.
+    // Canonical remainder (block_reward % n) goes to first address in sorted order.
+    let reward = ultradag_coin::constants::block_reward(1);
+    let per_producer = reward / num_v;
+    let remainder = reward.saturating_sub(per_producer.saturating_mul(num_v));
+    let mut sorted_addrs = vec![addr_a, addr_b, addr_c];
+    sorted_addrs.sort();
+    let first_sorted = sorted_addrs[0];
 
-    assert_eq!(state.balance(&addr_a), r0, "Account A should have reward for height 0");
-    assert_eq!(state.balance(&addr_b), r1, "Account B should have reward for height 1");
-    assert_eq!(state.balance(&addr_c), r2, "Account C should have reward for height 2");
+    for addr in &[addr_a, addr_b, addr_c] {
+        let expected = if *addr == first_sorted {
+            per_producer + remainder
+        } else {
+            per_producer
+        };
+        assert_eq!(state.balance(addr), expected,
+            "Validator {:?} should have correct reward (remainder goes to first sorted)", addr);
+    }
 
     let supply_after_r1 = state.total_supply();
-    assert_eq!(supply_after_r1, r0 + r1 + r2, "Total supply should be sum of round 1 rewards");
+    assert_eq!(supply_after_r1, per_producer * num_v + remainder,
+        "Total supply should be sum of round 1 rewards including remainder");
     
     // Round 3: Account A sends 1000 to Account B
     let tx1 = make_signed_tx(&sk_a, addr_b, 1000, 10, 0);
@@ -419,29 +428,31 @@ fn test_state_correctness_with_transactions() {
         state.apply_finalized_vertices(&finalized_vertices).unwrap();
     }
 
-    // After applying round 2 (heights 3,4,5) and round 3 (heights 6,7,8):
-    // Account A: r0 + r3 (from round 2) - 1000 - 10 + r6 + 10 (from round 3 with tx)
-    // Account B: r1 + r4 (from round 2) + 1000 + r7 (from round 3)
-    // Account C: r2 + r5 (from round 2) + r8 (from round 3)
-    
-    let r3 = ultradag_coin::constants::block_reward(3) / num_v;
-    let r4 = ultradag_coin::constants::block_reward(4) / num_v;
-    let r5 = ultradag_coin::constants::block_reward(5) / num_v;
-    let r6 = ultradag_coin::constants::block_reward(6) / num_v;
-    let r7 = ultradag_coin::constants::block_reward(7) / num_v;
-    let r8 = ultradag_coin::constants::block_reward(8) / num_v;
-    
-    let expected_a = r0 + r3 - 1000 - 10 + r6 + 10; // Fee goes back to proposer
-    let expected_b = r1 + r4 + 1000 + r7;
-    let expected_c = r2 + r5 + r8;
-    
+    // After applying round 2 and round 3:
+    // Each round distributes block_reward(round) / 3 to each producer + remainder to first sorted.
+    // Round 2: per_producer each + remainder to first sorted
+    // Round 3: per_producer each + remainder to first sorted, plus tx effects (A sends 1000+10 to B)
+    // Across 3 rounds total, first sorted address gets 3 * remainder extra.
+    let rounds_applied = 3u64; // rounds 1, 2, 3
+    let remainder_total = remainder * rounds_applied;
+
+    // Base balance: per_producer * 3 rounds for each validator
+    let base = per_producer * rounds_applied;
+
+    // First sorted gets all remainders; others get just base.
+    let expected_a = if addr_a == first_sorted { base + remainder_total } else { base }
+        - 1000 - 10 + 10; // sent 1000+10fee, got 10 fee back as proposer
+    let expected_b = if addr_b == first_sorted { base + remainder_total } else { base }
+        + 1000; // received 1000
+    let expected_c = if addr_c == first_sorted { base + remainder_total } else { base };
+
     assert_eq!(state.balance(&addr_a), expected_a, "Account A balance incorrect");
     assert_eq!(state.balance(&addr_b), expected_b, "Account B balance incorrect");
     assert_eq!(state.balance(&addr_c), expected_c, "Account C balance incorrect");
-    
-    // Verify total supply is conserved (sum of all block rewards)
+
+    // Verify total supply: 3 rounds × (per_producer × 3 + remainder) = 3 × block_reward
     let final_supply = state.total_supply();
-    let expected_supply = r0 + r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8;
+    let expected_supply = (per_producer * num_v + remainder) * rounds_applied;
     assert_eq!(final_supply, expected_supply, "Total supply should be conserved");
     
     println!("State correctness verified!");

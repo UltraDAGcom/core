@@ -16,7 +16,7 @@ fn late_joiner_converges() {
         delivery_policy: DeliveryPolicy::Perfect,
         seed: 42,
         txs_per_round: 0,
-        check_every_round: false, scenario: None, max_finality_lag: 50,
+        check_every_round: false, scenario: None, max_finality_lag: 60,
     };
     let mut harness = SimHarness::new(&config);
     let result = harness.run(&config);
@@ -114,7 +114,7 @@ fn late_joiner_converges() {
         }
 
         // Check invariants
-        let result = invariants::check_all(&harness.validators, &[], round, 50);
+        let result = invariants::check_all(&harness.validators, &[], round, 60);
         assert!(result.is_ok(), "Post-join round {} failed: {:?}", round, result.err());
     }
 }

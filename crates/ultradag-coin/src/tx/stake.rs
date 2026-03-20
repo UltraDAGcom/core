@@ -41,7 +41,7 @@ impl StakeTx {
     }
 
     pub fn verify_signature(&self) -> bool {
-        let expected_addr = Address(*blake3::hash(&self.pub_key).as_bytes());
+        let expected_addr = Address::from_pubkey(&self.pub_key);
         if expected_addr != self.from {
             return false;
         }
@@ -68,7 +68,7 @@ impl UnstakeTx {
     }
 
     pub fn verify_signature(&self) -> bool {
-        let expected_addr = Address(*blake3::hash(&self.pub_key).as_bytes());
+        let expected_addr = Address::from_pubkey(&self.pub_key);
         if expected_addr != self.from {
             return false;
         }

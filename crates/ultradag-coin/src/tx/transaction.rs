@@ -3,9 +3,11 @@ use serde::{Deserialize, Serialize};
 use crate::address::{Address, Signature};
 use crate::tx::stake::{StakeTx, UnstakeTx};
 use crate::tx::delegate::{DelegateTx, UndelegateTx, SetCommissionTx};
+use crate::tx::bridge::BridgeLockTx;
 use crate::governance::{CreateProposalTx, VoteTx};
 
-/// Unified transaction type supporting transfers, staking, unstaking, delegation, and governance.
+/// Unified transaction type supporting transfers, staking, unstaking, delegation,
+/// governance, and bridge operations.
 /// All variants go through consensus and are included in DAG vertices.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Transaction {
@@ -17,6 +19,7 @@ pub enum Transaction {
     Delegate(DelegateTx),
     Undelegate(UndelegateTx),
     SetCommission(SetCommissionTx),
+    BridgeLock(BridgeLockTx),
 }
 
 /// A transaction transferring UDAG from one address to another.
@@ -49,6 +52,7 @@ impl Transaction {
             Transaction::Delegate(tx) => tx.hash(),
             Transaction::Undelegate(tx) => tx.hash(),
             Transaction::SetCommission(tx) => tx.hash(),
+            Transaction::BridgeLock(tx) => tx.hash(),
         }
     }
 
@@ -63,6 +67,7 @@ impl Transaction {
             Transaction::Delegate(tx) => tx.verify_signature(),
             Transaction::Undelegate(tx) => tx.verify_signature(),
             Transaction::SetCommission(tx) => tx.verify_signature(),
+            Transaction::BridgeLock(tx) => tx.verify_signature(),
         }
     }
 
@@ -77,6 +82,7 @@ impl Transaction {
             Transaction::Delegate(tx) => tx.from,
             Transaction::Undelegate(tx) => tx.from,
             Transaction::SetCommission(tx) => tx.from,
+            Transaction::BridgeLock(tx) => tx.from,
         }
     }
 
@@ -91,6 +97,7 @@ impl Transaction {
             Transaction::Delegate(tx) => tx.nonce,
             Transaction::Undelegate(tx) => tx.nonce,
             Transaction::SetCommission(tx) => tx.nonce,
+            Transaction::BridgeLock(tx) => tx.nonce,
         }
     }
 
@@ -100,6 +107,7 @@ impl Transaction {
             Transaction::Transfer(tx) => tx.fee,
             Transaction::CreateProposal(tx) => tx.fee,
             Transaction::Vote(tx) => tx.fee,
+            Transaction::BridgeLock(tx) => tx.fee,
             Transaction::Stake(_)
             | Transaction::Unstake(_)
             | Transaction::Delegate(_)
@@ -114,6 +122,7 @@ impl Transaction {
             Transaction::Transfer(tx) => tx.amount,
             Transaction::Stake(tx) => tx.amount,
             Transaction::Delegate(tx) => tx.amount,
+            Transaction::BridgeLock(tx) => tx.amount,
             Transaction::Unstake(_)
             | Transaction::Undelegate(_)
             | Transaction::SetCommission(_)
@@ -132,7 +141,8 @@ impl Transaction {
             | Transaction::Undelegate(_)
             | Transaction::SetCommission(_)
             | Transaction::CreateProposal(_)
-            | Transaction::Vote(_) => None,
+            | Transaction::Vote(_)
+            | Transaction::BridgeLock(_) => None,
         }
     }
 
@@ -147,6 +157,7 @@ impl Transaction {
             Transaction::Delegate(tx) => tx.pub_key,
             Transaction::Undelegate(tx) => tx.pub_key,
             Transaction::SetCommission(tx) => tx.pub_key,
+            Transaction::BridgeLock(tx) => tx.pub_key,
         }
     }
 
@@ -161,6 +172,7 @@ impl Transaction {
             Transaction::Delegate(tx) => tx.signable_bytes(),
             Transaction::Undelegate(tx) => tx.signable_bytes(),
             Transaction::SetCommission(tx) => tx.signable_bytes(),
+            Transaction::BridgeLock(tx) => tx.signable_bytes(),
         }
     }
 
@@ -170,6 +182,7 @@ impl Transaction {
             Transaction::Transfer(tx) => tx.total_cost(),
             Transaction::Stake(tx) => tx.amount,
             Transaction::Delegate(tx) => tx.amount,
+            Transaction::BridgeLock(tx) => tx.total_cost(),
             Transaction::CreateProposal(tx) => tx.fee,
             Transaction::Vote(tx) => tx.fee,
             Transaction::Unstake(_)
@@ -232,7 +245,7 @@ impl TransferTx {
         }
 
         // 2. Verify pub_key hashes to the from address
-        let expected_addr = Address(*blake3::hash(&self.pub_key).as_bytes());
+        let expected_addr = Address::from_pubkey(&self.pub_key);
         if expected_addr != self.from {
             return false;
         }
@@ -317,8 +330,8 @@ mod tests {
         let tx = make_signed_tx(&sk, 50, 5, 3);
         if let Transaction::Transfer(ref transfer) = tx {
             assert_eq!(transfer.signable_bytes(), transfer.signable_bytes());
-            // Should be NETWORK_ID (19) + "transfer" (8) + from (32) + to (32) + amount (8) + fee (8) + nonce (8) = 115 bytes
-            assert_eq!(transfer.signable_bytes().len(), 115);
+            // Should be NETWORK_ID (19) + "transfer" (8) + from (20) + to (20) + amount (8) + fee (8) + nonce (8) = 91 bytes
+            assert_eq!(transfer.signable_bytes().len(), 91);
         } else {
             panic!("Expected Transfer variant");
         }

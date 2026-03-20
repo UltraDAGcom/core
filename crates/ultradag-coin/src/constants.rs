@@ -13,10 +13,22 @@ pub fn sats_to_udag(sats: u64) -> f64 {
 }
 
 /// Initial block reward: 1 UDAG per round (split among validators)
+///
+/// Emission timeline (at 5s/round):
+/// - Genesis pre-mine: 3,150,000 UDAG (15% of 21M: dev 5% + treasury 10%)
+/// - Remaining for emission: 17,850,000 UDAG
+/// - Epoch 0: 1 UDAG/round × 10.5M rounds = 10,500,000 UDAG (~1.66 years)
+/// - Epoch 1: 0.5 UDAG/round × 10.5M rounds = 5,250,000 UDAG
+/// - Epoch 2: 0.25 UDAG/round — supply cap (21M) hit mid-epoch
+/// - Total emission exhausted in ~4.7 years at 5s/round
+/// - Geometric series sum: INITIAL_REWARD × HALVING_INTERVAL × 2 = 21M UDAG
+///   (but only 17.85M remains after genesis, so cap is reached early)
 pub const INITIAL_REWARD_SATS: u64 = COIN;
 
-/// Reward halves every 10,500,000 rounds (~1.66 years at 5s rounds)
-/// Chosen so that reward × interval × 2 = MAX_SUPPLY (21M UDAG).
+/// Reward halves every 10,500,000 rounds (~1.66 years at 5s rounds).
+/// Geometric series: reward × interval × 2 = 21M UDAG total theoretical emission.
+/// Actual emission ends sooner (~4.7 years) because genesis pre-mine (3.15M UDAG)
+/// consumes 15% of the supply cap before emission begins.
 pub const HALVING_INTERVAL: u64 = 10_500_000;
 
 /// Genesis timestamp
@@ -157,28 +169,32 @@ pub const CHECKPOINT_INTERVAL: u64 = 100;
 /// CRITICAL: This must be updated if genesis state changes.
 /// The testnet and mainnet hashes differ because mainnet excludes faucet funds.
 /// Run `cargo test --features mainnet test_compute_mainnet_genesis_hash` to recompute.
+// Recomputed after Address size change (32 -> 20 bytes).
 #[cfg(not(feature = "mainnet"))]
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
-    0x8b, 0x11, 0x13, 0x6b, 0xfe, 0x2e, 0x19, 0xe1,
-    0x54, 0xa2, 0x07, 0xd5, 0x6f, 0x49, 0x5d, 0x45,
-    0xd8, 0x29, 0xef, 0x73, 0x2f, 0x55, 0x36, 0xf2,
-    0x59, 0xf5, 0xdf, 0x61, 0x1b, 0x1d, 0x41, 0x05,
-]; // Testnet: canonical state root v1 + configured_validator_count in state root
+    0xf7, 0xe9, 0xf0, 0x67, 0x41, 0xbe, 0xc5, 0x71,
+    0x15, 0xc5, 0x90, 0xda, 0x99, 0xcb, 0x34, 0xda,
+    0x75, 0x7c, 0x98, 0x97, 0x02, 0x54, 0xb9, 0x3b,
+    0x7b, 0x91, 0x5c, 0x0f, 0xde, 0xcd, 0xc1, 0x76,
+]; // Testnet: canonical state root v1 + 20-byte addresses + bridge_reserve
 
 /// Mainnet genesis checkpoint hash — computed from genesis WITHOUT faucet.
 /// To compute: `cargo test test_compute_genesis_hash -- --nocapture`
 /// Then replace this constant with the printed hash.
 /// IMPORTANT: This MUST be set to the real hash before mainnet launch.
 #[cfg(feature = "mainnet")]
-pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [0u8; 32]; // PLACEHOLDER — see test_compute_genesis_hash
+pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
+    0x80, 0x64, 0x72, 0xa4, 0xc6, 0xa3, 0xfe, 0x33,
+    0x73, 0xfe, 0x01, 0xfa, 0xd4, 0x4d, 0x07, 0xe0,
+    0x27, 0x7d, 0xa8, 0x9e, 0xce, 0x95, 0xc9, 0x5e,
+    0x27, 0xe8, 0xd4, 0x5a, 0xdf, 0xa6, 0xd7, 0x7a,
+]; // Mainnet: genesis without faucet, 3,150,000 UDAG (dev + treasury)
 
 /// Compile-time assertion: GENESIS_CHECKPOINT_HASH must not be the placeholder on mainnet.
 /// This is the primary defense — prevents building a mainnet binary with [0u8; 32].
 /// The runtime check below is a secondary defense for extra safety.
 #[cfg(feature = "mainnet")]
 const _GENESIS_HASH_GUARD: () = {
-    // Check first 4 bytes are not all zero (sufficient to detect placeholder).
-    // Full const array comparison requires nightly, so we check a prefix.
     assert!(
         GENESIS_CHECKPOINT_HASH[0] != 0
             || GENESIS_CHECKPOINT_HASH[1] != 0
@@ -211,26 +227,22 @@ pub fn epoch_of(round: u64) -> u64 {
 
 /// Check if a round is an epoch boundary (start of new epoch).
 pub fn is_epoch_boundary(round: u64) -> bool {
-    round.is_multiple_of(EPOCH_LENGTH_ROUNDS)
+    round % EPOCH_LENGTH_ROUNDS == 0
 }
 
 /// Deterministic seed for the testnet faucet keypair.
 /// Same on every node so all nodes recognize the faucet address.
-/// MAINNET: Remove faucet entirely. This assertion prevents shipping the test seed.
+/// On mainnet builds, the faucet credit is excluded from genesis (cfg-gated in new_with_genesis).
+/// The seed constant still exists but is only used by testnet RPC endpoints (also cfg-gated).
+#[cfg(not(feature = "mainnet"))]
 pub const FAUCET_SEED: [u8; 32] = [0xFA; 32];
 
-/// Compile-time assertion: faucet seed must not ship with mainnet builds.
-/// Enable `--features mainnet` to trigger this check.
-#[cfg(feature = "mainnet")]
-const _FAUCET_GUARD: () = assert!(
-    FAUCET_SEED[0] != 0xFA || FAUCET_SEED[1] != 0xFA || FAUCET_SEED[16] != 0xFA,
-    "FAUCET_SEED is the test placeholder [0xFA; 32]. Remove faucet before mainnet launch."
-);
-
 /// Faucet genesis pre-fund: 1,000,000 UDAG in sats.
+#[cfg(not(feature = "mainnet"))]
 pub const FAUCET_PREFUND_SATS: u64 = 1_000_000 * COIN;
 
 /// Return the deterministic faucet keypair (same on every node).
+#[cfg(not(feature = "mainnet"))]
 pub fn faucet_keypair() -> crate::address::SecretKey {
     crate::address::SecretKey::from_bytes(FAUCET_SEED)
 }
@@ -294,11 +306,28 @@ pub const SLASH_PERCENTAGE: u64 = 50;
 /// Keeps delegations meaningful and reduces state bloat from dust delegations.
 pub const MIN_DELEGATION_SATS: u64 = 100 * COIN;
 
+/// Minimum bridge lock amount: 1 UDAG.
+/// Prevents dust bridge operations that waste relay bandwidth.
+pub const MIN_BRIDGE_AMOUNT_SATS: u64 = COIN;
+
 /// Default commission percentage for validators on delegated rewards.
 pub const DEFAULT_COMMISSION_PERCENT: u8 = 10;
 
 /// Maximum commission percentage a validator can charge on delegated rewards.
 pub const MAX_COMMISSION_PERCENT: u8 = 100;
+
+/// Minimum rounds between commission changes for a validator.
+/// Prevents sandwich attacks where a validator raises commission right before
+/// reward distribution and lowers it immediately after.
+/// Set equal to UNSTAKE_COOLDOWN_ROUNDS (2016) so delegators always have time
+/// to exit before a commission change takes effect.
+pub const COMMISSION_COOLDOWN_ROUNDS: u64 = 2_016;
+
+/// Accounts with balance below this AND nonce == 0 are pruned as economically dead dust.
+/// Set to MIN_FEE_SATS — an account that can't pay fees can't do anything.
+/// Uses the protocol constant (not governance-adjustable min_fee_sats) so governance
+/// can't accidentally prune real accounts by raising min_fee.
+pub const DUST_THRESHOLD_SATS: u64 = MIN_FEE_SATS;
 
 /// Maximum serialized size of a DagVertex in bytes.
 /// Prevents DoS via oversized vertices (10K transactions x 256-byte memos = ~2.5MB).

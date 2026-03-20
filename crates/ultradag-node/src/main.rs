@@ -317,16 +317,30 @@ async fn main() {
         info!("  Address: {}", sk.address().to_hex());
         sk
     } else {
+        #[cfg(feature = "mainnet")]
+        {
+            error!("No validator key found. On mainnet, generate keys offline and provide via --pkey or save to {:?}", key_path);
+            std::process::exit(1);
+        }
+        #[cfg(not(feature = "mainnet"))]
+        {
         let sk = SecretKey::generate();
         let sk_hex: String = sk.to_bytes().iter().map(|b| format!("{b:02x}")).collect();
         if let Err(e) = std::fs::write(&key_path, &sk_hex) {
             error!("Failed to save validator key to {:?}: {}", key_path, e);
             std::process::exit(1);
         }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600))
+                .unwrap_or_else(|e| warn!("Failed to set key file permissions: {}", e));
+        }
         info!("Generated and saved validator keypair:");
         debug!("  Secret key: {}", sk_hex);
         info!("  Address:    {}", sk.address().to_hex());
         sk
+        }
     };
 
     // Determine seed peers early so we can pass them to NodeServer for heartbeat reconnection
@@ -372,11 +386,11 @@ async fn main() {
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            if line.len() != 64 {
-                warn!("Skipping invalid validator address (expected 64 hex chars): {}", line);
+            if line.len() != 40 {
+                warn!("Skipping invalid validator address (expected 40 hex chars): {}", line);
                 continue;
             }
-            let mut bytes = [0u8; 32];
+            let mut bytes = [0u8; 20];
             let valid = line.as_bytes().chunks(2).enumerate().all(|(i, chunk)| {
                 u8::from_str_radix(std::str::from_utf8(chunk).unwrap_or("xx"), 16)
                     .map(|b| { bytes[i] = b; })
@@ -648,11 +662,10 @@ async fn main() {
                     .map(|t| t.total_cost())
                     .fold(0u64, |acc, x| acc.saturating_add(x));
                 let total_needed = pending_cost
-                    .saturating_add(auto_stake_sats)
-                    .saturating_add(ultradag_coin::constants::MIN_FEE_SATS);
+                    .saturating_add(auto_stake_sats);
                 let balance = state.balance(&sender);
                 if balance < total_needed {
-                    warn!("Auto-stake: balance {} UDAG insufficient for stake of {} UDAG (need {} sats incl. pending+fee, have {} sats)",
+                    warn!("Auto-stake: balance {} UDAG insufficient for stake of {} UDAG (need {} sats incl. pending, have {} sats)",
                         balance / 100_000_000,
                         auto_stake_udag,
                         total_needed,

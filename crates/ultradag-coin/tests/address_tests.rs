@@ -5,7 +5,7 @@ fn test_address_from_secret_key() {
     let sk = SecretKey::generate();
     let addr = sk.address();
     
-    assert_ne!(addr.0, [0u8; 32]);
+    assert_ne!(addr.0, [0u8; 20]);
 }
 
 #[test]
@@ -19,11 +19,11 @@ fn test_address_deterministic() {
 
 #[test]
 fn test_address_from_hex_valid() {
-    let hex = "0000000000000000000000000000000000000000000000000000000000000001";
+    let hex = "0000000000000000000000000000000000000001";
     let addr = Address::from_hex(hex);
-    
+
     assert!(addr.is_some());
-    assert_eq!(addr.unwrap().0[31], 1);
+    assert_eq!(addr.unwrap().0[19], 1);
 }
 
 #[test]
@@ -36,12 +36,12 @@ fn test_address_from_hex_invalid() {
 
 #[test]
 fn test_address_to_hex() {
-    let mut bytes = [0u8; 32];
-    bytes[31] = 1;
+    let mut bytes = [0u8; 20];
+    bytes[19] = 1;
     let addr = Address(bytes);
-    
+
     let hex = addr.to_hex();
-    assert_eq!(hex.len(), 64);
+    assert_eq!(hex.len(), 40);
     assert!(hex.ends_with("01"));
 }
 
@@ -76,7 +76,7 @@ fn test_address_clone() {
 
 #[test]
 fn test_address_debug() {
-    let addr = Address([1u8; 32]);
+    let addr = Address([1u8; 20]);
     let debug_str = format!("{:?}", addr);
     
     assert!(debug_str.contains("Address"));

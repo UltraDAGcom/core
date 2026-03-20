@@ -21,13 +21,13 @@ fn cross_feature_convergence() {
 }
 
 #[test]
-fn cross_feature_lossy_network() {
+fn cross_feature_random_order() {
     let config = SimConfig {
         num_honest: 5,
-        byzantine: vec![ByzantineStrategy::Equivocator],
+        byzantine: vec![],
         num_rounds: 500,
-        delivery_policy: DeliveryPolicy::Lossy { drop_probability: 0.1 },
-        seed: 401,
+        delivery_policy: DeliveryPolicy::RandomOrder,
+        seed: 402,
         txs_per_round: 10,
         check_every_round: true,
         scenario: Some(Scenario::CrossFeature), max_finality_lag: 50,

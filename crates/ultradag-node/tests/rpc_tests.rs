@@ -173,8 +173,8 @@ async fn test_rpc_keygen_returns_valid_keypair() {
     // Secret key should be 64 hex chars (32 bytes)
     assert_eq!(secret.len(), 64, "secret key should be 64 hex chars");
     assert!(secret.chars().all(|c| c.is_ascii_hexdigit()), "secret key should be hex");
-    // Address should be 64 hex chars (32 bytes)
-    assert_eq!(address.len(), 64, "address should be 64 hex chars");
+    // Address should be 40 hex chars (20 bytes)
+    assert_eq!(address.len(), 40, "address should be 40 hex chars");
     assert!(address.chars().all(|c| c.is_ascii_hexdigit()), "address should be hex");
 }
 
@@ -196,8 +196,8 @@ async fn test_rpc_balance_invalid_address_returns_error() {
 async fn test_rpc_balance_valid_unknown_address() {
     let port = start_test_rpc().await;
     let client = http_client();
-    // Valid 64-char hex address that doesn't exist
-    let addr = "0000000000000000000000000000000000000000000000000000000000000001";
+    // Valid 40-char hex address that doesn't exist
+    let addr = "0000000000000000000000000000000000000001";
     let resp = client.get(format!("http://127.0.0.1:{}/balance/{}", port, addr))
         .send()
         .await

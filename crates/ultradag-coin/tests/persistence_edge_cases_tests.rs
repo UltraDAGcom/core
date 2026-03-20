@@ -150,7 +150,7 @@ fn test_mempool_persistence() {
 
     let mut tx = TransferTx {
         from: sk.address(),
-        to: Address([2u8; 32]),
+        to: Address([2u8; 20]),
         amount: 1000,
         fee: 100_000,
         nonce: 0,

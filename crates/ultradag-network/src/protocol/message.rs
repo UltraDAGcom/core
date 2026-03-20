@@ -161,7 +161,7 @@ mod tests {
         };
         let coinbase = CoinbaseTx {
             to: Address::ZERO,
-            amount: 5_000_000_000,
+            amount: 0,
             height: 1,
         };
         Block {
@@ -242,7 +242,7 @@ mod tests {
         match decoded {
             Message::NewBlock(b) => {
                 assert_eq!(b.header.height, 1);
-                assert_eq!(b.coinbase.amount, 5_000_000_000);
+                assert_eq!(b.coinbase.amount, 0);
             }
             _ => panic!("expected NewBlock"),
         }
@@ -451,6 +451,7 @@ mod tests {
             treasury_balance: 0,
             delegation_accounts: vec![],
             configured_validator_count: None,
+            bridge_reserve: 0,
         };
 
         let msg = Message::CheckpointSync {

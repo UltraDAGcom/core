@@ -90,8 +90,7 @@ fn build_and_sign_vertex(
 }
 
 fn build_block(validator: &SimValidator, round: u64, parents: &[[u8; 32]], txs: Vec<Transaction>, timestamp: i64) -> Block {
-    let total_fees: u64 = txs.iter().map(|t| t.fee()).fold(0u64, |a, f| a.saturating_add(f));
-    let coinbase = CoinbaseTx { to: validator.address, amount: total_fees, height: round };
+    let coinbase = CoinbaseTx { to: validator.address, amount: 0, height: round };
     let mut leaves = vec![coinbase.hash()];
     for tx in &txs { leaves.push(tx.hash()); }
     let mr = merkle_root(&leaves);
@@ -212,7 +211,7 @@ fn produce_duplicate_tx_flood(
     for i in 0..5u64 {
         let mut stale_tx = TransferTx {
             from: addr,
-            to: Address([0xDD; 32]),
+            to: Address([0xDD; 20]),
             amount: 1,
             fee: MIN_FEE_SATS,
             nonce: i, // Will be stale after first few rounds
@@ -272,7 +271,7 @@ fn produce_selective_equivocation(
 
     // Build vertex A: transfer to address 0xAA
     let mut tx_a = TransferTx {
-        from: addr, to: Address([0xAA; 32]), amount: 1,
+        from: addr, to: Address([0xAA; 20]), amount: 1,
         fee: MIN_FEE_SATS, nonce: round, // Use round as nonce (will be wrong but that's fine)
         pub_key, signature: Signature([0u8; 64]), memo: None,
     };
@@ -283,7 +282,7 @@ fn produce_selective_equivocation(
 
     // Build vertex B: transfer to address 0xBB (different tx, different hash)
     let mut tx_b = TransferTx {
-        from: addr, to: Address([0xBB; 32]), amount: 1,
+        from: addr, to: Address([0xBB; 20]), amount: 1,
         fee: MIN_FEE_SATS, nonce: round,
         pub_key, signature: Signature([0u8; 64]), memo: None,
     };

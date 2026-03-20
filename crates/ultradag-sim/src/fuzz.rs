@@ -120,7 +120,7 @@ pub fn execute_fuzz(
             v.run_finality();
         }
 
-        if round.is_multiple_of(10) || round == plans.len() as u64 {
+        if round % 10 == 0 || round == plans.len() as u64 {
             invariants::check_safety_invariants(&validators, &known_equivocators)?;
             properties::check_all_properties(&validators)?;
         }
@@ -204,7 +204,7 @@ fn execute_byzantine_action(
             let mut txs: Vec<Transaction> = v.mempool.best(50);
             for i in 0..*count as u64 {
                 let mut stale = TransferTx {
-                    from: v.address, to: Address([0xDD; 32]), amount: 1,
+                    from: v.address, to: Address([0xDD; 20]), amount: 1,
                     fee: MIN_FEE_SATS, nonce: i, pub_key,
                     signature: Signature([0u8; 64]), memo: None,
                 };
@@ -292,7 +292,7 @@ fn execute_byzantine_action(
             let amount = (balance / 100).saturating_mul(*amount_fraction as u64);
             if amount > 0 && balance >= amount + MIN_FEE_SATS {
                 let nonce = v.state.nonce(&v.address);
-                let to = Address([((val_idx + 100) as u8); 32]);
+                let to = Address([((val_idx + 100) as u8); 20]);
                 if let Some(tx) = txgen::generate_transfer_to(&v.sk, to, amount, nonce) {
                     validators[val_idx].mempool.insert(tx);
                 }
@@ -321,8 +321,7 @@ fn get_parents(validator: &SimValidator, round: u64) -> Vec<[u8; 32]> {
 }
 
 fn build_block(validator: &SimValidator, round: u64, parents: &[[u8; 32]], txs: Vec<Transaction>, timestamp: i64) -> Block {
-    let total_fees: u64 = txs.iter().map(|t| t.fee()).fold(0u64, |a, f| a.saturating_add(f));
-    let coinbase = CoinbaseTx { to: validator.address, amount: total_fees, height: round };
+    let coinbase = CoinbaseTx { to: validator.address, amount: 0, height: round };
     let mut leaves = vec![coinbase.hash()];
     for tx in &txs { leaves.push(tx.hash()); }
     let mr = merkle_root(&leaves);

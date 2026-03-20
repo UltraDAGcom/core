@@ -52,4 +52,17 @@ if [ "${SKIP_FAST_SYNC:-}" = "true" ] || [ "${SKIP_FAST_SYNC:-}" = "1" ]; then
   ARGS="$ARGS --skip-fast-sync"
 fi
 
+if [ -n "${PKEY:-}" ]; then
+  ARGS="$ARGS --pkey $PKEY"
+fi
+
+if [ "${TESTNET:-}" = "false" ] || [ "${TESTNET:-}" = "0" ]; then
+  ARGS="$ARGS --testnet=false"
+fi
+
+# Validator key allowlist (if the file exists)
+if [ -f "/etc/ultradag/validators.txt" ]; then
+  ARGS="$ARGS --validator-key /etc/ultradag/validators.txt"
+fi
+
 exec ultradag-node $ARGS

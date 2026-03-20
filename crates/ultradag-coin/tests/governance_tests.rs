@@ -53,7 +53,7 @@ fn test_proposal_voting_period() {
 
 #[test]
 fn test_proposal_types() {
-    let proposer = Address([1u8; 32]);
+    let proposer = Address([1u8; 20]);
 
     let param_change = Proposal {
         id: 1,
@@ -99,7 +99,7 @@ fn test_proposal_types() {
 
 #[test]
 fn test_proposal_status_transitions() {
-    let proposer = Address([1u8; 32]);
+    let proposer = Address([1u8; 20]);
 
     let mut proposal = Proposal {
         id: 1,
@@ -132,7 +132,7 @@ fn test_proposal_status_transitions() {
 
 #[test]
 fn test_vote_counting() {
-    let proposer = Address([1u8; 32]);
+    let proposer = Address([1u8; 20]);
 
     let mut proposal = Proposal {
         id: 1,
@@ -161,7 +161,7 @@ fn test_vote_counting() {
 
 #[test]
 fn test_proposal_quorum_calculation() {
-    let proposer = Address([1u8; 32]);
+    let proposer = Address([1u8; 20]);
 
     let proposal = Proposal {
         id: 1,
@@ -196,7 +196,7 @@ fn test_state_engine_governance_integration() {
 
 #[test]
 fn test_proposal_id_uniqueness() {
-    let proposer = Address([1u8; 32]);
+    let proposer = Address([1u8; 20]);
 
     let proposal1 = Proposal {
         id: 1,
@@ -237,7 +237,7 @@ fn test_proposal_id_uniqueness() {
 
 #[test]
 fn test_proposal_has_passed_with_quorum() {
-    let proposer = Address([1u8; 32]);
+    let proposer = Address([1u8; 20]);
 
     let proposal = Proposal {
         id: 1,
@@ -262,7 +262,7 @@ fn test_proposal_has_passed_with_quorum() {
 
 #[test]
 fn test_proposal_fails_without_quorum() {
-    let proposer = Address([1u8; 32]);
+    let proposer = Address([1u8; 20]);
 
     let proposal = Proposal {
         id: 1,

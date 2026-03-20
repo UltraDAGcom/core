@@ -187,7 +187,7 @@ fn test_transaction_broadcast() {
     let sk = SecretKey::generate();
     let mut tx = TransferTx {
         from: sk.address(),
-        to: Address([2u8; 32]),
+        to: Address([2u8; 20]),
         amount: 1000,
         fee: 100,
         nonce: 0,

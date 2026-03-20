@@ -19,9 +19,8 @@ fn address_is_exactly_blake3_of_pubkey() {
     let pubkey = sk.verifying_key();
     let pubkey_bytes = pubkey.to_bytes();
     
-    // Compute Blake3 hash manually
-    let expected_hash = blake3::hash(&pubkey_bytes);
-    let expected_address = Address(*expected_hash.as_bytes());
+    // Compute Blake3 hash manually (truncated to 20 bytes for address)
+    let expected_address = Address::from_pubkey(&pubkey_bytes);
     
     // Get address from SecretKey
     let actual_address = sk.address();

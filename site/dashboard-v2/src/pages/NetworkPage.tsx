@@ -134,8 +134,8 @@ export function NetworkPage() {
         )}
       </div>
 
-      {/* Bootstrap Nodes */}
-      {bootstrapNodes.length > 0 && (
+      {/* Bootstrap Nodes — only show if any are connected */}
+      {bootstrapNodes.length > 0 && bootstrapNodes.some((n: any) => n.connected) && (
         <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-3">
             <Radio className="w-4 h-4 text-purple-400" />
@@ -192,13 +192,6 @@ export function NetworkPage() {
 
 /* ---------- Health Card ---------- */
 
-const healthColors: Record<string, string> = {
-  healthy: 'bg-green-500',
-  warning: 'bg-yellow-500',
-  unhealthy: 'bg-red-500',
-  degraded: 'bg-orange-500',
-};
-
 const healthTextColors: Record<string, string> = {
   healthy: 'text-green-400',
   warning: 'text-yellow-400',
@@ -222,8 +215,7 @@ function HealthCard({ health }: { health: HealthDetailed }) {
         <div className="flex flex-wrap gap-3">
           {componentNames.map((name) => {
             const comp = components[name];
-            const st = (comp.status ?? 'unknown').toLowerCase();
-            const dotColor = healthColors[st] ?? 'bg-slate-600';
+            const dotColor = comp.available === true ? 'bg-green-500' : comp.available === false ? 'bg-red-500' : 'bg-slate-600';
             return (
               <div key={name} className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded px-2.5 py-1.5">
                 <span className={`w-2 h-2 rounded-full ${dotColor}`} />

@@ -17,6 +17,7 @@ tracing = { workspace = true }
 postcard = { workspace = true }
 bitvec = { workspace = true }
 redb = { workspace = true }
+bech32 = { workspace = true }
 
 [features]
 default = []

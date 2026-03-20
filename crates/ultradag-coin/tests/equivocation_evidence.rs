@@ -77,9 +77,9 @@ fn test_equivocation_evidence_survives_pruning() {
     assert_eq!(evidence.validator, sk2.address());
     assert_eq!(evidence.round, 5);
 
-    // Now prune rounds 1-10 (beyond pruning horizon)
-    // This simulates advancing to round 1010 and pruning old rounds
-    let pruned_count = dag.prune_old_rounds(1010);
+    // Prune old rounds. Use 1004 so new_floor = 1004 - 1000 = 4 < evidence round 5.
+    // This simulates advancing to round 1004 and pruning vertices in rounds < 4.
+    let pruned_count = dag.prune_old_rounds(1004);
     assert!(pruned_count > 0, "Should have pruned some vertices");
 
     // Verify evidence still exists after pruning

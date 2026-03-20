@@ -1,9 +1,9 @@
 use ed25519_dalek::Signer;
 use serde::{Deserialize, Serialize};
 
-/// A 32-byte address derived from the Ed25519 public key: blake3(pubkey).
+/// A 20-byte address derived from the Ed25519 public key: blake3(pubkey)[..20].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct Address(pub [u8; 32]);
+pub struct Address(pub [u8; 20]);
 
 /// An Ed25519 signing key (32-byte seed).
 #[derive(Clone)]
@@ -56,32 +56,84 @@ impl<'de> Deserialize<'de> for Signature {
 }
 
 impl Address {
-    pub const ZERO: Self = Self([0u8; 32]);
+    pub const ZERO: Self = Self([0u8; 20]);
+
+    /// Human-readable prefix for mainnet addresses
+    #[cfg(feature = "mainnet")]
+    pub const HRP: &'static str = "udag";
+
+    /// Human-readable prefix for testnet addresses
+    #[cfg(not(feature = "mainnet"))]
+    pub const HRP: &'static str = "tudg";
+
+    /// Derive an address from a raw Ed25519 public key (32 bytes): blake3(pubkey)[..20].
+    pub fn from_pubkey(pubkey: &[u8; 32]) -> Self {
+        let full_hash = blake3::hash(pubkey);
+        let mut addr = [0u8; 20];
+        addr.copy_from_slice(&full_hash.as_bytes()[..20]);
+        Self(addr)
+    }
 
     pub fn to_hex(&self) -> String {
         self.0.iter().map(|b| format!("{b:02x}")).collect()
     }
 
     pub fn short(&self) -> String {
-        self.to_hex()[..8].to_string()
+        let b = self.to_bech32();
+        if b.len() > 20 {
+            format!("{}...{}", &b[..12], &b[b.len()-6..])
+        } else {
+            b
+        }
     }
 
     pub fn from_hex(hex: &str) -> Option<Self> {
-        if hex.len() != 64 {
+        if hex.len() != 40 {
             return None;
         }
-        let mut bytes = [0u8; 32];
+        let mut bytes = [0u8; 20];
         for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
             let s = std::str::from_utf8(chunk).ok()?;
             bytes[i] = u8::from_str_radix(s, 16).ok()?;
         }
         Some(Self(bytes))
     }
+
+    /// Encode this address as a Bech32m string: udag1... (mainnet) or tudg1... (testnet)
+    pub fn to_bech32(&self) -> String {
+        let hrp = bech32::Hrp::parse(Self::HRP).expect("valid HRP");
+        bech32::encode::<bech32::Bech32m>(hrp, &self.0).expect("valid bech32m encoding")
+    }
+
+    /// Decode a Bech32m address string. Accepts both mainnet (udag1) and testnet (tudg1) prefixes.
+    pub fn from_bech32(s: &str) -> Option<Self> {
+        let (hrp, data) = bech32::decode(s).ok()?;
+        let hrp_str = hrp.as_str();
+        if hrp_str != "udag" && hrp_str != "tudg" {
+            return None;
+        }
+        if data.len() != 20 {
+            return None;
+        }
+        let mut bytes = [0u8; 20];
+        bytes.copy_from_slice(&data);
+        Some(Self(bytes))
+    }
+
+    /// Parse an address from either hex (40 chars) or bech32m (udag1.../tudg1...) format.
+    pub fn parse(s: &str) -> Option<Self> {
+        // Try hex first (fast path)
+        if s.len() == 40 && s.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Self::from_hex(s);
+        }
+        // Try bech32m
+        Self::from_bech32(s)
+    }
 }
 
 impl std::fmt::Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.short())
+        write!(f, "{}", self.to_bech32())
     }
 }
 
@@ -112,10 +164,13 @@ impl SecretKey {
         self.inner.to_bytes()
     }
 
-    /// Derive the public address: blake3(ed25519_pubkey).
+    /// Derive the public address: blake3(ed25519_pubkey)[..20].
     pub fn address(&self) -> Address {
         let pubkey = self.inner.verifying_key();
-        Address(*blake3::hash(pubkey.as_bytes()).as_bytes())
+        let full_hash = blake3::hash(pubkey.as_bytes());
+        let mut addr = [0u8; 20];
+        addr.copy_from_slice(&full_hash.as_bytes()[..20]);
+        Address(addr)
     }
 
     /// Return the Ed25519 verifying (public) key.
@@ -185,26 +240,30 @@ mod tests {
 
     #[test]
     fn address_from_hex_rejects_invalid_chars() {
-        let bad = "zz".repeat(32);
+        let bad = "zz".repeat(20);
         assert!(Address::from_hex(&bad).is_none());
     }
 
     #[test]
     fn address_zero_is_all_zeros() {
-        assert_eq!(Address::ZERO.0, [0u8; 32]);
-        assert_eq!(Address::ZERO.to_hex(), "0".repeat(64));
+        assert_eq!(Address::ZERO.0, [0u8; 20]);
+        assert_eq!(Address::ZERO.to_hex(), "0".repeat(40));
     }
 
     #[test]
-    fn address_short_returns_8_chars() {
+    fn address_short_returns_truncated_bech32m() {
         let addr = SecretKey::generate().address();
-        assert_eq!(addr.short().len(), 8);
+        let short = addr.short();
+        assert!(short.starts_with("tudg1"));
+        assert!(short.contains("..."));
     }
 
     #[test]
-    fn address_display_uses_short() {
+    fn address_display_uses_bech32m() {
         let addr = SecretKey::generate().address();
-        assert_eq!(format!("{addr}"), addr.short());
+        let display = format!("{addr}");
+        assert!(display.starts_with("tudg1"));
+        assert_eq!(display, addr.to_bech32());
     }
 
     #[test]
@@ -256,5 +315,43 @@ mod tests {
         let sig1 = sk.sign(b"data");
         let sig2 = sk2.sign(b"data");
         assert_eq!(sig1, sig2);
+    }
+
+    #[test]
+    fn bech32m_roundtrip() {
+        let sk = SecretKey::generate();
+        let addr = sk.address();
+        let bech = addr.to_bech32();
+        assert!(bech.starts_with("tudg1")); // testnet
+        let recovered = Address::from_bech32(&bech).expect("valid bech32m should parse");
+        assert_eq!(addr, recovered);
+    }
+
+    #[test]
+    fn bech32m_rejects_invalid() {
+        assert!(Address::from_bech32("udag1invalid").is_none());
+        assert!(Address::from_bech32("btc1qw508d6q").is_none());
+        assert!(Address::from_bech32("not_bech32").is_none());
+    }
+
+    #[test]
+    fn parse_accepts_both_formats() {
+        let sk = SecretKey::from_bytes([42u8; 32]);
+        let addr = sk.address();
+
+        // Parse from hex
+        let from_hex = Address::parse(&addr.to_hex()).unwrap();
+        assert_eq!(addr, from_hex);
+
+        // Parse from bech32m
+        let from_bech = Address::parse(&addr.to_bech32()).unwrap();
+        assert_eq!(addr, from_bech);
+    }
+
+    #[test]
+    fn display_uses_bech32m() {
+        let addr = SecretKey::from_bytes([42u8; 32]).address();
+        let display = format!("{addr}");
+        assert!(display.starts_with("tudg1"));
     }
 }

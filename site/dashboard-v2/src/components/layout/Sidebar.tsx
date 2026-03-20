@@ -10,6 +10,7 @@ import {
   X,
   PieChart,
   Send as SendIcon,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 interface NavItem {
@@ -30,6 +31,7 @@ const navItems: NavItem[] = [
       { to: '/wallet/send', icon: SendIcon, label: 'Send' },
     ],
   },
+  { to: '/bridge', icon: ArrowRightLeft, label: 'Bridge' },
   { to: '/staking', icon: Coins, label: 'Staking' },
   { to: '/governance', icon: Vote, label: 'Governance' },
   { to: '/council', icon: Users, label: 'Council' },
@@ -40,9 +42,10 @@ const navItems: NavItem[] = [
 interface SidebarProps {
   open: boolean;
   onClose: () => void;
+  network?: 'mainnet' | 'testnet';
 }
 
-export function Sidebar({ open, onClose }: SidebarProps) {
+export function Sidebar({ open, onClose, network = 'testnet' }: SidebarProps) {
   const location = useLocation();
 
   return (
@@ -131,7 +134,9 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
         {/* Footer */}
         <div className="px-4 py-3 border-t border-dag-border">
-          <p className="text-[11px] text-slate-500">Testnet v0.1</p>
+          <p className={`text-[11px] ${network === 'mainnet' ? 'text-dag-green' : 'text-slate-500'}`}>
+            {network === 'mainnet' ? 'Mainnet' : 'Testnet'} v0.1
+          </p>
         </div>
       </aside>
     </>

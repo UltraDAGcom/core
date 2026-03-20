@@ -1,20 +1,27 @@
 import { Menu, Lock, Unlock, Wifi, WifiOff } from 'lucide-react';
+import type { NetworkType } from '../../lib/api';
 
 interface TopBarProps {
   connected: boolean;
   nodeUrl: string;
   keystoreUnlocked: boolean;
+  network: NetworkType;
   onToggleSidebar: () => void;
   onToggleLock: () => void;
+  onSwitchNetwork: (network: NetworkType) => void;
 }
 
 export function TopBar({
   connected,
   nodeUrl,
   keystoreUnlocked,
+  network,
   onToggleSidebar,
   onToggleLock,
+  onSwitchNetwork,
 }: TopBarProps) {
+  const isMainnet = network === 'mainnet';
+
   return (
     <header className="h-14 bg-dag-sidebar/80 backdrop-blur border-b border-dag-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
       {/* Left: hamburger + node status */}
@@ -35,13 +42,36 @@ export function TopBar({
           <span className="text-xs text-dag-muted font-mono hidden sm:inline">
             {connected ? nodeUrl.replace('https://', '') : 'Disconnected'}
           </span>
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-dag-yellow/20 text-dag-yellow border border-dag-yellow/40">TESTNET</span>
           <span
             className={`w-2 h-2 rounded-full ${
               connected ? 'bg-dag-green animate-pulse' : 'bg-dag-red'
             }`}
           />
         </div>
+      </div>
+
+      {/* Center: network switcher */}
+      <div className="flex items-center bg-dag-surface border border-dag-border rounded-lg p-0.5">
+        <button
+          onClick={() => onSwitchNetwork('mainnet')}
+          className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+            isMainnet
+              ? 'bg-dag-green/20 text-dag-green border border-dag-green/30'
+              : 'text-dag-muted hover:text-white'
+          }`}
+        >
+          Mainnet
+        </button>
+        <button
+          onClick={() => onSwitchNetwork('testnet')}
+          className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+            !isMainnet
+              ? 'bg-dag-yellow/20 text-dag-yellow border border-dag-yellow/30'
+              : 'text-dag-muted hover:text-white'
+          }`}
+        >
+          Testnet
+        </button>
       </div>
 
       {/* Right: lock button */}

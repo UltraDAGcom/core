@@ -83,15 +83,11 @@ impl SimValidator {
                 .then_with(|| a.nonce().cmp(&b.nonce()))
         });
 
-        // 4. Compute total fees
-        let total_fees: u64 = sorted_txs.iter()
-            .map(|tx| tx.fee())
-            .fold(0u64, |acc, f| acc.saturating_add(f));
-
-        // 5. Coinbase = fees only (rewards distributed via distribute_round_rewards)
+        // 4. Coinbase amount is always 0 (fees credited via deferred mechanism,
+        //    rewards distributed via distribute_round_rewards)
         let coinbase = CoinbaseTx {
             to: self.address,
-            amount: total_fees,
+            amount: 0,
             height: round,
         };
 

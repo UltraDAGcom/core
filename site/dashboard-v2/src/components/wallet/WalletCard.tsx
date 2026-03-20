@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Wallet as WalletIcon, Eye, EyeOff, Trash2, Shield, AlertTriangle } from 'lucide-react';
 import { CopyButton } from '../shared/CopyButton.tsx';
-import { formatUdag, shortAddr } from '../../lib/api.ts';
+import { formatUdag, shortAddr, fullAddr, prettyAddr } from '../../lib/api.ts';
 import type { WalletBalance } from '../../hooks/useWalletBalances.ts';
 
 interface WalletCardProps {
@@ -133,11 +133,15 @@ export function WalletDetail({ name, address, secretKey, balance, onRemove }: Wa
         {/* Address */}
         <div>
           <label className="text-xs text-dag-muted uppercase tracking-wider">Address</label>
-          <div className="flex items-center gap-2 mt-1">
-            <code className="text-xs font-mono text-slate-300 bg-slate-800 px-3 py-2 rounded-lg break-all flex-1">
-              {address}
+          <div className="mt-1 bg-slate-800 rounded-lg px-3 py-2.5">
+            <code className="text-sm font-mono text-white leading-relaxed tracking-wide block">
+              {prettyAddr(address)}
             </code>
-            <CopyButton text={address} />
+            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-700/50">
+              <span className="text-[10px] text-dag-muted uppercase">Hex</span>
+              <code className="text-[10px] font-mono text-dag-muted break-all flex-1">{address}</code>
+              <CopyButton text={fullAddr(address)} />
+            </div>
           </div>
         </div>
 

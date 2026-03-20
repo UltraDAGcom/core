@@ -1,14 +1,14 @@
 use crate::address::Address;
 use crate::block::block::{Block, merkle_root};
 use crate::block::header::BlockHeader;
-use crate::constants::{self, GENESIS_TIMESTAMP};
+use crate::constants::GENESIS_TIMESTAMP;
 use crate::tx::CoinbaseTx;
 
 /// Create the genesis block.
 pub fn genesis_block() -> Block {
     let coinbase = CoinbaseTx {
         to: Address::ZERO,
-        amount: constants::block_reward(0),
+        amount: 0,
         height: 0,
     };
 
@@ -49,9 +49,9 @@ mod tests {
     }
 
     #[test]
-    fn genesis_coinbase_amount_equals_block_reward_zero() {
+    fn genesis_coinbase_amount_is_zero() {
         let gen = genesis_block();
-        assert_eq!(gen.coinbase.amount, constants::block_reward(0));
+        assert_eq!(gen.coinbase.amount, 0);
     }
 
     #[test]

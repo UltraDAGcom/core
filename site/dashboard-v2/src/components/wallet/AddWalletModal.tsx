@@ -52,8 +52,8 @@ export function AddWalletModal({ open, onClose, onGenerate, onAdd }: AddWalletMo
       setError('Secret key must be 64 hex characters');
       return;
     }
-    if (!/^[0-9a-fA-F]{64}$/.test(address.trim())) {
-      setError('Address must be 64 hex characters');
+    if (!/^[0-9a-fA-F]{40}$/.test(address.trim())) {
+      setError('Address must be 40 hex characters');
       return;
     }
     setLoading(true);

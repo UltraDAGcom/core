@@ -15,9 +15,9 @@ use ultradag_coin::state::persistence::StateSnapshot;
 /// Build a minimal but non-trivial state fixture with known values.
 /// Every field is set to a deterministic value so the hash is reproducible.
 fn known_fixture() -> StateSnapshot {
-    let addr_a = Address([0x01; 32]);
-    let addr_b = Address([0x02; 32]);
-    let addr_c = Address([0x03; 32]);
+    let addr_a = Address([0x01; 20]);
+    let addr_b = Address([0x02; 20]);
+    let addr_c = Address([0x03; 20]);
 
     StateSnapshot {
         accounts: vec![
@@ -29,6 +29,7 @@ fn known_fixture() -> StateSnapshot {
                 staked: 100_000_000_000,
                 unlock_at_round: None,
                 commission_percent: 10,
+                commission_last_changed: None,
             }),
         ],
         active_validator_set: vec![addr_a],
@@ -42,6 +43,7 @@ fn known_fixture() -> StateSnapshot {
         council_members: vec![
             (addr_c, ultradag_coin::governance::CouncilSeatCategory::Foundation),
         ],
+        bridge_reserve: 0,
         treasury_balance: 210_000_000_000_000,
         delegation_accounts: vec![
             (addr_b, DelegationAccount {
@@ -66,10 +68,10 @@ fn state_root_regression_known_fixture() {
     // To update: run this test, copy the printed hash, and replace the assertion.
     // WARNING: Updating this value means every node must be restarted with the new code.
     let expected: [u8; 32] = [
-        0x63, 0xdb, 0xc7, 0x01, 0x64, 0xf1, 0x7e, 0xb5,
-        0xb6, 0x6b, 0x35, 0x50, 0x29, 0x08, 0xf2, 0x30,
-        0xf4, 0x09, 0xec, 0x4f, 0x36, 0x87, 0xba, 0xb0,
-        0x23, 0x7a, 0x5f, 0x1c, 0x2f, 0xd8, 0xaa, 0x23,
+        0xe3, 0xef, 0x0f, 0xbb, 0x4e, 0x13, 0x9e, 0xd5,
+        0x10, 0x62, 0x57, 0x58, 0x89, 0x9b, 0xe0, 0x7c,
+        0xa3, 0xc2, 0xce, 0xe6, 0xe7, 0xd5, 0x40, 0xfe,
+        0xb6, 0xbb, 0x52, 0x86, 0x2d, 0x76, 0x41, 0xd9,
     ];
 
     if expected == [0x00; 32] {
@@ -146,6 +148,7 @@ fn state_root_empty_state() {
         next_proposal_id: 0,
         governance_params: GovernanceParams::default(),
         council_members: vec![],
+        bridge_reserve: 0,
         treasury_balance: 0,
         delegation_accounts: vec![],
         configured_validator_count: None,
