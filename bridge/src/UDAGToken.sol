@@ -118,8 +118,8 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable, ReentrancyGua
     }
 
     /// @notice Burn tokens from caller. Anyone can burn their own tokens.
-    /// @dev Not pausable to allow users to exit positions even during emergency
-    function burnSelf(uint256 amount) external nonReentrant {
+    /// @dev Paused during emergencies for consistency with other token operations
+    function burnSelf(uint256 amount) external whenNotPaused nonReentrant {
         require(amount > 0, "UDAG: burn amount must be positive");
         _burn(msg.sender, amount);
     }
