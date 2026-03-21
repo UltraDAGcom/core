@@ -103,6 +103,11 @@ export const postFaucet = (body: any) => fetchJson<any>('/faucet', { method: 'PO
 export const postProposal = (body: any) => fetchJson<any>('/proposal', { method: 'POST', body: JSON.stringify(body) });
 export const postVote = (body: any) => fetchJson<any>('/vote', { method: 'POST', body: JSON.stringify(body) });
 
+// Bridge endpoints (Validator Federation Bridge)
+export const getBridgeNonce = () => fetchJson<{ next_nonce: number }>('/bridge/nonce');
+export const getBridgeAttestation = (nonce: number) => fetchJson<any>(`/bridge/attestation/${nonce}`);
+export const getBridgeReserve = () => fetchJson<{ reserve_sats: number; reserve_udag: number }>('/bridge/reserve');
+
 // Bech32m encoding/decoding (BIP-350)
 const BECH32M_CONST = 0x2bc830a3;
 const CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';

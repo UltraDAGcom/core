@@ -1,14 +1,27 @@
-import { useState } from 'react';
-import { ArrowRightLeft, ArrowRight, ExternalLink, Shield, Clock, AlertTriangle, Info, Wallet, Unplug, Loader2, CheckCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ArrowRightLeft, ArrowRight, ExternalLink, Shield, Clock, AlertTriangle, Info, Wallet, Unplug, Loader2, CheckCircle, Copy } from 'lucide-react';
 import { Card } from '../components/shared/Card.tsx';
 import { useKeystore } from '../hooks/useKeystore.ts';
 import { useEthWallet } from '../hooks/useEthWallet.ts';
 import { useToast } from '../hooks/useToast.tsx';
-import { fullAddr, normalizeAddress, isValidAddress } from '../lib/api.ts';
+import { fullAddr, normalizeAddress, isValidAddress, formatUdag, getBridgeNonce, getBridgeAttestation, getBridgeReserve } from '../lib/api.ts';
 import { WalletSelector } from '../components/shared/WalletSelector.tsx';
 import { CopyButton } from '../components/shared/CopyButton.tsx';
 import { CONTRACTS_DEPLOYED } from '../lib/contracts.ts';
-import { formatUnits } from 'ethers';
+
+interface BridgeAttestation {
+  nonce: number;
+  sender: string;
+  sender_bech32: string;
+  recipient: string;
+  amount: number;
+  amount_udag: number;
+  destination_chain_id: number;
+  signature_count: number;
+  threshold: number;
+  ready: boolean;
+  proof?: any;
+}
 
 export function BridgePage() {
   const { wallets, unlocked } = useKeystore();
@@ -23,6 +36,9 @@ export function BridgePage() {
   const [bridging, setBridging] = useState(false);
   const [approving, setApproving] = useState(false);
   const [txHash, setTxHash] = useState('');
+  const [bridgeReserve, setBridgeReserve] = useState<{ reserve_sats: number; reserve_udag: number } | null>(null);
+  const [attestations, setAttestations] = useState<BridgeAttestation[]>([]);
+  const [loadingAttestations, setLoadingAttestations] = useState(false);
 
   const wallet = wallets[selectedWalletIdx];
   const bridgeActive = eth.contractsDeployed ? eth.bridgeActive : false;
@@ -34,6 +50,47 @@ export function BridgePage() {
     try { return eth.parseUdag(amount || '0'); } catch { return 0n; }
   })();
   const needsApproval = eth.connected && amountSats > 0n && eth.udagAllowance < amountSats;
+
+  // Fetch bridge reserve on mount
+  useEffect(() => {
+    const fetchReserve = async () => {
+      try {
+        const reserve = await getBridgeReserve();
+        setBridgeReserve(reserve);
+      } catch (e) {
+        // Node might not have bridge endpoints yet
+      }
+    };
+    fetchReserve();
+    const interval = setInterval(fetchReserve, 30000); // Refresh every 30s
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch recent attestations
+  useEffect(() => {
+    const fetchAttestations = async () => {
+      setLoadingAttestations(true);
+      try {
+        const nonceRes = await getBridgeNonce();
+        const recent: BridgeAttestation[] = [];
+        // Fetch last 5 attestations
+        for (let i = Math.max(0, nonceRes.next_nonce - 5); i < nonceRes.next_nonce; i++) {
+          try {
+            const att = await getBridgeAttestation(i);
+            recent.push(att);
+          } catch {}
+        }
+        setAttestations(recent.reverse());
+      } catch (e) {
+        // Node might not have bridge endpoints yet
+      } finally {
+        setLoadingAttestations(false);
+      }
+    };
+    fetchAttestations();
+    const interval = setInterval(fetchAttestations, 10000); // Refresh every 10s
+    return () => clearInterval(interval);
+  }, []);
 
   const handleApprove = async () => {
     setApproving(true);
@@ -63,7 +120,6 @@ export function BridgePage() {
       toast(eth.error, 'error');
     }
   };
-
 
   // Format bridge stats from contract or defaults
   const dailyCap = eth.contractsDeployed && eth.dailyCap > 0n ? eth.dailyCap : 50000000000000n; // 500k UDAG
@@ -200,286 +256,184 @@ export function BridgePage() {
                     </div>
                     <input
                       type="number"
-                      min="0"
-                      step="0.01"
                       value={amount}
-                      onChange={e => setAmount(e.target.value)}
+                      onChange={(e) => setAmount(e.target.value)}
                       placeholder="0.00"
-                      className="mt-1 block w-full rounded-lg bg-dag-surface border border-dag-border px-3 py-2.5 text-sm text-white"
+                      disabled={!eth.connected || !canBridge}
+                      className="w-full mt-1 px-4 py-3 bg-dag-bg border border-dag-border rounded-lg text-white placeholder-dag-muted focus:outline-none focus:border-dag-accent disabled:opacity-50"
                     />
-                    <span className="text-xs text-dag-muted mt-1">Max per transaction: {formatUnits(maxPerTx, 8)} UDAG</span>
                   </label>
 
-                  {/* Recipient */}
+                  {/* UltraDAG recipient */}
                   <label className="block">
-                    <span className="text-sm text-dag-muted">Recipient (UltraDAG address)</span>
-                    {unlocked && wallets.length > 0 ? (
-                      <div className="mt-1">
-                        <WalletSelector wallets={wallets} selectedIdx={selectedWalletIdx} onChange={setSelectedWalletIdx} label="" />
-                        {wallet && (
-                          <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-dag-bg rounded border border-dag-border/50">
-                            <code className="text-xs text-dag-muted font-mono truncate">{fullAddr(wallet.address)}</code>
-                            <CopyButton text={fullAddr(wallet.address)} />
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <input
-                        type="text"
-                        value={nativeAddress}
-                        onChange={e => setNativeAddress(e.target.value)}
-                        placeholder="tudg1... or udag1... or 40-char hex"
-                        className="mt-1 block w-full rounded-lg bg-dag-surface border border-dag-border px-3 py-2.5 text-sm text-white font-mono"
-                      />
+                    <span className="text-sm text-dag-muted">To (UltraDAG Address)</span>
+                    <input
+                      type="text"
+                      value={wallet ? wallet.address : nativeAddress}
+                      onChange={(e) => setNativeAddress(e.target.value)}
+                      placeholder="tudg1... or 40-char hex"
+                      disabled={!!wallet || !canBridge}
+                      className="w-full mt-1 px-4 py-3 bg-dag-bg border border-dag-border rounded-lg text-white placeholder-dag-muted focus:outline-none focus:border-dag-accent disabled:opacity-50"
+                    />
+                    {!wallet && (
+                      <p className="text-xs text-dag-muted mt-1">Enter your UltraDAG address or select a wallet above.</p>
                     )}
                   </label>
 
-                  {eth.error && (
-                    <div className="flex items-start gap-2 p-3 rounded-lg bg-dag-red/10 border border-dag-red/20">
-                      <AlertTriangle className="w-4 h-4 text-dag-red shrink-0 mt-0.5" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-dag-red break-words">{eth.error.length > 120 ? eth.error.slice(0, 120) + '...' : eth.error}</p>
-                        <button onClick={eth.clearError} className="text-xs text-dag-muted hover:text-white mt-1">Dismiss</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {txHash && (
-                    <div className="flex items-center gap-2 p-3 rounded-lg bg-dag-green/10 border border-dag-green/20">
-                      <CheckCircle className="w-4 h-4 text-dag-green shrink-0" />
-                      <div>
-                        <p className="text-sm text-dag-green">Bridge transfer submitted!</p>
-                        <p className="text-xs text-dag-muted font-mono mt-0.5">{txHash}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Action buttons */}
-                  {!eth.connected ? (
-                    <button
-                      onClick={eth.connect}
-                      disabled={!eth.hasMetaMask}
-                      className="w-full py-3 rounded-lg bg-gradient-to-r from-blue-500 to-dag-accent text-white font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center justify-center gap-2"
-                    >
-                      <Wallet className="w-4 h-4" /> Connect Wallet to Bridge
-                    </button>
-                  ) : needsApproval ? (
+                  {/* Approval */}
+                  {needsApproval && (
                     <button
                       onClick={handleApprove}
                       disabled={approving || !canBridge}
-                      className="w-full py-3 rounded-lg bg-blue-500/80 text-white font-medium text-sm hover:bg-blue-500 transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
+                      className="w-full py-3 rounded-lg bg-dag-yellow/20 text-dag-yellow border border-dag-yellow/30 font-medium text-sm disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                      {approving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                      {approving ? 'Approving...' : `Approve ${amount} UDAG`}
+                      {approving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+                      Approve UDAG Transfer
                     </button>
-                  ) : (
-                    <button
-                      onClick={handleBridgeToNative}
-                      disabled={bridging || !canBridge || amountSats <= 0n}
-                      className="w-full py-3 rounded-lg bg-gradient-to-r from-blue-500 to-dag-accent text-white font-medium text-sm disabled:opacity-40 hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
-                    >
-                      {bridging ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                      {bridging ? 'Bridging...' : !canBridge ? 'Bridge Not Active' : 'Bridge to UltraDAG'}
-                    </button>
+                  )}
+
+                  {/* Submit */}
+                  <button
+                    onClick={handleBridgeToNative}
+                    disabled={!eth.connected || !canBridge || bridging || needsApproval || amountSats <= 0n}
+                    className="w-full py-3 rounded-lg bg-dag-accent text-white font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:bg-dag-accent/90 transition-colors"
+                  >
+                    {bridging ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                    {bridging ? 'Bridging...' : 'Bridge to UltraDAG'}
+                  </button>
+
+                  {/* Tx hash */}
+                  {txHash && (
+                    <div className="bg-dag-green/10 border border-dag-green/30 rounded-lg p-3 flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-dag-green" />
+                      <span className="text-xs text-dag-green">Transaction submitted!</span>
+                      <a href={`https://arbiscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="ml-auto text-xs text-dag-green hover:underline flex items-center gap-1">
+                        View on Arbiscan <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
                   )}
                 </div>
               ) : (
                 /* ─── Native → Arbitrum ─── */
                 <div className="space-y-4">
                   <div className="bg-dag-surface border border-dag-border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-3">
                       <span className="text-xs text-dag-muted uppercase tracking-wider">From (UltraDAG)</span>
                       <span className="text-xs px-1.5 py-0.5 rounded bg-dag-accent/20 text-dag-accent">Native</span>
                     </div>
-                    {unlocked && wallets.length > 0 ? (
-                      <WalletSelector wallets={wallets} selectedIdx={selectedWalletIdx} onChange={setSelectedWalletIdx} label="" />
-                    ) : (
-                      <p className="text-sm text-dag-muted">Unlock your keystore to bridge from UltraDAG.</p>
-                    )}
-                  </div>
-
-                  <label className="block">
-                    <span className="text-sm text-dag-muted">Amount (UDAG)</span>
-                    <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00"
-                      className="mt-1 block w-full rounded-lg bg-dag-surface border border-dag-border px-3 py-2.5 text-sm text-white" />
-                  </label>
-
-                  <label className="block">
-                    <span className="text-sm text-dag-muted">Recipient (Arbitrum/Ethereum address)</span>
-                    {eth.connected ? (
-                      <div className="mt-1 flex items-center gap-2 px-3 py-2.5 bg-dag-surface border border-dag-border rounded-lg">
-                        <div className="w-2 h-2 rounded-full bg-dag-green" />
-                        <span className="text-sm text-white font-mono">{eth.address}</span>
-                        <CopyButton text={eth.address} />
-                      </div>
-                    ) : (
-                      <input type="text" value={arbAddress} onChange={e => setArbAddress(e.target.value)} placeholder="0x..."
-                        className="mt-1 block w-full rounded-lg bg-dag-surface border border-dag-border px-3 py-2.5 text-sm text-white font-mono" />
-                    )}
-                  </label>
-
-                  <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-dag-accent/5 border border-dag-accent/20">
-                    <Info className="w-4 h-4 text-dag-accent shrink-0 mt-0.5" />
-                    <p className="text-xs text-dag-muted">
-                      Native → Arbitrum bridging requires submitting a BridgeLock transaction on the UltraDAG network. The relayers will then mint ERC-20 UDAG to your Arbitrum address. This feature will be available after mainnet launch.
+                    <p className="text-sm text-dag-muted">
+                      Bridge from UltraDAG native chain to Arbitrum.
+                    </p>
+                    <p className="text-xs text-dag-muted mt-2">
+                      <Info className="w-3 h-3 inline mr-1" />
+                      This direction uses the Validator Federation Bridge. Validators sign attestations as part of consensus. Once 2/3+ signatures are collected, you can claim on Arbitrum.
                     </p>
                   </div>
 
-                  <button disabled className="w-full py-3 rounded-lg bg-gradient-to-r from-dag-accent to-blue-500 text-white font-medium text-sm disabled:opacity-40 cursor-not-allowed">
-                    Coming After Mainnet Launch
-                  </button>
-                </div>
-              )}
-
-              {!canBridge && !bridgePaused && (
-                <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-dag-yellow/5 border border-dag-yellow/20">
-                  <AlertTriangle className="w-4 h-4 text-dag-yellow shrink-0 mt-0.5" />
-                  <p className="text-xs text-dag-yellow/80">
-                    {CONTRACTS_DEPLOYED
-                      ? 'Bridge is deployed but not yet activated. Activation happens after mainnet launch.'
-                      : 'Bridge contracts are not yet deployed. You can buy UDAG on Arbitrum via Uniswap in the meantime.'}
-                  </p>
+                  {/* Bridge from native form - coming soon */}
+                  <div className="text-center py-8">
+                    <Clock className="w-12 h-12 text-dag-muted mx-auto mb-3" />
+                    <h3 className="text-lg font-semibold text-white">Coming Soon</h3>
+                    <p className="text-sm text-dag-muted mt-1">Bridge from UltraDAG native to Arbitrum will be available soon.</p>
+                  </div>
                 </div>
               )}
             </div>
           </Card>
-
-          {/* How It Works */}
-          <Card title="How the Bridge Works">
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-              {[
-                { num: '1', color: 'blue-500', label: 'Approve', desc: 'Approve the bridge contract to spend your UDAG tokens.' },
-                { num: '2', color: 'dag-accent', label: 'Escrow', desc: 'Tokens are held in the bridge contract (not burned immediately).' },
-                { num: '3', color: 'dag-purple', label: 'Verify', desc: '3-of-5 relayers confirm delivery on the destination chain.' },
-                { num: '4', color: 'dag-green', label: 'Complete', desc: direction === 'to-native' ? 'Relayers burn escrowed tokens. Native UDAG minted.' : 'ERC-20 UDAG minted to your Arbitrum address.' },
-              ].map(step => (
-                <div key={step.num} className="space-y-2">
-                  <div className={`w-8 h-8 rounded-lg bg-${step.color}/15 flex items-center justify-center`}>
-                    <span className={`text-${step.color} font-bold text-sm`}>{step.num}</span>
-                  </div>
-                  <h4 className="text-sm font-medium text-white">{step.label}</h4>
-                  <p className="text-xs text-dag-muted">{step.desc}</p>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 pt-3 border-t border-dag-border">
-              <p className="text-xs text-dag-muted">
-                If relayers don't confirm within 7 days, you can reclaim your escrowed tokens via the refund mechanism.
-              </p>
-            </div>
-          </Card>
-        </div>
-
-        {/* Right: Bridge Info */}
-        <div className="space-y-6">
-          {/* Ethereum Wallet */}
-          {eth.connected && (
-            <Card title="Arbitrum Wallet">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-dag-muted">Address</span>
-                  <div className="flex items-center gap-1">
-                    <span className="text-white font-mono text-xs">{eth.address.slice(0, 8)}...{eth.address.slice(-6)}</span>
-                    <CopyButton text={eth.address} />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-dag-muted">UDAG Balance</span>
-                  <span className="text-white font-mono">{Number(eth.udagBalance).toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-dag-muted">ETH Balance</span>
-                  <span className="text-white font-mono">{Number(eth.balance).toFixed(6)}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-dag-muted">Chain</span>
-                  <span className={eth.isCorrectChain ? 'text-dag-green' : 'text-dag-yellow'}>
-                    {eth.chainId === 42161 ? 'Arbitrum One' : eth.chainId === 421614 ? 'Arbitrum Sepolia' : `Chain ${eth.chainId}`}
-                  </span>
-                </div>
-              </div>
-            </Card>
-          )}
 
           {/* Bridge Stats */}
-          <Card title="Bridge Status">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-dag-muted">Status</span>
-                <span className={canBridge ? 'text-dag-green' : bridgePaused ? 'text-dag-red' : 'text-dag-yellow'}>
-                  {canBridge ? 'Active' : bridgePaused ? 'Paused' : 'Pre-Mainnet'}
-                </span>
+          <div className="grid grid-cols-2 gap-4">
+            <Card>
+              <div className="flex items-center gap-2 mb-2">
+                <Clock className="w-4 h-4 text-dag-muted" />
+                <span className="text-xs text-dag-muted uppercase">Daily Volume</span>
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-dag-muted">Daily Volume</span>
-                <span className="text-white font-mono">{formatUnits(dailyVolume, 8)} UDAG</span>
+              <p className="text-xl font-bold text-white">{formatUdag(Number(dailyVolume))} / {formatUdag(Number(dailyCap))} UDAG</p>
+              <div className="w-full bg-dag-bg rounded-full h-1.5 mt-2">
+                <div className="bg-dag-accent h-1.5 rounded-full" style={{ width: `${Math.min(100, (Number(dailyVolume) / Number(dailyCap)) * 100)}%` }} />
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-dag-muted">Daily Cap</span>
-                <span className="text-white font-mono">{formatUnits(dailyCap, 8)} UDAG</span>
+            </Card>
+            <Card>
+              <div className="flex items-center gap-2 mb-2">
+                <Shield className="w-4 h-4 text-dag-muted" />
+                <span className="text-xs text-dag-muted uppercase">Bridge Reserve</span>
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-dag-muted">Max per Tx</span>
-                <span className="text-white font-mono">{formatUnits(maxPerTx, 8)} UDAG</span>
-              </div>
-              {eth.contractsDeployed && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-dag-muted">Bridge Nonce</span>
-                  <span className="text-white font-mono">{eth.nonce.toString()}</span>
-                </div>
-              )}
+              <p className="text-xl font-bold text-white">{bridgeReserve ? formatUdag(bridgeReserve.reserve_udag) : '—'} UDAG</p>
+              <p className="text-xs text-dag-muted mt-1">Locked on UltraDAG</p>
+            </Card>
+          </div>
+        </div>
+
+        {/* Right: Recent Attestations */}
+        <div className="space-y-6">
+          <Card>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-white">Recent Bridge Attestations</h3>
+              {loadingAttestations && <Loader2 className="w-4 h-4 text-dag-muted animate-spin" />}
             </div>
+            {attestations.length === 0 ? (
+              <p className="text-sm text-dag-muted text-center py-4">No recent attestations</p>
+            ) : (
+              <div className="space-y-3">
+                {attestations.map((att) => (
+                  <div key={att.nonce} className="bg-dag-bg border border-dag-border rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-mono text-dag-muted">#{att.nonce}</span>
+                      {att.ready ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-dag-green/20 text-dag-green">Ready</span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-dag-yellow/20 text-dag-yellow">{att.signature_count}/{att.threshold} sigs</span>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-dag-muted">Amount</span>
+                        <span className="text-white font-mono">{formatUdag(att.amount_udag)} UDAG</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-dag-muted">Sender</span>
+                        <span className="text-white font-mono truncate max-w-[120px]">{att.sender_bech32.slice(0, 12)}...</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-dag-muted">Recipient</span>
+                        <span className="text-white font-mono truncate max-w-[120px]">{att.recipient.slice(0, 10)}...</span>
+                      </div>
+                    </div>
+                    {att.ready && (
+                      <button className="w-full mt-2 py-1.5 rounded bg-dag-accent/20 text-dag-accent border border-dag-accent/40 text-xs font-medium hover:bg-dag-accent/30 transition-colors flex items-center justify-center gap-1">
+                        <ExternalLink className="w-3 h-3" /> Claim on Arbitrum
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
 
-          {/* Security */}
-          <Card title="Security">
-            <div className="space-y-3">
-              <div className="flex items-start gap-2">
-                <Shield className="w-4 h-4 text-dag-green shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm text-white">Escrow + Refund</p>
-                  <p className="text-xs text-dag-muted">Tokens held in escrow, refundable after 7 days if relayers fail.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Shield className="w-4 h-4 text-dag-green shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm text-white">3-of-5 Multi-sig</p>
-                  <p className="text-xs text-dag-muted">Independent relayers must sign every bridge transfer.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <Clock className="w-4 h-4 text-dag-blue shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm text-white">Finality Confirmed</p>
-                  <p className="text-xs text-dag-muted">Transfers wait for BFT finality (~10s) before processing.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-dag-yellow shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm text-white">Rate Limiting</p>
-                  <p className="text-xs text-dag-muted">Daily volume caps and per-tx limits prevent abuse.</p>
-                </div>
-              </div>
+          {/* Info Card */}
+          <Card>
+            <div className="flex items-center gap-2 mb-3">
+              <Info className="w-4 h-4 text-dag-accent" />
+              <h3 className="text-sm font-semibold text-white">How It Works</h3>
             </div>
-          </Card>
-
-          {/* Quick Links */}
-          <Card title="Quick Links">
-            <div className="space-y-2">
-              {[
-                { label: 'Buy UDAG on Uniswap', href: 'https://app.uniswap.org' },
-                { label: 'UDAG on Arbiscan', href: 'https://arbiscan.io' },
-                { label: 'UltraDAG Website', href: 'https://ultradag.com' },
-              ].map(link => (
-                <a key={link.label} href={link.href} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-dag-surface border border-dag-border hover:border-dag-accent/40 transition-colors">
-                  <span className="text-sm text-white">{link.label}</span>
-                  <ExternalLink className="w-4 h-4 text-dag-muted" />
-                </a>
-              ))}
-            </div>
+            <ol className="space-y-2 text-xs text-dag-muted">
+              <li className="flex items-start gap-2">
+                <span className="text-dag-accent font-bold">1.</span>
+                <span>Approve UDAG transfer on Arbitrum</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-dag-accent font-bold">2.</span>
+                <span>Submit bridge transaction (tokens escrowed)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-dag-accent font-bold">3.</span>
+                <span>Validators sign attestation (2/3+ required)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-dag-accent font-bold">4.</span>
+                <span>Claim UDAG on UltraDAG native chain</span>
+              </li>
+            </ol>
           </Card>
         </div>
       </div>
