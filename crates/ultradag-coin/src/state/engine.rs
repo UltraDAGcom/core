@@ -262,6 +262,14 @@ pub struct StateEngine {
     /// Round-based lock for atomic batch processing.
     /// Ensures only one round can be applied at a time to prevent concurrent finalization corruption.
     round_lock: RwLock<Option<u64>>,
+    /// Bridge attestations: nonce → (attestation, collected signatures).
+    /// Validators sign attestations as part of consensus. When 2/3+ signatures collected,
+    /// users can claim on Arbitrum.
+    bridge_attestations: HashMap<u64, crate::bridge::BridgeAttestation>,
+    /// Bridge signatures: (nonce, validator) → signature.
+    bridge_signatures: HashMap<(u64, Address), [u8; 64]>,
+    /// Next bridge nonce (incremented for each new attestation).
+    bridge_nonce: u64,
 }
 
 impl StateEngine {
@@ -294,6 +302,9 @@ impl StateEngine {
             bridge_reserve: 0,
             last_proposal_round: HashMap::new(),
             round_lock: RwLock::new(None),
+            bridge_attestations: HashMap::new(),
+            bridge_signatures: HashMap::new(),
+            bridge_nonce: 0,
         }
     }
 
@@ -1051,9 +1062,9 @@ impl StateEngine {
                         continue;
                     }
                 }
-                crate::tx::Transaction::BridgeLock(bridge_tx) => {
+                crate::tx::Transaction::BridgeDeposit(bridge_tx) => {
                     if let Err(e) = self.apply_bridge_lock_tx(bridge_tx) {
-                        tracing::warn!("Skipping invalid BridgeLock tx in finalized vertex: {}", e);
+                        tracing::warn!("Skipping invalid BridgeDeposit tx in finalized vertex: {}", e);
                         self.increment_nonce(&bridge_tx.from);
                         self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
                         continue;
@@ -1547,8 +1558,8 @@ impl StateEngine {
         self.bridge_reserve
     }
 
-    /// Apply a BridgeLockTx: debit sender (amount + fee), add amount to bridge reserve.
-    pub fn apply_bridge_lock_tx(&mut self, tx: &crate::tx::BridgeLockTx) -> Result<(), CoinError> {
+    /// Apply a BridgeDepositTx: debit sender (amount + fee), add amount to bridge reserve.
+    pub fn apply_bridge_lock_tx(&mut self, tx: &crate::tx::BridgeDepositTx) -> Result<(), CoinError> {
         if tx.amount < crate::constants::MIN_BRIDGE_AMOUNT_SATS {
             return Err(CoinError::ValidationError("below minimum bridge amount".into()));
         }
@@ -2630,6 +2641,9 @@ impl StateEngine {
             slash_history: Vec::new(),
             applied_validators_per_round: HashMap::new(),
             bridge_reserve,
+            bridge_attestations: HashMap::new(),
+            bridge_signatures: HashMap::new(),
+            bridge_nonce: 0,
             last_proposal_round: HashMap::new(),
             round_lock: RwLock::new(None),
         })
@@ -2652,6 +2666,12 @@ impl StateEngine {
         council.sort_by_key(|(addr, _)| addr.0);
         let mut delegation_accounts: Vec<_> = self.delegation_accounts.iter().map(|(k, v)| (*k, v.clone())).collect();
         delegation_accounts.sort_by_key(|(addr, _)| addr.0);
+        let mut bridge_attestations: Vec<_> = self.bridge_attestations.iter().map(|(k, v)| (*k, v.clone())).collect();
+        bridge_attestations.sort_by_key(|(nonce, _)| *nonce);
+        let mut bridge_signatures: Vec<_> = self.bridge_signatures.iter()
+            .map(|((nonce, validator), sig)| ((*nonce, *validator), sig.to_vec()))
+            .collect();
+        bridge_signatures.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.0.1.0.cmp(&b.0.1.0)));
         crate::state::persistence::StateSnapshot {
             accounts,
             stake_accounts,
@@ -2668,6 +2688,9 @@ impl StateEngine {
             delegation_accounts,
             configured_validator_count: self.configured_validator_count,
             bridge_reserve: self.bridge_reserve,
+            bridge_attestations,
+            bridge_signatures,
+            bridge_nonce: self.bridge_nonce,
         }
     }
 
@@ -2707,6 +2730,20 @@ impl StateEngine {
             slash_history: Vec::new(),
             applied_validators_per_round: HashMap::new(),
             bridge_reserve: snapshot.bridge_reserve,
+            bridge_attestations: snapshot.bridge_attestations.into_iter().collect(),
+            bridge_signatures: snapshot.bridge_signatures
+                .into_iter()
+                .filter_map(|(k, v)| {
+                    if v.len() == 64 {
+                        let mut arr = [0u8; 64];
+                        arr.copy_from_slice(&v);
+                        Some((k, arr))
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            bridge_nonce: snapshot.bridge_nonce,
             last_proposal_round: HashMap::new(),
             round_lock: RwLock::new(None),
         })
@@ -2732,7 +2769,141 @@ impl StateEngine {
         self.treasury_balance = snapshot.treasury_balance;
         self.delegation_accounts = snapshot.delegation_accounts.into_iter().collect();
         self.bridge_reserve = snapshot.bridge_reserve;
+        self.bridge_attestations = snapshot.bridge_attestations.into_iter().collect();
+        self.bridge_signatures = snapshot.bridge_signatures
+            .into_iter()
+            .filter_map(|(k, v)| {
+                if v.len() == 64 {
+                    let mut arr = [0u8; 64];
+                    arr.copy_from_slice(&v);
+                    Some((k, arr))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        self.bridge_nonce = snapshot.bridge_nonce;
         self.configured_validator_count = saved_configured;
+    }
+
+    // ─── Bridge Attestation Functions ───
+
+    /// Create a new bridge attestation for a withdrawal.
+    /// Called when a user locks funds on the DAG for withdrawal on Arbitrum.
+    pub fn create_bridge_attestation(
+        &mut self,
+        sender: Address,
+        recipient: [u8; 20],
+        amount: u64,
+        destination_chain_id: u64,
+    ) -> Result<crate::bridge::BridgeAttestation, CoinError> {
+        use crate::bridge::BridgeAttestation;
+        
+        let attestation = BridgeAttestation::new(
+            sender,
+            recipient,
+            amount,
+            self.bridge_nonce,
+            destination_chain_id,
+        );
+        
+        // Verify attestation is valid
+        attestation.verify()?;
+        
+        // Lock funds in bridge reserve
+        self.bridge_reserve = self.bridge_reserve.saturating_add(amount);
+        
+        // Store attestation
+        self.bridge_attestations.insert(self.bridge_nonce, attestation.clone());
+        self.bridge_nonce += 1;
+        
+        Ok(attestation)
+    }
+
+    /// Sign a bridge attestation (validator function).
+    /// Validators sign attestations as part of normal block production.
+    pub fn sign_bridge_attestation(
+        &mut self,
+        nonce: u64,
+        validator: Address,
+        signature: [u8; 64],
+    ) -> Result<(), CoinError> {
+        // Verify attestation exists
+        if !self.bridge_attestations.contains_key(&nonce) {
+            return Err(CoinError::ValidationError("Attestation not found".into()));
+        }
+        
+        // Store signature
+        self.bridge_signatures.insert((nonce, validator), signature);
+        
+        Ok(())
+    }
+
+    /// Get the number of signatures for an attestation.
+    pub fn get_signature_count(&self, nonce: u64) -> usize {
+        self.bridge_signatures
+            .iter()
+            .filter(|((n, _), _)| *n == nonce)
+            .count()
+    }
+
+    /// Get the threshold for bridge signatures (2/3 of active validators).
+    pub fn get_bridge_threshold(&self) -> usize {
+        let validator_count = self.active_validator_set.len();
+        if validator_count < 3 {
+            return validator_count;
+        }
+        // Threshold = ceil(2/3 * validator_count)
+        (2 * validator_count + 2) / 3
+    }
+
+    /// Build a bridge proof with collected signatures.
+    /// Returns Ok when threshold signatures are collected.
+    pub fn build_bridge_proof(
+        &self,
+        nonce: u64,
+    ) -> Result<crate::bridge::BridgeProof, CoinError> {
+        use crate::bridge::{BridgeProof, SignedBridgeAttestation};
+        
+        // Get attestation
+        let attestation = self.bridge_attestations
+            .get(&nonce)
+            .ok_or_else(|| CoinError::ValidationError("Attestation not found".into()))?
+            .clone();
+        
+        // Collect signatures
+        let signatures: Vec<SignedBridgeAttestation> = self.bridge_signatures
+            .iter()
+            .filter(|((n, _), _)| *n == nonce)
+            .map(|((_, validator), signature)| {
+                SignedBridgeAttestation::new(attestation.clone(), *validator, *signature)
+            })
+            .collect();
+        
+        // Check threshold
+        let threshold = self.get_bridge_threshold();
+        if signatures.len() < threshold {
+            return Err(CoinError::ValidationError(
+                format!("Insufficient signatures: {} < {}", signatures.len(), threshold)
+            ));
+        }
+        
+        Ok(BridgeProof::new(attestation, signatures))
+    }
+
+    /// Get bridge attestation by nonce.
+    pub fn get_bridge_attestation(&self, nonce: u64) -> Option<&crate::bridge::BridgeAttestation> {
+        self.bridge_attestations.get(&nonce)
+    }
+
+    /// Get next bridge nonce.
+    pub fn get_bridge_nonce(&self) -> u64 {
+        self.bridge_nonce
+    }
+
+    /// Get bridge reserve balance.
+    pub fn get_bridge_reserve(&self) -> u64 {
+        self.bridge_reserve
     }
 
     /// Save state to redb database (ACID, crash-safe).

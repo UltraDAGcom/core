@@ -51,6 +51,7 @@
 
 pub mod address;
 pub mod block;
+pub mod bridge;
 pub mod consensus;
 pub mod constants;
 pub mod error;
@@ -70,4 +71,4 @@ pub use constants::{FAUCET_PREFUND_SATS, FAUCET_SEED, faucet_keypair};
 pub use error::CoinError;
 pub use block_producer::create_block;
 pub use state::{StateEngine, TxLocation};
-pub use tx::{CoinbaseTx, Mempool, Transaction, TransferTx, StakeTx, UnstakeTx, DelegateTx, UndelegateTx, SetCommissionTx, BridgeLockTx, MIN_STAKE_SATS, UNSTAKE_COOLDOWN_ROUNDS};
+pub use tx::{CoinbaseTx, Mempool, Transaction, TransferTx, StakeTx, UnstakeTx, DelegateTx, UndelegateTx, SetCommissionTx, BridgeDepositTx, MIN_STAKE_SATS, UNSTAKE_COOLDOWN_ROUNDS};

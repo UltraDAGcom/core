@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::address::{Address, Signature};
 use crate::tx::stake::{StakeTx, UnstakeTx};
 use crate::tx::delegate::{DelegateTx, UndelegateTx, SetCommissionTx};
-use crate::tx::bridge::BridgeLockTx;
+use crate::tx::bridge::BridgeDepositTx;
 use crate::governance::{CreateProposalTx, VoteTx};
 
 /// Unified transaction type supporting transfers, staking, unstaking, delegation,
@@ -19,7 +19,7 @@ pub enum Transaction {
     Delegate(DelegateTx),
     Undelegate(UndelegateTx),
     SetCommission(SetCommissionTx),
-    BridgeLock(BridgeLockTx),
+    BridgeDeposit(BridgeDepositTx),
 }
 
 /// A transaction transferring UDAG from one address to another.
@@ -52,7 +52,7 @@ impl Transaction {
             Transaction::Delegate(tx) => tx.hash(),
             Transaction::Undelegate(tx) => tx.hash(),
             Transaction::SetCommission(tx) => tx.hash(),
-            Transaction::BridgeLock(tx) => tx.hash(),
+            Transaction::BridgeDeposit(tx) => tx.hash(),
         }
     }
 
@@ -67,7 +67,7 @@ impl Transaction {
             Transaction::Delegate(tx) => tx.verify_signature(),
             Transaction::Undelegate(tx) => tx.verify_signature(),
             Transaction::SetCommission(tx) => tx.verify_signature(),
-            Transaction::BridgeLock(tx) => tx.verify_signature(),
+            Transaction::BridgeDeposit(tx) => tx.verify_signature(),
         }
     }
 
@@ -82,7 +82,7 @@ impl Transaction {
             Transaction::Delegate(tx) => tx.from,
             Transaction::Undelegate(tx) => tx.from,
             Transaction::SetCommission(tx) => tx.from,
-            Transaction::BridgeLock(tx) => tx.from,
+            Transaction::BridgeDeposit(tx) => tx.from,
         }
     }
 
@@ -97,7 +97,7 @@ impl Transaction {
             Transaction::Delegate(tx) => tx.nonce,
             Transaction::Undelegate(tx) => tx.nonce,
             Transaction::SetCommission(tx) => tx.nonce,
-            Transaction::BridgeLock(tx) => tx.nonce,
+            Transaction::BridgeDeposit(tx) => tx.nonce,
         }
     }
 
@@ -107,7 +107,7 @@ impl Transaction {
             Transaction::Transfer(tx) => tx.fee,
             Transaction::CreateProposal(tx) => tx.fee,
             Transaction::Vote(tx) => tx.fee,
-            Transaction::BridgeLock(tx) => tx.fee,
+            Transaction::BridgeDeposit(tx) => tx.fee,
             Transaction::Stake(_)
             | Transaction::Unstake(_)
             | Transaction::Delegate(_)
@@ -122,7 +122,7 @@ impl Transaction {
             Transaction::Transfer(tx) => tx.amount,
             Transaction::Stake(tx) => tx.amount,
             Transaction::Delegate(tx) => tx.amount,
-            Transaction::BridgeLock(tx) => tx.amount,
+            Transaction::BridgeDeposit(tx) => tx.amount,
             Transaction::Unstake(_)
             | Transaction::Undelegate(_)
             | Transaction::SetCommission(_)
@@ -142,7 +142,7 @@ impl Transaction {
             | Transaction::SetCommission(_)
             | Transaction::CreateProposal(_)
             | Transaction::Vote(_)
-            | Transaction::BridgeLock(_) => None,
+            | Transaction::BridgeDeposit(_) => None,
         }
     }
 
@@ -157,7 +157,7 @@ impl Transaction {
             Transaction::Delegate(tx) => tx.pub_key,
             Transaction::Undelegate(tx) => tx.pub_key,
             Transaction::SetCommission(tx) => tx.pub_key,
-            Transaction::BridgeLock(tx) => tx.pub_key,
+            Transaction::BridgeDeposit(tx) => tx.pub_key,
         }
     }
 
@@ -172,7 +172,7 @@ impl Transaction {
             Transaction::Delegate(tx) => tx.signable_bytes(),
             Transaction::Undelegate(tx) => tx.signable_bytes(),
             Transaction::SetCommission(tx) => tx.signable_bytes(),
-            Transaction::BridgeLock(tx) => tx.signable_bytes(),
+            Transaction::BridgeDeposit(tx) => tx.signable_bytes(),
         }
     }
 
@@ -182,7 +182,7 @@ impl Transaction {
             Transaction::Transfer(tx) => tx.total_cost(),
             Transaction::Stake(tx) => tx.amount,
             Transaction::Delegate(tx) => tx.amount,
-            Transaction::BridgeLock(tx) => tx.total_cost(),
+            Transaction::BridgeDeposit(tx) => tx.total_cost(),
             Transaction::CreateProposal(tx) => tx.fee,
             Transaction::Vote(tx) => tx.fee,
             Transaction::Unstake(_)

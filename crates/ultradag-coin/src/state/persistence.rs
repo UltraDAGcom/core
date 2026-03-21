@@ -43,6 +43,15 @@ pub struct StateSnapshot {
     /// Bridge reserve: UDAG locked for bridging to Arbitrum.
     #[serde(default)]
     pub bridge_reserve: u64,
+    /// Bridge attestations: nonce → attestation.
+    #[serde(default)]
+    pub bridge_attestations: Vec<(u64, crate::bridge::BridgeAttestation)>,
+    /// Bridge signatures: (nonce, validator) → signature (as Vec<u8> for serde).
+    #[serde(default)]
+    pub bridge_signatures: Vec<((u64, Address), Vec<u8>)>,
+    /// Next bridge nonce.
+    #[serde(default)]
+    pub bridge_nonce: u64,
 }
 
 impl StateSnapshot {
