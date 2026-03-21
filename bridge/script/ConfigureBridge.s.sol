@@ -11,10 +11,12 @@ import "../src/UDAGBridgeValidator.sol";
 ///
 /// Environment variables required:
 ///   BRIDGE_ADDRESS: Bridge contract address
-///   VALIDATOR_ADDRESSES: Comma-separated validator addresses to add
+///   GOVERNOR_KEY: Governor private key (must match bridge governor)
+///   VALIDATOR_ADDRESSES: Comma-separated validator addresses to add (minimum 3)
 contract ConfigureBridgeScript is Script {
     function run() external {
         address bridgeAddress = vm.envAddress("BRIDGE_ADDRESS");
+        uint256 governorKey = vm.envUint("GOVERNOR_KEY");
         string memory validatorAddressesStr = vm.envString("VALIDATOR_ADDRESSES");
 
         console.log("Configuring Validator Federation Bridge at:", bridgeAddress);
@@ -22,9 +24,9 @@ contract ConfigureBridgeScript is Script {
         UDAGBridgeValidator bridge = UDAGBridgeValidator(bridgeAddress);
 
         // Verify caller is governor
-        require(bridge.governor() == msg.sender, "Caller is not governor");
+        require(bridge.governor() == vm.addr(governorKey), "Caller is not governor");
 
-        vm.startBroadcast();
+        vm.startBroadcast(governorKey);
 
         // Parse and add validators
         bytes memory addressesBytes = bytes(validatorAddressesStr);
@@ -52,7 +54,8 @@ contract ConfigureBridgeScript is Script {
         console.log("Bridge:", bridgeAddress);
         console.log("Validators added:", validatorCount);
         console.log("Threshold:", bridge.threshold(), "of", validatorCount);
-        console.log("Status: READY");
+        console.log("Bridge enabled:", bridge.bridgeEnabled());
+        console.log("Status:", bridge.bridgeEnabled() ? "READY" : "WAITING FOR MORE VALIDATORS");
         console.log("========================================\n");
     }
 

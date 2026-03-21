@@ -35,22 +35,27 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable, ReentrancyGua
     event AdminRoleRenounced(address indexed formerAdmin);
 
     /// @notice Constructor - sets up initial roles and configuration
-    /// @param admin Address that will hold DEFAULT_ADMIN_ROLE initially
+    /// @param admin Address that will hold DEFAULT_ADMIN_ROLE initially (should be timelock)
     /// @param initialBridge Address of the bridge contract (can be updated later)
+    /// @param genesisMinter Address that can mint genesis allocations (deployer EOA)
     /// @dev Bridge receives MINTER_ROLE for minting on claims.
-    ///      Bridge does NOT receive BURNER_ROLE - deposits use transferFrom() to lock tokens.
+    ///      Genesis minter receives MINTER_ROLE temporarily for genesis minting.
+    ///      Genesis minter role is revoked when finalizeGenesis() is called.
     constructor(
         address admin,
-        address initialBridge
+        address initialBridge,
+        address genesisMinter
     )
         ERC20("UltraDAG", "UDAG")
         ERC20Permit("UltraDAG")
     {
         require(admin != address(0), "UDAG: admin cannot be zero");
         require(initialBridge != address(0), "UDAG: bridge cannot be zero");
+        require(genesisMinter != address(0), "UDAG: genesis minter cannot be zero");
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(MINTER_ROLE, admin);
+        _grantRole(MINTER_ROLE, genesisMinter); // Temporary for genesis minting
         _grantRole(PAUSER_ROLE, admin); // Admin can pause initially
 
         bridgeAddress = initialBridge;

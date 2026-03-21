@@ -13,8 +13,10 @@ import "@openzeppelin/contracts/governance/TimelockController.sol";
 ///
 /// Environment variables required:
 ///   RPC_URL: Arbitrum RPC endpoint
-///   DEPLOYER_KEY: Deployer private key
-///   GOVERNOR_KEY: Governor/admin private key (can be same as deployer)
+///   DEPLOYER_KEY: Deployer private key (for signing transactions)
+///   GOVERNOR_ADDRESS: Governor/admin address (timelock or multisig)
+///   DEV_ADDRESS: Developer allocation recipient
+///   TREASURY_ADDRESS: Treasury allocation recipient
 contract DeployScript is Script {
     // Configuration
     uint256 public constant MIN_DELAY = 1 days; // Timelock delay
@@ -30,13 +32,23 @@ contract DeployScript is Script {
 
     function run() external {
         // Load configuration from environment
-        address governor = vm.envAddress("GOVERNOR_KEY");
+        address governor = vm.envAddress("GOVERNOR_ADDRESS");
         address devAddress = vm.envAddress("DEV_ADDRESS");
         address treasuryAddress = vm.envAddress("TREASURY_ADDRESS");
+        
+        // Get deployer address from private key
+        uint256 deployerKey = vm.envUint("DEPLOYER_KEY");
+        address deployer = vm.addr(deployerKey);
 
-        vm.startBroadcast();
+        // Zero address checks
+        require(governor != address(0), "Deploy: zero governor");
+        require(devAddress != address(0), "Deploy: zero dev address");
+        require(treasuryAddress != address(0), "Deploy: zero treasury");
+
+        vm.startBroadcast(deployerKey);
 
         // Step 1: Deploy TimelockController
+        // Governor (EOA/multisig) will have TIMELOCK_ADMIN_ROLE
         timelockAddress = address(new TimelockController(
             MIN_DELAY,
             new address[](0), // No proposers initially
@@ -47,7 +59,8 @@ contract DeployScript is Script {
         console.log("TimelockController deployed:", timelockAddress);
 
         // Step 2: Deploy UDAG Token
-        tokenAddress = address(new UDAGToken(timelockAddress));
+        // Pass deployer as genesisMinter so it can mint genesis allocations
+        tokenAddress = address(new UDAGToken(timelockAddress, address(0), deployer));
         console.log("UDAGToken deployed:", tokenAddress);
 
         // Step 3: Deploy UDAG Bridge (Validator Federation - no relayers needed!)
@@ -64,16 +77,16 @@ contract DeployScript is Script {
         );
         console.log("Bridge granted MINTER_ROLE (for minting on withdrawal claims)");
         
-        // Step 5: Mint genesis allocations
+        // Step 5: Mint genesis allocations (deployer has MINTER_ROLE)
         UDAGToken(tokenAddress).mint(devAddress, DEV_ALLOCATION);
         console.log("Minted dev allocation:", DEV_ALLOCATION, "to", devAddress);
-        
+
         UDAGToken(tokenAddress).mint(treasuryAddress, TREASURY_ALLOCATION);
         console.log("Minted treasury allocation:", TREASURY_ALLOCATION, "to", treasuryAddress);
-        
-        // Step 6: Finalize genesis (revoke admin mint role)
+
+        // Step 6: Finalize genesis (revoke MINTER_ROLE from deployer)
         UDAGToken(tokenAddress).finalizeGenesis();
-        console.log("Genesis finalized - admin mint role revoked");
+        console.log("Genesis finalized - deployer MINTER_ROLE revoked");
         
         // Step 7: Configure Timelock roles
         // Grant proposer role to timelock itself (for self-scheduling)
