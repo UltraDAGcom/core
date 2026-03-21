@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import "forge-std/Script.sol";
 import "../src/UDAGToken.sol";
-import "../src/UDAGBridge.sol";
+import "../src/UDAGBridgeValidator.sol";
 import "@openzeppelin/contracts/governance/TimelockController.sol";
 
 /// @notice Deploy UltraDAG token and bridge to Arbitrum
@@ -15,7 +15,6 @@ import "@openzeppelin/contracts/governance/TimelockController.sol";
 ///   RPC_URL: Arbitrum RPC endpoint
 ///   DEPLOYER_KEY: Deployer private key
 ///   GOVERNOR_KEY: Governor/admin private key (can be same as deployer)
-///   RELAYER_KEYS: Comma-separated relayer private keys (5 keys for 3-of-5)
 contract DeployScript is Script {
     // Configuration
     uint256 public constant REQUIRED_SIGNERS = 3;
@@ -29,36 +28,15 @@ contract DeployScript is Script {
     address public tokenAddress;
     address public bridgeAddress;
     address public timelockAddress;
-    
+
     function run() external {
         // Load configuration from environment
         address governor = vm.envAddress("GOVERNOR_KEY");
         address devAddress = vm.envAddress("DEV_ADDRESS");
         address treasuryAddress = vm.envAddress("TREASURY_ADDRESS");
-        
-        // Parse relayer keys from comma-separated string
-        string memory relayerKeysStr = vm.envString("RELAYER_KEYS");
-        address[] memory relayers = new address[](5);
-        
-        // Parse each key (format: "key1,key2,key3,key4,key5")
-        bytes memory keysBytes = bytes(relayerKeysStr);
-        uint256 keyStart = 0;
-        uint256 keyIndex = 0;
-        
-        for (uint256 i = 0; i < keysBytes.length && keyIndex < 5; i++) {
-            if (keysBytes[i] == ',' || i == keysBytes.length - 1) {
-                uint256 keyEnd = (keysBytes[i] == ',') ? i : i + 1;
-                string memory keyStr = substring(relayerKeysStr, keyStart, keyEnd);
-                relayers[keyIndex] = vm.addr(vm.parseUint(keyStr));
-                keyIndex++;
-                keyStart = i + 1;
-            }
-        }
-        
-        require(keyIndex == 5, "Need exactly 5 relayer keys");
-        
+
         vm.startBroadcast();
-        
+
         // Step 1: Deploy TimelockController
         timelockAddress = address(new TimelockController(
             MIN_DELAY,
@@ -66,21 +44,19 @@ contract DeployScript is Script {
             new address[](0), // No executors initially
             governor // Admin
         ));
-        
+
         console.log("TimelockController deployed:", timelockAddress);
-        
+
         // Step 2: Deploy UDAG Token
         tokenAddress = address(new UDAGToken(timelockAddress));
         console.log("UDAGToken deployed:", tokenAddress);
-        
-        // Step 3: Deploy UDAG Bridge
-        bridgeAddress = address(new UDAGBridge(
+
+        // Step 3: Deploy UDAG Bridge (Validator Federation - no relayers needed!)
+        bridgeAddress = address(new UDAGBridgeValidator(
             tokenAddress,
-            timelockAddress,
-            relayers,
-            REQUIRED_SIGNERS
+            timelockAddress
         ));
-        console.log("UDAGBridge deployed:", bridgeAddress);
+        console.log("UDAGBridgeValidator deployed:", bridgeAddress);
         
         // Step 4: Grant bridge MINTER_ROLE and BURNER_ROLE
         UDAGToken(tokenAddress).grantRole(
