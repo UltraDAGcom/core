@@ -139,14 +139,14 @@ export function BridgePage() {
           <div className={`w-3 h-3 rounded-full ${canBridge ? 'bg-dag-green animate-pulse' : bridgePaused ? 'bg-dag-red' : bridgeActive ? 'bg-dag-yellow' : 'bg-dag-yellow'}`} />
           <div className="flex-1 min-w-[200px]">
             <span className={`text-sm font-medium ${canBridge ? 'text-dag-green' : 'text-dag-yellow'}`}>
-              {canBridge ? 'Bridge Active' : bridgePaused ? 'Bridge Paused' : CONTRACTS_DEPLOYED ? 'Bridge Inactive' : 'Phase 1: Token Only'}
+              {canBridge ? 'Bridge Active' : bridgePaused ? 'Bridge Paused' : CONTRACTS_DEPLOYED ? 'Bridge Inactive' : 'Validator Federation Bridge Active'}
             </span>
             <p className="text-xs text-dag-muted mt-0.5">
               {canBridge
                 ? 'Transfer UDAG between Arbitrum and the native chain.'
                 : CONTRACTS_DEPLOYED
                   ? 'Bridge contracts deployed. Waiting for activation.'
-                  : 'Contracts not yet deployed. Buy UDAG on Arbitrum via Uniswap.'}
+                  : 'Validator Federation Bridge: Validators sign attestations on UltraDAG native chain. Arbitrum contracts coming soon.'}
             </p>
           </div>
           {eth.connected && (
@@ -156,6 +156,36 @@ export function BridgePage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Live Bridge Stats - Always visible */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <div className="flex items-center gap-2 mb-2">
+            <Shield className="w-4 h-4 text-dag-accent" />
+            <span className="text-xs text-dag-muted uppercase">Bridge Reserve</span>
+          </div>
+          <p className="text-xl font-bold text-white">{bridgeReserve ? formatUdag(bridgeReserve.reserve_udag) : '—'} UDAG</p>
+          <p className="text-xs text-dag-muted mt-1">Locked on UltraDAG</p>
+        </Card>
+        <Card>
+          <div className="flex items-center gap-2 mb-2">
+            <Clock className="w-4 h-4 text-dag-muted" />
+            <span className="text-xs text-dag-muted uppercase">Daily Volume</span>
+          </div>
+          <p className="text-xl font-bold text-white">{formatUdag(Number(dailyVolume))} / {formatUdag(Number(dailyCap))} UDAG</p>
+          <div className="w-full bg-dag-bg rounded-full h-1.5 mt-2">
+            <div className="bg-dag-accent h-1.5 rounded-full" style={{ width: `${Math.min(100, (Number(dailyVolume) / Number(dailyCap)) * 100)}%` }} />
+          </div>
+        </Card>
+        <Card>
+          <div className="flex items-center gap-2 mb-2">
+            <CheckCircle className="w-4 h-4 text-dag-green" />
+            <span className="text-xs text-dag-muted uppercase">Security</span>
+          </div>
+          <p className="text-sm font-bold text-white">2/3 Validator Threshold</p>
+          <p className="text-xs text-dag-muted mt-1">Same security as DAG consensus</p>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -340,28 +370,6 @@ export function BridgePage() {
               )}
             </div>
           </Card>
-
-          {/* Bridge Stats */}
-          <div className="grid grid-cols-2 gap-4">
-            <Card>
-              <div className="flex items-center gap-2 mb-2">
-                <Clock className="w-4 h-4 text-dag-muted" />
-                <span className="text-xs text-dag-muted uppercase">Daily Volume</span>
-              </div>
-              <p className="text-xl font-bold text-white">{formatUdag(Number(dailyVolume))} / {formatUdag(Number(dailyCap))} UDAG</p>
-              <div className="w-full bg-dag-bg rounded-full h-1.5 mt-2">
-                <div className="bg-dag-accent h-1.5 rounded-full" style={{ width: `${Math.min(100, (Number(dailyVolume) / Number(dailyCap)) * 100)}%` }} />
-              </div>
-            </Card>
-            <Card>
-              <div className="flex items-center gap-2 mb-2">
-                <Shield className="w-4 h-4 text-dag-muted" />
-                <span className="text-xs text-dag-muted uppercase">Bridge Reserve</span>
-              </div>
-              <p className="text-xl font-bold text-white">{bridgeReserve ? formatUdag(bridgeReserve.reserve_udag) : '—'} UDAG</p>
-              <p className="text-xs text-dag-muted mt-1">Locked on UltraDAG</p>
-            </Card>
-          </div>
         </div>
 
         {/* Right: Recent Attestations */}
@@ -410,30 +418,37 @@ export function BridgePage() {
             )}
           </Card>
 
-          {/* Info Card */}
+          {/* Info Card - Validator Federation Bridge */}
           <Card>
             <div className="flex items-center gap-2 mb-3">
-              <Info className="w-4 h-4 text-dag-accent" />
-              <h3 className="text-sm font-semibold text-white">How It Works</h3>
+              <Shield className="w-4 h-4 text-dag-accent" />
+              <h3 className="text-sm font-semibold text-white">Validator Federation Bridge</h3>
             </div>
+            <p className="text-xs text-dag-muted mb-3">
+              The UltraDAG bridge uses the existing validator set (2/3 threshold) instead of external relayers. 
+              Validators sign attestations as part of normal block production.
+            </p>
             <ol className="space-y-2 text-xs text-dag-muted">
               <li className="flex items-start gap-2">
                 <span className="text-dag-accent font-bold">1.</span>
-                <span>Approve UDAG transfer on Arbitrum</span>
+                <span>Deposit on source chain (tokens locked)</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-dag-accent font-bold">2.</span>
-                <span>Submit bridge transaction (tokens escrowed)</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-dag-accent font-bold">3.</span>
                 <span>Validators sign attestation (2/3+ required)</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-dag-accent font-bold">4.</span>
-                <span>Claim UDAG on UltraDAG native chain</span>
+                <span className="text-dag-accent font-bold">3.</span>
+                <span>Claim on destination chain with proof</span>
               </li>
             </ol>
+            <div className="mt-3 p-2 bg-dag-accent/10 border border-dag-accent/30 rounded">
+              <div className="flex items-center gap-2 text-xs">
+                <CheckCircle className="w-3 h-3 text-dag-green" />
+                <span className="text-dag-green font-medium">No external relayers needed</span>
+              </div>
+              <p className="text-[10px] text-dag-muted mt-1">Same security as DAG consensus (2/3 BFT)</p>
+            </div>
           </Card>
         </div>
       </div>
