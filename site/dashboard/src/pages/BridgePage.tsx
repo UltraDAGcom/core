@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowRightLeft, ArrowRight, ExternalLink, Shield, Clock, Info, Unplug, Loader2, CheckCircle } from 'lucide-react';
+import { ArrowRightLeft, ArrowRight, ExternalLink, Shield, Clock, Info, Unplug, Loader2, CheckCircle, Wallet } from 'lucide-react';
 import { Card } from '../components/shared/Card.tsx';
 import { useKeystore } from '../hooks/useKeystore.ts';
 import { useEthWallet } from '../hooks/useEthWallet.ts';
@@ -265,9 +265,19 @@ export function BridgePage() {
                         )}
                       </div>
                     ) : (
-                      <p className="text-sm text-dag-muted">
-                        {eth.hasMetaMask ? 'Connect your Arbitrum wallet below to bridge tokens.' : 'Install MetaMask or a compatible wallet to continue.'}
-                      </p>
+                      <div className="space-y-3">
+                        <p className="text-sm text-dag-muted">
+                          {eth.hasMetaMask ? 'Connect your Arbitrum wallet to bridge tokens.' : 'Install MetaMask or a compatible wallet to continue.'}
+                        </p>
+                        <button
+                          onClick={eth.connect}
+                          disabled={eth.loading}
+                          className="w-full py-3 rounded-lg bg-dag-accent text-white font-medium text-sm disabled:opacity-50 flex items-center justify-center gap-2 hover:bg-dag-accent/90 transition-colors"
+                        >
+                          {eth.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
+                          {eth.loading ? 'Connecting...' : 'Connect Arbitrum Wallet'}
+                        </button>
+                      </div>
                     )}
                   </div>
 
