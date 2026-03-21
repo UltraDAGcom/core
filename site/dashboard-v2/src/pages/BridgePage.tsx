@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
-import { ArrowRightLeft, ArrowRight, ExternalLink, Shield, Clock, AlertTriangle, Info, Wallet, Unplug, Loader2, CheckCircle, Copy } from 'lucide-react';
+import { ArrowRightLeft, ArrowRight, ExternalLink, Shield, Clock, Info, Unplug, Loader2, CheckCircle } from 'lucide-react';
 import { Card } from '../components/shared/Card.tsx';
 import { useKeystore } from '../hooks/useKeystore.ts';
 import { useEthWallet } from '../hooks/useEthWallet.ts';
 import { useToast } from '../hooks/useToast.tsx';
-import { fullAddr, normalizeAddress, isValidAddress, formatUdag, getBridgeNonce, getBridgeAttestation, getBridgeReserve } from '../lib/api.ts';
-import { WalletSelector } from '../components/shared/WalletSelector.tsx';
+import { normalizeAddress, isValidAddress, formatUdag, getBridgeNonce, getBridgeAttestation, getBridgeReserve } from '../lib/api.ts';
 import { CopyButton } from '../components/shared/CopyButton.tsx';
 import { CONTRACTS_DEPLOYED } from '../lib/contracts.ts';
 
@@ -24,15 +23,14 @@ interface BridgeAttestation {
 }
 
 export function BridgePage() {
-  const { wallets, unlocked } = useKeystore();
+  const { wallets } = useKeystore();
   const eth = useEthWallet();
   const { toast } = useToast();
 
   const [direction, setDirection] = useState<'to-native' | 'to-arbitrum'>('to-native');
   const [amount, setAmount] = useState('');
-  const [arbAddress, setArbAddress] = useState('');
   const [nativeAddress, setNativeAddress] = useState('');
-  const [selectedWalletIdx, setSelectedWalletIdx] = useState(0);
+  const [selectedWalletIdx] = useState(0);
   const [bridging, setBridging] = useState(false);
   const [approving, setApproving] = useState(false);
   const [txHash, setTxHash] = useState('');
@@ -123,7 +121,6 @@ export function BridgePage() {
 
   // Format bridge stats from contract or defaults
   const dailyCap = eth.contractsDeployed && eth.dailyCap > 0n ? eth.dailyCap : 50000000000000n; // 500k UDAG
-  const maxPerTx = eth.contractsDeployed && eth.maxPerTx > 0n ? eth.maxPerTx : 10000000000000n; // 100k UDAG
   const dailyVolume = eth.dailyVolume;
 
   return (
