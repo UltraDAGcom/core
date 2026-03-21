@@ -20,12 +20,19 @@ pub enum DeliveryPolicy {
     Partition { split: usize, heal_after_rounds: u64 },
     /// Combined: reorder + drop.
     Lossy { drop_probability: f64 },
+    /// Messages arrive with variable latency (1-3 rounds typical).
+    /// Simulates real network conditions where messages have propagation delay.
+    /// `base_latency` is minimum rounds, `jitter` adds random variation.
+    Latency { base_latency: u64, jitter: u64 },
+    /// Combined latency + drop: messages can be both delayed and dropped.
+    LatencyLossy { base_latency: u64, jitter: u64, drop_probability: f64 },
 }
 
 struct InFlightMessage {
     vertex: DagVertex,
     from: usize,
     to: usize,
+    deliver_at_round: u64,  // Round when message should be delivered
 }
 
 pub struct VirtualNetwork {
@@ -57,10 +64,12 @@ impl VirtualNetwork {
     pub fn broadcast(&mut self, from: usize, vertex: DagVertex) {
         for to in 0..self.num_validators {
             if to != from {
+                let deliver_at = self.calculate_delivery_round();
                 self.pending.push(InFlightMessage {
                     vertex: vertex.clone(),
                     from,
                     to,
+                    deliver_at_round: deliver_at,
                 });
                 self.messages_sent += 1;
             }
@@ -71,13 +80,26 @@ impl VirtualNetwork {
     pub fn send_to(&mut self, from: usize, vertex: DagVertex, targets: &[usize]) {
         for &to in targets {
             if to != from && to < self.num_validators {
+                let deliver_at = self.calculate_delivery_round();
                 self.pending.push(InFlightMessage {
                     vertex: vertex.clone(),
                     from,
                     to,
+                    deliver_at_round: deliver_at,
                 });
                 self.messages_sent += 1;
             }
+        }
+    }
+
+    /// Calculate delivery round based on policy (handles latency simulation).
+    fn calculate_delivery_round(&mut self) -> u64 {
+        match &self.policy {
+            DeliveryPolicy::Latency { base_latency, jitter } |
+            DeliveryPolicy::LatencyLossy { base_latency, jitter, .. } => {
+                self.current_round + base_latency + self.rng.gen_range(0..=*jitter)
+            }
+            _ => self.current_round,  // Immediate delivery for other policies
         }
     }
 
@@ -87,58 +109,98 @@ impl VirtualNetwork {
 
         match self.policy.clone() {
             DeliveryPolicy::Perfect => {
+                let mut to_keep = Vec::new();
                 for msg in self.pending.drain(..) {
-                    self.inboxes[msg.to].push_back(msg.vertex);
+                    if msg.deliver_at_round <= round {
+                        self.inboxes[msg.to].push_back(msg.vertex);
+                    } else {
+                        to_keep.push(msg);
+                    }
                 }
+                self.pending = to_keep;
             }
             DeliveryPolicy::RandomOrder => {
-                self.pending.shuffle(&mut self.rng);
-                for msg in self.pending.drain(..) {
-                    self.inboxes[msg.to].push_back(msg.vertex);
+                let mut pending: Vec<_> = self.pending.drain(..).collect();
+                pending.shuffle(&mut self.rng);
+                let mut to_keep = Vec::new();
+                for msg in pending {
+                    if msg.deliver_at_round <= round {
+                        self.inboxes[msg.to].push_back(msg.vertex);
+                    } else {
+                        to_keep.push(msg);
+                    }
                 }
+                self.pending = to_keep;
             }
             DeliveryPolicy::Drop { probability } => {
-                let mut kept = Vec::new();
+                let mut to_keep = Vec::new();
                 for msg in self.pending.drain(..) {
-                    if self.rng.gen::<f64>() >= probability {
-                        kept.push(msg);
+                    if msg.deliver_at_round > round {
+                        to_keep.push(msg);
+                    } else if self.rng.gen::<f64>() >= probability {
+                        self.inboxes[msg.to].push_back(msg.vertex);
                     } else {
                         self.messages_dropped += 1;
                     }
                 }
-                for msg in kept {
-                    self.inboxes[msg.to].push_back(msg.vertex);
-                }
+                self.pending = to_keep;
             }
             DeliveryPolicy::Partition { split, heal_after_rounds } => {
                 let healed = round >= heal_after_rounds;
-                let mut kept = Vec::new();
+                let mut to_keep = Vec::new();
                 for msg in self.pending.drain(..) {
+                    if msg.deliver_at_round > round {
+                        to_keep.push(msg);
+                        continue;
+                    }
                     let from_group = msg.from < split;
                     let to_group = msg.to < split;
                     if healed || from_group == to_group {
-                        kept.push(msg);
+                        self.inboxes[msg.to].push_back(msg.vertex);
                     } else {
                         self.messages_dropped += 1;
                     }
                 }
-                for msg in kept {
-                    self.inboxes[msg.to].push_back(msg.vertex);
-                }
+                self.pending = to_keep;
             }
             DeliveryPolicy::Lossy { drop_probability } => {
-                self.pending.shuffle(&mut self.rng);
-                let mut kept = Vec::new();
-                for msg in self.pending.drain(..) {
-                    if self.rng.gen::<f64>() >= drop_probability {
-                        kept.push(msg);
+                let mut pending: Vec<_> = self.pending.drain(..).collect();
+                pending.shuffle(&mut self.rng);
+                let mut to_keep = Vec::new();
+                for msg in pending {
+                    if msg.deliver_at_round > round {
+                        to_keep.push(msg);
+                    } else if self.rng.gen::<f64>() >= drop_probability {
+                        self.inboxes[msg.to].push_back(msg.vertex);
                     } else {
                         self.messages_dropped += 1;
                     }
                 }
-                for msg in kept {
-                    self.inboxes[msg.to].push_back(msg.vertex);
+                self.pending = to_keep;
+            }
+            DeliveryPolicy::Latency { .. } => {
+                let mut to_keep = Vec::new();
+                for msg in self.pending.drain(..) {
+                    if msg.deliver_at_round <= round {
+                        self.inboxes[msg.to].push_back(msg.vertex);
+                    } else {
+                        to_keep.push(msg);
+                    }
                 }
+                self.pending = to_keep;
+            }
+            DeliveryPolicy::LatencyLossy { drop_probability, .. } => {
+                let mut to_keep = Vec::new();
+                for msg in self.pending.drain(..) {
+                    if msg.deliver_at_round > round {
+                        to_keep.push(msg);
+                    } else if self.rng.gen::<f64>() >= drop_probability {
+                        self.inboxes[msg.to].push_back(msg.vertex);
+                    } else {
+                        self.messages_dropped += 1;
+                    }
+                }
+                self.pending = to_keep;
             }
         }
     }

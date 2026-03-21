@@ -98,14 +98,13 @@ impl SimValidator {
         }
         let mr = merkle_root(&leaves);
 
-        // 7. Build block header with current timestamp for validation
-        // Note: Using current time ensures vertices pass timestamp validation
-        // (must be within 5 minutes past and 1 minute future)
+        // 7. Build block header with deterministic timestamp based on round
+        // Using round-based time ensures simulator determinism (same seed = same results)
+        // Each round is 5 seconds, starting from GENESIS_TIMESTAMP
+        const GENESIS_TIMESTAMP: i64 = 1741132800; // 2025-03-05T00:00:00Z
+        let current_timestamp = GENESIS_TIMESTAMP + (round as i64 * 5);
+        
         let prev_hash = parents.first().copied().unwrap_or([0u8; 32]);
-        let current_timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
         let header = BlockHeader {
             version: 1,
             height: round,

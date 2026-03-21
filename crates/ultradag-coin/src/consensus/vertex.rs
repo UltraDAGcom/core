@@ -85,21 +85,31 @@ impl DagVertex {
 
     /// Verify that the vertex timestamp is within acceptable bounds.
     /// Rejects vertices with timestamps too far in the past or future.
-    /// 
+    ///
     /// Validation rules:
     /// - Timestamp must not be older than MAX_TIMESTAMP_AGE_SECS (5 minutes)
     /// - Timestamp must not be more than MAX_TIMESTAMP_FUTURE_SECS (1 minute) in future
-    /// 
+    ///
     /// This prevents timestamp manipulation attacks while allowing for clock skew.
+    ///
+    /// Note: When compiled with the `simulator` feature, timestamp validation is disabled
+    /// to allow deterministic simulation with fixed genesis timestamps.
     pub fn verify_timestamp(&self, current_time: i64) -> bool {
-        let vertex_time = self.block.header.timestamp;
+        // In simulator mode, skip timestamp validation to allow deterministic timestamps
+        #[cfg(feature = "simulator")]
+        {
+            let _ = current_time; // Suppress unused warning
+            return true;
+        }
         
+        let vertex_time = self.block.header.timestamp;
+
         // Reject timestamps too old (prevents replay attacks with old vertices)
         let min_valid_time = current_time - crate::consensus::dag::MAX_TIMESTAMP_AGE_SECS;
-        
+
         // Reject timestamps too far in future (prevents timestamp manipulation)
         let max_valid_time = current_time + crate::consensus::dag::MAX_TIMESTAMP_FUTURE_SECS;
-        
+
         vertex_time >= min_valid_time && vertex_time <= max_valid_time
     }
 

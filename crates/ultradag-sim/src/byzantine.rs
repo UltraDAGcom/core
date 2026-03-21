@@ -107,11 +107,9 @@ fn build_block(validator: &SimValidator, round: u64, parents: &[[u8; 32]], txs: 
 fn produce_equivocation(validator: &mut SimValidator, round: u64) -> Vec<(DagVertex, Option<Vec<usize>>)> {
     let v1 = validator.produce_vertex(round);
     let parents = get_parents(validator, round);
-    // Use current timestamp for validation (within acceptable window)
-    let current_timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
+    // Use deterministic timestamp for simulation reproducibility
+    const GENESIS_TIMESTAMP: i64 = 1741132800; // 2025-03-05T00:00:00Z
+    let current_timestamp = GENESIS_TIMESTAMP + (round as i64 * 5);
     let block = build_block(validator, round, &parents, vec![], current_timestamp);
     let v2 = build_and_sign_vertex(validator, block, parents, round);
     vec![(v1, None), (v2, None)]
@@ -120,11 +118,9 @@ fn produce_equivocation(validator: &mut SimValidator, round: u64) -> Vec<(DagVer
 fn produce_timestamp_manipulated(validator: &mut SimValidator, round: u64, offset: i64) -> Vec<(DagVertex, Option<Vec<usize>>)> {
     let parents = get_parents(validator, round);
     let txs = validator.mempool.best(100);
-    // Use current timestamp with offset (keep within validation window)
-    let current_timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
+    // Use deterministic timestamp with offset for simulation reproducibility
+    const GENESIS_TIMESTAMP: i64 = 1741132800; // 2025-03-05T00:00:00Z
+    let current_timestamp = GENESIS_TIMESTAMP + (round as i64 * 5);
     let block = build_block(validator, round, &parents, txs, current_timestamp + offset.min(30));
     let v = build_and_sign_vertex(validator, block, parents.clone(), round);
     validator.dag.insert(v.clone());
