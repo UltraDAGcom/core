@@ -13,7 +13,8 @@ use tokio::net::TcpListener;
 use tracing::{error, info, warn};
 
 /// Timeout for RPC lock acquisition — prevents blocking when P2P sync holds write locks.
-const RPC_LOCK_TIMEOUT: Duration = Duration::from_secs(10);
+/// Set to 60 seconds to handle slow sync operations without spurious 503 errors.
+const RPC_LOCK_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Acquire a read lock with timeout. Returns 503 if the lock can't be acquired.
 macro_rules! read_lock_or_503 {
@@ -149,6 +150,30 @@ struct StatusResponse {
     cpu_usage_percent: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     uptime_seconds: Option<u64>,
+    // DAG memory statistics
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dag_memory_stats: Option<DagMemoryStats>,
+}
+
+/// DAG memory statistics for monitoring.
+#[derive(Serialize, Clone)]
+struct DagMemoryStats {
+    vertex_count: usize,
+    equivocation_vertex_count: usize,
+    children_map_count: usize,
+    total_children_entries: usize,
+    tips_count: usize,
+    rounds_count: usize,
+    descendant_validators_count: usize,
+    total_descendant_bitmap_bits: usize,
+    validator_index_count: usize,
+    validator_round_vertex_count: usize,
+    byzantine_validators_count: usize,
+    equivocation_evidence_count: usize,
+    evidence_store_validators: usize,
+    evidence_store_entries: usize,
+    pruning_floor: u64,
+    current_round: u64,
 }
 
 /// Cached /status response — serves last good data when locks are contended.
@@ -420,6 +445,66 @@ struct UndelegateRequest {
     secret_key: String,
 }
 
+// ========================================
+// CLIENT-SIDE SIGNING REQUEST TYPES
+// For mainnet: transactions must be pre-signed
+// ========================================
+
+/// Pre-signed transaction submission (mainnet-compatible)
+#[derive(Deserialize)]
+struct SubmitTxRequest {
+    /// Hex-encoded serialized transaction (postcard format)
+    tx_hex: String,
+}
+
+/// Pre-signed stake transaction submission
+#[derive(Deserialize)]
+struct SubmitStakeRequest {
+    /// Hex-encoded serialized StakeTx
+    tx_hex: String,
+}
+
+/// Pre-signed unstake transaction submission
+#[derive(Deserialize)]
+struct SubmitUnstakeRequest {
+    /// Hex-encoded serialized UnstakeTx
+    tx_hex: String,
+}
+
+/// Pre-signed proposal creation
+#[derive(Deserialize)]
+struct SubmitProposalRequest {
+    /// Hex-encoded serialized CreateProposalTx
+    tx_hex: String,
+}
+
+/// Pre-signed vote submission
+#[derive(Deserialize)]
+struct SubmitVoteRequest {
+    /// Hex-encoded serialized VoteTx
+    tx_hex: String,
+}
+
+/// Pre-signed delegation submission
+#[derive(Deserialize)]
+struct SubmitDelegateRequest {
+    /// Hex-encoded serialized DelegateTx
+    tx_hex: String,
+}
+
+/// Pre-signed undelegation submission
+#[derive(Deserialize)]
+struct SubmitUndelegateRequest {
+    /// Hex-encoded serialized UndelegateTx
+    tx_hex: String,
+}
+
+/// Helper struct for deserializing raw transaction bytes
+#[derive(Deserialize)]
+struct RawTxHex {
+    tx_hex: String,
+}
+
 #[derive(Deserialize)]
 struct SetCommissionRequest {
     secret_key: String,
@@ -498,6 +583,107 @@ async fn handle_request(
         // Lock-free health check for Fly.io proxy — never blocks on DAG/state locks
         (&Method::GET, ["health"]) => {
             json_response(StatusCode::OK, &serde_json::json!({"status": "ok"}))
+        }
+
+        // Prometheus-compatible metrics endpoint
+        (&Method::GET, ["metrics"]) => {
+            // Collect metrics without blocking
+            let dag_round = server.dag.try_read()
+                .map(|d| d.current_round())
+                .unwrap_or(0);
+            let dag_vertices = server.dag.try_read()
+                .map(|d| d.len())
+                .unwrap_or(0);
+            let pruning_floor = server.dag.try_read()
+                .map(|d| d.pruning_floor())
+                .unwrap_or(0);
+            
+            let finality_lag = server.dag.try_read()
+                .and_then(|d| {
+                    server.finality.try_read()
+                        .map(|f| d.current_round().saturating_sub(f.last_finalized_round()))
+                })
+                .unwrap_or(0);
+            
+            let validator_count = server.finality.try_read()
+                .map(|f| f.validator_count())
+                .unwrap_or(0);
+            
+            let (total_supply, account_count, total_staked, active_validators, mempool_size) = 
+                match (server.state.try_read(), server.mempool.try_read()) {
+                    (Ok(state), Ok(mempool)) => (
+                        state.total_supply(),
+                        state.account_count(),
+                        state.total_staked(),
+                        state.active_validators().len(),
+                        mempool.len(),
+                    ),
+                    _ => (0, 0, 0, 0, 0),
+                };
+
+            let peer_count = server.peers.peer_count().await;
+            let ban_count = server.peers.ban_count().await;
+
+            // Format as Prometheus metrics
+            let metrics = format!(
+                "# HELP ultradag_current_round Current DAG round number
+# TYPE ultradag_current_round gauge
+ultradag_current_round {dag_round}
+
+# HELP ultradag_vertex_count Total vertices in DAG
+# TYPE ultradag_vertex_count gauge
+ultradag_vertex_count {dag_vertices}
+
+# HELP ultradag_pruning_floor Pruning floor round
+# TYPE ultradag_pruning_floor gauge
+ultradag_pruning_floor {pruning_floor}
+
+# HELP ultradag_finality_lag Rounds behind finality
+# TYPE ultradag_finality_lag gauge
+ultradag_finality_lag {finality_lag}
+
+# HELP ultradag_validator_count Number of registered validators
+# TYPE ultradag_validator_count gauge
+ultradag_validator_count {validator_count}
+
+# HELP ultradag_active_validators Number of active validators
+# TYPE ultradag_active_validators gauge
+ultradag_active_validators {active_validators}
+
+# HELP ultradag_total_supply Total UDAG supply in sats
+# TYPE ultradag_total_supply gauge
+ultradag_total_supply {total_supply}
+
+# HELP ultradag_account_count Number of accounts
+# TYPE ultradag_account_count gauge
+ultradag_account_count {account_count}
+
+# HELP ultradag_total_staked Total staked UDAG in sats
+# TYPE ultradag_total_staked gauge
+ultradag_total_staked {total_staked}
+
+# HELP ultradag_mempool_size Transactions in mempool
+# TYPE ultradag_mempool_size gauge
+ultradag_mempool_size {mempool_size}
+
+# HELP ultradag_peer_count Connected P2P peers
+# TYPE ultradag_peer_count gauge
+ultradag_peer_count {peer_count}
+
+# HELP ultradag_banned_ips Banned IP addresses
+# TYPE ultradag_banned_ips gauge
+ultradag_banned_ips {ban_count}
+");
+
+            Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Access-Control-Allow-Origin", "*")
+                .body(Full::new(Bytes::from(metrics)))
+                .unwrap_or_else(|e| {
+                    error!("Failed to build metrics response: {}", e);
+                    Response::new(Full::new(Bytes::from("")))
+                })
         }
 
         // Detailed health diagnostics with comprehensive system status
@@ -652,9 +838,10 @@ async fn handle_request(
             let dag_vertices = dag.len();
             let dag_round = dag.current_round();
             let dag_tips_len = dag.tips().len();
+            let dag_stats = dag.dag_memory_stats();
             drop(dag);
 
-            let fin = read_or_cache!(server.finality);
+            let fin = read_lock_or_503!(server.finality);
             let finalized_count = fin.finalized_count();
             let validator_count = fin.validator_count();
             drop(fin);
@@ -687,6 +874,24 @@ async fn handle_request(
                 memory_usage_bytes,
                 cpu_usage_percent,
                 uptime_seconds,
+                dag_memory_stats: Some(DagMemoryStats {
+                    vertex_count: dag_stats.vertex_count,
+                    equivocation_vertex_count: dag_stats.equivocation_vertex_count,
+                    children_map_count: dag_stats.children_map_count,
+                    total_children_entries: dag_stats.total_children_entries,
+                    tips_count: dag_stats.tips_count,
+                    rounds_count: dag_stats.rounds_count,
+                    descendant_validators_count: dag_stats.descendant_validators_count,
+                    total_descendant_bitmap_bits: dag_stats.total_descendant_bitmap_bits,
+                    validator_index_count: dag_stats.validator_index_count,
+                    validator_round_vertex_count: dag_stats.validator_round_vertex_count,
+                    byzantine_validators_count: dag_stats.byzantine_validators_count,
+                    equivocation_evidence_count: dag_stats.equivocation_evidence_count,
+                    evidence_store_validators: dag_stats.evidence_store_validators,
+                    evidence_store_entries: dag_stats.evidence_store_entries,
+                    pruning_floor: dag_stats.pruning_floor,
+                    current_round: dag_stats.current_round,
+                }),
             };
 
             *status_cache().lock().await = Some(status.clone());
@@ -1929,8 +2134,8 @@ async fn handle_request(
         }
 
         // Submit a pre-signed transaction (enables client-side signing / light clients).
-        // Accepts a JSON-serialized Transaction. Verifies signature, validates against
-        // state, inserts in mempool, and broadcasts.
+        // Accepts a JSON-serialized Transaction or {tx_hex: "..."} format.
+        // Verifies signature, validates against state, inserts in mempool, and broadcasts.
         (&Method::POST, ["tx", "submit"]) => {
             if !rate_limiter.check_rate_limit(client_ip, limits::TX) {
                 return Ok(error_response(
@@ -1942,9 +2147,24 @@ async fn handle_request(
             if body.len() > MAX_REQUEST_SIZE {
                 return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large (max 1MB)"));
             }
-            let Ok(tx) = serde_json::from_slice::<Transaction>(&body) else {
+            
+            // Parse request - accept either {tx_hex: "..."} or direct Transaction JSON
+            let tx: Transaction = if let Ok(raw) = serde_json::from_slice::<RawTxHex>(&body) {
+                // Hex-encoded serialized transaction (postcard format)
+                let tx_bytes = match hex::decode(&raw.tx_hex) {
+                    Ok(bytes) => bytes,
+                    Err(_) => return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex in tx_hex")),
+                };
+                match postcard::from_bytes(&tx_bytes) {
+                    Ok(tx) => tx,
+                    Err(_) => return Ok(error_response(StatusCode::BAD_REQUEST, "failed to deserialize transaction from hex")),
+                }
+            } else if let Ok(tx_direct) = serde_json::from_slice::<Transaction>(&body) {
+                // Direct JSON transaction
+                tx_direct
+            } else {
                 return Ok(error_response(StatusCode::BAD_REQUEST,
-                    "invalid JSON: expected a serialized Transaction (Transfer, Stake, Unstake, CreateProposal, Vote, Delegate, Undelegate, or SetCommission)"));
+                    "invalid JSON: expected a serialized Transaction or {tx_hex: \"...\"}"));
             };
 
             // Verify Ed25519 signature

@@ -159,7 +159,10 @@ async fn main() -> Result<(), LoadTestError> {
         let semaphore = semaphore.clone();
 
         let task = tokio::spawn(async move {
-            let _permit = semaphore.acquire().await.unwrap();
+            let _permit = match semaphore.acquire().await {
+                Ok(permit) => permit,
+                Err(_) => return Err(LoadTestError("semaphore closed".into())),
+            };
             send_transaction(&client, &config, i as u64).await
         });
 

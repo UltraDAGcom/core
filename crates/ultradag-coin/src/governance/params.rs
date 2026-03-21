@@ -56,6 +56,9 @@ impl Default for GovernanceParams {
 
 impl GovernanceParams {
     /// Apply a parameter change. Returns Err if param name is unknown or value is invalid.
+    /// 
+    /// SECURITY: Enforces BFT safety minimums to prevent governance from changing
+    /// parameters to values that would compromise consensus safety or enable attacks.
     pub fn apply_change(&mut self, param: &str, new_value: &str) -> Result<(), String> {
         let value: u64 = new_value.parse::<u64>()
             .map_err(|_| format!("Invalid value '{}': must be a positive integer", new_value))?;
@@ -73,10 +76,14 @@ impl GovernanceParams {
                 self.min_fee_sats = value;
             }
             "min_stake_to_propose" => {
-                // Floor: 1 sat (anyone with stake can propose)
+                // SECURITY: BFT safety minimum prevents dust attacks on governance.
+                // Floor: BFT_MIN_STAKE_SATS (1000 sats) — meaningful stake required
                 // Ceiling: 1M UDAG — prevents governance from being locked to whales
-                if value == 0 {
-                    return Err("min_stake_to_propose cannot be zero".to_string());
+                if value < BFT_MIN_STAKE_SATS {
+                    return Err(format!(
+                        "min_stake_to_propose cannot be below BFT safety minimum of {} sats",
+                        BFT_MIN_STAKE_SATS
+                    ));
                 }
                 if value > 1_000_000 * 100_000_000 {
                     return Err("min_stake_to_propose cannot exceed 1,000,000 UDAG".to_string());
@@ -84,8 +91,20 @@ impl GovernanceParams {
                 self.min_stake_to_propose = value;
             }
             "quorum_numerator" => {
-                if !(5..=100).contains(&value) {
-                    return Err("quorum_numerator must be 5-100".to_string());
+                // SECURITY: BFT safety bounds prevent quorum manipulation.
+                // Floor: BFT_MIN_QUORUM_NUMERATOR (10%) — prevents tiny fraction from passing proposals
+                // Ceiling: BFT_MAX_QUORUM_NUMERATOR (50%) — prevents impossible quorum requirements
+                if value < BFT_MIN_QUORUM_NUMERATOR {
+                    return Err(format!(
+                        "quorum_numerator cannot be below BFT safety minimum of {}",
+                        BFT_MIN_QUORUM_NUMERATOR
+                    ));
+                }
+                if value > BFT_MAX_QUORUM_NUMERATOR {
+                    return Err(format!(
+                        "quorum_numerator cannot exceed BFT safety maximum of {}",
+                        BFT_MAX_QUORUM_NUMERATOR
+                    ));
                 }
                 self.quorum_numerator = value;
             }

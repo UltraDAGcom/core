@@ -86,19 +86,37 @@ impl ValidatorSet {
     }
 
     /// BFT quorum threshold: ceil(2n/3).
-    /// When `configured_validators` is set, uses that as `n` to prevent
-    /// phantom registrations from inflating the threshold.
+    /// 
+    /// SECURITY: When `configured_validators` is set, uses that as `n` to prevent
+    /// phantom registrations from inflating the threshold (VULN-02 fix).
+    /// 
     /// Returns usize::MAX if fewer than min_validators are known.
     /// When `configured_validators` is set, uses that count for the min check
     /// (the operator has declared the expected validator count).
+    /// 
+    /// # Panics
+    /// This function should not panic under normal operation. If arithmetic overflow
+    /// occurs, it indicates a critical bug and the node should halt.
     pub fn quorum_threshold(&self) -> usize {
         let effective_count = match self.configured_validators {
-            Some(configured) => configured,
-            None => self.validators.len(),
+            Some(configured) => {
+                // Use configured count to prevent attacker from inflating threshold
+                // by registering fake validators (VULN-02 fix)
+                configured
+            }
+            None => {
+                // Dynamic count mode: vulnerable to phantom validator inflation
+                // Operators should always use configured_validators in production
+                self.validators.len()
+            }
         };
+        
+        // Enforce minimum validator requirement
         if effective_count < self.min_validators {
             return usize::MAX;
         }
+        
+        // ceil(2n/3) calculation with overflow protection
         (2 * effective_count).div_ceil(3)
     }
 

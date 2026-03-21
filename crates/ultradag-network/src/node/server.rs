@@ -1028,6 +1028,7 @@ async fn handle_peer(
     let mut last_round_hash_request: Option<Instant> = None;
     let mut last_get_dag_vertices: Option<Instant> = None;
     let mut last_get_checkpoint: Option<Instant> = None;
+    let mut last_checkpoint_sync: Option<Instant> = None;
 
     // Per-peer aggregate message rate limiting: track messages in a sliding window.
     // Disconnect peers that exceed MAX_MESSAGES_PER_WINDOW within RATE_WINDOW_SECS.
@@ -1913,6 +1914,20 @@ async fn handle_peer(
             }
 
             Message::CheckpointSync { checkpoint, suffix_vertices, state_at_checkpoint, checkpoint_chain } => {
+                // Rate limit CheckpointSync: at most one per 5 minutes per peer.
+                // Checkpoint sync is expensive: multiple disk reads (checkpoint files,
+                // checkpoint state, entire chain), DAG read lock, and large state application.
+                const CHECKPOINT_SYNC_INTERVAL: Duration = Duration::from_secs(300);
+                let now = Instant::now();
+                if let Some(last) = last_checkpoint_sync {
+                    if now.duration_since(last) < CHECKPOINT_SYNC_INTERVAL {
+                        debug!("CheckpointSync rate limited for {}", peer_addr);
+                        checkpoint_metrics.record_fast_sync_failure();
+                        continue;
+                    }
+                }
+                last_checkpoint_sync = Some(now);
+
                 checkpoint_metrics.record_fast_sync_attempt();
                 let sync_start = std::time::Instant::now();
 

@@ -48,6 +48,12 @@ fn make_vertex(
     txs: Vec<Transaction>,
     sk: &SecretKey,
 ) -> DagVertex {
+    // Use current time for timestamp to pass validation (within 5 min past, 1 min future)
+    let current_timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    
     let coinbase = CoinbaseTx {
         to: *proposer,
         amount: 0,
@@ -57,7 +63,7 @@ fn make_vertex(
         header: BlockHeader {
             version: 1,
             height,
-            timestamp: 1_000_000 + round as i64,
+            timestamp: current_timestamp, // Use current time for validation
             prev_hash: parents.first().copied().unwrap_or([0u8; 32]),
             merkle_root: [0u8; 32],
         },

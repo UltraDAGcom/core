@@ -474,20 +474,31 @@ fn test_proposals_at_max_active_count_rejected() {
         fund_and_seat(&mut state, sk, cat);
     }
 
-    // Create MAX_ACTIVE_PROPOSALS proposals using first council member
-    let sk = &sks[0];
+    // Create MAX_ACTIVE_PROPOSALS proposals using different council members
+    // (to avoid PROPOSAL_COOLDOWN_ROUNDS restriction)
+    let mut nonces = vec![0u64; sks.len()];
     for i in 0..MAX_ACTIVE_PROPOSALS as u64 {
+        let idx = (i as usize) % sks.len();
+        let proposer_sk = &sks[idx];
+        let nonce = nonces[idx];
+        nonces[idx] += 1;
+        
         let ptx = make_proposal_tx(
-            sk, i, &format!("Proposal {}", i), "Desc",
-            ProposalType::TextProposal, MIN_FEE_SATS, i,
+            proposer_sk, i, &format!("Proposal {}", i), "Desc",
+            ProposalType::TextProposal, MIN_FEE_SATS, nonce,
         );
-        state.apply_create_proposal(&ptx, 1000).unwrap();
+        // Use different rounds to avoid cooldown
+        let round = 1000 + i * (crate::constants::PROPOSAL_COOLDOWN_ROUNDS + 1);
+        state.apply_create_proposal(&ptx, round).unwrap();
     }
 
-    // One more should fail
+    // One more should fail - use a fresh address that hasn't proposed before
+    let fresh_sk = SecretKey::from_bytes([0x99; 32]);
+    fund_and_seat(&mut state, &fresh_sk, CouncilSeatCategory::Business);
+    
     let ptx = make_proposal_tx(
-        sk, MAX_ACTIVE_PROPOSALS as u64, "One too many", "Desc",
-        ProposalType::TextProposal, MIN_FEE_SATS, MAX_ACTIVE_PROPOSALS as u64,
+        &fresh_sk, MAX_ACTIVE_PROPOSALS as u64, "One too many", "Desc",
+        ProposalType::TextProposal, MIN_FEE_SATS, 0,
     );
     let result = state.apply_create_proposal(&ptx, 1000);
     assert!(result.is_err(), "Should reject when at max active proposals");

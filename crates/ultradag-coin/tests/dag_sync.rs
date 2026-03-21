@@ -14,12 +14,18 @@ fn make_vertex(
     parents: Vec<[u8; 32]>,
     sk: &SecretKey,
 ) -> DagVertex {
+    // Use current time for timestamp to pass validation (within 5 min past, 1 min future)
+    let current_timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    
     let validator = sk.address();
     let block = Block {
         header: BlockHeader {
             version: 1,
             height: 0,
-            timestamp: 1_000_000 + nonce as i64,
+            timestamp: current_timestamp, // Use current time for validation
             prev_hash: parents.first().copied().unwrap_or([0u8; 32]),
             merkle_root: [0u8; 32],
         },

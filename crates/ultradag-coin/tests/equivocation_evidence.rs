@@ -5,10 +5,16 @@ use ultradag_coin::consensus::{BlockDag, DagVertex};
 use ultradag_coin::tx::CoinbaseTx;
 
 fn make_vertex(nonce: u64, round: u64, parents: Vec<[u8; 32]>, sk: &SecretKey) -> DagVertex {
+    // Use current time for timestamp to pass validation (within 5 min past, 1 min future)
+    let current_timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    
     let header = BlockHeader {
         version: 1,
         height: round,
-        timestamp: 1000000 + round as i64,
+        timestamp: current_timestamp, // Use current time for validation
         prev_hash: [0u8; 32],
         merkle_root: [0u8; 32],
     };
@@ -22,12 +28,12 @@ fn make_vertex(nonce: u64, round: u64, parents: Vec<[u8; 32]>, sk: &SecretKey) -
         coinbase,
         transactions: vec![],
     };
-    // Add nonce to make vertices unique
-    block.header.timestamp += nonce as i64;
-    
+    // Add nonce to make vertices unique (small offset to keep within validation window)
+    block.header.timestamp += (nonce % 10) as i64;
+
     let validator = sk.address();
     let pub_key = sk.verifying_key().to_bytes();
-    
+
     let mut vertex = DagVertex::new(
         block.clone(),
         parents,
@@ -36,7 +42,7 @@ fn make_vertex(nonce: u64, round: u64, parents: Vec<[u8; 32]>, sk: &SecretKey) -
         pub_key,
         ultradag_coin::address::Signature([0u8; 64]), // Placeholder
     );
-    
+
     // Sign the vertex
     let sig = sk.sign(&vertex.signable_bytes());
     vertex.signature = sig;
@@ -61,14 +67,14 @@ fn test_equivocation_evidence_survives_pruning() {
     // Round 5: sk2 equivocates (two different vertices, same round)
     let equivocating_v1 = make_vertex(100, 5, vec![v1.hash()], &sk2);
     let equivocating_v2 = make_vertex(101, 5, vec![v1.hash()], &sk2);
-    
+
     // Insert first equivocating vertex
     assert!(dag.try_insert(equivocating_v1.clone()).is_ok());
-    
+
     // Insert second equivocating vertex - should detect equivocation
     let result = dag.try_insert(equivocating_v2.clone());
     assert!(result.is_err(), "Should detect equivocation");
-    
+
     // Verify evidence is stored
     assert!(dag.is_byzantine(&sk2.address()));
     let evidence = dag.get_permanent_evidence(&sk2.address());
@@ -77,9 +83,10 @@ fn test_equivocation_evidence_survives_pruning() {
     assert_eq!(evidence.validator, sk2.address());
     assert_eq!(evidence.round, 5);
 
-    // Prune old rounds. Use 1004 so new_floor = 1004 - 1000 = 4 < evidence round 5.
-    // This simulates advancing to round 1004 and pruning vertices in rounds < 4.
-    let pruned_count = dag.prune_old_rounds(1004);
+    // Prune old rounds. Use 1504 so new_floor = 1504 - 500 = 1004 > evidence round 5.
+    // Wait - we want evidence to SURVIVE, so use a round that keeps evidence.
+    // With PRUNING_HORIZON=500, use round 504 so floor = 4 < evidence round 5.
+    let pruned_count = dag.prune_old_rounds(504);
     assert!(pruned_count > 0, "Should have pruned some vertices");
 
     // Verify evidence still exists after pruning

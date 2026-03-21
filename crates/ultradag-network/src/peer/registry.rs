@@ -83,6 +83,16 @@ impl PeerRegistry {
         }
     }
 
+    /// Get the number of connected peers.
+    pub async fn peer_count(&self) -> usize {
+        self.writers.read().await.len()
+    }
+
+    /// Get the number of banned IPs.
+    pub async fn ban_count(&self) -> usize {
+        self.banned_peers.read().await.len()
+    }
+
     /// Atomically mark an address as "connecting" to prevent duplicate connection attempts.
     /// Returns true if the address was not already being connected to (caller should proceed).
     /// Returns false if another task is already connecting (caller should skip).

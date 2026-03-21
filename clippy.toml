@@ -1,0 +1,36 @@
+# Clippy configuration for UltraDAG
+# Enforces strict code quality standards for production readiness
+
+# Disallow common panic-inducing methods in production code
+disallowed-methods = [
+    { path = "std::option::Option::unwrap", reason = "Use proper error handling instead of panicking" },
+    { path = "std::option::Option::expect", reason = "Use proper error handling with meaningful messages" },
+    { path = "std::result::Result::unwrap", reason = "Use ? operator or match for error handling" },
+    { path = "std::result::Result::expect", reason = "Use proper error handling with context" },
+    { path = "std::panic::panic", reason = "Return errors instead of panicking" },
+]
+
+# Allow unwrap in tests (test code can panic on failure)
+disallowed-methods-allow-tests = true
+
+# Maximum cognitive complexity for functions
+cognitive-complexity-threshold = 50
+
+# Maximum lines in a function
+too-many-arguments-threshold = 10
+
+# Warn on large stack allocations
+large-stack-frames-threshold = 65536
+
+# Warn on excessive type complexity
+type-complexity-threshold = 500
+
+# Disallow saturating arithmetic in critical paths (use checked arithmetic instead)
+# Note: This is a manual check - look for saturating_* in production code
+# arithmetic-side-effects = true
+
+# Require documentation for public items
+missing-docs-in-crate-items = true
+
+# Warn on unused imports and variables
+warn-on-all-unused-imports = true

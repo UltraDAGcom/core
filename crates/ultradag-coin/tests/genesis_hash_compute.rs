@@ -3,6 +3,11 @@
 /// For testnet hash: `cargo test test_compute_genesis_hash -- --nocapture`
 #[test]
 fn test_compute_genesis_hash() {
+    // For mainnet: we need to set ULTRADAG_DEV_KEY to compute genesis
+    // Use a deterministic test key for genesis computation
+    #[cfg(feature = "mainnet")]
+    std::env::set_var("ULTRADAG_DEV_KEY", "0000000000000000000000000000000000000000000000000000000000000001");
+    
     let state = ultradag_coin::StateEngine::new_with_genesis();
     let snapshot = state.snapshot();
     let state_root = ultradag_coin::consensus::checkpoint::compute_state_root(&snapshot);
@@ -30,6 +35,10 @@ fn test_compute_genesis_hash() {
 
 #[test]
 fn genesis_hash_matches_constant() {
+    // For mainnet: set ULTRADAG_DEV_KEY for genesis computation
+    #[cfg(feature = "mainnet")]
+    std::env::set_var("ULTRADAG_DEV_KEY", "0000000000000000000000000000000000000000000000000000000000000001");
+    
     let state = ultradag_coin::StateEngine::new_with_genesis();
     let snapshot = state.snapshot();
     let state_root = ultradag_coin::consensus::checkpoint::compute_state_root(&snapshot);

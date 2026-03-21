@@ -264,7 +264,9 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         let (k, v) = entry?;
         let key_bytes = k.value();
         if key_bytes.len() == 28 {
-            let id = u64::from_le_bytes(key_bytes[..8].try_into().unwrap());
+            let id_bytes: [u8; 8] = key_bytes[..8].try_into()
+                .map_err(|_| PersistenceError::Serialization("vote key conversion failed".into()))?;
+            let id = u64::from_le_bytes(id_bytes);
             let mut addr_bytes = [0u8; 20];
             addr_bytes.copy_from_slice(&key_bytes[8..]);
             let addr = Address(addr_bytes);
@@ -396,7 +398,9 @@ fn read_u64(table: &redb::ReadOnlyTable<&str, &[u8]>, key: &str) -> Result<u64, 
         Some(v) => {
             let bytes = v.value();
             if bytes.len() >= 8 {
-                Ok(u64::from_le_bytes(bytes[..8].try_into().unwrap()))
+                let bytes_array: [u8; 8] = bytes[..8].try_into()
+                    .map_err(|_| PersistenceError::Serialization("metadata value conversion failed".into()))?;
+                Ok(u64::from_le_bytes(bytes_array))
             } else {
                 Ok(0)
             }

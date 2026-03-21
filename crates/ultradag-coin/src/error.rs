@@ -91,6 +91,18 @@ pub enum CoinError {
 
     #[error("FATAL: supply invariant broken — node must halt: {0}")]
     SupplyInvariantBroken(String),
+
+    /// Voter has stake locked in active proposals and cannot vote again.
+    #[error("stake is locked in active votes")]
+    StakeLocked,
+
+    /// Proposal cooldown not elapsed since last proposal by this address.
+    #[error("proposal cooldown not elapsed — must wait {} rounds", crate::constants::PROPOSAL_COOLDOWN_ROUNDS)]
+    ProposalCooldownNotElapsed,
+
+    /// Parameter change would violate BFT safety minimums.
+    #[error("parameter change violates BFT safety constraints: {0}")]
+    BFTSafetyViolation(String),
 }
 
 impl CoinError {

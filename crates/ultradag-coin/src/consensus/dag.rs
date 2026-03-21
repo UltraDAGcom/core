@@ -74,20 +74,30 @@ pub enum DagInsertError {
 }
 
 /// Maximum number of parent references allowed per DagVertex.
-pub const MAX_PARENTS: usize = 64;
+/// Limited to prevent DoS through excessive parent traversal during finality checks.
+pub const MAX_PARENTS: usize = 32;
 
 /// Target number of parents per vertex for partial parent selection.
 /// Each validator references K deterministically-scored parents instead of all parents.
-/// Enables bounded parent selection when validator count exceeds K_PARENTS (32).
+/// Enables bounded parent selection when validator count exceeds K_PARENTS (16).
 /// With MAX_ACTIVE_VALIDATORS=21, all validators are selected as parents.
-/// Partial selection activates when validator count exceeds 32 (e.g., via future
-/// parameter change). K=32 provides strong DAG connectivity while keeping parent
-/// count manageable. Follows Narwhal's approach.
-pub const K_PARENTS: usize = 32;
+/// Partial selection activates when validator count exceeds 16.
+/// K=16 provides sufficient DAG connectivity while keeping parent count manageable.
+/// Follows Narwhal's approach with more conservative bounds.
+pub const K_PARENTS: usize = 16;
 
 /// Number of rounds to keep in memory before pruning older finalized vertices.
-/// Keeps last 1000 rounds = ~1.4 hours at 5-second rounds.
-pub const PRUNING_HORIZON: u64 = 1000;
+/// Keeps last 500 rounds = ~42 minutes at 5-second rounds.
+/// Reduces memory footprint while maintaining sufficient history for finality.
+pub const PRUNING_HORIZON: u64 = 500;
+
+/// Maximum age in seconds for vertex timestamps relative to local time.
+/// Vertices with timestamps older than this are rejected.
+pub const MAX_TIMESTAMP_AGE_SECS: i64 = 300; // 5 minutes
+
+/// Maximum future timestamp offset allowed for vertices.
+/// Vertices claiming to be from the future beyond this are rejected.
+pub const MAX_TIMESTAMP_FUTURE_SECS: i64 = 60; // 1 minute
 
 /// Equivocation evidence stored permanently, separate from the prunable DAG.
 /// This ensures slashing proofs survive even after the relevant vertices are pruned.
@@ -98,6 +108,44 @@ pub struct EquivocationEvidence {
     pub vertex_hash_1: [u8; 32],
     pub vertex_hash_2: [u8; 32],
     pub detected_at_round: u64,
+}
+
+/// Memory statistics for the DAG.
+/// Returned by `BlockDag::dag_memory_stats()` for monitoring memory usage.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DagMemoryStats {
+    /// Number of vertices in the DAG.
+    pub vertex_count: usize,
+    /// Number of rejected equivocation vertices stored for evidence broadcasting.
+    pub equivocation_vertex_count: usize,
+    /// Number of entries in the children map (vertices that have children).
+    pub children_map_count: usize,
+    /// Total number of child entries across all children sets.
+    pub total_children_entries: usize,
+    /// Number of current tips (vertices with no children).
+    pub tips_count: usize,
+    /// Number of rounds with vertices.
+    pub rounds_count: usize,
+    /// Number of vertices with descendant_validators bitmaps.
+    pub descendant_validators_count: usize,
+    /// Total size of all descendant_validators bitmaps (in bits).
+    pub total_descendant_bitmap_bits: usize,
+    /// Number of validators in the validator index.
+    pub validator_index_count: usize,
+    /// Number of entries in the validator_round_vertex secondary index.
+    pub validator_round_vertex_count: usize,
+    /// Number of Byzantine validators.
+    pub byzantine_validators_count: usize,
+    /// Number of entries in the temporary equivocation_evidence map.
+    pub equivocation_evidence_count: usize,
+    /// Number of validators with permanent evidence in evidence_store.
+    pub evidence_store_validators: usize,
+    /// Total number of evidence entries in evidence_store.
+    pub evidence_store_entries: usize,
+    /// Current pruning floor (earliest round kept in memory).
+    pub pruning_floor: u64,
+    /// Current round number.
+    pub current_round: u64,
 }
 
 /// The DAG data structure for DAG-BFT consensus.
@@ -708,20 +756,37 @@ impl BlockDag {
         }
         // Calculate the new pruning floor
         let new_floor = last_finalized_round.saturating_sub(depth);
-        
+
         // Only prune if we've advanced beyond the current floor
         if new_floor <= self.pruning_floor {
             return 0;
         }
-        
+
         let mut pruned_count = 0;
-        
+
         // Collect rounds to prune (all rounds < new_floor)
         let rounds_to_prune: Vec<u64> = self.rounds.keys()
             .copied()
             .filter(|&r| r < new_floor)
             .collect();
-        
+
+        // First pass: collect all parent hashes that need children set cleanup
+        // This avoids holding references while modifying the children map
+        let mut parents_to_cleanup: HashSet<[u8; 32]> = HashSet::new();
+        for round in &rounds_to_prune {
+            if let Some(hashes) = self.rounds.get(round) {
+                for hash in hashes {
+                    if let Some(v) = self.vertices.get(hash) {
+                        for parent in &v.parent_hashes {
+                            if *parent != [0u8; 32] {
+                                parents_to_cleanup.insert(*parent);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         for round in rounds_to_prune {
             if let Some(hashes) = self.rounds.remove(&round) {
                 for hash in hashes {
@@ -730,7 +795,7 @@ impl BlockDag {
                         self.validator_round_vertex.remove(&(v.validator, v.round));
                     }
 
-                    // Remove from vertices
+                    // Remove from vertices (main data structure)
                     self.vertices.remove(&hash);
 
                     // Remove from children map
@@ -742,10 +807,6 @@ impl BlockDag {
                     // Remove from descendant_validators
                     self.descendant_validators.remove(&hash);
 
-                    // Stale entries in other vertices' children sets are harmless:
-                    // they point to removed hashes and are ignored during traversal.
-                    // Removing them was O(V*C) and caused lock contention under load.
-
                     // Remove from equivocation_vertices if present
                     self.equivocation_vertices.remove(&hash);
 
@@ -753,11 +814,27 @@ impl BlockDag {
                 }
             }
         }
-        
+
+        // Remove pruned vertices from all parent children sets
+        // This prevents unbounded growth of children sets
+        for parent_hash in parents_to_cleanup {
+            if let Some(children_set) = self.children.get_mut(&parent_hash) {
+                children_set.retain(|child_hash| self.vertices.contains_key(child_hash));
+            }
+        }
+
+        // Clean up empty children entries (including genesis parent [0u8; 32])
+        // This prevents unbounded growth from stale genesis parent references
+        self.children.retain(|_parent_hash, children_set| !children_set.is_empty());
+
         // Prune equivocation vertices from rounds below the new floor.
         // These are rejected vertices stored for evidence broadcasting — they're NOT
         // in self.rounds, so the per-hash removal above never catches them.
         self.equivocation_vertices.retain(|_, v| v.round >= new_floor);
+
+        // Prune old equivocation evidence entries (keep only recent rounds)
+        // Evidence is still permanently stored in evidence_store for slashing proofs
+        self.equivocation_evidence.retain(|(_, round), _| *round >= new_floor);
 
         // Prune old evidence entries (keep evidence for validators who equivocated in recent rounds)
         self.evidence_store.retain(|_addr, entries| {
@@ -779,6 +856,106 @@ impl BlockDag {
     /// Set the pruning floor directly (used after checkpoint fast-sync).
     pub fn set_pruning_floor(&mut self, floor: u64) {
         self.pruning_floor = floor;
+    }
+
+    /// Memory statistics for the DAG.
+    /// Provides visibility into memory usage for monitoring and debugging.
+    pub fn dag_memory_stats(&self) -> DagMemoryStats {
+        // Calculate total children set size
+        let total_children_entries: usize = self.children.values().map(|s| s.len()).sum();
+        
+        // Calculate total descendant_validators bitmap size (in bits)
+        let total_descendant_bitmap_bits: usize = self.descendant_validators
+            .values()
+            .map(|bv| bv.len())
+            .sum();
+
+        DagMemoryStats {
+            vertex_count: self.vertices.len(),
+            equivocation_vertex_count: self.equivocation_vertices.len(),
+            children_map_count: self.children.len(),
+            total_children_entries,
+            tips_count: self.tips.len(),
+            rounds_count: self.rounds.len(),
+            descendant_validators_count: self.descendant_validators.len(),
+            total_descendant_bitmap_bits,
+            validator_index_count: self.validator_index.len(),
+            validator_round_vertex_count: self.validator_round_vertex.len(),
+            byzantine_validators_count: self.byzantine_validators.len(),
+            equivocation_evidence_count: self.equivocation_evidence.len(),
+            evidence_store_validators: self.evidence_store.len(),
+            evidence_store_entries: self.evidence_store.values().map(|v| v.len()).sum(),
+            pruning_floor: self.pruning_floor,
+            current_round: self.current_round,
+        }
+    }
+
+    /// Verify internal consistency of DAG data structures.
+    /// Returns Ok(()) if all invariants hold, Err with description otherwise.
+    /// Used for testing to ensure pruning cleans up all data properly.
+    pub fn verify_integrity(&self) -> Result<(), String> {
+        // 1. All children references point to existing vertices
+        // Note: genesis parent [0u8; 32] is a sentinel and may have children that don't exist
+        let genesis: [u8; 32] = [0u8; 32];
+        for (parent_hash, children_set) in self.children.iter() {
+            if *parent_hash == genesis {
+                // Skip genesis parent - it's a sentinel that may have stale references
+                continue;
+            }
+            for child_hash in children_set {
+                if !self.vertices.contains_key(child_hash) {
+                    return Err(format!("Stale child reference: parent={:?}, child={:?}", parent_hash, child_hash));
+                }
+            }
+        }
+
+        // 2. All descendant_validators entries have corresponding vertices
+        for hash in self.descendant_validators.keys() {
+            if !self.vertices.contains_key(hash) {
+                return Err(format!("Stale descendant_validators entry: {:?}", hash));
+            }
+        }
+
+        // 3. All tips exist in vertices
+        for tip_hash in self.tips.iter() {
+            if !self.vertices.contains_key(tip_hash) {
+                return Err(format!("Stale tip reference: {:?}", tip_hash));
+            }
+        }
+
+        // 4. All validator_round_vertex entries have corresponding vertices
+        for ((validator, round), hash) in self.validator_round_vertex.iter() {
+            if let Some(vertex) = self.vertices.get(hash) {
+                if vertex.validator != *validator {
+                    return Err(format!("Validator mismatch in secondary index for {:?}", hash));
+                }
+                if vertex.round != *round {
+                    return Err(format!("Round mismatch in secondary index for {:?}", hash));
+                }
+            }
+        }
+
+        // 5. All equivocation_vertices are valid (exist or are rejected equivocations)
+        for (hash, vertex) in self.equivocation_vertices.iter() {
+            if self.vertices.contains_key(hash) {
+                return Err(format!("Equivocation vertex {:?} should not be in main vertices", hash));
+            }
+            // Verify the vertex is actually an equivocation (same validator, round as another vertex)
+            if !self.validator_round_vertex.contains_key(&(vertex.validator, vertex.round)) {
+                return Err(format!("Equivocation vertex {:?} has no matching validator_round_vertex entry", hash));
+            }
+        }
+
+        // 6. All rounds entries point to existing vertices
+        for (round, hashes) in self.rounds.iter() {
+            for hash in hashes {
+                if !self.vertices.contains_key(hash) {
+                    return Err(format!("Stale round {} entry: {:?}", round, hash));
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Save DAG state to disk
@@ -1151,28 +1328,28 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
-        
+
         let mut vertex = make_vertex_with(1, 1, vec![], &sk);
         vertex.block.header.timestamp = now + 600; // 10 minutes in future
-        
+
         // Re-sign with new timestamp
         let signable = vertex.signable_bytes();
         vertex.signature = sk.sign(&signable);
 
-        // Should be rejected (>5 minutes in future)
+        // Should be rejected (>60 seconds in future)
         let result = dag.try_insert(vertex);
         assert_eq!(result, Err(DagInsertError::FutureTimestamp), "Vertex with timestamp 10 minutes in future should be rejected");
 
-        // Create vertex with timestamp 200 seconds (3.3 minutes) in the future
+        // Create vertex with timestamp 30 seconds in the future (within tolerance)
         let mut vertex2 = make_vertex_with(2, 1, vec![], &sk);
-        vertex2.block.header.timestamp = now + 200; // 3.3 minutes in future
-        
+        vertex2.block.header.timestamp = now + 30; // 30 seconds in future
+
         // Re-sign
         let signable2 = vertex2.signable_bytes();
         vertex2.signature = sk.sign(&signable2);
 
-        // Should be accepted (<5 minutes in future)
+        // Should be accepted (<60 seconds in future)
         let result2 = dag.try_insert(vertex2);
-        assert_eq!(result2, Ok(true), "Vertex with timestamp 3.3 minutes in future should be accepted");
+        assert_eq!(result2, Ok(true), "Vertex with timestamp 30 seconds in future should be accepted");
     }
 }

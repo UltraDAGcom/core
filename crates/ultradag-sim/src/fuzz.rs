@@ -11,6 +11,15 @@ use crate::invariants;
 use crate::properties;
 use crate::txgen;
 
+/// Get current timestamp for vertex creation.
+/// Ensures vertices pass timestamp validation (within 5 min past, 1 min future).
+fn current_timestamp() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+}
+
 // === Action types ===
 
 #[derive(Debug, Clone)]
@@ -193,7 +202,8 @@ fn execute_byzantine_action(
             let v1 = validators[val_idx].produce_vertex(round);
             network.broadcast(val_idx, v1);
             let parents = get_parents(&validators[val_idx], round);
-            let block = build_block(&validators[val_idx], round, &parents, vec![], 1_000_001 + round as i64);
+            let current_ts = current_timestamp();
+            let block = build_block(&validators[val_idx], round, &parents, vec![], current_ts);
             let v2 = build_and_sign_vertex(&validators[val_idx], block, parents, round);
             network.broadcast(val_idx, v2);
         }
@@ -211,7 +221,8 @@ fn execute_byzantine_action(
                 stale.signature = v.sk.sign(&stale.signable_bytes());
                 txs.push(Transaction::Transfer(stale));
             }
-            let block = build_block(&validators[val_idx], round, &parents, txs, 1_000_000 + round as i64);
+            let current_ts = current_timestamp();
+            let block = build_block(&validators[val_idx], round, &parents, txs, current_ts);
             let vertex = build_and_sign_vertex(&validators[val_idx], block, parents, round);
             validators[val_idx].dag.insert(vertex.clone());
             validators[val_idx].finality.register_validator(validators[val_idx].address);
@@ -228,7 +239,8 @@ fn execute_byzantine_action(
                     .collect();
                 if own.is_empty() { vec![[0u8; 32]] } else { own }
             };
-            let block = build_block(&validators[val_idx], round, &parents, vec![], 1_000_000 + round as i64);
+            let current_ts = current_timestamp();
+            let block = build_block(&validators[val_idx], round, &parents, vec![], current_ts);
             let vertex = build_and_sign_vertex(&validators[val_idx], block, parents, round);
             validators[val_idx].dag.insert(vertex.clone());
             validators[val_idx].finality.register_validator(validators[val_idx].address);
@@ -302,7 +314,9 @@ fn execute_byzantine_action(
         }
         Action::BadTimestamp { offset } => {
             let parents = get_parents(&validators[val_idx], round);
-            let block = build_block(&validators[val_idx], round, &parents, vec![], 1_000_000 + round as i64 + offset);
+            // Use current timestamp with small offset (keep within validation window)
+            let current_ts = current_timestamp();
+            let block = build_block(&validators[val_idx], round, &parents, vec![], current_ts + (*offset).min(30));
             let vertex = build_and_sign_vertex(&validators[val_idx], block, parents, round);
             validators[val_idx].dag.insert(vertex.clone());
             validators[val_idx].finality.register_validator(validators[val_idx].address);

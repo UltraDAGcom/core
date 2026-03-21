@@ -30,6 +30,7 @@ fn known_fixture() -> StateSnapshot {
                 unlock_at_round: None,
                 commission_percent: 10,
                 commission_last_changed: None,
+                locked_stake: 0,
             }),
         ],
         active_validator_set: vec![addr_a],

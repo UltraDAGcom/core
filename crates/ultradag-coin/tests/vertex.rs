@@ -8,12 +8,18 @@ use ultradag_coin::consensus::vertex::DagVertex;
 use ultradag_coin::tx::CoinbaseTx;
 
 fn make_vertex(uid: u64, round: u64, parents: Vec<[u8; 32]>, sk: &SecretKey) -> DagVertex {
+    // Use current time for timestamp to pass validation (within 5 min past, 1 min future)
+    let current_timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    
     let validator = sk.address();
     let block = Block {
         header: BlockHeader {
             version: 1,
             height: uid,
-            timestamp: 1_000_000 + uid as i64,
+            timestamp: current_timestamp, // Use current time for validation
             prev_hash: parents.first().copied().unwrap_or([0u8; 32]),
             merkle_root: [0u8; 32],
         },

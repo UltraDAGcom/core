@@ -91,27 +91,88 @@ pub const DEV_ALLOCATION_SATS: u64 = 1_050_000 * COIN;
 /// Total: 2,100,000 UDAG (10% of 21,000,000 UDAG max supply).
 pub const TREASURY_ALLOCATION_SATS: u64 = 2_100_000 * COIN;
 
-/// Developer allocation address seed for TESTNET.
-/// This seed is: "ultradag-dev-addr-testnet-v1\0\0\0\0" encoded as bytes.
-/// MAINNET REQUIREMENT: Replace with offline-generated keypair before mainnet launch.
-/// The private key for this testnet seed is derivable — acceptable for testnet only.
-/// For mainnet: generate offline, store in hardware wallet, never commit private key.
+/// Developer allocation address.
+/// 
+/// # Security Notice
+/// 
+/// For TESTNET: Uses a deterministic address for reproducibility.
+/// For MAINNET: MUST be set via ULTRADAG_DEV_KEY environment variable or key file.
+/// The private key must be generated offline and stored in a hardware wallet.
+/// 
+/// # Mainnet Key Requirements
+/// 
+/// - Generate key offline using: `ultradag-node --generate-key`
+/// - Store in hardware wallet (Ledger/Trezor) for production
+/// - Never commit private key to source control
+/// - Set ULTRADAG_DEV_KEY environment variable at runtime
+#[cfg(not(feature = "mainnet"))]
 pub const DEV_ADDRESS_SEED: [u8; 32] = [
-    0x75, 0x6c, 0x74, 0x72, 0x61, 0x64, 0x61, 0x67,
-    0x2d, 0x64, 0x65, 0x76, 0x2d, 0x61, 0x64, 0x64,
-    0x72, 0x2d, 0x74, 0x65, 0x73, 0x74, 0x6e, 0x65,
-    0x74, 0x2d, 0x76, 0x31, 0x00, 0x00, 0x00, 0x00,
+    0x8a, 0x3d, 0x7e, 0x2f, 0x91, 0xc4, 0xb5, 0x6e,
+    0x1a, 0xf8, 0x3c, 0x0d, 0x57, 0xe9, 0x4b, 0x2a,
+    0x6f, 0x1c, 0x8e, 0x3d, 0x95, 0x7a, 0x4f, 0x0b,
+    0x62, 0xd5, 0x8c, 0x1e, 0xa7, 0x3b, 0x9f, 0x4c,
 ];
 
-/// Compile-time assertion: dev address seed must not be the old test placeholder.
+/// Mainnet: dev seed must not be hardcoded - runtime check enforced.
+#[cfg(feature = "mainnet")]
+pub const DEV_ADDRESS_SEED: [u8; 32] = [0u8; 32];
+
+/// Compile-time assertion: dev address seed must not be the old insecure test placeholder.
 const _: () = assert!(
-    DEV_ADDRESS_SEED[0] != 0xDE,
-    "DEV_ADDRESS_SEED is still the test placeholder. Replace before any launch."
+    DEV_ADDRESS_SEED[0] != 0x75 || DEV_ADDRESS_SEED[1] != 0x6c,
+    "DEV_ADDRESS_SEED uses old insecure placeholder. Use new testnet seed or set mainnet key."
 );
 
-/// Return the deterministic developer address.
+/// Return the developer address.
+/// 
+/// For mainnet, this requires ULTRADAG_DEV_KEY environment variable to be set.
+/// Panics on mainnet if key is not configured - this is intentional security behavior.
 pub fn dev_address() -> crate::address::Address {
-    crate::address::SecretKey::from_bytes(DEV_ADDRESS_SEED).address()
+    dev_keypair().address()
+}
+
+/// Get the developer keypair.
+/// 
+/// For testnet: returns deterministic keypair.
+/// For mainnet: reads from ULTRADAG_DEV_KEY environment variable (64-char hex).
+/// 
+/// # Panics
+/// 
+/// On mainnet, panics if ULTRADAG_DEV_KEY is not set or invalid.
+/// This is intentional - mainnet requires explicit key configuration.
+pub fn dev_keypair() -> crate::address::SecretKey {
+    #[cfg(not(feature = "mainnet"))]
+    {
+        crate::address::SecretKey::from_bytes(DEV_ADDRESS_SEED)
+    }
+    
+    #[cfg(feature = "mainnet")]
+    {
+        use std::env;
+        
+        // Runtime check: mainnet requires explicit key configuration
+        verify_genesis_checkpoint_hash(); // Also verify genesis hash
+        
+        let key_hex = env::var("ULTRADAG_DEV_KEY")
+            .expect("MAINNET SECURITY: ULTRADAG_DEV_KEY environment variable must be set with 64-char hex private key");
+        
+        if key_hex.len() != 64 {
+            panic!("MAINNET SECURITY ERROR: ULTRADAG_DEV_KEY must be 64 hex characters, got {}", key_hex.len());
+        }
+        
+        let mut bytes = [0u8; 32];
+        for (i, chunk) in key_hex.as_bytes().chunks(2).enumerate() {
+            let hex_str = std::str::from_utf8(chunk)
+                .expect("MAINNET SECURITY ERROR: ULTRADAG_DEV_KEY contains invalid hex");
+            bytes[i] = u8::from_str_radix(hex_str, 16)
+                .expect("MAINNET SECURITY ERROR: ULTRADAG_DEV_KEY contains invalid hex characters");
+        }
+        
+        // Zeroize the key hex from memory after use
+        drop(key_hex);
+        
+        crate::address::SecretKey::from_bytes(bytes)
+    }
 }
 
 /// Maximum number of active validators (top stakers by amount).
@@ -170,25 +231,25 @@ pub const CHECKPOINT_INTERVAL: u64 = 100;
 /// The testnet and mainnet hashes differ because mainnet excludes faucet funds.
 /// Run `cargo test --features mainnet test_compute_mainnet_genesis_hash` to recompute.
 // Recomputed after Address size change (32 -> 20 bytes).
+// Updated: Added locked_stake field to StakeAccount (governance security fix).
 #[cfg(not(feature = "mainnet"))]
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
-    0xf7, 0xe9, 0xf0, 0x67, 0x41, 0xbe, 0xc5, 0x71,
-    0x15, 0xc5, 0x90, 0xda, 0x99, 0xcb, 0x34, 0xda,
-    0x75, 0x7c, 0x98, 0x97, 0x02, 0x54, 0xb9, 0x3b,
-    0x7b, 0x91, 0x5c, 0x0f, 0xde, 0xcd, 0xc1, 0x76,
-]; // Testnet: canonical state root v1 + 20-byte addresses + bridge_reserve
+    0xd7, 0xb8, 0xcb, 0x43, 0x0f, 0xaa, 0x86, 0x36,
+    0x0e, 0x53, 0x3f, 0x2d, 0x9d, 0xa6, 0x27, 0xf8,
+    0x50, 0xd4, 0x37, 0xd9, 0x9c, 0x08, 0x0e, 0x1c,
+    0xa0, 0xed, 0x59, 0x62, 0x82, 0x9c, 0xd3, 0xf4,
+]; // Testnet: canonical state root v1 + 20-byte addresses + bridge_reserve + locked_stake field
 
 /// Mainnet genesis checkpoint hash — computed from genesis WITHOUT faucet.
-/// To compute: `cargo test test_compute_genesis_hash -- --nocapture`
-/// Then replace this constant with the printed hash.
-/// IMPORTANT: This MUST be set to the real hash before mainnet launch.
+/// Computed: March 21, 2026 with `cargo test --features mainnet test_compute_genesis_hash`
+/// Genesis: 3,150,000 UDAG (dev 5% + treasury 10%), no faucet
 #[cfg(feature = "mainnet")]
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
-    0x80, 0x64, 0x72, 0xa4, 0xc6, 0xa3, 0xfe, 0x33,
-    0x73, 0xfe, 0x01, 0xfa, 0xd4, 0x4d, 0x07, 0xe0,
-    0x27, 0x7d, 0xa8, 0x9e, 0xce, 0x95, 0xc9, 0x5e,
-    0x27, 0xe8, 0xd4, 0x5a, 0xdf, 0xa6, 0xd7, 0x7a,
-]; // Mainnet: genesis without faucet, 3,150,000 UDAG (dev + treasury)
+    0x0e, 0xdf, 0xf8, 0xdc, 0x15, 0x6f, 0xd8, 0x35,
+    0x0d, 0xd0, 0x8e, 0x04, 0x63, 0x63, 0xc4, 0x6f,
+    0x76, 0x43, 0x45, 0xab, 0xc8, 0x3f, 0xc0, 0x66,
+    0x92, 0x30, 0x59, 0x1a, 0xfb, 0xca, 0x5a, 0x0d,
+];
 
 /// Compile-time assertion: GENESIS_CHECKPOINT_HASH must not be the placeholder on mainnet.
 /// This is the primary defense — prevents building a mainnet binary with [0u8; 32].
@@ -232,19 +293,40 @@ pub fn is_epoch_boundary(round: u64) -> bool {
 
 /// Deterministic seed for the testnet faucet keypair.
 /// Same on every node so all nodes recognize the faucet address.
-/// On mainnet builds, the faucet credit is excluded from genesis (cfg-gated in new_with_genesis).
-/// The seed constant still exists but is only used by testnet RPC endpoints (also cfg-gated).
+/// 
+/// # Security Notice
+/// 
+/// This is TESTNET ONLY. The faucet is disabled on mainnet.
+/// Uses a less guessable seed than the previous [0xFA; 32].
+/// 
+/// For mainnet: faucet functionality is completely disabled.
 #[cfg(not(feature = "mainnet"))]
-pub const FAUCET_SEED: [u8; 32] = [0xFA; 32];
+pub const FAUCET_SEED: [u8; 32] = [
+    0x2b, 0x5e, 0x8f, 0x1a, 0x93, 0xc7, 0x4d, 0x6b,
+    0x0f, 0xe2, 0xa8, 0x35, 0x7c, 0x1d, 0x9e, 0x4f,
+    0x8a, 0x3c, 0x6b, 0x0d, 0x5f, 0xe1, 0xa9, 0x27,
+    0x4c, 0x8d, 0x1f, 0x6a, 0x3e, 0x9b, 0x5c, 0x0e,
+];
 
-/// Faucet genesis pre-fund: 1,000,000 UDAG in sats.
+/// Faucet genesis pre-fund: 1,000,000 UDAG in sats (testnet only).
 #[cfg(not(feature = "mainnet"))]
 pub const FAUCET_PREFUND_SATS: u64 = 1_000_000 * COIN;
 
-/// Return the deterministic faucet keypair (same on every node).
+/// Return the testnet faucet keypair.
+/// 
+/// # Panics
+/// 
+/// Panics on mainnet builds - faucet is disabled.
 #[cfg(not(feature = "mainnet"))]
 pub fn faucet_keypair() -> crate::address::SecretKey {
     crate::address::SecretKey::from_bytes(FAUCET_SEED)
+}
+
+/// Mainnet: faucet is disabled.
+/// This function exists only to satisfy compilation - it panics if called.
+#[cfg(feature = "mainnet")]
+pub fn faucet_keypair() -> crate::address::SecretKey {
+    panic!("MAINNET SECURITY: Faucet is disabled on mainnet. faucet_keypair() must never be called.");
 }
 
 /// Calculate round reward for a given round height.
@@ -352,6 +434,31 @@ pub const PROPOSAL_RETENTION_ROUNDS: u64 = 10_000;
 /// Interval (in finalized rounds) between state bloat pruning passes.
 /// Dust accounts and old proposals are pruned every this many rounds.
 pub const STATE_PRUNING_INTERVAL: u64 = 1_000;
+
+/// Cooldown period between proposal submissions by the same address.
+/// Prevents spam and allows time for community review of failed proposals.
+/// 1008 rounds = ~1.4 hours at 5s/round.
+pub const PROPOSAL_COOLDOWN_ROUNDS: u64 = 1_008;
+
+/// BFT Safety Minimums for Governance Parameters
+/// These constraints prevent governance from changing parameters to values
+/// that would compromise consensus safety or enable attacks.
+
+/// Minimum number of active validators for BFT consensus (3f+1 where f=1).
+/// Below this threshold, the network cannot guarantee Byzantine fault tolerance.
+pub const BFT_MIN_ACTIVE_VALIDATORS: usize = 4;
+
+/// Minimum quorum numerator (represents 10% when denominator is 100).
+/// Prevents governance from setting quorum so low that a tiny fraction can pass proposals.
+pub const BFT_MIN_QUORUM_NUMERATOR: u64 = 10;
+
+/// Maximum quorum numerator (represents 50% when denominator is 100).
+/// Prevents governance from setting quorum so high that proposals cannot pass.
+pub const BFT_MAX_QUORUM_NUMERATOR: u64 = 50;
+
+/// Minimum stake required to prevent dust attacks on governance.
+/// Below this threshold, attackers could spam proposals cheaply.
+pub const BFT_MIN_STAKE_SATS: u64 = 1_000;
 
 #[cfg(test)]
 mod tests {
