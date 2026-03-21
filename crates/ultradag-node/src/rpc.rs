@@ -1201,11 +1201,11 @@ ultradag_banned_ips {ban_count}
                         "commission_percent": t.commission_percent,
                         "nonce": t.nonce,
                     }),
-                    Transaction::BridgeLock(t) => serde_json::json!({
+                    Transaction::BridgeDeposit(t) => serde_json::json!({
                         "type": "bridge_lock",
                         "hash": hex_encode(&tx.hash()),
                         "from": t.from.to_hex(),
-                        "arb_recipient": hex_encode(&t.arb_recipient),
+                        "recipient": hex_encode(&t.recipient),
                         "amount": t.amount,
                         "fee": t.fee,
                         "nonce": t.nonce,
@@ -1568,6 +1568,66 @@ ultradag_banned_ips {ban_count}
                 "total_staked": state.total_staked(),
                 "total_delegated": state.total_delegated(),
                 "validators": validators,
+            }))
+        }
+
+        // ─── Bridge Endpoints ───
+
+        (&Method::GET, ["bridge", "nonce"]) => {
+            let state = read_lock_or_503!(server.state);
+            json_response(StatusCode::OK, &serde_json::json!({
+                "next_nonce": state.get_bridge_nonce(),
+            }))
+        }
+
+        (&Method::GET, ["bridge", "attestation", nonce_str]) => {
+            let Ok(nonce) = nonce_str.parse::<u64>() else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid nonce"));
+            };
+            let state = read_lock_or_503!(server.state);
+            
+            // Get attestation
+            let Some(attestation) = state.get_bridge_attestation(nonce) else {
+                return Ok(error_response(StatusCode::NOT_FOUND, "attestation not found"));
+            };
+            
+            // Get signature count
+            let signature_count = state.get_signature_count(nonce);
+            let threshold = state.get_bridge_threshold();
+            
+            // Try to build proof if we have enough signatures
+            let proof = state.build_bridge_proof(nonce).ok();
+            
+            json_response(StatusCode::OK, &serde_json::json!({
+                "nonce": attestation.nonce,
+                "sender": attestation.sender.to_hex(),
+                "sender_bech32": attestation.sender.to_bech32(),
+                "recipient": format!("0x{}", hex::encode(attestation.recipient)),
+                "amount": attestation.amount,
+                "amount_udag": attestation.amount as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                "destination_chain_id": attestation.destination_chain_id,
+                "signature_count": signature_count,
+                "threshold": threshold,
+                "ready": signature_count >= threshold,
+                "proof": proof.map(|p| serde_json::json!({
+                    "attestation": serde_json::json!({
+                        "sender": p.attestation.sender.to_hex(),
+                        "recipient": format!("0x{}", hex::encode(p.attestation.recipient)),
+                        "amount": p.attestation.amount,
+                        "nonce": p.attestation.nonce,
+                        "destination_chain_id": p.attestation.destination_chain_id,
+                    }),
+                    "signature_count": p.signatures.len(),
+                })),
+            }))
+        }
+
+        (&Method::GET, ["bridge", "reserve"]) => {
+            let state = read_lock_or_503!(server.state);
+            let reserve = state.get_bridge_reserve();
+            json_response(StatusCode::OK, &serde_json::json!({
+                "reserve_sats": reserve,
+                "reserve_udag": reserve as f64 / ultradag_coin::SATS_PER_UDAG as f64,
             }))
         }
 
@@ -2112,7 +2172,7 @@ ultradag_banned_ips {ban_count}
                         Transaction::Delegate(_) => "delegate",
                         Transaction::Undelegate(_) => "undelegate",
                         Transaction::SetCommission(_) => "set_commission",
-                        Transaction::BridgeLock(_) => "bridge_lock",
+                        Transaction::BridgeDeposit(_) => "bridge_lock",
                     },
                     "from": tx.from().to_hex(),
                     "fee": tx.fee(),
@@ -2236,7 +2296,7 @@ ultradag_banned_ips {ban_count}
                             &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
                     }
                 }
-                Transaction::BridgeLock(t) => {
+                Transaction::BridgeDeposit(t) => {
                     if t.amount < ultradag_coin::constants::MIN_BRIDGE_AMOUNT_SATS {
                         return Ok(error_response(StatusCode::BAD_REQUEST,
                             &format!("minimum bridge amount is {} sats ({} UDAG)",

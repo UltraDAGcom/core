@@ -1063,7 +1063,7 @@ impl StateEngine {
                     }
                 }
                 crate::tx::Transaction::BridgeDeposit(bridge_tx) => {
-                    if let Err(e) = self.apply_bridge_lock_tx(bridge_tx) {
+                    if let Err(e) = self.apply_bridge_lock_tx(bridge_tx, None, None) {
                         tracing::warn!("Skipping invalid BridgeDeposit tx in finalized vertex: {}", e);
                         self.increment_nonce(&bridge_tx.from);
                         self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
@@ -1559,7 +1559,13 @@ impl StateEngine {
     }
 
     /// Apply a BridgeDepositTx: debit sender (amount + fee), add amount to bridge reserve.
-    pub fn apply_bridge_lock_tx(&mut self, tx: &crate::tx::BridgeDepositTx) -> Result<(), CoinError> {
+    /// Also creates a bridge attestation for validators to sign.
+    pub fn apply_bridge_lock_tx(
+        &mut self,
+        tx: &crate::tx::BridgeDepositTx,
+        validator: Option<crate::address::Address>,
+        validator_sk: Option<&crate::address::SecretKey>,
+    ) -> Result<Option<crate::bridge::BridgeAttestation>, CoinError> {
         if tx.amount < crate::constants::MIN_BRIDGE_AMOUNT_SATS {
             return Err(CoinError::ValidationError("below minimum bridge amount".into()));
         }
@@ -1575,7 +1581,27 @@ impl StateEngine {
         self.debit(&tx.from, total)?;
         self.bridge_reserve = self.bridge_reserve.saturating_add(tx.amount);
         self.increment_nonce(&tx.from);
-        Ok(())
+        
+        // Create bridge attestation for validators to sign
+        let attestation = crate::bridge::BridgeAttestation::new(
+            tx.from,
+            tx.recipient,
+            tx.amount,
+            self.bridge_nonce,
+            tx.destination_chain_id,
+        );
+        
+        // Store attestation
+        self.bridge_attestations.insert(self.bridge_nonce, attestation.clone());
+        self.bridge_nonce += 1;
+        
+        // If we're a validator, sign the attestation
+        if let (Some(validator), Some(sk)) = (validator, validator_sk) {
+            let signature = sk.sign(&attestation.hash());
+            self.bridge_signatures.insert((attestation.nonce, validator), signature.0);
+        }
+        
+        Ok(Some(attestation))
     }
 
     /// Apply a StakeTx: debit liquid balance, credit stake account.

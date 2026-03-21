@@ -239,6 +239,29 @@ pub async fn validator_loop(
 
         let block_hash = block.hash();
 
+        // Sign bridge attestations for any BridgeDeposit transactions in this block.
+        // Validators sign attestations as part of normal block production.
+        // These signatures are collected and users can claim on Arbitrum with 2/3+ signatures.
+        {
+            let mut state_w = server.state.write().await;
+            for tx in &block.transactions {
+                if let ultradag_coin::Transaction::BridgeDeposit(bridge_tx) = tx {
+                    // Create attestation and sign with validator key
+                    match state_w.apply_bridge_lock_tx(bridge_tx, Some(validator), Some(&sk)) {
+                        Ok(Some(attestation)) => {
+                            info!("Created and signed bridge attestation nonce={}", attestation.nonce);
+                        }
+                        Ok(None) => {
+                            warn!("Bridge attestation creation returned None");
+                        }
+                        Err(e) => {
+                            warn!("Failed to create bridge attestation: {}", e);
+                        }
+                    }
+                }
+            }
+        } // state_w dropped
+
         // Build DAG vertex referencing all known tips
         let parent_hashes = if dag_tips.is_empty() {
             vec![[0u8; 32]] // Genesis vertex
