@@ -37,24 +37,27 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable, ReentrancyGua
     /// @notice Constructor - sets up initial roles and configuration
     /// @param admin Address that will hold DEFAULT_ADMIN_ROLE initially
     /// @param initialBridge Address of the bridge contract (can be updated later)
+    /// @dev Bridge receives MINTER_ROLE for minting on claims.
+    ///      Bridge does NOT receive BURNER_ROLE - deposits use transferFrom() to lock tokens.
     constructor(
-        address admin, 
+        address admin,
         address initialBridge
-    ) 
-        ERC20("UltraDAG", "UDAG") 
+    )
+        ERC20("UltraDAG", "UDAG")
         ERC20Permit("UltraDAG")
     {
         require(admin != address(0), "UDAG: admin cannot be zero");
         require(initialBridge != address(0), "UDAG: bridge cannot be zero");
-        
+
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(MINTER_ROLE, admin);
         _grantRole(PAUSER_ROLE, admin); // Admin can pause initially
-        
+
         bridgeAddress = initialBridge;
+        // Bridge only needs MINTER_ROLE for minting on withdrawal claims
+        // Deposits use transferFrom() to lock tokens - no burn needed
         _grantRole(MINTER_ROLE, initialBridge);
-        _grantRole(BURNER_ROLE, initialBridge);
-        
+
         emit BridgeUpdated(address(0), initialBridge);
     }
 

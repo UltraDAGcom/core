@@ -17,7 +17,6 @@ import "@openzeppelin/contracts/governance/TimelockController.sol";
 ///   GOVERNOR_KEY: Governor/admin private key (can be same as deployer)
 contract DeployScript is Script {
     // Configuration
-    uint256 public constant REQUIRED_SIGNERS = 3;
     uint256 public constant MIN_DELAY = 1 days; // Timelock delay
     
     // Genesis allocations (in sats, 8 decimals)
@@ -57,17 +56,13 @@ contract DeployScript is Script {
             timelockAddress
         ));
         console.log("UDAGBridgeValidator deployed:", bridgeAddress);
-        
-        // Step 4: Grant bridge MINTER_ROLE and BURNER_ROLE
+
+        // Step 4: Grant bridge MINTER_ROLE only (deposits lock tokens via transferFrom)
         UDAGToken(tokenAddress).grantRole(
             UDAGToken(tokenAddress).MINTER_ROLE(),
             bridgeAddress
         );
-        UDAGToken(tokenAddress).grantRole(
-            UDAGToken(tokenAddress).BURNER_ROLE(),
-            bridgeAddress
-        );
-        console.log("Bridge granted MINTER_ROLE and BURNER_ROLE");
+        console.log("Bridge granted MINTER_ROLE (for minting on withdrawal claims)");
         
         // Step 5: Mint genesis allocations
         UDAGToken(tokenAddress).mint(devAddress, DEV_ALLOCATION);
@@ -114,23 +109,17 @@ contract DeployScript is Script {
         console.log("Governor:", governor);
         console.log("Dev Address:", devAddress);
         console.log("Treasury Address:", treasuryAddress);
-        console.log("Relayers:");
-        for (uint256 i = 0; i < relayers.length; i++) {
-            console.log("  ", i, ":", relayers[i]);
-        }
-        console.log("Required Signatures:", REQUIRED_SIGNERS);
         console.log("Timelock Delay:", MIN_DELAY, "seconds");
         console.log("========================================\n");
-        
+
         // Save deployment artifacts
-        _saveDeploymentArtifacts(governor, devAddress, treasuryAddress, relayers);
+        _saveDeploymentArtifacts(governor, devAddress, treasuryAddress);
     }
-    
+
     function _saveDeploymentArtifacts(
         address governor,
         address devAddress,
-        address treasuryAddress,
-        address[] memory relayers
+        address treasuryAddress
     ) internal {
         // Create deployment output file
         string memory deploymentInfo = string.concat(
@@ -141,12 +130,9 @@ contract DeployScript is Script {
             ',"governor":"', vm.toString(governor), '"',
             ',"devAddress":"', vm.toString(devAddress), '"',
             ',"treasuryAddress":"', vm.toString(treasuryAddress), '"',
-            ',"relayers":[',
-            _addressesToJson(relayers),
-            '],"requiredSigners":', vm.toString(REQUIRED_SIGNERS),
             ',"timelockDelay":', vm.toString(MIN_DELAY), '}'
         );
-        
+
         // Write to file (for CI/CD integration)
         vm.writeJson(deploymentInfo, "deployment-output.json");
         console.log("Deployment artifacts saved to deployment-output.json");
