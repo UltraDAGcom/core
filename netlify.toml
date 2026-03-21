@@ -1,0 +1,14 @@
+[build]
+  base = "site/dashboard-v2"
+  publish = "dist"
+  command = "npm install && npm run build"
+
+[[redirects]]
+  from = "/dashboard/*"
+  to = "/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/dashboard"
+  to = "/index.html"
+  status = 200

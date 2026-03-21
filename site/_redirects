@@ -2,10 +2,6 @@
 /docs/ /docs/index.html 200
 /docs/* /docs/:splat 200
 
-# Handle dashboard directory - serve from dashboard-v2/dist/
-/dashboard/ /dashboard-v2/dist/index.html 200
-/dashboard /dashboard-v2/dist/index.html 200
-/dashboard/* /dashboard-v2/dist/:splat 200
-
-# Handle dashboard assets explicitly
-/dashboard/assets/* /dashboard-v2/dist/assets/:splat 200
+# Handle dashboard directory - SPA routing
+/dashboard/* /dashboard/index.html 200
+/dashboard /dashboard/index.html 200
