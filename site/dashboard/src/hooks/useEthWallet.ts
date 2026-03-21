@@ -48,7 +48,13 @@ const defaultState: EthWalletState = {
 const ACCEPTED_CHAINS = [ARBITRUM_CHAIN_ID, ARBITRUM_SEPOLIA_CHAIN_ID];
 
 function getEthereum(): any {
-  return (window as any).ethereum;
+  // Prefer MetaMask if available
+  const ethereum = (window as any).ethereum;
+  if (ethereum?.isMetaMask) {
+    return ethereum;
+  }
+  // Fallback to any injected provider
+  return ethereum;
 }
 
 export function useEthWallet() {
@@ -156,7 +162,10 @@ export function useEthWallet() {
 
   const switchToArbitrum = useCallback(async () => {
     const ethereum = getEthereum();
-    if (!ethereum) return;
+    if (!ethereum) {
+      setError('No Ethereum wallet detected. Please install MetaMask.');
+      return;
+    }
     try {
       await ethereum.request({
         method: 'wallet_switchEthereumChain',
@@ -165,16 +174,24 @@ export function useEthWallet() {
     } catch (e: any) {
       if (e.code === 4902) {
         // Chain not added, add it
-        await ethereum.request({
-          method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: '0x' + ARBITRUM_CHAIN_ID.toString(16),
-            chainName: 'Arbitrum One',
-            nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-            rpcUrls: ['https://arb1.arbitrum.io/rpc'],
-            blockExplorerUrls: ['https://arbiscan.io'],
-          }],
-        });
+        try {
+          await ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0x' + ARBITRUM_CHAIN_ID.toString(16),
+              chainName: 'Arbitrum One',
+              nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+              rpcUrls: ['https://arb1.arbitrum.io/rpc'],
+              blockExplorerUrls: ['https://arbiscan.io'],
+            }],
+          });
+        } catch (addError) {
+          setError('Failed to add Arbitrum network. Please add it manually in your wallet.');
+        }
+      } else if (e.code === 4001) {
+        setError('Network switch rejected by user');
+      } else {
+        setError('Failed to switch to Arbitrum. Please switch manually in your wallet.');
       }
     }
   }, []);

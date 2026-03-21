@@ -236,7 +236,24 @@ export function BridgePage() {
                       <span className="text-xs text-dag-muted uppercase tracking-wider">From (Arbitrum)</span>
                       <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">ERC-20</span>
                     </div>
-                    {eth.connected ? (
+                    {!CONTRACTS_DEPLOYED ? (
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-2">
+                          <Info className="w-4 h-4 text-dag-yellow mt-0.5" />
+                          <p className="text-sm text-dag-muted">
+                            Bridge contracts are not yet deployed on Arbitrum. You can buy UDAG on Arbitrum via Uniswap in the meantime.
+                          </p>
+                        </div>
+                        <a
+                          href="https://app.uniswap.org"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-xs text-dag-accent hover:text-dag-accent/80"
+                        >
+                          Open Uniswap <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    ) : eth.connected ? (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
