@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { BrowserProvider, Contract, formatUnits, parseUnits } from 'ethers';
 import {
   ARBITRUM_CHAIN_ID,
@@ -27,6 +27,14 @@ interface EthWalletState {
   nonce: bigint;
 }
 
+export interface DiscoveredWallet {
+  uuid: string;
+  name: string;
+  icon: string; // data URI or URL
+  rdns: string; // reverse DNS identifier
+  provider: any; // EIP-1193 provider
+}
+
 const defaultState: EthWalletState = {
   connected: false,
   address: '',
@@ -47,21 +55,150 @@ const defaultState: EthWalletState = {
 // Acceptable chain IDs
 const ACCEPTED_CHAINS = [ARBITRUM_CHAIN_ID, ARBITRUM_SEPOLIA_CHAIN_ID];
 
-function getEthereum(): any {
-  // Prefer MetaMask if available
-  const ethereum = (window as any).ethereum;
-  if (ethereum?.isMetaMask) {
-    return ethereum;
+const safeBigInt = (v: any): bigint => {
+  try {
+    return BigInt(v);
+  } catch {
+    return 0n;
   }
-  // Fallback to any injected provider
-  return ethereum;
+};
+
+// EIP-6963 event types
+interface EIP6963ProviderInfo {
+  uuid: string;
+  name: string;
+  icon: string;
+  rdns: string;
+}
+
+interface EIP6963ProviderDetail {
+  info: EIP6963ProviderInfo;
+  provider: any;
+}
+
+interface EIP6963AnnounceEvent extends Event {
+  detail: EIP6963ProviderDetail;
+}
+
+// Detect wallet name/icon from injected provider flags
+function identifyInjectedProvider(provider: any): { name: string; icon: string } {
+  if (provider.isMetaMask) {
+    return {
+      name: 'MetaMask',
+      icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMTIiIGhlaWdodD0iMTg5Ij48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwb2x5Z29uIGZpbGw9IiNDREJEQjIiIHBvaW50cz0iNjAuNzUgMTczLjI1IDkwLjc1IDE4Ny44NzUgOTAuNzUgMTcxIDkwLjc1IDE1Ny41IDY4LjYyNSAxNjQuNjI1Ii8+PHBvbHlnb24gZmlsbD0iI0NEQkRCMiIgcG9pbnRzPSIxMDUuNzUgMTczLjI1IDc1Ljc1IDE4Ny44NzUgNzUuNzUgMTcxIDc1Ljc1IDE1Ny41IDk3Ljg3NSAxNjQuNjI1Ii8+PHBvbHlnb24gZmlsbD0iIzM5MzkzOSIgcG9pbnRzPSI5MC43NSAxNTAuMzc1IDY4LjYyNSAxNjQuNjI1IDc2LjUgMTQ1LjEyNSA2My4zNzUgMTQ4Ljg3NSIvPjxwb2x5Z29uIGZpbGw9IiMzOTM5MzkiIHBvaW50cz0iNzUuNzUgMTUwLjM3NSA5Ny44NzUgMTY0LjYyNSA5MCAxNDUuMTI1IDEwMy4xMjUgMTQ4Ljg3NSIvPjwvZz48L3N2Zz4=',
+    };
+  }
+  if (provider.isPhantom) {
+    return {
+      name: 'Phantom',
+      icon: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgdmlld0JveD0iMCAwIDEyOCAxMjgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjEyOCIgaGVpZ2h0PSIxMjgiIHJ4PSIyNCIgZmlsbD0iIzU0MUQ5RSIvPjwvc3ZnPg==',
+    };
+  }
+  if (provider.isCoinbaseWallet) {
+    return {
+      name: 'Coinbase Wallet',
+      icon: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgdmlld0JveD0iMCAwIDEyOCAxMjgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjEyOCIgaGVpZ2h0PSIxMjgiIHJ4PSIyNCIgZmlsbD0iIzAwNTJGRiIvPjwvc3ZnPg==',
+    };
+  }
+  if (provider.isBraveWallet) {
+    return {
+      name: 'Brave Wallet',
+      icon: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgdmlld0JveD0iMCAwIDEyOCAxMjgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjEyOCIgaGVpZ2h0PSIxMjgiIHJ4PSIyNCIgZmlsbD0iI0ZCNTQyQiIvPjwvc3ZnPg==',
+    };
+  }
+  if (provider.isRabby) {
+    return {
+      name: 'Rabby',
+      icon: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgdmlld0JveD0iMCAwIDEyOCAxMjgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjEyOCIgaGVpZ2h0PSIxMjgiIHJ4PSIyNCIgZmlsbD0iIzgxNjdGNSIvPjwvc3ZnPg==',
+    };
+  }
+  return {
+    name: 'Browser Wallet',
+    icon: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgdmlld0JveD0iMCAwIDEyOCAxMjgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjEyOCIgaGVpZ2h0PSIxMjgiIHJ4PSIyNCIgZmlsbD0iIzMzNDE1NSIvPjwvc3ZnPg==',
+  };
 }
 
 export function useEthWallet() {
   const [state, setState] = useState<EthWalletState>(defaultState);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [discoveredWallets, setDiscoveredWallets] = useState<DiscoveredWallet[]>([]);
+  const [selectedWallet, setSelectedWallet] = useState<{ name: string; icon: string } | null>(null);
 
+  // Ref to the currently selected provider so all operations use the same wallet
+  const selectedProviderRef = useRef<any>(null);
+  // Ref to track whether EIP-6963 discovered any wallets
+  const eip6963DiscoveredRef = useRef(false);
+
+  // --- EIP-6963 Wallet Discovery ---
+  useEffect(() => {
+    const walletMap = new Map<string, DiscoveredWallet>();
+
+    const handleAnnounce = (event: Event) => {
+      const e = event as EIP6963AnnounceEvent;
+      if (!e.detail?.info?.uuid || !e.detail?.provider) return;
+      const { info, provider } = e.detail;
+      walletMap.set(info.uuid, {
+        uuid: info.uuid,
+        name: info.name,
+        icon: info.icon,
+        rdns: info.rdns,
+        provider,
+      });
+      eip6963DiscoveredRef.current = true;
+      setDiscoveredWallets(Array.from(walletMap.values()));
+    };
+
+    window.addEventListener('eip6963:announceProvider', handleAnnounce);
+    // Request all providers to announce themselves
+    window.dispatchEvent(new Event('eip6963:requestProvider'));
+
+    // Fallback: if no EIP-6963 wallets discovered after 500ms, check window.ethereum
+    const fallbackTimeout = setTimeout(() => {
+      if (eip6963DiscoveredRef.current) return; // EIP-6963 wallets already found
+
+      const ethereum = (window as any).ethereum;
+      if (!ethereum) return;
+
+      // EIP-5749: check for providers array (multiple injected providers)
+      const providers: any[] = ethereum.providers || [ethereum];
+      const fallbackWallets: DiscoveredWallet[] = [];
+      const seen = new Set<string>();
+
+      for (const prov of providers) {
+        const identified = identifyInjectedProvider(prov);
+        // Deduplicate by name
+        if (seen.has(identified.name)) continue;
+        seen.add(identified.name);
+
+        fallbackWallets.push({
+          uuid: `fallback-${identified.name.toLowerCase().replace(/\s+/g, '-')}`,
+          name: identified.name,
+          icon: identified.icon,
+          rdns: '',
+          provider: prov,
+        });
+      }
+
+      if (fallbackWallets.length > 0) {
+        setDiscoveredWallets(fallbackWallets);
+      }
+    }, 500);
+
+    return () => {
+      window.removeEventListener('eip6963:announceProvider', handleAnnounce);
+      clearTimeout(fallbackTimeout);
+    };
+  }, []);
+
+  // --- Helper: get the active provider ---
+  const getProvider = useCallback((): any => {
+    if (selectedProviderRef.current) return selectedProviderRef.current;
+    // Fallback to window.ethereum if nothing selected
+    return (window as any).ethereum || null;
+  }, []);
+
+  // --- Fetch balances from the selected provider ---
   const fetchBalances = useCallback(async (provider: BrowserProvider, address: string) => {
     try {
       const ethBal = await provider.getBalance(address);
@@ -95,7 +232,6 @@ export function useEthWallet() {
           bridge.nonce().catch(() => 0n),
         ]);
 
-        const safeBigInt = (v: any): bigint => { try { return BigInt(v); } catch { return 0n; } };
         udagBalanceRaw = safeBigInt(bal);
         udagBalance = formatUnits(udagBalanceRaw, 8);
         udagAllowance = safeBigInt(allowance);
@@ -129,24 +265,62 @@ export function useEthWallet() {
     }
   }, []);
 
-  const connect = useCallback(async () => {
-    const ethereum = getEthereum();
-    if (!ethereum) {
-      setError('MetaMask or compatible wallet not detected. Please install MetaMask.');
+  // --- Connect to a specific wallet (by uuid) or the first available ---
+  const connect = useCallback(async (walletUuid?: string) => {
+    setLoading(true);
+    setError('');
+
+    let targetProvider: any = null;
+    let walletInfo: { name: string; icon: string } | null = null;
+
+    if (walletUuid) {
+      // Find the specific wallet by uuid
+      const wallet = discoveredWallets.find(w => w.uuid === walletUuid);
+      if (wallet) {
+        targetProvider = wallet.provider;
+        walletInfo = { name: wallet.name, icon: wallet.icon };
+      }
+    }
+
+    if (!targetProvider && discoveredWallets.length > 0) {
+      // Use the first discovered wallet
+      const first = discoveredWallets[0];
+      targetProvider = first.provider;
+      walletInfo = { name: first.name, icon: first.icon };
+    }
+
+    if (!targetProvider) {
+      // Final fallback to window.ethereum
+      const ethereum = (window as any).ethereum;
+      if (ethereum) {
+        targetProvider = ethereum;
+        const identified = identifyInjectedProvider(ethereum);
+        walletInfo = { name: identified.name, icon: identified.icon };
+      }
+    }
+
+    if (!targetProvider) {
+      setError('No Ethereum wallet detected. Please install MetaMask or another Web3 wallet.');
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setError('');
     try {
-      const provider = new BrowserProvider(ethereum);
+      selectedProviderRef.current = targetProvider;
+      setSelectedWallet(walletInfo);
+
+      const provider = new BrowserProvider(targetProvider);
       const accounts = await provider.send('eth_requestAccounts', []);
       if (accounts.length === 0) {
         setError('No accounts found');
+        selectedProviderRef.current = null;
+        setSelectedWallet(null);
         return;
       }
       await fetchBalances(provider, accounts[0]);
     } catch (e: any) {
+      selectedProviderRef.current = null;
+      setSelectedWallet(null);
       if (e.code === 4001) {
         setError('Connection rejected by user');
       } else {
@@ -155,24 +329,28 @@ export function useEthWallet() {
     } finally {
       setLoading(false);
     }
-  }, [fetchBalances]);
+  }, [fetchBalances, discoveredWallets]);
 
+  // --- Disconnect ---
   const disconnect = useCallback(async () => {
     // Try to revoke wallet permissions if supported
     try {
-      const ethereum = getEthereum();
-      if (ethereum?.request) {
-        await ethereum.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] });
+      const provider = getProvider();
+      if (provider?.request) {
+        await provider.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] });
       }
     } catch {} // Not all wallets support this
+    selectedProviderRef.current = null;
+    setSelectedWallet(null);
     setState(defaultState);
     setError('');
-  }, []);
+  }, [getProvider]);
 
+  // --- Switch to Arbitrum ---
   const switchToArbitrum = useCallback(async () => {
-    const ethereum = getEthereum();
+    const ethereum = getProvider();
     if (!ethereum) {
-      setError('No Ethereum wallet detected. Please install MetaMask.');
+      setError('No Ethereum wallet detected. Please install a Web3 wallet.');
       return;
     }
     try {
@@ -203,10 +381,11 @@ export function useEthWallet() {
         setError('Failed to switch to Arbitrum. Please switch manually in your wallet.');
       }
     }
-  }, []);
+  }, [getProvider]);
 
+  // --- Approve token spend ---
   const approve = useCallback(async (_amount: bigint): Promise<boolean> => {
-    const ethereum = getEthereum();
+    const ethereum = getProvider();
     if (!ethereum || !CONTRACTS_DEPLOYED) return false;
     try {
       const provider = new BrowserProvider(ethereum);
@@ -223,11 +402,12 @@ export function useEthWallet() {
       setError(e.reason || e.message || 'Approval failed');
       return false;
     }
-  }, [fetchBalances]);
+  }, [fetchBalances, getProvider]);
 
+  // --- Bridge to native ---
   const bridgeToNative = useCallback(async (nativeRecipient: string, amount: bigint): Promise<{ hash: string | null; error: string | null }> => {
     if (!state.isCorrectChain) return { hash: null, error: 'Please switch to Arbitrum first' };
-    const ethereum = getEthereum();
+    const ethereum = getProvider();
     if (!ethereum || !CONTRACTS_DEPLOYED) return { hash: null, error: 'Wallet not connected or contracts not deployed' };
     // Validate recipient is exactly 40 hex chars
     const cleanRecipient = nativeRecipient.replace(/^0x/, '').toLowerCase();
@@ -250,8 +430,9 @@ export function useEthWallet() {
       setError(errMsg);
       return { hash: null, error: errMsg };
     }
-  }, [fetchBalances, state.isCorrectChain]);
+  }, [fetchBalances, getProvider, state.isCorrectChain]);
 
+  // --- Claim withdrawal on Arbitrum ---
   const claimWithdrawal = useCallback(async (
     sender: string,
     recipient: string,
@@ -260,7 +441,7 @@ export function useEthWallet() {
     signatures: string[],
   ): Promise<{ success: boolean; error: string | null }> => {
     if (!state.isCorrectChain) return { success: false, error: 'Please switch to Arbitrum first' };
-    const ethereum = getEthereum();
+    const ethereum = getProvider();
     if (!ethereum || !CONTRACTS_DEPLOYED) return { success: false, error: 'Wallet not connected or contracts not deployed' };
     try {
       const provider = new BrowserProvider(ethereum);
@@ -277,10 +458,11 @@ export function useEthWallet() {
       setError(errMsg);
       return { success: false, error: errMsg };
     }
-  }, [fetchBalances, state.isCorrectChain]);
+  }, [fetchBalances, getProvider, state.isCorrectChain]);
 
+  // --- Refund bridge ---
   const refundBridge = useCallback(async (bridgeNonce: bigint): Promise<boolean> => {
-    const ethereum = getEthereum();
+    const ethereum = getProvider();
     if (!ethereum || !CONTRACTS_DEPLOYED) return false;
     try {
       const provider = new BrowserProvider(ethereum);
@@ -295,11 +477,11 @@ export function useEthWallet() {
       setError(e.reason || e.message || 'Refund failed');
       return false;
     }
-  }, [fetchBalances]);
+  }, [fetchBalances, getProvider]);
 
-  // Listen for account/chain changes
+  // --- Listen for account/chain changes on the SELECTED provider ---
   useEffect(() => {
-    const ethereum = getEthereum();
+    const ethereum = getProvider();
     if (!ethereum) return;
 
     const handleAccountsChanged = async (accounts: string[]) => {
@@ -332,15 +514,17 @@ export function useEthWallet() {
       ethereum.removeListener('accountsChanged', handleAccountsChanged);
       ethereum.removeListener('chainChanged', handleChainChanged);
     };
-  }, [state.connected, disconnect, fetchBalances]);
+  }, [state.connected, disconnect, fetchBalances, getProvider]);
 
-  // No auto-reconnect — user must explicitly click "Connect Wallet"
+  // No auto-reconnect -- user must explicitly click "Connect Wallet"
 
   return {
     ...state,
     loading,
     error,
-    hasMetaMask: !!getEthereum(),
+    discoveredWallets,
+    selectedWallet,
+    hasMetaMask: discoveredWallets.length > 0 || !!(window as any).ethereum,
     contractsDeployed: CONTRACTS_DEPLOYED,
     connect,
     disconnect,
@@ -350,6 +534,12 @@ export function useEthWallet() {
     claimWithdrawal,
     refundBridge,
     clearError: () => setError(''),
-    parseUdag: (udag: string) => { try { return parseUnits(udag, 8); } catch { return 0n; } },
+    parseUdag: (udag: string) => {
+      try {
+        return parseUnits(udag, 8);
+      } catch {
+        return 0n;
+      }
+    },
   };
 }
