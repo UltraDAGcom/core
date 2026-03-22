@@ -149,7 +149,7 @@ export function BridgePage() {
   const [direction, setDirection] = useState<'to-native' | 'to-arbitrum'>('to-native');
   const [amount, setAmount] = useState('');
   const [nativeAddress, setNativeAddress] = useState('');
-  const [selectedWalletIdx] = useState(0);
+  const [selectedWalletIdx, setSelectedWalletIdx] = useState(0);
   const [bridging, setBridging] = useState(false);
   const [approving, setApproving] = useState(false);
   const [txHash, setTxHash] = useState('');
@@ -700,21 +700,37 @@ export function BridgePage() {
                       </div>
                     </div>
 
-                    <input
-                      type="text"
-                      value={wallet ? wallet.address : nativeAddress}
-                      onChange={(e) => setNativeAddress(e.target.value)}
-                      placeholder="tudg1... or 40-char hex address"
-                      disabled={!!wallet || !canBridge}
-                      className="w-full px-4 py-3 bg-dag-surface border border-dag-border/50 rounded-xl text-sm font-mono text-white placeholder-dag-muted/30 focus:outline-none focus:border-dag-accent/50 disabled:opacity-50"
-                    />
-                    {wallet ? (
-                      <div className="flex items-center gap-1.5 text-xs text-dag-muted">
-                        <CheckCircle className="w-3 h-3 text-dag-green" />
-                        <span>Using your linked UltraDAG wallet</span>
-                      </div>
+                    {wallets.length > 0 ? (
+                      <>
+                        <select
+                          value={selectedWalletIdx}
+                          onChange={(e) => setSelectedWalletIdx(Number(e.target.value))}
+                          className="w-full px-4 py-3 bg-dag-surface border border-dag-border/50 rounded-xl text-sm font-mono text-white focus:outline-none focus:border-dag-accent/50 appearance-none cursor-pointer"
+                          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
+                        >
+                          {wallets.map((w, i) => (
+                            <option key={w.address} value={i}>
+                              {w.name || `Wallet ${i + 1}`} — {w.address.slice(0, 10)}...{w.address.slice(-6)}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="flex items-center gap-1.5 text-xs text-dag-muted">
+                          <CheckCircle className="w-3 h-3 text-dag-green" />
+                          <span>Receiving on {wallet?.name || 'your UltraDAG wallet'}</span>
+                        </div>
+                      </>
                     ) : (
-                      <p className="text-[10px] text-dag-muted">Enter your UltraDAG address or link a wallet in the Wallet tab</p>
+                      <>
+                        <input
+                          type="text"
+                          value={nativeAddress}
+                          onChange={(e) => setNativeAddress(e.target.value)}
+                          placeholder="tudg1... or 40-char hex address"
+                          disabled={!canBridge}
+                          className="w-full px-4 py-3 bg-dag-surface border border-dag-border/50 rounded-xl text-sm font-mono text-white placeholder-dag-muted/30 focus:outline-none focus:border-dag-accent/50 disabled:opacity-50"
+                        />
+                        <p className="text-[10px] text-dag-muted">Enter your UltraDAG address or create a wallet in the Wallet tab</p>
+                      </>
                     )}
                   </div>
 
