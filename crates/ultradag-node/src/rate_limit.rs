@@ -49,6 +49,7 @@ pub mod limits {
     pub const SET_COMMISSION: RateLimit = RateLimit::new("set_commission", 5, 60); // 5 set-commission/min
     pub const KEYGEN: RateLimit = RateLimit::new("keygen", 10, 60);   // 10 keygen/min
     pub const BRIDGE: RateLimit = RateLimit::new("bridge", 30, 60);  // 30 bridge queries/min
+    pub const BRIDGE_DEPOSIT: RateLimit = RateLimit::new("bridge_deposit", 5, 60); // 5 bridge deposits/min
     pub const GLOBAL: RateLimit = RateLimit::new("global", 1000, 60);  // 1000 total/min (testnet)
 
     pub const MAX_CONCURRENT_CONNECTIONS: u32 = 1000;

@@ -107,6 +107,7 @@ export const postVote = (body: any) => fetchJson<any>('/vote', { method: 'POST',
 export const getBridgeNonce = () => fetchJson<{ next_nonce: number }>('/bridge/nonce');
 export const getBridgeAttestation = (nonce: number) => fetchJson<any>(`/bridge/attestation/${nonce}`);
 export const getBridgeReserve = () => fetchJson<{ reserve_sats: number; reserve_udag: number }>('/bridge/reserve');
+export const postBridgeDeposit = (body: any) => fetchJson<any>('/bridge/deposit', { method: 'POST', body: JSON.stringify(body) });
 
 // Bech32m encoding/decoding (BIP-350)
 const BECH32M_CONST = 0x2bc830a3;

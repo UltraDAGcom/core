@@ -36,7 +36,7 @@ macro_rules! write_lock_or_503 {
     };
 }
 
-use ultradag_coin::{Address, Mempool, SecretKey, Signature, StateEngine, Transaction, TransferTx, StakeTx, UnstakeTx, DelegateTx, UndelegateTx, SetCommissionTx, MIN_STAKE_SATS};
+use ultradag_coin::{Address, Mempool, SecretKey, Signature, StateEngine, Transaction, TransferTx, StakeTx, UnstakeTx, DelegateTx, UndelegateTx, SetCommissionTx, BridgeDepositTx, MIN_STAKE_SATS};
 use ultradag_coin::governance::{CreateProposalTx, VoteTx, ProposalType, CouncilAction, CouncilSeatCategory};
 use ultradag_network::{Message, NodeServer};
 use crate::rate_limit::{RateLimiter, limits};
@@ -509,6 +509,15 @@ struct RawTxHex {
 struct SetCommissionRequest {
     secret_key: String,
     commission_percent: u8,
+}
+
+#[derive(Deserialize)]
+struct BridgeDepositRequest {
+    secret_key: String,
+    recipient: String,
+    amount: u64,
+    fee: u64,
+    destination_chain_id: u64,
 }
 
 #[derive(Deserialize)]
@@ -1637,6 +1646,140 @@ ultradag_banned_ips {ban_count}
             json_response(StatusCode::OK, &serde_json::json!({
                 "reserve_sats": reserve,
                 "reserve_udag": reserve as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+            }))
+        }
+
+        (&Method::POST, ["bridge", "deposit"]) => {
+            // TESTNET ONLY: accepts secret_key in body. Mainnet: use /tx/submit with a pre-signed BridgeDepositTx.
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE,
+                    "POST /bridge/deposit disabled: private keys must not transit over the network. Use /tx/submit with a pre-signed BridgeDepositTx."));
+            }
+            if !rate_limiter.check_rate_limit(client_ip, limits::BRIDGE_DEPOSIT) {
+                return Ok(error_response(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "rate limit exceeded: too many bridge deposit requests",
+                ));
+            }
+
+            let body = req.collect().await?.to_bytes();
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large (max 1MB)"));
+            }
+            let Ok(bridge_req) = serde_json::from_slice::<BridgeDepositRequest>(&body) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    "invalid JSON body, need: {secret_key, recipient, amount, fee, destination_chain_id}"));
+            };
+
+            // Parse and validate secret key
+            let sk = match parse_secret_key(&bridge_req.secret_key) {
+                Ok(sk) => sk,
+                Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, e)),
+            };
+            let sender = sk.address();
+
+            // Validate recipient (0x-prefixed 42-char Ethereum address)
+            let recipient_hex = bridge_req.recipient.strip_prefix("0x")
+                .or_else(|| bridge_req.recipient.strip_prefix("0X"))
+                .unwrap_or(&bridge_req.recipient);
+            if recipient_hex.len() != 40 || !recipient_hex.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    "invalid recipient: expected 0x-prefixed 40-char hex Ethereum address"));
+            }
+            let mut recipient_bytes = [0u8; 20];
+            for (i, chunk) in recipient_hex.as_bytes().chunks(2).enumerate() {
+                let s = std::str::from_utf8(chunk).unwrap_or("00");
+                recipient_bytes[i] = u8::from_str_radix(s, 16).unwrap_or(0);
+            }
+            if recipient_bytes == [0u8; 20] {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid recipient: zero address"));
+            }
+
+            // Validate amount
+            if bridge_req.amount < ultradag_coin::constants::MIN_BRIDGE_AMOUNT_SATS {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    &format!("amount too low: minimum {} sats ({} UDAG)",
+                        ultradag_coin::constants::MIN_BRIDGE_AMOUNT_SATS,
+                        ultradag_coin::constants::MIN_BRIDGE_AMOUNT_SATS / ultradag_coin::SATS_PER_UDAG)));
+            }
+            if bridge_req.amount > ultradag_coin::constants::MAX_BRIDGE_AMOUNT_SATS {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    &format!("amount too high: maximum {} sats ({} UDAG)",
+                        ultradag_coin::constants::MAX_BRIDGE_AMOUNT_SATS,
+                        ultradag_coin::constants::MAX_BRIDGE_AMOUNT_SATS / ultradag_coin::SATS_PER_UDAG)));
+            }
+
+            // Validate fee
+            if bridge_req.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    &format!("fee too low: minimum {} sats (0.0001 UDAG)", ultradag_coin::constants::MIN_FEE_SATS)));
+            }
+
+            // Validate destination chain ID
+            if !ultradag_coin::SUPPORTED_BRIDGE_CHAIN_IDS.contains(&bridge_req.destination_chain_id) {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    &format!("unsupported destination_chain_id: {}. Supported: {:?}",
+                        bridge_req.destination_chain_id,
+                        ultradag_coin::SUPPORTED_BRIDGE_CHAIN_IDS)));
+            }
+
+            // Atomic nonce assignment + validation + mempool insertion
+            let (tx, tx_hash, nonce) = {
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
+
+                let nonce = next_nonce(&state, &mp, &sender);
+
+                // Validate balance including pending cost
+                let balance = state.balance(&sender);
+                let pc = pending_cost(&mp, &sender);
+                let tx_cost = bridge_req.amount.saturating_add(bridge_req.fee);
+                let total_needed = pc.saturating_add(tx_cost);
+                if balance < total_needed {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!(
+                            "insufficient balance: need {} sats (incl. {} pending), have {} sats ({:.4} UDAG)",
+                            total_needed, pc, balance,
+                            balance as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                        )));
+                }
+
+                // Build and sign bridge deposit transaction
+                let mut bridge_tx = BridgeDepositTx {
+                    from: sender,
+                    recipient: recipient_bytes,
+                    amount: bridge_req.amount,
+                    destination_chain_id: bridge_req.destination_chain_id,
+                    nonce,
+                    fee: bridge_req.fee,
+                    pub_key: sk.verifying_key().to_bytes(),
+                    signature: Signature([0u8; 64]),
+                };
+                bridge_tx.signature = sk.sign(&bridge_tx.signable_bytes());
+                let tx = Transaction::BridgeDeposit(bridge_tx);
+                let tx_hash = tx.hash();
+
+                // Insert into mempool while still holding the lock
+                if !mp.insert(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                }
+
+                (tx, tx_hash, nonce)
+            };
+
+            // Broadcast to peers (outside lock)
+            server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+            let _ = server.tx_tx.send(tx);
+
+            json_response(StatusCode::OK, &serde_json::json!({
+                "status": "pending",
+                "tx_hash": hex_encode(&tx_hash),
+                "from": sender.to_hex(),
+                "recipient": bridge_req.recipient,
+                "amount": bridge_req.amount,
+                "fee": bridge_req.fee,
+                "destination_chain_id": bridge_req.destination_chain_id,
+                "nonce": nonce,
             }))
         }
 

@@ -22,8 +22,10 @@ import { useKeystore } from '../hooks/useKeystore.ts';
 import { useEthWallet } from '../hooks/useEthWallet.ts';
 import type { DiscoveredWallet } from '../hooks/useEthWallet.ts';
 import { useToast } from '../hooks/useToast.tsx';
-import { normalizeAddress, isValidAddress, formatUdag, formatUdagBigint, getBridgeNonce, getBridgeAttestation, getBridgeReserve } from '../lib/api.ts';
+import { normalizeAddress, isValidAddress, formatUdag, formatUdagBigint, shortAddr, getBridgeNonce, getBridgeAttestation, getBridgeReserve, postBridgeDeposit, isConnected } from '../lib/api.ts';
 import { CopyButton } from '../components/shared/CopyButton.tsx';
+import { WalletSelector } from '../components/shared/WalletSelector.tsx';
+import { useWalletBalances } from '../hooks/useWalletBalances.ts';
 import { CONTRACTS_DEPLOYED } from '../lib/contracts.ts';
 
 interface BridgeAttestation {
@@ -157,6 +159,14 @@ export function BridgePage() {
   const [loadingAttestations, setLoadingAttestations] = useState(false);
   const [showWalletPicker, setShowWalletPicker] = useState(false);
   const isMounted = useRef(true);
+
+  // Native -> Arbitrum deposit state
+  const [depositWalletIdx, setDepositWalletIdx] = useState(0);
+  const [depositAmount, setDepositAmount] = useState('');
+  const [depositRecipient, setDepositRecipient] = useState('');
+  const [depositing, setDepositing] = useState(false);
+  const [depositTxHash, setDepositTxHash] = useState('');
+  const { balances: walletBalances } = useWalletBalances(wallets, isConnected());
 
   const wallet = wallets[selectedWalletIdx];
   // The validator federation bridge is always active on the native side.
@@ -366,6 +376,90 @@ export function BridgePage() {
     } else if (result.error) {
       toast(result.error, 'error');
     }
+  };
+
+  // Handle Native -> Arbitrum bridge deposit
+  const handleBridgeToArbitrum = async () => {
+    const depositWallet = wallets[depositWalletIdx];
+    if (!depositWallet) {
+      toast('Select a wallet first', 'error');
+      return;
+    }
+
+    // Validate recipient (0x-prefixed Ethereum address)
+    const recipient = depositRecipient.trim();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(recipient)) {
+      toast('Invalid Ethereum address: must be 0x-prefixed 40-char hex', 'error');
+      return;
+    }
+
+    // Parse amount to sats
+    let sats: number;
+    try {
+      const parsed = parseFloat(depositAmount || '0');
+      if (isNaN(parsed) || parsed <= 0) {
+        toast('Enter a valid amount', 'error');
+        return;
+      }
+      sats = Math.round(parsed * 100_000_000);
+    } catch {
+      toast('Invalid amount', 'error');
+      return;
+    }
+
+    // Min 1 UDAG (100_000_000 sats)
+    if (sats < 100_000_000) {
+      toast('Minimum bridge amount is 1 UDAG', 'error');
+      return;
+    }
+
+    // Max 100,000 UDAG
+    if (sats > 100_000 * 100_000_000) {
+      toast('Maximum bridge amount is 100,000 UDAG', 'error');
+      return;
+    }
+
+    // Balance check
+    const wb = walletBalances.get(depositWallet.address);
+    const balance = wb?.balance ?? 0;
+    const fee = 10_000; // MIN_FEE_SATS
+    if (balance < sats + fee) {
+      toast(`Insufficient balance: need ${formatUdag(sats + fee)} UDAG, have ${formatUdag(balance)} UDAG`, 'error');
+      return;
+    }
+
+    setDepositing(true);
+    setDepositTxHash('');
+    try {
+      const result = await postBridgeDeposit({
+        secret_key: depositWallet.secret_key,
+        recipient,
+        amount: sats,
+        fee,
+        destination_chain_id: 42161,
+      });
+      setDepositTxHash(result.tx_hash);
+      setDepositAmount('');
+      toast('Bridge deposit submitted! Validators will sign attestations.', 'success');
+    } catch (e: any) {
+      const msg = e?.message || String(e);
+      try {
+        const parsed = JSON.parse(msg);
+        toast(parsed.error || msg, 'error');
+      } catch {
+        toast(msg, 'error');
+      }
+    } finally {
+      setDepositing(false);
+    }
+  };
+
+  const depositAmountInputHandler = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/[^0-9.]/g, '');
+    const parts = val.split('.');
+    const sanitized = parts[0] + (parts.length > 1 ? '.' + parts.slice(1).join('') : '');
+    if (parts.length > 1 && parts[1].length > 8) return;
+    setDepositAmount(sanitized);
   };
 
   // Format bridge stats from contract
@@ -689,26 +783,65 @@ export function BridgePage() {
               ) : (
                 /* ---- Native -> Arbitrum ---- */
                 <div className="space-y-3">
-                  {/* Source: UltraDAG */}
-                  <div className="rounded-xl bg-dag-bg border border-dag-border/50 p-4">
-                    <div className="flex items-center justify-between mb-3">
+                  {/* Source: UltraDAG Wallet */}
+                  <div className="rounded-xl bg-dag-bg border border-dag-border/50 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
                       <span className="text-xs text-dag-muted font-medium uppercase tracking-wider">From</span>
                       <div className="flex items-center gap-1.5">
                         <div className="w-4 h-4 rounded-full bg-dag-accent/20 flex items-center justify-center">
                           <div className="w-2 h-2 rounded-full bg-dag-accent" />
                         </div>
                         <span className="text-xs font-medium text-dag-accent">UltraDAG</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-dag-accent/10 text-dag-accent/70 border border-dag-accent/20">Native</span>
                       </div>
                     </div>
-                    <p className="text-sm text-dag-muted">
-                      Bridge from UltraDAG native chain to Arbitrum ERC-20.
-                    </p>
-                    <div className="mt-3 flex items-start gap-2 p-2.5 rounded-lg bg-dag-accent/5 border border-dag-accent/10">
-                      <Info className="w-3.5 h-3.5 text-dag-accent mt-0.5 shrink-0" />
-                      <p className="text-xs text-dag-muted">
-                        Validators sign attestations as part of consensus. Once 2/3+ signatures are collected, you can claim on Arbitrum.
-                      </p>
-                    </div>
+
+                    {wallets.length > 0 ? (
+                      <div className="space-y-3">
+                        <WalletSelector wallets={wallets} selectedIdx={depositWalletIdx} onChange={setDepositWalletIdx} label="Source Wallet" />
+
+                        {/* Amount input */}
+                        <div className="relative">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={depositAmount}
+                            onChange={depositAmountInputHandler}
+                            placeholder="0.00"
+                            className="w-full px-4 py-4 bg-dag-surface border border-dag-border/50 rounded-xl text-2xl font-mono text-white placeholder-dag-muted/30 focus:outline-none focus:border-dag-accent/50 pr-28"
+                          />
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                            {(() => {
+                              const wb = wallets[depositWalletIdx] ? walletBalances.get(wallets[depositWalletIdx].address) : undefined;
+                              const bal = wb?.balance ?? 0;
+                              return bal > 10000 ? (
+                                <button
+                                  onClick={() => setDepositAmount(((bal - 10000) / 100_000_000).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''))}
+                                  className="text-[10px] font-bold text-dag-accent hover:text-dag-accent/80 px-2 py-1 rounded bg-dag-accent/10 hover:bg-dag-accent/15 transition-colors"
+                                >
+                                  MAX
+                                </button>
+                              ) : null;
+                            })()}
+                            <span className="text-sm font-medium text-dag-muted">UDAG</span>
+                          </div>
+                        </div>
+
+                        {/* Balance row */}
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-dag-muted">
+                            Balance: <span className="text-white font-mono">
+                              {formatUdag(walletBalances.get(wallets[depositWalletIdx]?.address ?? '')?.balance ?? 0)}
+                            </span> UDAG
+                          </span>
+                          <span className="text-dag-muted">
+                            Fee: <span className="text-white font-mono">0.0001</span> UDAG
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-dag-muted">Create a wallet in the Wallet tab to bridge UDAG to Arbitrum.</p>
+                    )}
                   </div>
 
                   {/* Arrow Divider */}
@@ -719,32 +852,90 @@ export function BridgePage() {
                   </div>
 
                   {/* Destination: Arbitrum */}
-                  <div className="rounded-xl bg-dag-bg border border-dag-border/50 p-4">
-                    <div className="flex items-center justify-between mb-3">
+                  <div className="rounded-xl bg-dag-bg border border-dag-border/50 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
                       <span className="text-xs text-dag-muted font-medium uppercase tracking-wider">To</span>
                       <div className="flex items-center gap-1.5">
                         <div className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center">
                           <div className="w-2 h-2 rounded-full bg-blue-400" />
                         </div>
                         <span className="text-xs font-medium text-blue-400">Arbitrum</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400/70 border border-blue-500/20">ERC-20</span>
                       </div>
                     </div>
+
+                    <input
+                      type="text"
+                      value={depositRecipient}
+                      onChange={(e) => setDepositRecipient(e.target.value)}
+                      placeholder="0x... (Ethereum/Arbitrum address)"
+                      className="w-full px-4 py-3 bg-dag-surface border border-dag-border/50 rounded-xl text-sm font-mono text-white placeholder-dag-muted/30 focus:outline-none focus:border-dag-accent/50"
+                    />
+                    {eth.connected && eth.address && (
+                      <button
+                        onClick={() => setDepositRecipient(eth.address)}
+                        className="text-[10px] text-dag-accent hover:text-dag-accent/80 transition-colors"
+                      >
+                        Use connected wallet: {eth.address.slice(0, 6)}...{eth.address.slice(-4)}
+                      </button>
+                    )}
+                    <p className="text-[10px] text-dag-muted">Enter your Arbitrum/Ethereum address to receive bridged UDAG ERC-20 tokens</p>
                   </div>
 
-                  {/* Native -> Arbitrum bridge info */}
-                  <div className="text-center py-6">
-                    <div className="w-14 h-14 rounded-2xl bg-dag-accent/10 border border-dag-accent/20 flex items-center justify-center mx-auto mb-4">
-                      <Zap className="w-7 h-7 text-dag-accent" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-white">Validator Federation Bridge</h3>
-                    <p className="text-sm text-dag-muted mt-1.5 max-w-xs mx-auto">
-                      Send a <code className="text-dag-accent">BridgeDeposit</code> transaction on UltraDAG. Validators automatically sign attestations during consensus. Once 2/3+ validators sign, claim your tokens on Arbitrum.
+                  {/* Bridge button */}
+                  <div className="space-y-2.5 pt-1">
+                    <button
+                      onClick={handleBridgeToArbitrum}
+                      disabled={wallets.length === 0 || depositing || !depositAmount || !depositRecipient}
+                      className="w-full py-4 rounded-xl bg-gradient-to-r from-dag-accent to-dag-blue text-white font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-dag-accent/20 transition-all"
+                    >
+                      {depositing ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Zap className="w-4 h-4" />
+                      )}
+                      {depositing
+                        ? 'Bridging...'
+                        : wallets.length === 0
+                          ? 'Create Wallet First'
+                          : !depositAmount
+                            ? 'Enter Amount'
+                            : !depositRecipient
+                              ? 'Enter Recipient'
+                              : 'Bridge to Arbitrum'}
+                    </button>
+                  </div>
+
+                  {/* Info note */}
+                  <div className="flex items-start gap-2 p-2.5 rounded-lg bg-dag-accent/5 border border-dag-accent/10">
+                    <Info className="w-3.5 h-3.5 text-dag-accent mt-0.5 shrink-0" />
+                    <p className="text-xs text-dag-muted">
+                      Validators sign attestations as part of consensus. Once 2/3+ signatures are collected, you can claim on Arbitrum.
                     </p>
-                    <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-dag-green/10 text-dag-green text-xs font-medium border border-dag-green/20">
+                  </div>
+
+                  {/* Validator badge */}
+                  <div className="flex justify-center">
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-dag-green/10 text-dag-green text-xs font-medium border border-dag-green/20">
                       <div className="w-1.5 h-1.5 rounded-full bg-dag-green animate-pulse" />
                       5 Validators Active
                     </div>
                   </div>
+
+                  {/* Deposit success message */}
+                  {depositTxHash && (
+                    <div className="rounded-xl bg-dag-green/5 border border-dag-green/20 p-3.5 flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-dag-green/10 flex items-center justify-center shrink-0">
+                        <CheckCircle className="w-4 h-4 text-dag-green" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-dag-green">Bridge deposit submitted!</p>
+                        <p className="text-[10px] text-dag-muted mt-0.5">Validators will sign attestations during consensus. Track status in the Arbitrum &rarr; Native tab.</p>
+                        <p className="text-[10px] text-dag-muted mt-0.5 truncate font-mono">{depositTxHash}</p>
+                      </div>
+                      <CopyButton text={depositTxHash} />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
