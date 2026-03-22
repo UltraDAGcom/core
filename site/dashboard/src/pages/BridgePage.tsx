@@ -183,7 +183,8 @@ export function BridgePage() {
       return 0n;
     }
   })();
-  const needsApproval = eth.connected && amountSats > 0n && eth.udagAllowance < amountSats;
+  // Only show approval when Arbitrum contracts are actually deployed
+  const needsApproval = CONTRACTS_DEPLOYED && eth.connected && amountSats > 0n && eth.udagAllowance < amountSats;
 
   // Track component mount state
   useEffect(() => {
