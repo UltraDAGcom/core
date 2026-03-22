@@ -21,7 +21,7 @@ contract ConfigureBridgeScript is Script {
 
         console.log("Configuring Validator Federation Bridge at:", bridgeAddress);
 
-        UDAGBridgeValidator bridge = UDAGBridgeValidator(bridgeAddress);
+        UDAGBridgeValidator bridge = UDAGBridgeValidator(payable(bridgeAddress));
 
         // Verify caller is governor
         require(bridge.governor() == vm.addr(governorKey), "Caller is not governor");

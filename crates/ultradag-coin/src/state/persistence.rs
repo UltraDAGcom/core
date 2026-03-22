@@ -52,6 +52,10 @@ pub struct StateSnapshot {
     /// Next bridge nonce.
     #[serde(default)]
     pub bridge_nonce: u64,
+    /// Bridge contract address on the destination chain (20 bytes).
+    /// Included in attestation hashes for cross-contract replay protection.
+    #[serde(default)]
+    pub bridge_contract_address: [u8; 20],
 }
 
 impl StateSnapshot {

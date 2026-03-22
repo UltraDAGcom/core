@@ -4,8 +4,8 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @title UltraDAG Token (UDAG) - Hardened Version
 /// @notice ERC-20 representation of UDAG on Arbitrum with enhanced security controls.
@@ -26,6 +26,7 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable, ReentrancyGua
     // ─── Genesis State ───
     bool public genesisFinalized;
     address public bridgeAddress; // Track authorized bridge for monitoring
+    address public genesisMinter; // Stored for finalizeGenesis revocation
 
     // ─── Events ───
     event GenesisFinalized(uint256 indexed totalSupply, address indexed finalizedBy);
@@ -37,27 +38,28 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable, ReentrancyGua
     /// @notice Constructor - sets up initial roles and configuration
     /// @param admin Address that will hold DEFAULT_ADMIN_ROLE initially (should be timelock)
     /// @param initialBridge Address of the bridge contract (can be updated later)
-    /// @param genesisMinter Address that can mint genesis allocations (deployer EOA)
+    /// @param genesisMinter_ Address that can mint genesis allocations (deployer EOA)
     /// @dev Bridge receives MINTER_ROLE for minting on claims.
     ///      Genesis minter receives MINTER_ROLE temporarily for genesis minting.
     ///      Genesis minter role is revoked when finalizeGenesis() is called.
     constructor(
         address admin,
         address initialBridge,
-        address genesisMinter
+        address genesisMinter_
     )
         ERC20("UltraDAG", "UDAG")
         ERC20Permit("UltraDAG")
     {
         require(admin != address(0), "UDAG: admin cannot be zero");
         require(initialBridge != address(0), "UDAG: bridge cannot be zero");
-        require(genesisMinter != address(0), "UDAG: genesis minter cannot be zero");
+        require(genesisMinter_ != address(0), "UDAG: genesis minter cannot be zero");
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(MINTER_ROLE, admin);
-        _grantRole(MINTER_ROLE, genesisMinter); // Temporary for genesis minting
+        _grantRole(MINTER_ROLE, genesisMinter_); // Temporary for genesis minting
         _grantRole(PAUSER_ROLE, admin); // Admin can pause initially
 
+        genesisMinter = genesisMinter_; // Store for finalizeGenesis revocation
         bridgeAddress = initialBridge;
         // Bridge only needs MINTER_ROLE for minting on withdrawal claims
         // Deposits use transferFrom() to lock tokens - no burn needed
@@ -134,15 +136,24 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable, ReentrancyGua
 
     // ─── Genesis Finalization ───
 
-    /// @notice Finalize genesis minting. After this, admin minter role is revoked.
+    /// @notice Finalize genesis minting. After this, minter roles are revoked from
+    ///         both the caller (admin) and the genesis minter.
     /// @dev Should be called after minting dev allocation + treasury.
     ///      Admin retains DEFAULT_ADMIN_ROLE for emergency functions.
     function finalizeGenesis() external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
         require(!genesisFinalized, "UDAG: already finalized");
-        
+
         genesisFinalized = true;
-        _revokeRole(MINTER_ROLE, msg.sender); // Revoke from caller only
-        
+        _revokeRole(MINTER_ROLE, msg.sender); // Revoke from caller (admin)
+        _revokeRole(MINTER_ROLE, genesisMinter); // Revoke from genesis minter
+
+        // Lock MINTER_ROLE and BURNER_ROLE permanently: set their role admin
+        // to a role that nobody has, making them unassignable after genesis.
+        // The bridge retains its existing MINTER_ROLE grant, but no new grants
+        // can ever be made.
+        _setRoleAdmin(MINTER_ROLE, bytes32(type(uint256).max));
+        _setRoleAdmin(BURNER_ROLE, bytes32(type(uint256).max));
+
         emit GenesisFinalized(totalSupply(), msg.sender);
     }
 
@@ -151,18 +162,18 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable, ReentrancyGua
     /// @notice Update the authorized bridge address
     /// @dev Only DEFAULT_ADMIN_ROLE. Transfers roles from old bridge to new.
     function updateBridge(address newBridge) external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
+        require(!genesisFinalized, "UDAG: bridge updates locked after genesis");
         require(newBridge != address(0), "UDAG: new bridge cannot be zero");
         require(newBridge != bridgeAddress, "UDAG: same bridge address");
         
         address oldBridge = bridgeAddress;
         
-        // Revoke roles from old bridge
+        // Revoke MINTER_ROLE from old bridge
         _revokeRole(MINTER_ROLE, oldBridge);
-        _revokeRole(BURNER_ROLE, oldBridge);
-        
-        // Grant roles to new bridge
+
+        // Grant MINTER_ROLE to new bridge (for minting on withdrawal claims)
+        // Bridge does NOT need BURNER_ROLE: deposits use transferFrom (escrow), not burn
         _grantRole(MINTER_ROLE, newBridge);
-        _grantRole(BURNER_ROLE, newBridge);
         
         bridgeAddress = newBridge;
         emit BridgeUpdated(oldBridge, newBridge);
@@ -216,15 +227,15 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable, ReentrancyGua
         return MAX_SUPPLY - totalSupply();
     }
 
-    // ─── Override _beforeTokenTransfer for pause enforcement ───
-    /// @dev Pausable already hooks into _beforeTokenTransfer, 
-    ///      but we explicitly note the integration here for auditors
-    function _beforeTokenTransfer(
+    // ─── Override _update for pause enforcement ───
+    /// @dev In OZ v5, _update replaces _beforeTokenTransfer.
+    ///      Enforces pause on all token transfers, mints, and burns.
+    function _update(
         address from,
         address to,
-        uint256 amount
+        uint256 value
     ) internal override(ERC20) whenNotPaused {
-        super._beforeTokenTransfer(from, to, amount);
+        super._update(from, to, value);
     }
 
     // ─── Support for EIP-712 Domain (inherited from ERC20Permit) ───

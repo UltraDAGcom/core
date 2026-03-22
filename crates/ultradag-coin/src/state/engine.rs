@@ -266,10 +266,16 @@ pub struct StateEngine {
     /// Validators sign attestations as part of consensus. When 2/3+ signatures collected,
     /// users can claim on Arbitrum.
     bridge_attestations: HashMap<u64, crate::bridge::BridgeAttestation>,
-    /// Bridge signatures: (nonce, validator) → signature.
-    bridge_signatures: HashMap<(u64, Address), [u8; 64]>,
+    /// Bridge signatures: (nonce, validator) → packed ECDSA data.
+    /// Format: eth_address (20 bytes) + ecdsa_signature (65 bytes: r || s || v) = 85 bytes.
+    /// Uses secp256k1/ECDSA for Solidity ecrecover compatibility (H1 fix).
+    bridge_signatures: HashMap<(u64, Address), [u8; 85]>,
     /// Next bridge nonce (incremented for each new attestation).
     bridge_nonce: u64,
+    /// Bridge contract address on the destination chain (20 bytes).
+    /// Included in attestation hashes for cross-contract replay protection.
+    /// Set via `set_bridge_contract_address()` or CLI configuration.
+    bridge_contract_address: [u8; 20],
 }
 
 impl StateEngine {
@@ -305,7 +311,19 @@ impl StateEngine {
             bridge_attestations: HashMap::new(),
             bridge_signatures: HashMap::new(),
             bridge_nonce: 0,
+            bridge_contract_address: [0u8; 20],
         }
+    }
+
+    /// Set the bridge contract address on the destination chain.
+    /// This is included in all bridge attestation hashes for cross-contract replay protection.
+    pub fn set_bridge_contract_address(&mut self, address: [u8; 20]) {
+        self.bridge_contract_address = address;
+    }
+
+    /// Get the bridge contract address on the destination chain.
+    pub fn bridge_contract_address(&self) -> [u8; 20] {
+        self.bridge_contract_address
     }
 
     /// Set the configured validator count for pre-staking reward splitting.
@@ -1065,6 +1083,14 @@ impl StateEngine {
                 crate::tx::Transaction::BridgeDeposit(bridge_tx) => {
                     if let Err(e) = self.apply_bridge_lock_tx(bridge_tx, None, None) {
                         tracing::warn!("Skipping invalid BridgeDeposit tx in finalized vertex: {}", e);
+                        // M3 fix: on failure, still charge the fee (like Transfer).
+                        // The balance check above verified tx.total_cost() is affordable.
+                        // apply_bridge_lock_tx may have already debited (if it failed after debit),
+                        // so only charge fee if we haven't debited yet (validation errors).
+                        if bridge_tx.fee > 0 {
+                            let _ = self.debit(&bridge_tx.from, bridge_tx.fee);
+                            collected_fees = collected_fees.saturating_add(bridge_tx.fee);
+                        }
                         self.increment_nonce(&bridge_tx.from);
                         self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
                         continue;
@@ -1383,6 +1409,12 @@ impl StateEngine {
                 if proposals_pruned > 0 {
                     tracing::debug!("Pruned {} old proposals at round {}", proposals_pruned, fin);
                 }
+
+                // Remove fully-signed or old bridge attestations (M2 fix)
+                let bridge_pruned = self.prune_old_bridge_attestations(fin);
+                if bridge_pruned > 0 {
+                    tracing::debug!("Pruned {} old bridge attestations at round {}", bridge_pruned, fin);
+                }
             }
         }
 
@@ -1560,15 +1592,33 @@ impl StateEngine {
 
     /// Apply a BridgeDepositTx: debit sender (amount + fee), add amount to bridge reserve.
     /// Also creates a bridge attestation for validators to sign.
+    ///
+    /// H4 fix: validates destination_chain_id against SUPPORTED_BRIDGE_CHAIN_IDS.
+    /// M1 fix: stores creation_round on the attestation for round-based pruning.
     pub fn apply_bridge_lock_tx(
         &mut self,
         tx: &crate::tx::BridgeDepositTx,
-        validator: Option<crate::address::Address>,
-        validator_sk: Option<&crate::address::SecretKey>,
+        _validator: Option<crate::address::Address>,
+        _validator_sk: Option<&crate::address::SecretKey>,
     ) -> Result<Option<crate::bridge::BridgeAttestation>, CoinError> {
         if tx.amount < crate::constants::MIN_BRIDGE_AMOUNT_SATS {
             return Err(CoinError::ValidationError("below minimum bridge amount".into()));
         }
+
+        // M4: validate max bridge deposit cap (before debit)
+        if tx.amount > crate::constants::MAX_BRIDGE_AMOUNT_SATS {
+            return Err(CoinError::ValidationError(
+                format!("bridge deposit exceeds maximum: {} > {}", tx.amount, crate::constants::MAX_BRIDGE_AMOUNT_SATS)
+            ));
+        }
+
+        // H4: validate destination chain ID
+        if !crate::constants::SUPPORTED_BRIDGE_CHAIN_IDS.contains(&tx.destination_chain_id) {
+            return Err(CoinError::ValidationError(
+                format!("unsupported destination chain ID: {}", tx.destination_chain_id)
+            ));
+        }
+
         let total = tx.amount.saturating_add(tx.fee);
         let bal = self.balance(&tx.from);
         if bal < total {
@@ -1581,26 +1631,29 @@ impl StateEngine {
         self.debit(&tx.from, total)?;
         self.bridge_reserve = self.bridge_reserve.saturating_add(tx.amount);
         self.increment_nonce(&tx.from);
-        
+
+        // M1: set creation_round for round-based pruning
+        let current_round = self.last_finalized_round.unwrap_or(0);
+
         // Create bridge attestation for validators to sign
-        let attestation = crate::bridge::BridgeAttestation::new(
+        // C3 fix: use self.bridge_contract_address instead of default [0u8; 20]
+        let attestation = crate::bridge::BridgeAttestation::new_with_contract(
             tx.from,
             tx.recipient,
             tx.amount,
             self.bridge_nonce,
             tx.destination_chain_id,
+            self.bridge_contract_address,
+            current_round,
         );
-        
+
         // Store attestation
         self.bridge_attestations.insert(self.bridge_nonce, attestation.clone());
-        self.bridge_nonce += 1;
-        
-        // If we're a validator, sign the attestation
-        if let (Some(validator), Some(sk)) = (validator, validator_sk) {
-            let signature = sk.sign(&attestation.hash());
-            self.bridge_signatures.insert((attestation.nonce, validator), signature.0);
-        }
-        
+        self.bridge_nonce = self.bridge_nonce.saturating_add(1);
+
+        // NOTE: validators sign attestations separately via sign_pending_bridge_attestations()
+        // during the validator loop, not here. This prevents double-application.
+
         Ok(Some(attestation))
     }
 
@@ -2670,6 +2723,7 @@ impl StateEngine {
             bridge_attestations: HashMap::new(),
             bridge_signatures: HashMap::new(),
             bridge_nonce: 0,
+            bridge_contract_address: [0u8; 20],
             last_proposal_round: HashMap::new(),
             round_lock: RwLock::new(None),
         })
@@ -2695,7 +2749,10 @@ impl StateEngine {
         let mut bridge_attestations: Vec<_> = self.bridge_attestations.iter().map(|(k, v)| (*k, v.clone())).collect();
         bridge_attestations.sort_by_key(|(nonce, _)| *nonce);
         let mut bridge_signatures: Vec<_> = self.bridge_signatures.iter()
-            .map(|((nonce, validator), sig)| ((*nonce, *validator), sig.to_vec()))
+            .map(|((nonce, validator), packed)| {
+                // Serialize as 85 bytes: eth_address (20) + ecdsa_sig (65)
+                ((*nonce, *validator), packed.to_vec())
+            })
             .collect();
         bridge_signatures.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.0.1.0.cmp(&b.0.1.0)));
         crate::state::persistence::StateSnapshot {
@@ -2717,6 +2774,7 @@ impl StateEngine {
             bridge_attestations,
             bridge_signatures,
             bridge_nonce: self.bridge_nonce,
+            bridge_contract_address: self.bridge_contract_address,
         }
     }
 
@@ -2760,16 +2818,21 @@ impl StateEngine {
             bridge_signatures: snapshot.bridge_signatures
                 .into_iter()
                 .filter_map(|(k, v)| {
-                    if v.len() == 64 {
-                        let mut arr = [0u8; 64];
-                        arr.copy_from_slice(&v);
-                        Some((k, arr))
-                    } else {
+                    // Current format: 85 bytes = eth_address (20) + ecdsa_sig (65)
+                    if v.len() == 85 {
+                        let mut packed = [0u8; 85];
+                        packed.copy_from_slice(&v);
+                        Some((k, packed))
+                    }
+                    // Legacy formats (96 or 64 bytes) are incompatible with ECDSA —
+                    // drop them silently. Validators will re-sign pending attestations.
+                    else {
                         None
                     }
                 })
                 .collect(),
             bridge_nonce: snapshot.bridge_nonce,
+            bridge_contract_address: snapshot.bridge_contract_address,
             last_proposal_round: HashMap::new(),
             round_lock: RwLock::new(None),
         })
@@ -2799,70 +2862,137 @@ impl StateEngine {
         self.bridge_signatures = snapshot.bridge_signatures
             .into_iter()
             .filter_map(|(k, v)| {
-                if v.len() == 64 {
-                    let mut arr = [0u8; 64];
-                    arr.copy_from_slice(&v);
-                    Some((k, arr))
+                // Current format: 85 bytes = eth_address (20) + ecdsa_sig (65)
+                if v.len() == 85 {
+                    let mut packed = [0u8; 85];
+                    packed.copy_from_slice(&v);
+                    Some((k, packed))
                 } else {
-                    None
+                    None // Drop incompatible legacy formats
                 }
             })
             .collect();
         self.bridge_nonce = snapshot.bridge_nonce;
+        self.bridge_contract_address = snapshot.bridge_contract_address;
         self.configured_validator_count = saved_configured;
     }
 
     // ─── Bridge Attestation Functions ───
 
-    /// Create a new bridge attestation for a withdrawal.
-    /// Called when a user locks funds on the DAG for withdrawal on Arbitrum.
-    pub fn create_bridge_attestation(
-        &mut self,
-        sender: Address,
-        recipient: [u8; 20],
-        amount: u64,
-        destination_chain_id: u64,
-    ) -> Result<crate::bridge::BridgeAttestation, CoinError> {
-        use crate::bridge::BridgeAttestation;
-        
-        let attestation = BridgeAttestation::new(
-            sender,
-            recipient,
-            amount,
-            self.bridge_nonce,
-            destination_chain_id,
-        );
-        
-        // Verify attestation is valid
-        attestation.verify()?;
-        
-        // Lock funds in bridge reserve
-        self.bridge_reserve = self.bridge_reserve.saturating_add(amount);
-        
-        // Store attestation
-        self.bridge_attestations.insert(self.bridge_nonce, attestation.clone());
-        self.bridge_nonce += 1;
-        
-        Ok(attestation)
-    }
-
     /// Sign a bridge attestation (validator function).
-    /// Validators sign attestations as part of normal block production.
+    /// Validators sign attestations as part of consensus finalization.
+    /// Verifies that: (1) the attestation exists, (2) the validator is in the active set,
+    /// (3) the ECDSA signature is valid over the Solidity message hash.
+    ///
+    /// H1 fix: uses secp256k1/ECDSA signatures for Solidity ecrecover compatibility.
+    /// Signature format: eth_address (20) + ecdsa_sig (65) = 85 bytes.
     pub fn sign_bridge_attestation(
         &mut self,
         nonce: u64,
         validator: Address,
-        signature: [u8; 64],
+        packed_sig: [u8; 85],
     ) -> Result<(), CoinError> {
         // Verify attestation exists
-        if !self.bridge_attestations.contains_key(&nonce) {
-            return Err(CoinError::ValidationError("Attestation not found".into()));
+        let attestation = self.bridge_attestations.get(&nonce)
+            .ok_or_else(|| CoinError::ValidationError("Attestation not found".into()))?;
+
+        // Verify validator is in the active set
+        if !self.active_validator_set.contains(&validator) {
+            return Err(CoinError::ValidationError("signer is not an active validator".into()));
         }
-        
-        // Store signature
-        self.bridge_signatures.insert((nonce, validator), signature);
-        
+
+        // Extract eth_address and signature from packed format
+        let mut eth_addr = [0u8; 20];
+        eth_addr.copy_from_slice(&packed_sig[..20]);
+        let sig_bytes = &packed_sig[20..];
+
+        // Verify ECDSA signature by recovering signer address
+        use k256::ecdsa::{RecoveryId, Signature as EcdsaSig, VerifyingKey};
+        use sha3::{Digest, Keccak256};
+
+        let ecdsa_sig = EcdsaSig::from_slice(&sig_bytes[..64])
+            .map_err(|_| CoinError::ValidationError("invalid ECDSA signature".into()))?;
+        let v = sig_bytes[64];
+        let recovery_id = RecoveryId::from_byte(v.wrapping_sub(27))
+            .ok_or_else(|| CoinError::ValidationError("invalid recovery id".into()))?;
+
+        let message_hash = attestation.solidity_message_hash();
+
+        // C1 fix: apply EIP-191 prefix before ECDSA recovery (matches sign_for_bridge)
+        let eth_signed_hash: [u8; 32] = {
+            let mut prefixed = Vec::with_capacity(60);
+            prefixed.extend_from_slice(b"\x19Ethereum Signed Message:\n32");
+            prefixed.extend_from_slice(&message_hash);
+            Keccak256::digest(&prefixed).into()
+        };
+
+        let recovered_vk = VerifyingKey::recover_from_prehash(&eth_signed_hash, &ecdsa_sig, recovery_id)
+            .map_err(|_| CoinError::InvalidSignature)?;
+
+        let encoded = recovered_vk.to_encoded_point(false);
+        let pubkey_bytes = &encoded.as_bytes()[1..];
+        let hash = Keccak256::digest(pubkey_bytes);
+        let mut recovered_addr = [0u8; 20];
+        recovered_addr.copy_from_slice(&hash[12..32]);
+
+        if recovered_addr != eth_addr {
+            return Err(CoinError::InvalidSignature);
+        }
+
+        // Store verified signature
+        self.bridge_signatures.insert((nonce, validator), packed_sig);
+
         Ok(())
+    }
+
+    /// Sign all pending bridge attestations that this validator hasn't signed yet.
+    /// Called by the validator loop after applying finalized vertices, so that
+    /// attestation creation (state mutation) and signing happen in separate steps.
+    ///
+    /// H2 fix: only active validators may sign bridge attestations.
+    /// H1 fix: uses secp256k1/ECDSA signatures for Solidity compatibility.
+    /// The secp key is derived from the Ed25519 key via SHA-256.
+    pub fn sign_pending_bridge_attestations(
+        &mut self,
+        validator: Address,
+        sk: &crate::address::SecretKey,
+    ) {
+        // H2: only active validators should sign bridge attestations
+        if !self.active_validator_set.contains(&validator) {
+            return;
+        }
+
+        let secp_key = match crate::bridge::derive_secp_key_from_ed25519(&sk.to_bytes()) {
+            Some(key) => key,
+            None => {
+                tracing::error!("Failed to derive secp256k1 key for bridge signing");
+                return;
+            }
+        };
+        let eth_addr = crate::bridge::eth_address_from_secp_key(&secp_key);
+        let nonces: Vec<u64> = self.bridge_attestations.keys().copied().collect();
+        for nonce in nonces {
+            // Skip if already signed
+            if self.bridge_signatures.contains_key(&(nonce, validator)) {
+                continue;
+            }
+            if let Some(attestation) = self.bridge_attestations.get(&nonce) {
+                let msg_hash = attestation.solidity_message_hash();
+                let sig = match crate::bridge::sign_for_bridge(&msg_hash, &secp_key) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::error!("Failed to sign bridge attestation nonce={}: {}", nonce, e);
+                        continue;
+                    }
+                };
+                // Store: eth_address (20) + ecdsa_signature (65) = 85 bytes
+                let mut combined = [0u8; 85];
+                combined[..20].copy_from_slice(&eth_addr);
+                combined[20..].copy_from_slice(&sig);
+                self.bridge_signatures.insert((nonce, validator), combined);
+                tracing::debug!("Signed bridge attestation nonce={} as validator {}", nonce, validator.to_hex());
+            }
+        }
     }
 
     /// Get the number of signatures for an attestation.
@@ -2885,27 +3015,33 @@ impl StateEngine {
 
     /// Build a bridge proof with collected signatures.
     /// Returns Ok when threshold signatures are collected.
+    ///
+    /// H1 fix: builds proof with ECDSA signatures (eth_address + 65-byte sig).
     pub fn build_bridge_proof(
         &self,
         nonce: u64,
     ) -> Result<crate::bridge::BridgeProof, CoinError> {
         use crate::bridge::{BridgeProof, SignedBridgeAttestation};
-        
+
         // Get attestation
         let attestation = self.bridge_attestations
             .get(&nonce)
             .ok_or_else(|| CoinError::ValidationError("Attestation not found".into()))?
             .clone();
-        
-        // Collect signatures
+
+        // Collect signatures — unpack eth_address (20) + ecdsa_sig (65) from 85-byte packed format
         let signatures: Vec<SignedBridgeAttestation> = self.bridge_signatures
             .iter()
             .filter(|((n, _), _)| *n == nonce)
-            .map(|((_, validator), signature)| {
-                SignedBridgeAttestation::new(attestation.clone(), *validator, *signature)
+            .map(|((_, validator), packed)| {
+                let mut eth_addr = [0u8; 20];
+                eth_addr.copy_from_slice(&packed[..20]);
+                let mut sig = [0u8; 65];
+                sig.copy_from_slice(&packed[20..85]);
+                SignedBridgeAttestation::new(attestation.clone(), *validator, eth_addr, sig)
             })
             .collect();
-        
+
         // Check threshold
         let threshold = self.get_bridge_threshold();
         if signatures.len() < threshold {
@@ -2913,8 +3049,54 @@ impl StateEngine {
                 format!("Insufficient signatures: {} < {}", signatures.len(), threshold)
             ));
         }
-        
+
         Ok(BridgeProof::new(attestation, signatures))
+    }
+
+    /// Refund a bridge attestation (for failed bridges).
+    /// Reduces bridge_reserve and credits the original sender.
+    /// Marks the attestation as refunded by removing it.
+    ///
+    /// M2 fix: `pub(crate)` visibility — callers MUST verify governance authorization
+    /// before invoking (e.g., via an executed governance proposal).
+    /// Direct external access is intentionally prevented.
+    pub(crate) fn bridge_refund(&mut self, nonce: u64, governance_authorized: bool) -> Result<(), CoinError> {
+        if !governance_authorized {
+            return Err(CoinError::ValidationError(
+                "bridge_refund requires governance authorization".into()
+            ));
+        }
+        // Verify the attestation exists
+        let attestation = self.bridge_attestations.get(&nonce)
+            .ok_or_else(|| CoinError::ValidationError(
+                format!("bridge attestation nonce {} not found", nonce)
+            ))?
+            .clone();
+
+        let amount = attestation.amount;
+        let sender = attestation.sender;
+
+        // Reduce bridge reserve
+        if self.bridge_reserve < amount {
+            return Err(CoinError::ValidationError(
+                "bridge_reserve insufficient for refund (state corruption?)".into()
+            ));
+        }
+        self.bridge_reserve = self.bridge_reserve.saturating_sub(amount);
+
+        // Credit the original sender
+        self.credit(&sender, amount);
+
+        // Remove attestation and associated signatures (marks as refunded)
+        self.bridge_attestations.remove(&nonce);
+        self.bridge_signatures.retain(|(n, _), _| *n != nonce);
+
+        tracing::info!(
+            "Bridge refund: nonce={} amount={} sender={}",
+            nonce, amount, sender.to_hex()
+        );
+
+        Ok(())
     }
 
     /// Get bridge attestation by nonce.
@@ -2930,6 +3112,46 @@ impl StateEngine {
     /// Get bridge reserve balance.
     pub fn get_bridge_reserve(&self) -> u64 {
         self.bridge_reserve
+    }
+
+    /// Prune old bridge attestations and their signatures.
+    /// Removes attestations older than BRIDGE_ATTESTATION_RETENTION_ROUNDS based on creation_round.
+    /// Returns the number of attestations pruned.
+    ///
+    /// M1 fix: prunes ONLY by age (creation_round). The "fully signed" criterion was removed
+    /// because bridge_signatures count is non-deterministic across nodes (each validator signs
+    /// locally). Using sig_count for pruning would cause different nodes to prune different
+    /// attestations, diverging bridge_attestations which IS in the state root.
+    pub fn prune_old_bridge_attestations(&mut self, current_round: u64) -> usize {
+        let retention = crate::constants::BRIDGE_ATTESTATION_RETENTION_ROUNDS;
+
+        let mut to_prune = Vec::new();
+        for (&nonce, attestation) in &self.bridge_attestations {
+            let is_old = attestation.creation_round.saturating_add(retention) < current_round;
+            if is_old {
+                to_prune.push(nonce);
+            }
+        }
+
+        let pruned = to_prune.len();
+        for nonce in &to_prune {
+            self.bridge_attestations.remove(nonce);
+            self.bridge_signatures.retain(|(n, _), _| n != nonce);
+        }
+        pruned
+    }
+
+    /// Restore bridge state from persistence.
+    /// Called by load_from_redb after from_parts (which initializes bridge state to empty/0).
+    pub fn restore_bridge_state(
+        &mut self,
+        attestations: HashMap<u64, crate::bridge::BridgeAttestation>,
+        signatures: HashMap<(u64, Address), [u8; 85]>,
+        nonce: u64,
+    ) {
+        self.bridge_attestations = attestations;
+        self.bridge_signatures = signatures;
+        self.bridge_nonce = nonce;
     }
 
     /// Save state to redb database (ACID, crash-safe).

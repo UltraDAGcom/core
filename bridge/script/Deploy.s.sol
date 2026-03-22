@@ -49,18 +49,26 @@ contract DeployScript is Script {
 
         // Step 1: Deploy TimelockController
         // Governor (EOA/multisig) will have TIMELOCK_ADMIN_ROLE
+        // Pass proposer and executor roles in constructor since only admin can grant roles post-construction
+        address[] memory proposers = new address[](1);
+        proposers[0] = governor;
+        address[] memory executors = new address[](1);
+        executors[0] = governor;
+
         timelockAddress = address(new TimelockController(
             MIN_DELAY,
-            new address[](0), // No proposers initially
-            new address[](0), // No executors initially
+            proposers,
+            executors,
             governor // Admin
         ));
 
         console.log("TimelockController deployed:", timelockAddress);
 
         // Step 2: Deploy UDAG Token
-        // Pass deployer as genesisMinter so it can mint genesis allocations
-        tokenAddress = address(new UDAGToken(timelockAddress, address(0), deployer));
+        // Use a throwaway address as temp bridge (so updateBridge doesn't revoke deployer's MINTER_ROLE)
+        // Deployer is admin (for setup) and genesisMinter (for genesis minting)
+        address tempBridge = address(0xdead);
+        tokenAddress = address(new UDAGToken(deployer, tempBridge, deployer));
         console.log("UDAGToken deployed:", tokenAddress);
 
         // Step 3: Deploy UDAG Bridge (Validator Federation - no relayers needed!)
@@ -70,44 +78,44 @@ contract DeployScript is Script {
         ));
         console.log("UDAGBridgeValidator deployed:", bridgeAddress);
 
-        // Step 4: Grant bridge MINTER_ROLE only (deposits lock tokens via transferFrom)
-        UDAGToken(tokenAddress).grantRole(
-            UDAGToken(tokenAddress).MINTER_ROLE(),
-            bridgeAddress
-        );
-        console.log("Bridge granted MINTER_ROLE (for minting on withdrawal claims)");
-        
-        // Step 5: Mint genesis allocations (deployer has MINTER_ROLE)
+        // Step 4: Update token's bridge to real bridge contract
+        // Revokes MINTER_ROLE from tempBridge, grants to real bridge
+        UDAGToken(tokenAddress).updateBridge(bridgeAddress);
+        console.log("Token bridge updated to real bridge address");
+
+        // Step 5: Mint genesis allocations (deployer has MINTER_ROLE as genesisMinter + admin)
         UDAGToken(tokenAddress).mint(devAddress, DEV_ALLOCATION);
         console.log("Minted dev allocation:", DEV_ALLOCATION, "to", devAddress);
 
         UDAGToken(tokenAddress).mint(treasuryAddress, TREASURY_ALLOCATION);
         console.log("Minted treasury allocation:", TREASURY_ALLOCATION, "to", treasuryAddress);
 
-        // Step 6: Finalize genesis (revoke MINTER_ROLE from deployer)
+        // Step 6: Finalize genesis (revoke MINTER_ROLE from deployer admin and genesisMinter)
         UDAGToken(tokenAddress).finalizeGenesis();
         console.log("Genesis finalized - deployer MINTER_ROLE revoked");
-        
-        // Step 7: Configure Timelock roles
-        // Grant proposer role to timelock itself (for self-scheduling)
-        TimelockController(payable(timelockAddress)).grantRole(
-            TimelockController(payable(timelockAddress)).PROPOSER_ROLE(),
+
+        // Step 7: Transfer admin to timelock
+        UDAGToken(tokenAddress).grantRole(
+            UDAGToken(tokenAddress).DEFAULT_ADMIN_ROLE(),
             timelockAddress
         );
-        
-        // Grant executor role to timelock itself
-        TimelockController(payable(timelockAddress)).grantRole(
-            TimelockController(payable(timelockAddress)).EXECUTOR_ROLE(),
+        UDAGToken(tokenAddress).grantRole(
+            UDAGToken(tokenAddress).PAUSER_ROLE(),
             timelockAddress
         );
-        
-        // Grant proposer role to governor (can propose changes)
-        TimelockController(payable(timelockAddress)).grantRole(
-            TimelockController(payable(timelockAddress)).PROPOSER_ROLE(),
-            governor
+        // Deployer renounces its own admin role and pauser role
+        UDAGToken(tokenAddress).renounceRole(
+            UDAGToken(tokenAddress).PAUSER_ROLE(),
+            deployer
         );
-        
-        console.log("Timelock configured with proposer and executor roles");
+        UDAGToken(tokenAddress).renounceRole(
+            UDAGToken(tokenAddress).DEFAULT_ADMIN_ROLE(),
+            deployer
+        );
+        console.log("Token admin transferred to timelock, deployer PAUSER_ROLE renounced");
+
+        // Step 8: Timelock roles already configured via constructor (proposers + executors)
+        console.log("Timelock configured with proposer and executor roles via constructor");
         
         vm.stopBroadcast();
         

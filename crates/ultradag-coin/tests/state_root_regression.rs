@@ -54,6 +54,10 @@ fn known_fixture() -> StateSnapshot {
             }),
         ],
         configured_validator_count: None,
+        bridge_attestations: vec![],
+        bridge_signatures: vec![],
+        bridge_nonce: 0,
+        bridge_contract_address: [0u8; 20],
     }
 }
 
@@ -68,11 +72,12 @@ fn state_root_regression_known_fixture() {
     // This is the canonical hash of the known fixture.
     // To update: run this test, copy the printed hash, and replace the assertion.
     // WARNING: Updating this value means every node must be restarted with the new code.
+    // Updated after adding bridge_contract_address to state root (C3 fix)
     let expected: [u8; 32] = [
-        0xe3, 0xef, 0x0f, 0xbb, 0x4e, 0x13, 0x9e, 0xd5,
-        0x10, 0x62, 0x57, 0x58, 0x89, 0x9b, 0xe0, 0x7c,
-        0xa3, 0xc2, 0xce, 0xe6, 0xe7, 0xd5, 0x40, 0xfe,
-        0xb6, 0xbb, 0x52, 0x86, 0x2d, 0x76, 0x41, 0xd9,
+        60, 175, 125, 141, 90, 202, 249, 64,
+        4, 101, 71, 104, 241, 125, 204, 130,
+        64, 253, 207, 255, 175, 117, 41, 252,
+        184, 79, 168, 9, 59, 150, 116, 147,
     ];
 
     if expected == [0x00; 32] {
@@ -153,6 +158,10 @@ fn state_root_empty_state() {
         treasury_balance: 0,
         delegation_accounts: vec![],
         configured_validator_count: None,
+        bridge_attestations: vec![],
+        bridge_signatures: vec![],
+        bridge_nonce: 0,
+        bridge_contract_address: [0u8; 20],
     };
     let root = compute_state_root(&snapshot);
     assert_ne!(root, [0u8; 32], "Empty state root should not be all zeros");

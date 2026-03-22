@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ArrowRightLeft, ArrowRight, ExternalLink, Shield, Clock, Info, Unplug, Loader2, CheckCircle, Wallet } from 'lucide-react';
+import { formatUnits } from 'ethers';
 import { Card } from '../components/shared/Card.tsx';
 import { useKeystore } from '../hooks/useKeystore.ts';
 import { useEthWallet } from '../hooks/useEthWallet.ts';
 import { useToast } from '../hooks/useToast.tsx';
-import { normalizeAddress, isValidAddress, formatUdag, getBridgeNonce, getBridgeAttestation, getBridgeReserve } from '../lib/api.ts';
+import { normalizeAddress, isValidAddress, formatUdag, formatUdagBigint, getBridgeNonce, getBridgeAttestation, getBridgeReserve } from '../lib/api.ts';
 import { CopyButton } from '../components/shared/CopyButton.tsx';
 import { CONTRACTS_DEPLOYED } from '../lib/contracts.ts';
 
@@ -19,7 +20,12 @@ interface BridgeAttestation {
   signature_count: number;
   threshold: number;
   ready: boolean;
-  proof?: any;
+  proof?: {
+    signatures?: string[];
+    sender_eth?: string;
+    recipient_eth?: string;
+    amount_raw?: string;
+  };
 }
 
 export function BridgePage() {
@@ -34,9 +40,11 @@ export function BridgePage() {
   const [bridging, setBridging] = useState(false);
   const [approving, setApproving] = useState(false);
   const [txHash, setTxHash] = useState('');
+  const [claiming, setClaiming] = useState<number | null>(null); // nonce being claimed
   const [bridgeReserve, setBridgeReserve] = useState<{ reserve_sats: number; reserve_udag: number } | null>(null);
   const [attestations, setAttestations] = useState<BridgeAttestation[]>([]);
   const [loadingAttestations, setLoadingAttestations] = useState(false);
+  const isMounted = useRef(true);
 
   const wallet = wallets[selectedWalletIdx];
   const bridgeActive = eth.contractsDeployed ? eth.bridgeActive : false;
@@ -49,12 +57,25 @@ export function BridgePage() {
   })();
   const needsApproval = eth.connected && amountSats > 0n && eth.udagAllowance < amountSats;
 
+  // Track component mount state (M12)
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
+  // H5: Display eth.error in toast when it changes
+  useEffect(() => {
+    if (eth.error) {
+      toast(eth.error, 'error');
+    }
+  }, [eth.error]);
+
   // Fetch bridge reserve on mount
   useEffect(() => {
     const fetchReserve = async () => {
       try {
         const reserve = await getBridgeReserve();
-        setBridgeReserve(reserve);
+        if (isMounted.current) setBridgeReserve(reserve);
       } catch (e) {
         // Node might not have bridge endpoints yet
       }
@@ -64,31 +85,48 @@ export function BridgePage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch recent attestations
+  // Fetch recent attestations (L4: parallel fetch, M12: isMounted guard, M6: tab-gated + backoff)
+  const consecutiveErrorsRef = useRef(0);
   useEffect(() => {
+    if (direction !== 'to-native') return; // M6: only poll on the tab that displays attestations
+
     const fetchAttestations = async () => {
-      setLoadingAttestations(true);
+      if (isMounted.current) setLoadingAttestations(true);
       try {
         const nonceRes = await getBridgeNonce();
-        const recent: BridgeAttestation[] = [];
-        // Fetch last 5 attestations
+        // Fetch last 5 attestations in parallel (L4)
+        const indices: number[] = [];
         for (let i = Math.max(0, nonceRes.next_nonce - 5); i < nonceRes.next_nonce; i++) {
-          try {
-            const att = await getBridgeAttestation(i);
-            recent.push(att);
-          } catch {}
+          indices.push(i);
         }
-        setAttestations(recent.reverse());
+        const results = await Promise.all(
+          indices.map(i => getBridgeAttestation(i).catch(() => null))
+        );
+        const recent = results.filter((att): att is BridgeAttestation => att !== null);
+        if (isMounted.current) setAttestations(recent.reverse());
+        consecutiveErrorsRef.current = 0; // Reset on success
       } catch (e) {
+        consecutiveErrorsRef.current += 1;
         // Node might not have bridge endpoints yet
       } finally {
-        setLoadingAttestations(false);
+        if (isMounted.current) setLoadingAttestations(false);
       }
     };
     fetchAttestations();
-    const interval = setInterval(fetchAttestations, 10000); // Refresh every 10s
-    return () => clearInterval(interval);
-  }, []);
+
+    // M6: Backoff on consecutive errors: 10s base, doubles per error, max 60s
+    const getInterval = () => Math.min(10000 * Math.pow(2, consecutiveErrorsRef.current), 60000);
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const scheduleNext = () => {
+      timeoutId = setTimeout(async () => {
+        await fetchAttestations();
+        if (isMounted.current) scheduleNext();
+      }, getInterval());
+    };
+    scheduleNext();
+
+    return () => clearTimeout(timeoutId);
+  }, [direction]);
 
   const handleApprove = async () => {
     setApproving(true);
@@ -99,28 +137,107 @@ export function BridgePage() {
 
   const handleBridgeToNative = async () => {
     if (!eth.connected) return;
-    const recipient = wallet ? normalizeAddress(wallet.address) : normalizeAddress(nativeAddress);
-    if (!recipient || (!wallet && !isValidAddress(nativeAddress))) {
+    eth.clearError(); // M11: clear stale errors
+
+    const rawAddress = wallet ? wallet.address : nativeAddress;
+    if (!isValidAddress(rawAddress)) {
       toast('Invalid UltraDAG recipient address', 'error');
+      return;
+    }
+    const recipient = normalizeAddress(rawAddress);
+    if (!/^[0-9a-f]{40}$/.test(recipient)) {
+      toast('Invalid UltraDAG recipient address (could not normalize to 40 hex chars)', 'error');
       return;
     }
     if (amountSats <= 0n) { toast('Enter a valid amount', 'error'); return; }
 
+    // M7: Balance sufficiency check
+    if (amountSats > eth.udagBalanceRaw) {
+      toast('Insufficient UDAG balance', 'error');
+      return;
+    }
+
+    // M8: Per-tx and daily cap validation
+    const effectiveMaxPerTx = eth.maxPerTx > 0n ? eth.maxPerTx : 0n;
+    if (effectiveMaxPerTx > 0n && amountSats > effectiveMaxPerTx) {
+      toast(`Amount exceeds per-transaction limit of ${formatUdagBigint(effectiveMaxPerTx)} UDAG`, 'error');
+      return;
+    }
+    const effectiveDailyCap = dailyCap;
+    if (effectiveDailyCap > 0n && dailyVolume + amountSats > effectiveDailyCap) {
+      toast('Amount would exceed daily bridge limit', 'error');
+      return;
+    }
+
     setBridging(true);
     setTxHash('');
-    const hash = await eth.bridgeToNative(recipient, amountSats);
+    // M9: Use return value directly instead of stale eth.error
+    const result = await eth.bridgeToNative(recipient, amountSats);
     setBridging(false);
-    if (hash) {
-      setTxHash(hash);
+    if (result.hash) {
+      setTxHash(result.hash);
       setAmount('');
       toast('Bridge transfer submitted! Tokens escrowed.', 'success');
-    } else if (eth.error) {
-      toast(eth.error, 'error');
+    } else if (result.error) {
+      toast(result.error, 'error');
     }
   };
 
-  // Format bridge stats from contract or defaults
-  const dailyCap = eth.contractsDeployed && eth.dailyCap > 0n ? eth.dailyCap : 50000000000000n; // 500k UDAG
+  // H12: Claim withdrawal on Arbitrum
+  const handleClaim = async (att: BridgeAttestation) => {
+    if (!eth.connected) {
+      toast('Connect your Arbitrum wallet first', 'error');
+      return;
+    }
+    eth.clearError(); // M11: clear stale errors
+
+    const signatures = att.proof?.signatures;
+    if (!signatures || signatures.length === 0) {
+      toast('No signatures available for this attestation', 'error');
+      return;
+    }
+
+    const senderEth = att.proof?.sender_eth;
+    const recipientEth = att.proof?.recipient_eth;
+
+    // H4: Validate Ethereum addresses before calling contract
+    const isValidEthAddr = (addr: string | undefined): addr is string =>
+      typeof addr === 'string' && /^0x[0-9a-fA-F]{40}$/.test(addr);
+    if (!isValidEthAddr(senderEth) || !isValidEthAddr(recipientEth)) {
+      toast('Invalid Ethereum addresses in attestation proof', 'error');
+      return;
+    }
+
+    // C1: Safely parse BigInt from untrusted API data
+    let amountRaw: bigint;
+    let nonceValue: bigint;
+    try {
+      amountRaw = att.proof?.amount_raw ? BigInt(att.proof.amount_raw) : BigInt(att.amount);
+      nonceValue = BigInt(att.nonce);
+    } catch {
+      toast('Invalid numeric data in attestation', 'error');
+      return;
+    }
+
+    setClaiming(att.nonce);
+    const result = await eth.claimWithdrawal(
+      senderEth,
+      recipientEth,
+      amountRaw,
+      nonceValue,
+      signatures,
+    );
+    setClaiming(null);
+
+    if (result.success) {
+      toast(`Withdrawal #${att.nonce} claimed successfully!`, 'success');
+    } else if (result.error) {
+      toast(result.error, 'error');
+    }
+  };
+
+  // Format bridge stats from contract (no hardcoded fallback)
+  const dailyCap = eth.contractsDeployed && eth.dailyCap > 0n ? eth.dailyCap : 0n;
   const dailyVolume = eth.dailyVolume;
 
   return (
@@ -170,9 +287,11 @@ export function BridgePage() {
             <Clock className="w-4 h-4 text-dag-muted" />
             <span className="text-xs text-dag-muted uppercase">Daily Volume</span>
           </div>
-          <p className="text-xl font-bold text-white">{formatUdag(Number(dailyVolume))} / {formatUdag(Number(dailyCap))} UDAG</p>
+          <p className="text-xl font-bold text-white">
+            {dailyCap > 0n ? `${formatUdagBigint(dailyVolume)} / ${formatUdagBigint(dailyCap)} UDAG` : '-- / -- UDAG'}
+          </p>
           <div className="w-full bg-dag-bg rounded-full h-1.5 mt-2">
-            <div className="bg-dag-accent h-1.5 rounded-full" style={{ width: `${Math.min(100, (Number(dailyVolume) / Number(dailyCap)) * 100)}%` }} />
+            <div className="bg-dag-accent h-1.5 rounded-full" style={{ width: `${dailyCap > 0n ? Math.min(100, Number((dailyVolume * 100n) / dailyCap)) : 0}%` }} />
           </div>
         </Card>
         <Card>
@@ -301,15 +420,24 @@ export function BridgePage() {
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-dag-muted">Amount (UDAG)</span>
                       {eth.connected && (
-                        <button onClick={() => setAmount(eth.udagBalance)} className="text-xs text-dag-accent hover:text-dag-accent/80">
+                        <button onClick={() => setAmount(formatUnits(eth.udagBalanceRaw, 8))} className="text-xs text-dag-accent hover:text-dag-accent/80">
                           Max
                         </button>
                       )}
                     </div>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9.]/g, '');
+                        // Prevent multiple dots
+                        const parts = val.split('.');
+                        const sanitized = parts[0] + (parts.length > 1 ? '.' + parts.slice(1).join('') : '');
+                        // Limit to 8 decimal places
+                        if (parts.length > 1 && parts[1].length > 8) return;
+                        setAmount(sanitized);
+                      }}
                       placeholder="0.00"
                       disabled={!eth.connected || !canBridge}
                       className="w-full mt-1 px-4 py-3 bg-dag-bg border border-dag-border rounded-lg text-white placeholder-dag-muted focus:outline-none focus:border-dag-accent disabled:opacity-50"
@@ -430,8 +558,13 @@ export function BridgePage() {
                       </div>
                     </div>
                     {att.ready && (
-                      <button className="w-full mt-2 py-1.5 rounded bg-dag-accent/20 text-dag-accent border border-dag-accent/40 text-xs font-medium hover:bg-dag-accent/30 transition-colors flex items-center justify-center gap-1">
-                        <ExternalLink className="w-3 h-3" /> Claim on Arbitrum
+                      <button
+                        onClick={() => handleClaim(att)}
+                        disabled={claiming === att.nonce}
+                        className="w-full mt-2 py-1.5 rounded bg-dag-accent/20 text-dag-accent border border-dag-accent/40 text-xs font-medium hover:bg-dag-accent/30 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                      >
+                        {claiming === att.nonce ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />}
+                        {claiming === att.nonce ? 'Claiming...' : 'Claim on Arbitrum'}
                       </button>
                     )}
                   </div>

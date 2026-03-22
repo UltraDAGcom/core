@@ -234,21 +234,21 @@ pub const CHECKPOINT_INTERVAL: u64 = 100;
 // Updated: Added locked_stake field to StakeAccount (governance security fix).
 #[cfg(not(feature = "mainnet"))]
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
-    0xd7, 0xb8, 0xcb, 0x43, 0x0f, 0xaa, 0x86, 0x36,
-    0x0e, 0x53, 0x3f, 0x2d, 0x9d, 0xa6, 0x27, 0xf8,
-    0x50, 0xd4, 0x37, 0xd9, 0x9c, 0x08, 0x0e, 0x1c,
-    0xa0, 0xed, 0x59, 0x62, 0x82, 0x9c, 0xd3, 0xf4,
-]; // Testnet: canonical state root v1 + 20-byte addresses + bridge_reserve + locked_stake field
+    0xd7, 0xa1, 0x8c, 0xf5, 0xff, 0x02, 0xcb, 0x00,
+    0xb2, 0x4e, 0x9e, 0x89, 0xe2, 0xf8, 0x6d, 0xee,
+    0x27, 0xee, 0xd8, 0x49, 0xe2, 0x71, 0x65, 0xaa,
+    0xd1, 0x7e, 0x0d, 0x43, 0x64, 0x6f, 0xfc, 0xd3,
+]; // Testnet: canonical state root v1 + 20-byte addresses + bridge_reserve + locked_stake + bridge_contract_address
 
 /// Mainnet genesis checkpoint hash — computed from genesis WITHOUT faucet.
 /// Computed: March 21, 2026 with `cargo test --features mainnet test_compute_genesis_hash`
 /// Genesis: 3,150,000 UDAG (dev 5% + treasury 10%), no faucet
 #[cfg(feature = "mainnet")]
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
-    0x0e, 0xdf, 0xf8, 0xdc, 0x15, 0x6f, 0xd8, 0x35,
-    0x0d, 0xd0, 0x8e, 0x04, 0x63, 0x63, 0xc4, 0x6f,
-    0x76, 0x43, 0x45, 0xab, 0xc8, 0x3f, 0xc0, 0x66,
-    0x92, 0x30, 0x59, 0x1a, 0xfb, 0xca, 0x5a, 0x0d,
+    0xae, 0xba, 0x9d, 0xae, 0xca, 0xac, 0xa8, 0x3a,
+    0xbb, 0xb7, 0xa7, 0xf2, 0x6d, 0x7b, 0x6f, 0x8d,
+    0x4d, 0x9d, 0xa0, 0x55, 0xc4, 0xf6, 0x51, 0x70,
+    0x1a, 0x77, 0x8a, 0x03, 0x82, 0xcd, 0x2b, 0x13,
 ];
 
 /// Compile-time assertion: GENESIS_CHECKPOINT_HASH must not be the placeholder on mainnet.
@@ -391,6 +391,20 @@ pub const MIN_DELEGATION_SATS: u64 = 100 * COIN;
 /// Minimum bridge lock amount: 1 UDAG.
 /// Prevents dust bridge operations that waste relay bandwidth.
 pub const MIN_BRIDGE_AMOUNT_SATS: u64 = COIN;
+
+/// Maximum bridge deposit amount: 100,000 UDAG.
+/// Matches the Solidity contract's MAX_DEPOSIT (100_000 * 10^8).
+pub const MAX_BRIDGE_AMOUNT_SATS: u64 = 100_000 * COIN;
+
+/// Bridge attestation retention: prune fully-signed or old attestations after this many rounds.
+/// Prevents unbounded bridge state growth.
+pub const BRIDGE_ATTESTATION_RETENTION_ROUNDS: u64 = 10_000;
+
+/// Supported destination chain IDs for bridge operations.
+/// Only these chains are valid targets for BridgeDepositTx.
+/// - 42161: Arbitrum One (mainnet)
+/// - 421614: Arbitrum Sepolia (testnet)
+pub const SUPPORTED_BRIDGE_CHAIN_IDS: &[u64] = &[42161, 421614];
 
 /// Default commission percentage for validators on delegated rewards.
 pub const DEFAULT_COMMISSION_PERCENT: u8 = 10;

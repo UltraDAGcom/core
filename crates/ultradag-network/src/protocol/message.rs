@@ -452,6 +452,10 @@ mod tests {
             delegation_accounts: vec![],
             configured_validator_count: None,
             bridge_reserve: 0,
+            bridge_attestations: vec![],
+            bridge_signatures: vec![],
+            bridge_nonce: 0,
+            bridge_contract_address: [0u8; 20],
         };
 
         let msg = Message::CheckpointSync {

@@ -282,6 +282,33 @@ pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
         None => { hasher.update(&[0u8]); }
     }
 
+    // Bridge state: nonce and attestations are deterministic (created during consensus).
+    // Bridge signatures are NOT included — they are generated locally by each validator
+    // in their validator loop, so different nodes have different signature sets. Including
+    // them here would cause state root divergence across nodes.
+    // Bridge signatures are still persisted (redb) and included in snapshots for fast-sync,
+    // but they must NOT affect the state root hash.
+    hasher.update(&snapshot.bridge_nonce.to_le_bytes());
+
+    // Bridge attestations (sorted by nonce in snapshot())
+    hasher.update(&(snapshot.bridge_attestations.len() as u64).to_le_bytes());
+    for (nonce, att) in &snapshot.bridge_attestations {
+        hasher.update(&nonce.to_le_bytes());
+        hasher.update(&att.sender.0);
+        hasher.update(&att.recipient);
+        hasher.update(&att.amount.to_le_bytes());
+        hasher.update(&att.nonce.to_le_bytes());
+        hasher.update(&att.destination_chain_id.to_le_bytes());
+        hasher.update(&att.bridge_contract_address);
+        hasher.update(&att.creation_round.to_le_bytes());
+    }
+
+    // Bridge contract address (C3 fix: included in state root)
+    hasher.update(&snapshot.bridge_contract_address);
+
+    // NOTE: bridge_signatures intentionally excluded from state root (C4 fix).
+    // They are non-deterministic across nodes (each validator signs locally).
+
     *hasher.finalize().as_bytes()
 }
 

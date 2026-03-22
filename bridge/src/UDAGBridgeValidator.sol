@@ -2,21 +2,19 @@
 pragma solidity ^0.8.24;
 
 import "./UDAGToken.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @title UltraDAG Validator Federation Bridge - Hardened
 /// @notice Bridge secured by UltraDAG validator set (2/3 threshold).
 /// @dev No external relayers! DAG validators sign attestations as part of consensus.
 ///      Includes reentrancy guard, internal hash computation, and emergency controls.
-///      Uses OpenZeppelin's SignatureChecker for safe signature verification.
 contract UDAGBridgeValidator is ReentrancyGuard {
-    using SignatureChecker for address;
     using SafeERC20 for IERC20;
     
     UDAGToken public immutable token;
     address public governor;
+    address public pendingGovernor;
     bool public paused;
     
     // ─── Validator Set Management ───
@@ -54,13 +52,17 @@ contract UDAGBridgeValidator is ReentrancyGuard {
     event ValidatorAdded(address indexed validator);
     event ValidatorRemoved(address indexed validator);
     event ThresholdUpdated(uint256 newThreshold);
-    event GovernorUpdated(address indexed oldGovernor, address indexed newGovernor);
     event EmergencyWithdrawal(address indexed token, address indexed to, uint256 amount);
     event BridgePaused(address indexed pausedBy);
     event BridgeUnpaused(address indexed unpausedBy);
+    event PendingGovernorSet(address indexed currentGovernor, address indexed pendingGovernor);
+    event GovernorAccepted(address indexed oldGovernor, address indexed newGovernor);
+    event BridgeMigration(address indexed newBridge, uint256 amount);
+    event ETHReceived(address indexed sender, uint256 amount);
+    event BridgeEnabled();
     
     // ─── Errors ───
-    error BridgePaused();
+    error BridgeIsPaused();
     error AmountTooLarge();
     error InvalidRecipient();
     error NotGovernor();
@@ -72,6 +74,8 @@ contract UDAGBridgeValidator is ReentrancyGuard {
     error MinValidatorsNotMet();
     error SignatureNotSorted();
     error MalleableSignature();
+    error NotPendingGovernor();
+    error NotPaused();
     
     // ─── Modifiers ───
     modifier onlyGovernor() {
@@ -80,7 +84,7 @@ contract UDAGBridgeValidator is ReentrancyGuard {
     }
     
     modifier whenNotPaused() {
-        if (paused) revert BridgePaused();
+        if (paused) revert BridgeIsPaused();
         _;
     }
     
@@ -105,9 +109,8 @@ contract UDAGBridgeValidator is ReentrancyGuard {
         if (nativeRecipient == bytes20(0)) revert InvalidRecipient();
         if (amount == 0 || amount > MAX_DEPOSIT) revert AmountTooLarge();
 
-        // Transfer tokens into bridge escrow
-        // Will revert if approval insufficient or transfer fails
-        token.transferFrom(msg.sender, address(this), amount);
+        // Transfer tokens into bridge escrow using SafeERC20
+        IERC20(address(token)).safeTransferFrom(msg.sender, address(this), amount);
 
         uint256 depositNonce = nonce++;
 
@@ -193,6 +196,8 @@ contract UDAGBridgeValidator is ReentrancyGuard {
     }
     
     /// @notice Public view function for off-chain signature generation.
+    /// @dev Validators must sign the returned hash using eth_sign (EIP-191),
+    ///      which automatically adds "\x19Ethereum Signed Message:\n32" prefix.
     function getMessageHash(
         bytes20 sender,
         address recipient,
@@ -206,16 +211,23 @@ contract UDAGBridgeValidator is ReentrancyGuard {
     
     /// @notice Verify threshold signatures from validators.
     /// @dev Enforces: unique signers, sorted order, validator membership.
-    ///      Uses OpenZeppelin's SignatureChecker for safe signature verification.
+    ///      Uses EIP-191 personal sign prefix for ecrecover.
+    ///      Validators must sign using eth_sign (which adds the prefix automatically).
     function _verifyThresholdSignatures(
         bytes32 messageHash,
         bytes calldata signatures
     ) internal view {
         // Validate signature length (each signature is exactly 65 bytes)
         if (signatures.length % 65 != 0) revert InvalidSignature();
-        
+
         uint256 sigCount = signatures.length / 65;
         if (sigCount < threshold) revert InsufficientSignatures();
+        if (sigCount > validators.length) revert InvalidSignature();
+
+        // EIP-191 personal sign prefix
+        bytes32 ethSignedMessageHash = keccak256(
+            abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash)
+        );
 
         address lastSigner = address(0);
         uint256 validCount = 0;
@@ -233,20 +245,20 @@ contract UDAGBridgeValidator is ReentrancyGuard {
                 v := byte(0, calldataload(add(signatures.offset, add(offset, 64))))
             }
 
-            // Reconstruct signer address from signature
-            // SignatureChecker handles both EOA (v=27/28) and contract signatures (EIP-1271)
+            // M5: Reject malleable signatures (s-value upper half)
+            if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) revert MalleableSignature();
+
+            // Reconstruct signer address from EIP-191 prefixed hash
             address signer;
             if (v == 27 || v == 28) {
-                // Standard EOA signature - use ecrecover
-                signer = ecrecover(messageHash, v, r, s);
+                signer = ecrecover(ethSignedMessageHash, v, r, s);
             } else if (v == 0 || v == 1) {
                 // EIP-155 chain-specific v value - normalize to 27/28
-                signer = ecrecover(messageHash, v + 27, r, s);
+                signer = ecrecover(ethSignedMessageHash, v + 27, r, s);
             } else {
-                // Invalid v value
                 revert InvalidSignature();
             }
-            
+
             if (signer == address(0)) revert InvalidSignature();
 
             // Verify signer is an active validator
@@ -278,6 +290,7 @@ contract UDAGBridgeValidator is ReentrancyGuard {
         // Enable bridge operations when minimum validators reached
         if (!bridgeEnabled && validators.length >= MIN_VALIDATORS) {
             bridgeEnabled = true;
+            emit BridgeEnabled();
         }
         
         emit ValidatorAdded(validator);
@@ -304,21 +317,29 @@ contract UDAGBridgeValidator is ReentrancyGuard {
         emit ValidatorRemoved(validator);
     }
     
-    /// @notice Update threshold to ceil(2/3 * validatorCount).
+    /// @notice Update threshold to strictly >2/3 of validator count.
+    /// @dev Formula: floor(2n/3) + 1, which gives:
+    ///      n=3: 3 (unanimous), n=4: 3, n=5: 4, n=21: 15
     function _updateThreshold() internal {
         uint256 validatorCount = validators.length;
         if (validatorCount < MIN_VALIDATORS) {
             threshold = validatorCount; // Allow bootstrapping
         } else {
-            // Ceiling division: ceil(2n/3) = (2n + 2) / 3
-            threshold = (2 * validatorCount + 2) / 3;
+            // Strict BFT: floor(2n/3) + 1 ensures threshold > 2n/3
+            threshold = (2 * validatorCount) / 3 + 1;
         }
         emit ThresholdUpdated(threshold);
     }
     
     /// @notice Set custom threshold (emergency/testing only).
+    /// @dev Enforces BFT minimum of ceil(2n/3) when enough validators exist.
     function setThreshold(uint256 newThreshold) external onlyGovernor whenNotPaused {
         if (newThreshold == 0 || newThreshold > validators.length) revert InvalidValidatorSet();
+        // Enforce BFT minimum when validator count is at or above MIN_VALIDATORS
+        if (validators.length >= MIN_VALIDATORS) {
+            uint256 bftMinimum = (2 * validators.length) / 3 + 1;
+            require(newThreshold >= bftMinimum, "Below BFT minimum");
+        }
         threshold = newThreshold;
         emit ThresholdUpdated(newThreshold);
     }
@@ -335,14 +356,36 @@ contract UDAGBridgeValidator is ReentrancyGuard {
         emit BridgeUnpaused(msg.sender);
     }
     
-    /// @notice Transfer governor role.
+    /// @notice Initiate governor transfer (2-step).
+    /// @dev New governor must call acceptGovernor() to complete the transfer.
     function setGovernor(address newGovernor) external onlyGovernor {
         if (newGovernor == address(0)) revert InvalidRecipient();
+        pendingGovernor = newGovernor;
+        emit PendingGovernorSet(governor, newGovernor);
+    }
+
+    /// @notice Accept governor role. Only callable by pendingGovernor.
+    function acceptGovernor() external {
+        if (msg.sender != pendingGovernor) revert NotPendingGovernor();
         address old = governor;
-        governor = newGovernor;
-        emit GovernorUpdated(old, newGovernor);
+        governor = pendingGovernor;
+        pendingGovernor = address(0);
+        emit GovernorAccepted(old, governor);
     }
     
+    // ─── Bridge Migration ───
+
+    /// @notice Migrate escrowed UDAG to a new bridge contract.
+    /// @dev Only callable by governor when paused (safety measure).
+    ///      Intended to be called via timelock for operational safety.
+    function migrateToNewBridge(address newBridge, uint256 amount) external onlyGovernor nonReentrant {
+        if (!paused) revert NotPaused();
+        if (newBridge == address(0)) revert InvalidRecipient();
+
+        IERC20(address(token)).safeTransfer(newBridge, amount);
+        emit BridgeMigration(newBridge, amount);
+    }
+
     // ─── Emergency Recovery ───
     
     /// @notice Emergency withdrawal of stuck ERC20 tokens.
@@ -362,7 +405,7 @@ contract UDAGBridgeValidator is ReentrancyGuard {
     }
     
     /// @notice Emergency withdrawal of native ETH (if any).
-    function emergencyWithdrawETH(address payable to) external onlyGovernor {
+    function emergencyWithdrawETH(address payable to) external onlyGovernor nonReentrant {
         if (to == address(0)) revert InvalidRecipient();
         uint256 balance = address(this).balance;
         if (balance == 0) return;
@@ -398,8 +441,6 @@ contract UDAGBridgeValidator is ReentrancyGuard {
     
     // ─── Receive ETH (prevent accidental sends) ───
     receive() external payable {
-        // Optionally revert to prevent accidental ETH sends:
-        // revert("Do not send ETH directly");
-        // Or allow for emergencyWithdrawETH to work
+        emit ETHReceived(msg.sender, msg.value);
     }
 }

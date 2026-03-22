@@ -48,21 +48,29 @@ impl BridgeDepositTx {
     }
 
     /// Verify the transaction signature.
+    /// Checks that pub_key derives to the claimed `from` address (prevents key substitution)
+    /// and uses verify_strict (not verify) to prevent signature malleability.
     pub fn verify_signature(&self) -> bool {
-        use ed25519_dalek::{Signature, Verifier, VerifyingKey};
-        
+        use ed25519_dalek::{Signature, VerifyingKey};
+
+        // Verify pub_key -> address mapping (H1: matching TransferTx pattern)
+        if Address::from_pubkey(&self.pub_key) != self.from {
+            return false;
+        }
+
         let message = self.signable_bytes();
         let sig = match Signature::from_slice(&self.signature.0) {
             Ok(s) => s,
             Err(_) => return false,
         };
-        
+
         let vk = match VerifyingKey::from_bytes(&self.pub_key) {
             Ok(k) => k,
             Err(_) => return false,
         };
-        
-        vk.verify(&message, &sig).is_ok()
+
+        // H2: Use verify_strict to prevent signature malleability
+        vk.verify_strict(&message, &sig).is_ok()
     }
 
     /// Verify the transaction is valid.

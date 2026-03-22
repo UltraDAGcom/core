@@ -176,6 +176,10 @@ fn test_07_state_root_is_deterministic() {
         treasury_balance: 0,
         delegation_accounts: vec![],
         configured_validator_count: None,
+        bridge_attestations: vec![],
+        bridge_signatures: vec![],
+        bridge_nonce: 0,
+        bridge_contract_address: [0u8; 20],
     };
 
     let snapshot2 = StateSnapshot {
@@ -194,6 +198,10 @@ fn test_07_state_root_is_deterministic() {
         treasury_balance: 0,
         delegation_accounts: vec![],
         configured_validator_count: None,
+        bridge_attestations: vec![],
+        bridge_signatures: vec![],
+        bridge_nonce: 0,
+        bridge_contract_address: [0u8; 20],
     };
 
     let root1 = compute_state_root(&snapshot1);

@@ -209,6 +209,22 @@ export function formatUdag(sats: number): string {
   return (sats / 100_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }
 
+/** Format a bigint value (in sats) as UDAG string without Number precision loss */
+export function formatUdagBigint(val: bigint): string {
+  const COIN = 100_000_000n;
+  const negative = val < 0n;
+  const abs = negative ? -val : val;
+  const whole = abs / COIN;
+  const frac = abs % COIN;
+  const fracStr = frac.toString().padStart(8, '0').replace(/0+$/, '') || '0';
+  // Ensure at least 2 decimal places
+  const paddedFrac = fracStr.length < 2 ? fracStr.padEnd(2, '0') : fracStr;
+  const sign = negative ? '-' : '';
+  // Add thousand separators to whole part
+  const wholeStr = whole.toLocaleString();
+  return `${sign}${wholeStr}.${paddedFrac}`;
+}
+
 export function bytesToHex(bytes: number[]): string {
   return bytes.map(b => b.toString(16).padStart(2, '0')).join('');
 }

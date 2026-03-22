@@ -1574,6 +1574,9 @@ ultradag_banned_ips {ban_count}
         // ─── Bridge Endpoints ───
 
         (&Method::GET, ["bridge", "nonce"]) => {
+            if !rate_limiter.check_rate_limit(client_ip, limits::BRIDGE) {
+                return Ok(error_response(StatusCode::TOO_MANY_REQUESTS, "rate limit exceeded"));
+            }
             let state = read_lock_or_503!(server.state);
             json_response(StatusCode::OK, &serde_json::json!({
                 "next_nonce": state.get_bridge_nonce(),
@@ -1581,6 +1584,9 @@ ultradag_banned_ips {ban_count}
         }
 
         (&Method::GET, ["bridge", "attestation", nonce_str]) => {
+            if !rate_limiter.check_rate_limit(client_ip, limits::BRIDGE) {
+                return Ok(error_response(StatusCode::TOO_MANY_REQUESTS, "rate limit exceeded"));
+            }
             let Ok(nonce) = nonce_str.parse::<u64>() else {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid nonce"));
             };
@@ -1623,6 +1629,9 @@ ultradag_banned_ips {ban_count}
         }
 
         (&Method::GET, ["bridge", "reserve"]) => {
+            if !rate_limiter.check_rate_limit(client_ip, limits::BRIDGE) {
+                return Ok(error_response(StatusCode::TOO_MANY_REQUESTS, "rate limit exceeded"));
+            }
             let state = read_lock_or_503!(server.state);
             let reserve = state.get_bridge_reserve();
             json_response(StatusCode::OK, &serde_json::json!({

@@ -45,4 +45,6 @@ export const UDAG_BRIDGE_ABI = [
   'event BridgeToNative(address indexed sender, bytes20 indexed nativeRecipient, uint256 amount, uint256 indexed bridgeNonce)',
   'event BridgeCompleted(uint256 indexed bridgeNonce)',
   'event BridgeRefunded(uint256 indexed bridgeNonce, address indexed sender, uint256 amount)',
+  'function claimWithdrawal(address sender, address recipient, uint256 amount, uint256 depositNonce, bytes[] signatures)',
+  'event WithdrawalClaimed(address indexed recipient, uint256 amount, uint256 indexed depositNonce)',
 ];

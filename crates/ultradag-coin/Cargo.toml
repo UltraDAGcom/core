@@ -19,6 +19,9 @@ postcard = { workspace = true }
 bitvec = { workspace = true }
 redb = { workspace = true }
 bech32 = { workspace = true }
+sha3 = { workspace = true }
+k256 = { workspace = true }
+sha2 = { workspace = true }
 
 [features]
 default = []

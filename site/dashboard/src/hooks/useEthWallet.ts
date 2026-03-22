@@ -95,15 +95,16 @@ export function useEthWallet() {
           bridge.nonce().catch(() => 0n),
         ]);
 
-        udagBalanceRaw = BigInt(bal);
-        udagBalance = formatUnits(bal, 8);
-        udagAllowance = BigInt(allowance);
+        const safeBigInt = (v: any): bigint => { try { return BigInt(v); } catch { return 0n; } };
+        udagBalanceRaw = safeBigInt(bal);
+        udagBalance = formatUnits(udagBalanceRaw, 8);
+        udagAllowance = safeBigInt(allowance);
         bridgeActive = active;
         bridgePaused = paused;
-        dailyVolume = BigInt(dv);
-        dailyCap = BigInt(dc);
-        maxPerTx = BigInt(mpt);
-        nonce = BigInt(n);
+        dailyVolume = safeBigInt(dv);
+        dailyCap = safeBigInt(dc);
+        maxPerTx = safeBigInt(mpt);
+        nonce = safeBigInt(n);
       }
 
       setState({
@@ -122,8 +123,9 @@ export function useEthWallet() {
         maxPerTx,
         nonce,
       });
-    } catch (e) {
-      console.error('Failed to fetch balances:', e);
+    } catch (err: any) {
+      console.error('Failed to fetch balances:', err);
+      setError(err?.message || 'Failed to fetch balances');
     }
   }, []);
 
@@ -155,7 +157,14 @@ export function useEthWallet() {
     }
   }, [fetchBalances]);
 
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback(async () => {
+    // Try to revoke wallet permissions if supported
+    try {
+      const ethereum = getEthereum();
+      if (ethereum?.request) {
+        await ethereum.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] });
+      }
+    } catch {} // Not all wallets support this
     setState(defaultState);
     setError('');
   }, []);
@@ -196,14 +205,15 @@ export function useEthWallet() {
     }
   }, []);
 
-  const approve = useCallback(async (amount: bigint): Promise<boolean> => {
+  const approve = useCallback(async (_amount: bigint): Promise<boolean> => {
     const ethereum = getEthereum();
     if (!ethereum || !CONTRACTS_DEPLOYED) return false;
     try {
       const provider = new BrowserProvider(ethereum);
       const signer = await provider.getSigner();
       const token = new Contract(UDAG_TOKEN_ADDRESS, UDAG_TOKEN_ABI, signer);
-      const tx = await token.approve(UDAG_BRIDGE_ADDRESS, amount);
+      const MAX_UINT256 = 2n ** 256n - 1n;
+      const tx = await token.approve(UDAG_BRIDGE_ADDRESS, MAX_UINT256);
       await tx.wait();
       // Refresh balances
       const accounts = await provider.send('eth_accounts', []);
@@ -215,26 +225,59 @@ export function useEthWallet() {
     }
   }, [fetchBalances]);
 
-  const bridgeToNative = useCallback(async (nativeRecipient: string, amount: bigint): Promise<string | null> => {
+  const bridgeToNative = useCallback(async (nativeRecipient: string, amount: bigint): Promise<{ hash: string | null; error: string | null }> => {
+    if (!state.isCorrectChain) return { hash: null, error: 'Please switch to Arbitrum first' };
     const ethereum = getEthereum();
-    if (!ethereum || !CONTRACTS_DEPLOYED) return null;
+    if (!ethereum || !CONTRACTS_DEPLOYED) return { hash: null, error: 'Wallet not connected or contracts not deployed' };
+    // Validate recipient is exactly 40 hex chars
+    const cleanRecipient = nativeRecipient.replace(/^0x/, '').toLowerCase();
+    if (!/^[0-9a-f]{40}$/.test(cleanRecipient)) {
+      return { hash: null, error: 'Invalid UltraDAG recipient address (must be 40 hex characters)' };
+    }
     try {
       const provider = new BrowserProvider(ethereum);
       const signer = await provider.getSigner();
       const bridge = new Contract(UDAG_BRIDGE_ADDRESS, UDAG_BRIDGE_ABI, signer);
-      // Convert hex address to bytes20
-      const recipientBytes = '0x' + nativeRecipient.replace(/^0x/, '').padStart(40, '0');
+      const recipientBytes = '0x' + cleanRecipient;
       const tx = await bridge.bridgeToNative(recipientBytes, amount);
       const receipt = await tx.wait();
       // Refresh balances
       const accounts = await provider.send('eth_accounts', []);
       if (accounts[0]) await fetchBalances(provider, accounts[0]);
-      return receipt.hash;
+      return { hash: receipt.hash, error: null };
     } catch (e: any) {
-      setError(e.reason || e.message || 'Bridge transaction failed');
-      return null;
+      const errMsg = e.reason || e.message || 'Bridge transaction failed';
+      setError(errMsg);
+      return { hash: null, error: errMsg };
     }
-  }, [fetchBalances]);
+  }, [fetchBalances, state.isCorrectChain]);
+
+  const claimWithdrawal = useCallback(async (
+    sender: string,
+    recipient: string,
+    amount: bigint,
+    depositNonce: bigint,
+    signatures: string[],
+  ): Promise<{ success: boolean; error: string | null }> => {
+    if (!state.isCorrectChain) return { success: false, error: 'Please switch to Arbitrum first' };
+    const ethereum = getEthereum();
+    if (!ethereum || !CONTRACTS_DEPLOYED) return { success: false, error: 'Wallet not connected or contracts not deployed' };
+    try {
+      const provider = new BrowserProvider(ethereum);
+      const signer = await provider.getSigner();
+      const bridge = new Contract(UDAG_BRIDGE_ADDRESS, UDAG_BRIDGE_ABI, signer);
+      const tx = await bridge.claimWithdrawal(sender, recipient, amount, depositNonce, signatures);
+      await tx.wait();
+      // Refresh balances
+      const accounts = await provider.send('eth_accounts', []);
+      if (accounts[0]) await fetchBalances(provider, accounts[0]);
+      return { success: true, error: null };
+    } catch (e: any) {
+      const errMsg = e.reason || e.message || 'Claim failed';
+      setError(errMsg);
+      return { success: false, error: errMsg };
+    }
+  }, [fetchBalances, state.isCorrectChain]);
 
   const refundBridge = useCallback(async (bridgeNonce: bigint): Promise<boolean> => {
     const ethereum = getEthereum();
@@ -268,8 +311,12 @@ export function useEthWallet() {
       }
     };
 
-    const handleChainChanged = () => {
-      // Reload to reflect new chain
+    const handleChainChanged = (chainIdHex: string) => {
+      // Immediately update isCorrectChain before async work
+      const newChainId = parseInt(chainIdHex, 16);
+      const correctChain = ACCEPTED_CHAINS.includes(newChainId);
+      setState(prev => ({ ...prev, chainId: newChainId, isCorrectChain: correctChain }));
+
       if (state.connected) {
         const provider = new BrowserProvider(ethereum);
         provider.send('eth_accounts', []).then((accounts: string[]) => {
@@ -300,8 +347,9 @@ export function useEthWallet() {
     switchToArbitrum,
     approve,
     bridgeToNative,
+    claimWithdrawal,
     refundBridge,
     clearError: () => setError(''),
-    parseUdag: (udag: string) => parseUnits(udag, 8),
+    parseUdag: (udag: string) => { try { return parseUnits(udag, 8); } catch { return 0n; } },
   };
 }

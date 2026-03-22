@@ -239,28 +239,11 @@ pub async fn validator_loop(
 
         let block_hash = block.hash();
 
-        // Sign bridge attestations for any BridgeDeposit transactions in this block.
-        // Validators sign attestations as part of normal block production.
-        // These signatures are collected and users can claim on Arbitrum with 2/3+ signatures.
-        {
-            let mut state_w = server.state.write().await;
-            for tx in &block.transactions {
-                if let ultradag_coin::Transaction::BridgeDeposit(bridge_tx) = tx {
-                    // Create attestation and sign with validator key
-                    match state_w.apply_bridge_lock_tx(bridge_tx, Some(validator), Some(&sk)) {
-                        Ok(Some(attestation)) => {
-                            info!("Created and signed bridge attestation nonce={}", attestation.nonce);
-                        }
-                        Ok(None) => {
-                            warn!("Bridge attestation creation returned None");
-                        }
-                        Err(e) => {
-                            warn!("Failed to create bridge attestation: {}", e);
-                        }
-                    }
-                }
-            }
-        } // state_w dropped
+        // NOTE: BridgeDeposit transactions are NOT applied here during vertex production.
+        // State mutation (debit, bridge_reserve increment, attestation creation) happens
+        // ONLY in the consensus path (apply_vertex_with_validators / apply_finalized_vertices)
+        // to prevent double-application. Validators sign attestations during finalization
+        // via sign_pending_bridge_attestations().
 
         // Build DAG vertex referencing all known tips
         let parent_hashes = if dag_tips.is_empty() {
@@ -385,6 +368,11 @@ pub async fn validator_loop(
                     warn!("Failed to apply finalized vertices to state: {}", e);
                     false
                 } else {
+                    // Sign any bridge attestations created during finalization.
+                    // This is separated from state mutation (C2 fix) so that
+                    // attestations are only created once via the consensus path.
+                    state_w.sign_pending_bridge_attestations(validator, &sk);
+
                     let changed = state_w.epoch_just_changed(prev_round);
                     let mut mp = server.mempool.write().await;
                     for v in &finalized_vertices {
