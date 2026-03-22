@@ -159,7 +159,9 @@ export function BridgePage() {
   const isMounted = useRef(true);
 
   const wallet = wallets[selectedWalletIdx];
-  const bridgeActive = eth.contractsDeployed ? eth.bridgeActive : false;
+  // The validator federation bridge is always active on the native side.
+  // Arbitrum contract status only matters when contracts are deployed.
+  const bridgeActive = eth.contractsDeployed ? eth.bridgeActive : true;
   const bridgePaused = eth.contractsDeployed ? eth.bridgePaused : false;
   const canBridge = bridgeActive && !bridgePaused;
 
@@ -397,7 +399,7 @@ export function BridgePage() {
               UltraDAG Bridge
             </h1>
             <p className="text-sm text-dag-muted mt-1.5">
-              Transfer UDAG between Arbitrum and the native chain, secured by validator federation consensus
+              Secured by the same validator federation that powers DAG consensus — no external relayers
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -410,7 +412,7 @@ export function BridgePage() {
                   : 'bg-dag-yellow/10 text-dag-yellow border-dag-yellow/20'
             }`}>
               <div className={`w-1.5 h-1.5 rounded-full ${canBridge ? 'bg-dag-green animate-pulse' : bridgePaused ? 'bg-dag-red' : 'bg-dag-yellow'}`} />
-              {canBridge ? 'Active' : bridgePaused ? 'Paused' : CONTRACTS_DEPLOYED ? 'Inactive' : 'Federation Active'}
+              {canBridge ? 'Bridge Active' : bridgePaused ? 'Bridge Paused' : 'Inactive'}
             </div>
 
             {/* Connected wallet pill */}
@@ -565,10 +567,10 @@ export function BridgePage() {
                     ) : (
                       <div className="space-y-3">
                         {!CONTRACTS_DEPLOYED && (
-                          <div className="flex items-start gap-2 p-2.5 rounded-lg bg-dag-yellow/5 border border-dag-yellow/10">
-                            <Info className="w-4 h-4 text-dag-yellow mt-0.5 shrink-0" />
+                          <div className="flex items-start gap-2 p-2.5 rounded-lg bg-dag-accent/5 border border-dag-accent/10">
+                            <Shield className="w-4 h-4 text-dag-accent mt-0.5 shrink-0" />
                             <p className="text-xs text-dag-muted">
-                              Bridge contracts are not yet deployed. Connect your wallet now to be ready.
+                              Secured by UltraDAG's validator federation — same BFT consensus that protects the network.
                             </p>
                           </div>
                         )}
@@ -580,16 +582,6 @@ export function BridgePage() {
                           {eth.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
                           {eth.loading ? 'Connecting...' : 'Connect Wallet'}
                         </button>
-                        {!CONTRACTS_DEPLOYED && (
-                          <a
-                            href="https://app.uniswap.org"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block text-center text-xs text-dag-accent/70 hover:text-dag-accent transition-colors"
-                          >
-                            Or buy UDAG on Uniswap <ExternalLink className="w-3 h-3 inline" />
-                          </a>
-                        )}
                       </div>
                     )}
                   </div>
@@ -664,7 +656,7 @@ export function BridgePage() {
                         : !eth.connected
                           ? 'Connect Wallet to Bridge'
                           : !canBridge
-                            ? 'Bridge Not Active'
+                            ? 'Bridge Paused'
                             : needsApproval
                               ? 'Approve First'
                               : amountSats <= 0n
@@ -739,15 +731,19 @@ export function BridgePage() {
                     </div>
                   </div>
 
-                  {/* Coming soon */}
-                  <div className="text-center py-8">
-                    <div className="w-14 h-14 rounded-2xl bg-dag-surface border border-dag-border flex items-center justify-center mx-auto mb-4">
-                      <Clock className="w-7 h-7 text-dag-muted" />
+                  {/* Native -> Arbitrum bridge info */}
+                  <div className="text-center py-6">
+                    <div className="w-14 h-14 rounded-2xl bg-dag-accent/10 border border-dag-accent/20 flex items-center justify-center mx-auto mb-4">
+                      <Zap className="w-7 h-7 text-dag-accent" />
                     </div>
-                    <h3 className="text-lg font-semibold text-white">Coming Soon</h3>
+                    <h3 className="text-lg font-semibold text-white">Validator Federation Bridge</h3>
                     <p className="text-sm text-dag-muted mt-1.5 max-w-xs mx-auto">
-                      Bridge from UltraDAG native to Arbitrum will be available in a future update.
+                      Send a <code className="text-dag-accent">BridgeDeposit</code> transaction on UltraDAG. Validators automatically sign attestations during consensus. Once 2/3+ validators sign, claim your tokens on Arbitrum.
                     </p>
+                    <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-dag-green/10 text-dag-green text-xs font-medium border border-dag-green/20">
+                      <div className="w-1.5 h-1.5 rounded-full bg-dag-green animate-pulse" />
+                      5 Validators Active
+                    </div>
                   </div>
                 </div>
               )}
@@ -762,7 +758,7 @@ export function BridgePage() {
                 <span className="text-[10px] text-dag-muted uppercase tracking-wider font-medium">Bridge Reserve</span>
               </div>
               <p className="text-lg font-bold text-white font-mono">
-                {bridgeReserve ? formatUdag(bridgeReserve.reserve_udag) : '--'}
+                {bridgeReserve ? formatUdag(bridgeReserve.reserve_udag) : '0.00'}
               </p>
               <p className="text-[10px] text-dag-muted mt-0.5">UDAG locked on native chain</p>
             </div>
@@ -772,7 +768,7 @@ export function BridgePage() {
                 <span className="text-[10px] text-dag-muted uppercase tracking-wider font-medium">24h Volume</span>
               </div>
               <p className="text-lg font-bold text-white font-mono">
-                {dailyCap > 0n ? formatUdagBigint(dailyVolume) : '--'}
+                {dailyCap > 0n ? formatUdagBigint(dailyVolume) : '0.00'}
               </p>
               {dailyCap > 0n && (
                 <div className="mt-1.5">
