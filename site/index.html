@@ -516,6 +516,58 @@ pre{padding:24px 28px;overflow-x:auto;font-family:'DM Mono',monospace;font-size:
 .copy-btn{background:var(--bg2);border:1px solid var(--border2);color:var(--muted);padding:6px 14px;border-radius:2px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;transition:all .2s}
 .copy-btn:hover{border-color:var(--accent);color:var(--accent)}
 
+/* HERO SOCIAL PILLS */
+.social-pill{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:100px;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;letter-spacing:.04em;text-decoration:none;transition:all .25s;border:1px solid}
+.social-telegram{color:#29b6f6;border-color:rgba(41,182,246,.25);background:rgba(41,182,246,.06)}
+.social-telegram:hover{background:rgba(41,182,246,.15);border-color:rgba(41,182,246,.4);color:#29b6f6;box-shadow:0 0 20px rgba(41,182,246,.15)}
+.social-x{color:var(--subtle);border-color:var(--border2);background:rgba(255,255,255,.03)}
+.social-x:hover{background:rgba(255,255,255,.07);border-color:var(--subtle);color:var(--white);box-shadow:0 0 20px rgba(255,255,255,.05)}
+
+/* LAUNCH SECTION */
+.launch-section{position:relative;z-index:10;max-width:720px;margin:0 auto;padding:80px 24px 0;text-align:center}
+.launch-inner{background:linear-gradient(180deg,rgba(61,155,233,.04) 0%,rgba(61,155,233,0) 100%);border:1px solid rgba(61,155,233,.12);border-radius:16px;padding:48px 40px;position:relative;overflow:hidden}
+.launch-inner::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:200px;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent)}
+.launch-badge{display:inline-block;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);border:1px solid rgba(61,155,233,.3);padding:4px 14px;border-radius:100px;margin-bottom:20px;background:rgba(61,155,233,.06)}
+.launch-title{font-family:'Cormorant',serif;font-size:clamp(28px,4vw,42px);font-weight:300;color:var(--white);margin-bottom:8px;letter-spacing:.02em}
+.launch-subtitle{font-size:15px;color:var(--subtle);margin-bottom:36px;max-width:400px;margin-left:auto;margin-right:auto}
+
+/* COUNTDOWN */
+.countdown{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:36px}
+.countdown-block{display:flex;flex-direction:column;align-items:center;min-width:72px}
+.countdown-num{font-family:'DM Mono',monospace;font-size:clamp(32px,5vw,48px);font-weight:500;color:var(--white);line-height:1;letter-spacing:.02em;text-shadow:0 0 30px rgba(61,155,233,.2)}
+.countdown-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:6px}
+.countdown-sep{font-family:'DM Mono',monospace;font-size:clamp(24px,4vw,36px);color:var(--dim);margin-top:-16px}
+
+/* EMAIL FORM */
+.email-form{max-width:420px;margin:0 auto 28px}
+.email-input-wrap{display:flex;gap:0;border:1px solid var(--border2);border-radius:8px;overflow:hidden;background:var(--bg2);transition:border-color .25s}
+.email-input-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(61,155,233,.1)}
+.email-input{flex:1;padding:14px 16px;background:transparent;border:none;color:var(--white);font-family:'Syne',sans-serif;font-size:14px;outline:none;min-width:0}
+.email-input::placeholder{color:var(--dim)}
+.email-btn{padding:10px 20px;background:var(--accent);color:#fff;border:none;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;letter-spacing:.04em;cursor:pointer;transition:all .2s;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.email-btn:hover{background:#4aa8f2;box-shadow:0 0 16px rgba(61,155,233,.3)}
+.email-btn.success{background:var(--success)}
+.email-note{font-family:'DM Mono',monospace;font-size:11px;color:var(--dim);margin-top:10px;letter-spacing:.02em}
+
+/* LAUNCH SOCIAL */
+.launch-social{padding-top:24px;border-top:1px solid var(--border)}
+.launch-social-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:14px}
+.launch-social-links{display:flex;justify-content:center;gap:12px}
+.launch-social-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:8px;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;letter-spacing:.04em;text-decoration:none;transition:all .25s;border:1px solid}
+.launch-social-btn.telegram{color:#29b6f6;border-color:rgba(41,182,246,.2);background:rgba(41,182,246,.05)}
+.launch-social-btn.telegram:hover{background:rgba(41,182,246,.12);border-color:rgba(41,182,246,.35);box-shadow:0 0 20px rgba(41,182,246,.12)}
+.launch-social-btn.x-twitter{color:var(--subtle);border-color:var(--border2);background:rgba(255,255,255,.02)}
+.launch-social-btn.x-twitter:hover{background:rgba(255,255,255,.06);border-color:var(--subtle);color:var(--white)}
+
+@media(max-width:600px){
+  .countdown-block{min-width:56px}
+  .countdown-num{font-size:28px}
+  .email-input-wrap{flex-direction:column}
+  .email-btn{width:100%;justify-content:center;padding:14px}
+  .launch-inner{padding:36px 20px}
+  .launch-social-links{flex-direction:column;align-items:center}
+}
+
 /* FOOTER */
 footer{position:relative;z-index:1;border-top:1px solid var(--border);background:var(--bg);margin-top:120px}
 .footer-inner{max-width:1200px;margin:0 auto;padding:64px 48px 32px}
@@ -727,6 +779,77 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <div class="hero-actions">
     <a href="network.html" class="btn-primary">Watch it live &rarr;</a>
     <a href="#run" class="btn-secondary">Run a Node &rarr;</a>
+  </div>
+
+  <!-- SOCIAL LINKS (prominent, in hero) -->
+  <div class="hero-social" style="display:flex;gap:12px;margin-top:28px;pointer-events:all;opacity:0;animation:fadeUp .8s .75s forwards">
+    <a href="https://t.me/ultradagcom" target="_blank" class="social-pill social-telegram">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+      Join Telegram
+    </a>
+    <a href="https://x.com/ultradagcom" target="_blank" class="social-pill social-x">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l11.733 16h4.267l-11.733 -16z"/><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772"/></svg>
+      Follow on X
+    </a>
+  </div>
+</div>
+
+<!-- TOKEN LAUNCH COUNTDOWN + EMAIL CAPTURE -->
+<div class="launch-section" id="launch">
+  <div class="launch-inner">
+    <div class="launch-badge">TOKEN LAUNCH</div>
+    <h2 class="launch-title">UDAG Token Launch</h2>
+    <p class="launch-subtitle">Be the first to know. Join the waitlist for priority access.</p>
+
+    <!-- COUNTDOWN -->
+    <div class="countdown" id="countdown">
+      <div class="countdown-block">
+        <span class="countdown-num" id="cd-days">--</span>
+        <span class="countdown-label">Days</span>
+      </div>
+      <div class="countdown-sep">:</div>
+      <div class="countdown-block">
+        <span class="countdown-num" id="cd-hours">--</span>
+        <span class="countdown-label">Hours</span>
+      </div>
+      <div class="countdown-sep">:</div>
+      <div class="countdown-block">
+        <span class="countdown-num" id="cd-mins">--</span>
+        <span class="countdown-label">Minutes</span>
+      </div>
+      <div class="countdown-sep">:</div>
+      <div class="countdown-block">
+        <span class="countdown-num" id="cd-secs">--</span>
+        <span class="countdown-label">Seconds</span>
+      </div>
+    </div>
+
+    <!-- EMAIL CAPTURE -->
+    <form class="email-form" id="email-form" onsubmit="return handleEmailSubmit(event)">
+      <div class="email-input-wrap">
+        <input type="email" id="email-input" placeholder="your@email.com" required autocomplete="email" class="email-input">
+        <button type="submit" class="email-btn" id="email-btn">
+          <span id="email-btn-text">Get Early Access</span>
+          <svg id="email-btn-check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:none"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        </button>
+      </div>
+      <p class="email-note">No spam. Only launch updates and early access.</p>
+    </form>
+
+    <!-- SOCIAL CTA -->
+    <div class="launch-social">
+      <span class="launch-social-label">Join the community</span>
+      <div class="launch-social-links">
+        <a href="https://t.me/ultradagcom" target="_blank" class="launch-social-btn telegram">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          Telegram
+        </a>
+        <a href="https://x.com/ultradagcom" target="_blank" class="launch-social-btn x-twitter">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l11.733 16h4.267l-11.733 -16z"/><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772"/></svg>
+          X / Twitter
+        </a>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1382,6 +1505,77 @@ const observer = new IntersectionObserver((entries) => {
   });
 }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
 reveals.forEach(el => observer.observe(el));
+
+// ─── TOKEN LAUNCH COUNTDOWN ───
+(function() {
+  // Launch date: 60 days from March 23, 2026 = May 22, 2026
+  const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
+
+  function updateCountdown() {
+    const now = Date.now();
+    const diff = Math.max(0, LAUNCH_DATE - now);
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const secs = Math.floor((diff % (1000 * 60)) / 1000);
+
+    const pad = n => String(n).padStart(2, '0');
+    document.getElementById('cd-days').textContent = pad(days);
+    document.getElementById('cd-hours').textContent = pad(hours);
+    document.getElementById('cd-mins').textContent = pad(mins);
+    document.getElementById('cd-secs').textContent = pad(secs);
+  }
+
+  updateCountdown();
+  setInterval(updateCountdown, 1000);
+})();
+
+// ─── EMAIL CAPTURE ───
+function handleEmailSubmit(e) {
+  e.preventDefault();
+  const email = document.getElementById('email-input').value.trim();
+  if (!email) return false;
+
+  const btn = document.getElementById('email-btn');
+  const btnText = document.getElementById('email-btn-text');
+  const btnCheck = document.getElementById('email-btn-check');
+
+  // Store in localStorage as simple waitlist (in production, send to backend/service)
+  try {
+    const waitlist = JSON.parse(localStorage.getItem('udag_waitlist') || '[]');
+    if (!waitlist.includes(email)) {
+      waitlist.push(email);
+      localStorage.setItem('udag_waitlist', JSON.stringify(waitlist));
+    }
+  } catch {}
+
+  // Also try to send to a simple endpoint (can be configured later)
+  fetch('https://ultradag-node-1.fly.dev/waitlist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, timestamp: new Date().toISOString() })
+  }).catch(() => {}); // Silently fail — localStorage is the backup
+
+  // Show success state
+  btn.classList.add('success');
+  btnText.style.display = 'none';
+  btnCheck.style.display = 'block';
+  document.getElementById('email-input').disabled = true;
+  document.getElementById('email-input').value = '';
+  document.getElementById('email-input').placeholder = 'You\'re on the list!';
+
+  // Reset after 4 seconds
+  setTimeout(() => {
+    btn.classList.remove('success');
+    btnText.style.display = 'inline';
+    btnCheck.style.display = 'none';
+    document.getElementById('email-input').disabled = false;
+    document.getElementById('email-input').placeholder = 'your@email.com';
+  }, 4000);
+
+  return false;
+}
 
 // Hero grid animation loaded from external file
 </script>
