@@ -2,6 +2,7 @@ use ultradag_coin::{
     SecretKey, Address, Transaction, TransferTx, Signature,
     StakeTx, UnstakeTx, DelegateTx, UndelegateTx, SetCommissionTx,
     constants::MIN_FEE_SATS,
+    tx::bridge::{BridgeDepositTx, BridgeReleaseTx},
 };
 use ultradag_coin::governance::{CreateProposalTx, VoteTx, ProposalType};
 use rand::Rng;
@@ -181,4 +182,44 @@ pub fn generate_transfer_to(
     };
     tx.signature = sk.sign(&tx.signable_bytes());
     Some(Transaction::Transfer(tx))
+}
+
+// === Bridge transaction generators ===
+
+/// Generate a BridgeDepositTx: lock UDAG on native chain for Arbitrum withdrawal.
+pub fn generate_bridge_deposit_tx(
+    sk: &SecretKey,
+    recipient: [u8; 20],
+    amount: u64,
+    destination_chain_id: u64,
+    nonce: u64,
+) -> Transaction {
+    let from = sk.address();
+    let pub_key = sk.verifying_key().to_bytes();
+    let mut tx = BridgeDepositTx {
+        from, recipient, amount, destination_chain_id, fee: MIN_FEE_SATS, nonce, pub_key,
+        signature: Signature([0u8; 64]),
+    };
+    tx.signature = sk.sign(&tx.signable_bytes());
+    Transaction::BridgeDeposit(tx)
+}
+
+/// Generate a BridgeReleaseTx: release locked funds from bridge_reserve to native recipient.
+/// Submitted by validators who observed an Arbitrum deposit.
+pub fn generate_bridge_release_tx(
+    sk: &SecretKey,
+    recipient: Address,
+    amount: u64,
+    source_chain_id: u64,
+    deposit_nonce: u64,
+    nonce: u64,
+) -> Transaction {
+    let from = sk.address();
+    let pub_key = sk.verifying_key().to_bytes();
+    let mut tx = BridgeReleaseTx {
+        from, recipient, amount, source_chain_id, deposit_nonce, nonce, pub_key,
+        signature: Signature([0u8; 64]),
+    };
+    tx.signature = sk.sign(&tx.signable_bytes());
+    Transaction::BridgeRelease(tx)
 }

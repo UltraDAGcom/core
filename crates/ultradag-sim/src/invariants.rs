@@ -49,13 +49,15 @@ pub fn check_supply_invariant(validators: &[SimValidator]) -> Result<(), String>
             .map(|(_, d)| d.delegated)
             .fold(0u64, |acc, d| acc.saturating_add(d));
         let treasury = v.state.treasury_balance();
-        let total = liquid.saturating_add(staked).saturating_add(delegated).saturating_add(treasury);
+        let bridge = v.state.bridge_reserve();
+        let total = liquid.saturating_add(staked).saturating_add(delegated)
+            .saturating_add(treasury).saturating_add(bridge);
         let supply = v.state.total_supply();
 
         if total != supply {
             return Err(format!(
-                "Supply invariant violated on validator {}:\n  liquid={}, staked={}, delegated={}, treasury={}\n  sum={}, total_supply={}\n  diff={}\n",
-                v.index, liquid, staked, delegated, treasury, total, supply,
+                "Supply invariant violated on validator {}:\n  liquid={}, staked={}, delegated={}, treasury={}, bridge_reserve={}\n  sum={}, total_supply={}\n  diff={}\n",
+                v.index, liquid, staked, delegated, treasury, bridge, total, supply,
                 (total as i128) - (supply as i128),
             ));
         }
@@ -244,6 +246,34 @@ pub fn check_finality_liveness(
     Ok(())
 }
 
+/// Check that bridge_reserve is consistent across honest validators at the same finalized round.
+pub fn check_bridge_consistency(validators: &[SimValidator]) -> Result<(), String> {
+    let mut by_round: HashMap<u64, Vec<(usize, u64)>> = HashMap::new();
+
+    for v in validators.iter().filter(|v| v.honest) {
+        let round = v.last_finalized_round();
+        if round > 0 {
+            by_round.entry(round)
+                .or_default()
+                .push((v.index, v.state.bridge_reserve()));
+        }
+    }
+
+    for (round, entries) in &by_round {
+        if entries.len() < 2 { continue; }
+        let (first_idx, first_reserve) = entries[0];
+        for &(idx, reserve) in &entries[1..] {
+            if reserve != first_reserve {
+                return Err(format!(
+                    "Bridge consistency failed at round {}: validator {} bridge_reserve={}, validator {} bridge_reserve={}",
+                    round, first_idx, first_reserve, idx, reserve
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Run all invariant checks.
 pub fn check_all(
     validators: &[SimValidator],
@@ -281,6 +311,9 @@ pub fn check_all(
         violations.push(e);
     }
     if let Err(e) = check_finality_liveness(validators, current_round, max_finality_lag) {
+        violations.push(e);
+    }
+    if let Err(e) = check_bridge_consistency(validators) {
         violations.push(e);
     }
 
