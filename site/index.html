@@ -824,13 +824,19 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
       </div>
     </div>
 
-    <!-- EMAIL CAPTURE -->
-    <form class="email-form" id="email-form" onsubmit="return handleEmailSubmit(event)">
+    <!-- EMAIL CAPTURE (Mailchimp) -->
+    <form class="email-form" id="email-form"
+      action="https://ultradagcom.us12.list-manage.com/subscribe/post"
+      method="POST" target="_blank">
+      <!-- Mailchimp hidden fields -->
+      <input type="hidden" name="u" value="7c006c449bd3dc3a523bce11d">
+      <input type="hidden" name="id" value="daf1702c98">
       <div class="email-input-wrap">
-        <input type="email" id="email-input" placeholder="your@email.com" required autocomplete="email" class="email-input">
+        <input type="email" name="EMAIL" id="email-input" placeholder="your@email.com" required autocomplete="email" class="email-input">
+        <!-- Honeypot anti-bot field -->
+        <div style="position:absolute;left:-5000px" aria-hidden="true"><input type="text" name="b_7c006c449bd3dc3a523bce11d_daf1702c98" tabindex="-1" value=""></div>
         <button type="submit" class="email-btn" id="email-btn">
           <span id="email-btn-text">Get Early Access</span>
-          <svg id="email-btn-check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:none"><polyline points="20 6 9 17 4 12"></polyline></svg>
         </button>
       </div>
       <p class="email-note">No spam. Only launch updates and early access.</p>
@@ -1532,50 +1538,8 @@ reveals.forEach(el => observer.observe(el));
 })();
 
 // ─── EMAIL CAPTURE ───
-function handleEmailSubmit(e) {
-  e.preventDefault();
-  const email = document.getElementById('email-input').value.trim();
-  if (!email) return false;
-
-  const btn = document.getElementById('email-btn');
-  const btnText = document.getElementById('email-btn-text');
-  const btnCheck = document.getElementById('email-btn-check');
-
-  // Store in localStorage as simple waitlist (in production, send to backend/service)
-  try {
-    const waitlist = JSON.parse(localStorage.getItem('udag_waitlist') || '[]');
-    if (!waitlist.includes(email)) {
-      waitlist.push(email);
-      localStorage.setItem('udag_waitlist', JSON.stringify(waitlist));
-    }
-  } catch {}
-
-  // Also try to send to a simple endpoint (can be configured later)
-  fetch('https://ultradag-node-1.fly.dev/waitlist', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, timestamp: new Date().toISOString() })
-  }).catch(() => {}); // Silently fail — localStorage is the backup
-
-  // Show success state
-  btn.classList.add('success');
-  btnText.style.display = 'none';
-  btnCheck.style.display = 'block';
-  document.getElementById('email-input').disabled = true;
-  document.getElementById('email-input').value = '';
-  document.getElementById('email-input').placeholder = 'You\'re on the list!';
-
-  // Reset after 4 seconds
-  setTimeout(() => {
-    btn.classList.remove('success');
-    btnText.style.display = 'inline';
-    btnCheck.style.display = 'none';
-    document.getElementById('email-input').disabled = false;
-    document.getElementById('email-input').placeholder = 'your@email.com';
-  }, 4000);
-
-  return false;
-}
+// Form POSTs directly to Mailchimp (target="_blank" opens their confirmation page).
+// No JS handler needed — Mailchimp handles subscribe server-side.
 
 // Hero grid animation loaded from external file
 </script>
