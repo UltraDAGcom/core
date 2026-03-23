@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface ActivityBarProps {
   rounds: Array<{ round: number; vertexCount: number; txCount: number }>;
@@ -7,39 +7,51 @@ interface ActivityBarProps {
 
 export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  // Track which rounds we've already seen so we can animate new arrivals once
-  const seenRoundsRef = useRef<Set<number>>(new Set());
+  // Rounds that should play their entry animation (one-shot, cleared after animation ends)
+  const [enteringRounds, setEnteringRounds] = useState<Set<number>>(new Set());
+  // All rounds we've ever rendered — persists across re-renders
+  const knownRef = useRef<Set<number>>(new Set());
+  // Whether this is the very first render (don't animate initial batch)
+  const isFirstRender = useRef(true);
 
   if (!rounds || rounds.length === 0) return null;
 
-  // Take last N rounds, sorted ascending (oldest left, newest right)
   const display = rounds
     .slice(-maxRounds)
     .sort((a, b) => a.round - b.round);
 
   const maxVertices = Math.max(...display.map(r => r.vertexCount), 1);
 
-  // Determine which bars are new (never seen before)
-  const newThisRender: Set<number> = new Set();
-  for (const r of display) {
-    if (!seenRoundsRef.current.has(r.round)) {
-      newThisRender.add(r.round);
+  // Detect new rounds on data change
+  useEffect(() => {
+    const currentRounds = display.map(r => r.round);
+    const brandNew: number[] = [];
+
+    for (const round of currentRounds) {
+      if (!knownRef.current.has(round)) {
+        knownRef.current.add(round);
+        // Don't animate on first load — only on subsequent data refreshes
+        if (!isFirstRender.current) {
+          brandNew.push(round);
+        }
+      }
     }
-  }
-  // Mark all current rounds as seen (after checking)
-  // Use a microtask so the render sees them as "new" first
-  if (newThisRender.size > 0) {
-    Promise.resolve().then(() => {
-      for (const r of newThisRender) {
-        seenRoundsRef.current.add(r);
-      }
-      // Keep the set bounded
-      if (seenRoundsRef.current.size > maxRounds * 2) {
-        const arr = [...seenRoundsRef.current].sort((a, b) => a - b);
-        seenRoundsRef.current = new Set(arr.slice(-maxRounds));
-      }
-    });
-  }
+
+    isFirstRender.current = false;
+
+    if (brandNew.length > 0) {
+      setEnteringRounds(new Set(brandNew));
+      // Clear after animation completes (500ms)
+      const timer = setTimeout(() => setEnteringRounds(new Set()), 500);
+      return () => clearTimeout(timer);
+    }
+
+    // Prune old entries from known set
+    if (knownRef.current.size > maxRounds * 3) {
+      const sorted = [...knownRef.current].sort((a, b) => a - b);
+      knownRef.current = new Set(sorted.slice(-maxRounds * 2));
+    }
+  }, [rounds.map(r => r.round).join(',')]);
 
   return (
     <div className="relative flex items-end gap-[3px] h-12 px-1 mb-3">
@@ -52,12 +64,12 @@ export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
               ? 'bg-dag-yellow'
               : 'bg-dag-red';
 
-        const isNew = newThisRender.has(r.round);
+        const isEntering = enteringRounds.has(r.round);
 
         return (
           <div
             key={r.round}
-            className="relative flex-1 flex flex-col items-center justify-end cursor-pointer group"
+            className="relative flex-1 flex flex-col items-center justify-end cursor-pointer"
             style={{ height: '100%' }}
             onMouseEnter={() => setHoveredIndex(i)}
             onMouseLeave={() => setHoveredIndex(null)}
@@ -84,14 +96,14 @@ export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
             {r.txCount > 0 && (
               <div className="w-1.5 h-1.5 rounded-full bg-dag-blue mb-0.5 shrink-0" />
             )}
-            {/* Bar — new bars animate in once via CSS animation, then stay */}
+            {/* Bar */}
             <div
-              className={`w-full rounded-sm ${barColor} min-w-[4px]`}
+              className={`w-full rounded-sm ${barColor} min-w-[4px] transition-opacity duration-200`}
               style={{
                 height: `${heightPercent}%`,
                 opacity: hoveredIndex === i ? 1 : 0.7,
-                transition: isNew ? 'none' : 'all 0.3s ease',
-                animation: isNew ? `activityBarIn 0.4s ease-out` : undefined,
+                transformOrigin: 'bottom',
+                animation: isEntering ? 'activityBarIn 0.4s ease-out' : undefined,
               }}
             />
           </div>
@@ -99,7 +111,7 @@ export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
       })}
       <style>{`
         @keyframes activityBarIn {
-          from { transform: scaleY(0); opacity: 0; }
+          from { transform: scaleY(0); opacity: 0.2; }
           to { transform: scaleY(1); opacity: 0.7; }
         }
       `}</style>
