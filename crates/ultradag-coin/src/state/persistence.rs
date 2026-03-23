@@ -56,6 +56,10 @@ pub struct StateSnapshot {
     /// Included in attestation hashes for cross-contract replay protection.
     #[serde(default)]
     pub bridge_contract_address: [u8; 20],
+    /// Used bridge release nonces: (source_chain_id, deposit_nonce) pairs already released.
+    /// Prevents double-release of Arbitrum deposits.
+    #[serde(default)]
+    pub used_release_nonces: Vec<(u64, u64)>,
 }
 
 impl StateSnapshot {

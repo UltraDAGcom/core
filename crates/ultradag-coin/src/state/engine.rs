@@ -276,6 +276,9 @@ pub struct StateEngine {
     /// Included in attestation hashes for cross-contract replay protection.
     /// Set via `set_bridge_contract_address()` or CLI configuration.
     bridge_contract_address: [u8; 20],
+    /// Used release nonces: (source_chain_id, deposit_nonce) pairs that have been released.
+    /// Prevents double-release of the same Arbitrum deposit.
+    used_release_nonces: std::collections::HashSet<(u64, u64)>,
 }
 
 impl StateEngine {
@@ -312,6 +315,7 @@ impl StateEngine {
             bridge_signatures: HashMap::new(),
             bridge_nonce: 0,
             bridge_contract_address: [0u8; 20],
+            used_release_nonces: std::collections::HashSet::new(),
         }
     }
 
@@ -1083,15 +1087,19 @@ impl StateEngine {
                 crate::tx::Transaction::BridgeDeposit(bridge_tx) => {
                     if let Err(e) = self.apply_bridge_lock_tx(bridge_tx, None, None) {
                         tracing::warn!("Skipping invalid BridgeDeposit tx in finalized vertex: {}", e);
-                        // M3 fix: on failure, still charge the fee (like Transfer).
-                        // The balance check above verified tx.total_cost() is affordable.
-                        // apply_bridge_lock_tx may have already debited (if it failed after debit),
-                        // so only charge fee if we haven't debited yet (validation errors).
                         if bridge_tx.fee > 0 {
                             let _ = self.debit(&bridge_tx.from, bridge_tx.fee);
                             collected_fees = collected_fees.saturating_add(bridge_tx.fee);
                         }
                         self.increment_nonce(&bridge_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::BridgeRelease(release_tx) => {
+                    if let Err(e) = self.apply_bridge_release_tx(release_tx) {
+                        tracing::warn!("Skipping invalid BridgeRelease tx in finalized vertex: {}", e);
+                        self.increment_nonce(&release_tx.from);
                         self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
                         continue;
                     }
@@ -1655,6 +1663,62 @@ impl StateEngine {
         // during the validator loop, not here. This prevents double-application.
 
         Ok(Some(attestation))
+    }
+
+    /// Apply a BridgeReleaseTx: release locked funds from bridge_reserve to a native recipient.
+    /// Called when validators observe an Arbitrum deposit and submit release attestations.
+    /// Fee-exempt (validators shouldn't pay to process bridge releases).
+    pub fn apply_bridge_release_tx(
+        &mut self,
+        tx: &crate::tx::bridge::BridgeReleaseTx,
+    ) -> Result<(), CoinError> {
+        // Verify submitter is an active validator
+        if !self.active_validator_set.contains(&tx.from) {
+            return Err(CoinError::ValidationError("only active validators can submit bridge releases".into()));
+        }
+
+        // Validate amount range
+        if tx.amount < crate::constants::MIN_BRIDGE_AMOUNT_SATS {
+            return Err(CoinError::ValidationError("below minimum bridge amount".into()));
+        }
+        if tx.amount > crate::constants::MAX_BRIDGE_AMOUNT_SATS {
+            return Err(CoinError::ValidationError("exceeds maximum bridge amount".into()));
+        }
+
+        // Validate source chain
+        if !crate::constants::SUPPORTED_BRIDGE_CHAIN_IDS.contains(&tx.source_chain_id) {
+            return Err(CoinError::ValidationError(
+                format!("unsupported source chain ID: {}", tx.source_chain_id)
+            ));
+        }
+
+        // Check deposit_nonce hasn't been released already (replay protection)
+        let nonce_key = (tx.source_chain_id, tx.deposit_nonce);
+        if self.used_release_nonces.contains(&nonce_key) {
+            return Err(CoinError::ValidationError(
+                format!("bridge release already processed for chain {} nonce {}", tx.source_chain_id, tx.deposit_nonce)
+            ));
+        }
+
+        // Check bridge_reserve has sufficient funds
+        if self.bridge_reserve < tx.amount {
+            return Err(CoinError::ValidationError(
+                format!("insufficient bridge reserve: {} < {}", self.bridge_reserve, tx.amount)
+            ));
+        }
+
+        // Execute the release
+        self.bridge_reserve = self.bridge_reserve.saturating_sub(tx.amount);
+        self.credit(&tx.recipient, tx.amount)?;
+        self.used_release_nonces.insert(nonce_key);
+        self.increment_nonce(&tx.from);
+
+        tracing::info!(
+            "Bridge release: {} sats from chain {} nonce {} to {}",
+            tx.amount, tx.source_chain_id, tx.deposit_nonce, tx.recipient.to_hex()
+        );
+
+        Ok(())
     }
 
     /// Apply a StakeTx: debit liquid balance, credit stake account.
@@ -2724,6 +2788,7 @@ impl StateEngine {
             bridge_signatures: HashMap::new(),
             bridge_nonce: 0,
             bridge_contract_address: [0u8; 20],
+            used_release_nonces: std::collections::HashSet::new(),
             last_proposal_round: HashMap::new(),
             round_lock: RwLock::new(None),
         })
@@ -2775,6 +2840,7 @@ impl StateEngine {
             bridge_signatures,
             bridge_nonce: self.bridge_nonce,
             bridge_contract_address: self.bridge_contract_address,
+            used_release_nonces: self.used_release_nonces.iter().copied().collect(),
         }
     }
 
@@ -2833,6 +2899,7 @@ impl StateEngine {
                 .collect(),
             bridge_nonce: snapshot.bridge_nonce,
             bridge_contract_address: snapshot.bridge_contract_address,
+            used_release_nonces: snapshot.used_release_nonces.into_iter().collect(),
             last_proposal_round: HashMap::new(),
             round_lock: RwLock::new(None),
         })
@@ -3129,12 +3196,23 @@ impl StateEngine {
         for (&nonce, attestation) in &self.bridge_attestations {
             let is_old = attestation.creation_round.saturating_add(retention) < current_round;
             if is_old {
-                to_prune.push(nonce);
+                to_prune.push((nonce, attestation.sender, attestation.amount));
             }
         }
 
         let pruned = to_prune.len();
-        for nonce in &to_prune {
+        for (nonce, sender, amount) in &to_prune {
+            // Auto-refund: return locked funds from bridge_reserve to the original sender.
+            // This prevents funds from being permanently stuck when attestations expire
+            // before the user claims on Arbitrum.
+            if self.bridge_reserve >= *amount {
+                self.bridge_reserve = self.bridge_reserve.saturating_sub(*amount);
+                let _ = self.credit(sender, *amount);
+                tracing::warn!(
+                    "Bridge auto-refund: {} sats returned to {} (attestation #{} expired after {} rounds)",
+                    amount, sender.to_hex(), nonce, retention
+                );
+            }
             self.bridge_attestations.remove(nonce);
             self.bridge_signatures.retain(|(n, _), _| n != nonce);
         }

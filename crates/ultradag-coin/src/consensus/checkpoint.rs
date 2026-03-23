@@ -309,6 +309,15 @@ pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
     // NOTE: bridge_signatures intentionally excluded from state root (C4 fix).
     // They are non-deterministic across nodes (each validator signs locally).
 
+    // Used release nonces (sorted for determinism)
+    let mut release_nonces: Vec<_> = snapshot.used_release_nonces.iter().copied().collect();
+    release_nonces.sort();
+    hasher.update(&(release_nonces.len() as u64).to_le_bytes());
+    for (chain_id, nonce) in &release_nonces {
+        hasher.update(&chain_id.to_le_bytes());
+        hasher.update(&nonce.to_le_bytes());
+    }
+
     *hasher.finalize().as_bytes()
 }
 

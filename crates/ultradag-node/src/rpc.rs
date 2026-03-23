@@ -1219,6 +1219,16 @@ ultradag_banned_ips {ban_count}
                         "fee": t.fee,
                         "nonce": t.nonce,
                     }),
+                    Transaction::BridgeRelease(t) => serde_json::json!({
+                        "type": "bridge_release",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "recipient": t.recipient.to_hex(),
+                        "amount": t.amount,
+                        "source_chain_id": t.source_chain_id,
+                        "deposit_nonce": t.deposit_nonce,
+                        "nonce": t.nonce,
+                    }),
                 }
             }).collect();
             json_response(StatusCode::OK, &txs)
@@ -1783,6 +1793,129 @@ ultradag_banned_ips {ban_count}
             }))
         }
 
+        // POST /bridge/release — Submit a bridge release (Arbitrum→Native unlock).
+        // Validators submit this to release locked funds from bridge_reserve.
+        (&Method::POST, ["bridge", "release"]) => {
+            #[cfg(feature = "mainnet")]
+            {
+                return Ok(error_response(StatusCode::GONE,
+                    "/bridge/release disabled on mainnet: use /tx/submit with pre-signed BridgeReleaseTx"));
+            }
+            #[cfg(not(feature = "mainnet"))]
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE,
+                    "/bridge/release disabled on mainnet: use /tx/submit with pre-signed BridgeReleaseTx"));
+            }
+            #[cfg(not(feature = "mainnet"))] {
+            if !rate_limiter.check_rate_limit(client_ip, limits::BRIDGE_DEPOSIT) {
+                return Ok(error_response(StatusCode::TOO_MANY_REQUESTS, "rate limit exceeded"));
+            }
+
+            let body = req.collect().await?.to_bytes();
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large (max 1MB)"));
+            }
+
+            #[derive(serde::Deserialize)]
+            struct BridgeReleaseRequest {
+                secret_key: String,
+                recipient: String,
+                amount: u64,
+                source_chain_id: u64,
+                deposit_nonce: u64,
+            }
+
+            let release_req: BridgeReleaseRequest = match serde_json::from_slice(&body) {
+                Ok(r) => r,
+                Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, &format!("invalid JSON: {}", e))),
+            };
+
+            // Parse secret key
+            let sk = match parse_secret_key(&release_req.secret_key) {
+                Ok(k) => k,
+                Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, e)),
+            };
+            let sender = sk.address();
+
+            // Parse recipient (native address hex)
+            let recipient_hex = release_req.recipient.strip_prefix("0x").unwrap_or(&release_req.recipient);
+            if recipient_hex.len() != 40 || !recipient_hex.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid recipient: need 40 hex chars"));
+            }
+            let mut recipient_bytes = [0u8; 20];
+            for (i, chunk) in recipient_hex.as_bytes().chunks(2).enumerate() {
+                let s = std::str::from_utf8(chunk).unwrap_or("00");
+                recipient_bytes[i] = u8::from_str_radix(s, 16).unwrap_or(0);
+            }
+            let recipient = ultradag_coin::Address(recipient_bytes);
+
+            // Validate amount
+            if release_req.amount < ultradag_coin::constants::MIN_BRIDGE_AMOUNT_SATS {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    &format!("minimum bridge amount is {} sats", ultradag_coin::constants::MIN_BRIDGE_AMOUNT_SATS)));
+            }
+            if release_req.amount > ultradag_coin::constants::MAX_BRIDGE_AMOUNT_SATS {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    &format!("exceeds maximum bridge amount: {} sats", ultradag_coin::constants::MAX_BRIDGE_AMOUNT_SATS)));
+            }
+
+            // Validate chain ID
+            if !ultradag_coin::constants::SUPPORTED_BRIDGE_CHAIN_IDS.contains(&release_req.source_chain_id) {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    &format!("unsupported source chain ID: {}", release_req.source_chain_id)));
+            }
+
+            // Build, sign, and submit BridgeReleaseTx
+            let (tx, tx_hash, nonce) = {
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
+
+                // Verify sender is active validator
+                if !state.is_active_validator(&sender) {
+                    return Ok(error_response(StatusCode::FORBIDDEN, "only active validators can submit bridge releases"));
+                }
+
+                let nonce = state.nonce(&sender);
+                let pending_nonce = mp.pending_nonce(&sender).map(|n| n.saturating_add(1)).unwrap_or(nonce);
+
+                let mut release_tx = ultradag_coin::tx::bridge::BridgeReleaseTx {
+                    from: sender,
+                    recipient,
+                    amount: release_req.amount,
+                    source_chain_id: release_req.source_chain_id,
+                    deposit_nonce: release_req.deposit_nonce,
+                    nonce: pending_nonce,
+                    pub_key: sk.verifying_key().to_bytes(),
+                    signature: ultradag_coin::Signature([0u8; 64]),
+                };
+                release_tx.signature = sk.sign(&release_tx.signable_bytes());
+
+                let tx = Transaction::BridgeRelease(release_tx);
+                let tx_hash = tx.hash();
+
+                if !mp.insert(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                }
+
+                (tx, tx_hash, pending_nonce)
+            };
+
+            server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+            let _ = server.tx_tx.send(tx);
+
+            json_response(StatusCode::OK, &serde_json::json!({
+                "status": "pending",
+                "tx_hash": hex_encode(&tx_hash),
+                "from": sender.to_hex(),
+                "recipient": recipient.to_hex(),
+                "amount": release_req.amount,
+                "source_chain_id": release_req.source_chain_id,
+                "deposit_nonce": release_req.deposit_nonce,
+                "nonce": nonce,
+            }))
+            }
+        }
+
         (&Method::GET, ["keygen"]) => {
             // TESTNET ONLY: generates keys server-side (server sees private key).
             // Mainnet: use SDK or CLI for offline key generation.
@@ -2325,6 +2458,7 @@ ultradag_banned_ips {ban_count}
                         Transaction::Undelegate(_) => "undelegate",
                         Transaction::SetCommission(_) => "set_commission",
                         Transaction::BridgeDeposit(_) => "bridge_lock",
+                        Transaction::BridgeRelease(_) => "bridge_release",
                     },
                     "from": tx.from().to_hex(),
                     "fee": tx.fee(),
@@ -2458,6 +2592,16 @@ ultradag_banned_ips {ban_count}
                     if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
                         return Ok(error_response(StatusCode::BAD_REQUEST,
                             &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+                    }
+                }
+                Transaction::BridgeRelease(t) => {
+                    if t.amount < ultradag_coin::constants::MIN_BRIDGE_AMOUNT_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("minimum bridge amount is {} sats", ultradag_coin::constants::MIN_BRIDGE_AMOUNT_SATS)));
+                    }
+                    if t.amount > ultradag_coin::constants::MAX_BRIDGE_AMOUNT_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("bridge release exceeds maximum: {} sats", ultradag_coin::constants::MAX_BRIDGE_AMOUNT_SATS)));
                     }
                 }
                 // Unstake, Undelegate — no amount/fee fields to validate

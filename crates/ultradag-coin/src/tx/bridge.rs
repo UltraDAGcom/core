@@ -93,6 +93,79 @@ impl BridgeDepositTx {
     }
 }
 
+/// Bridge release transaction: release locked funds from bridge_reserve to a native recipient.
+/// Submitted by validators who observed a deposit on Arbitrum.
+/// Fee-exempt (validators shouldn't pay to process bridge releases).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BridgeReleaseTx {
+    /// Validator submitting the release attestation
+    pub from: Address,
+    /// Native chain recipient
+    pub recipient: Address,
+    /// Amount to release (in sats)
+    pub amount: u64,
+    /// Source chain ID (e.g., 42161 for Arbitrum where deposit happened)
+    pub source_chain_id: u64,
+    /// Deposit nonce from the Arbitrum deposit event
+    pub deposit_nonce: u64,
+    /// Validator's transaction nonce
+    pub nonce: u64,
+    /// Validator's public key (32 bytes)
+    pub pub_key: [u8; 32],
+    /// Validator's signature
+    pub signature: Signature,
+}
+
+impl BridgeReleaseTx {
+    /// Create signable bytes for this transaction.
+    pub fn signable_bytes(&self) -> Vec<u8> {
+        use crate::constants::NETWORK_ID;
+        let mut buf = Vec::new();
+        buf.extend_from_slice(NETWORK_ID);
+        buf.extend_from_slice(b"bridge_release");
+        buf.extend_from_slice(&self.from.0);
+        buf.extend_from_slice(&self.recipient.0);
+        buf.extend_from_slice(&self.amount.to_le_bytes());
+        buf.extend_from_slice(&self.source_chain_id.to_le_bytes());
+        buf.extend_from_slice(&self.deposit_nonce.to_le_bytes());
+        buf.extend_from_slice(&self.nonce.to_le_bytes());
+        buf.extend_from_slice(&self.pub_key);
+        buf
+    }
+
+    /// Verify the transaction signature.
+    pub fn verify_signature(&self) -> bool {
+        use ed25519_dalek::VerifyingKey;
+
+        if Address::from_pubkey(&self.pub_key) != self.from {
+            return false;
+        }
+        let message = self.signable_bytes();
+        let sig = match ed25519_dalek::Signature::from_slice(&self.signature.0) {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+        let vk = match VerifyingKey::from_bytes(&self.pub_key) {
+            Ok(k) => k,
+            Err(_) => return false,
+        };
+        vk.verify_strict(&message, &sig).is_ok()
+    }
+
+    /// Get the transaction hash.
+    pub fn hash(&self) -> [u8; 32] {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(b"bridge_release");
+        hasher.update(&self.from.0);
+        hasher.update(&self.recipient.0);
+        hasher.update(&self.amount.to_le_bytes());
+        hasher.update(&self.source_chain_id.to_le_bytes());
+        hasher.update(&self.deposit_nonce.to_le_bytes());
+        hasher.update(&self.nonce.to_le_bytes());
+        *hasher.finalize().as_bytes()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

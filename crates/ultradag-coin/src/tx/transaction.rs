@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::address::{Address, Signature};
 use crate::tx::stake::{StakeTx, UnstakeTx};
 use crate::tx::delegate::{DelegateTx, UndelegateTx, SetCommissionTx};
-use crate::tx::bridge::BridgeDepositTx;
+use crate::tx::bridge::{BridgeDepositTx, BridgeReleaseTx};
 use crate::governance::{CreateProposalTx, VoteTx};
 
 /// Unified transaction type supporting transfers, staking, unstaking, delegation,
@@ -20,6 +20,7 @@ pub enum Transaction {
     Undelegate(UndelegateTx),
     SetCommission(SetCommissionTx),
     BridgeDeposit(BridgeDepositTx),
+    BridgeRelease(BridgeReleaseTx),
 }
 
 /// A transaction transferring UDAG from one address to another.
@@ -53,6 +54,7 @@ impl Transaction {
             Transaction::Undelegate(tx) => tx.hash(),
             Transaction::SetCommission(tx) => tx.hash(),
             Transaction::BridgeDeposit(tx) => tx.hash(),
+            Transaction::BridgeRelease(tx) => tx.hash(),
         }
     }
 
@@ -68,6 +70,7 @@ impl Transaction {
             Transaction::Undelegate(tx) => tx.verify_signature(),
             Transaction::SetCommission(tx) => tx.verify_signature(),
             Transaction::BridgeDeposit(tx) => tx.verify_signature(),
+            Transaction::BridgeRelease(tx) => tx.verify_signature(),
         }
     }
 
@@ -83,6 +86,7 @@ impl Transaction {
             Transaction::Undelegate(tx) => tx.from,
             Transaction::SetCommission(tx) => tx.from,
             Transaction::BridgeDeposit(tx) => tx.from,
+            Transaction::BridgeRelease(tx) => tx.from,
         }
     }
 
@@ -98,6 +102,7 @@ impl Transaction {
             Transaction::Undelegate(tx) => tx.nonce,
             Transaction::SetCommission(tx) => tx.nonce,
             Transaction::BridgeDeposit(tx) => tx.nonce,
+            Transaction::BridgeRelease(tx) => tx.nonce,
         }
     }
 
@@ -112,7 +117,8 @@ impl Transaction {
             | Transaction::Unstake(_)
             | Transaction::Delegate(_)
             | Transaction::Undelegate(_)
-            | Transaction::SetCommission(_) => 0,
+            | Transaction::SetCommission(_)
+            | Transaction::BridgeRelease(_) => 0,
         }
     }
 
@@ -123,6 +129,7 @@ impl Transaction {
             Transaction::Stake(tx) => tx.amount,
             Transaction::Delegate(tx) => tx.amount,
             Transaction::BridgeDeposit(tx) => tx.amount,
+            Transaction::BridgeRelease(tx) => tx.amount,
             Transaction::Unstake(_)
             | Transaction::Undelegate(_)
             | Transaction::SetCommission(_)
@@ -142,7 +149,8 @@ impl Transaction {
             | Transaction::SetCommission(_)
             | Transaction::CreateProposal(_)
             | Transaction::Vote(_)
-            | Transaction::BridgeDeposit(_) => None,
+            | Transaction::BridgeDeposit(_)
+            | Transaction::BridgeRelease(_) => None,
         }
     }
 
@@ -158,6 +166,7 @@ impl Transaction {
             Transaction::Undelegate(tx) => tx.pub_key,
             Transaction::SetCommission(tx) => tx.pub_key,
             Transaction::BridgeDeposit(tx) => tx.pub_key,
+            Transaction::BridgeRelease(tx) => tx.pub_key,
         }
     }
 
@@ -173,6 +182,7 @@ impl Transaction {
             Transaction::Undelegate(tx) => tx.signable_bytes(),
             Transaction::SetCommission(tx) => tx.signable_bytes(),
             Transaction::BridgeDeposit(tx) => tx.signable_bytes(),
+            Transaction::BridgeRelease(tx) => tx.signable_bytes(),
         }
     }
 
@@ -187,7 +197,8 @@ impl Transaction {
             Transaction::Vote(tx) => tx.fee,
             Transaction::Unstake(_)
             | Transaction::Undelegate(_)
-            | Transaction::SetCommission(_) => 0,
+            | Transaction::SetCommission(_)
+            | Transaction::BridgeRelease(_) => 0,
         }
     }
 }

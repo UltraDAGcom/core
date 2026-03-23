@@ -396,9 +396,9 @@ pub const MIN_BRIDGE_AMOUNT_SATS: u64 = COIN;
 /// Matches the Solidity contract's MAX_DEPOSIT (100_000 * 10^8).
 pub const MAX_BRIDGE_AMOUNT_SATS: u64 = 100_000 * COIN;
 
-/// Bridge attestation retention: prune fully-signed or old attestations after this many rounds.
-/// Prevents unbounded bridge state growth.
-pub const BRIDGE_ATTESTATION_RETENTION_ROUNDS: u64 = 10_000;
+/// Bridge attestation retention: ~5.8 days at 5s/round.
+/// When pruned, unclaimed attestations are auto-refunded to the original sender.
+pub const BRIDGE_ATTESTATION_RETENTION_ROUNDS: u64 = 100_000;
 
 /// Supported destination chain IDs for bridge operations.
 /// Only these chains are valid targets for BridgeDepositTx.
