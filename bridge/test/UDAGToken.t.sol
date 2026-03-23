@@ -7,14 +7,12 @@ import "../src/UDAGToken.sol";
 contract UDAGTokenTest is Test {
     UDAGToken public token;
     address public admin = address(0xA);
-    address public minter = address(0xB);
     address public user = address(0xC);
     address public bridge = address(0xD);
-    address public genesisMinter = address(0xE);
 
     function setUp() public {
         vm.prank(admin);
-        token = new UDAGToken(admin, bridge, genesisMinter);
+        token = new UDAGToken(admin, bridge);
     }
 
     function test_name() public view {
@@ -33,16 +31,24 @@ contract UDAGTokenTest is Test {
         assertEq(token.MAX_SUPPLY(), 21_000_000 * 10 ** 8);
     }
 
-    function test_adminCanMint() public {
-        vm.prank(admin);
+    function test_bridgeCanMint() public {
+        vm.prank(bridge);
         token.mint(user, 1000 * 10 ** 8);
         assertEq(token.balanceOf(user), 1000 * 10 ** 8);
     }
 
+    function test_adminCannotMint() public {
+        vm.prank(admin);
+        vm.expectRevert();
+        token.mint(user, 1000 * 10 ** 8);
+    }
+
     function test_mintRespectsMaxSupply() public {
-        vm.startPrank(admin);
+        vm.startPrank(bridge);
         token.mint(user, token.MAX_SUPPLY());
-        vm.expectRevert("UDAG: would exceed max supply");
+        vm.expectRevert(
+            abi.encodeWithSelector(UDAGToken.ExceedsMaxSupply.selector, 1, 0)
+        );
         token.mint(user, 1);
         vm.stopPrank();
     }
@@ -53,17 +59,8 @@ contract UDAGTokenTest is Test {
         token.mint(user, 100);
     }
 
-    function test_burnRequiresRole() public {
-        vm.prank(admin);
-        token.mint(user, 1000);
-
-        vm.prank(user);
-        vm.expectRevert();
-        token.burn(user, 500);
-    }
-
     function test_burnSelfWorks() public {
-        vm.prank(admin);
+        vm.prank(bridge);
         token.mint(user, 1000);
 
         vm.prank(user);
@@ -71,33 +68,8 @@ contract UDAGTokenTest is Test {
         assertEq(token.balanceOf(user), 500);
     }
 
-    function test_grantMinterRole() public {
-        vm.startPrank(admin);
-        token.grantRole(token.MINTER_ROLE(), minter);
-        vm.stopPrank();
-
-        vm.prank(minter);
-        token.mint(user, 100);
-        assertEq(token.balanceOf(user), 100);
-    }
-
-    function test_grantBurnerRole() public {
-        vm.startPrank(admin);
-        token.mint(user, 1000);
-        token.grantRole(token.BURNER_ROLE(), minter);
-        vm.stopPrank();
-
-        // Burner must have allowance to burn from another address (C1 fix)
-        vm.prank(user);
-        token.approve(minter, 500);
-
-        vm.prank(minter);
-        token.burn(user, 500);
-        assertEq(token.balanceOf(user), 500);
-    }
-
     function test_totalSupplyTracking() public {
-        vm.prank(admin);
+        vm.prank(bridge);
         token.mint(user, 1000);
         assertEq(token.totalSupply(), 1000);
 
@@ -106,59 +78,49 @@ contract UDAGTokenTest is Test {
         assertEq(token.totalSupply(), 700);
     }
 
-    function test_genesisAllocation() public {
-        // Dev allocation: 1,050,000 UDAG
-        uint256 devAlloc = 1_050_000 * 10 ** 8;
-        // Treasury: 2,100,000 UDAG
-        uint256 treasury = 2_100_000 * 10 ** 8;
-
-        vm.startPrank(admin);
-        token.mint(address(0xDE), devAlloc);
-        token.mint(address(0xDA0), treasury);
-        vm.stopPrank();
-
-        assertEq(token.totalSupply(), devAlloc + treasury);
-        assertEq(token.totalSupply(), 3_150_000 * 10 ** 8);
+    function test_zeroSupplyAtDeploy() public view {
+        // No genesis minting -- supply starts at zero
+        assertEq(token.totalSupply(), 0);
     }
 
-    // ─── M7: New comprehensive tests ───
+    // ─── MINTER_ROLE is locked from the start ───
 
-    /// @notice After finalizeGenesis, MINTER_ROLE is revoked from admin and genesisMinter
-    function test_finalizeGenesis() public {
-        vm.prank(admin);
-        token.finalizeGenesis();
-
-        assertTrue(token.genesisFinalized());
-        // Both admin and genesisMinter should lose MINTER_ROLE
-        assertFalse(token.hasRole(token.MINTER_ROLE(), admin));
-        assertFalse(token.hasRole(token.MINTER_ROLE(), genesisMinter));
-        // Bridge should still have MINTER_ROLE
-        assertTrue(token.hasRole(token.MINTER_ROLE(), bridge));
-    }
-
-    /// @notice After finalizeGenesis, nobody can grant MINTER_ROLE (role admin is dead)
-    function test_cannotGrantMinterAfterGenesis() public {
+    /// @notice MINTER_ROLE admin is a dead role -- nobody can grant it
+    function test_cannotGrantMinterRole() public {
         bytes32 minterRole = token.MINTER_ROLE();
 
-        vm.prank(admin);
-        token.finalizeGenesis();
-
         // Admin tries to grant MINTER_ROLE to an arbitrary address -- should revert
-        // because the role admin for MINTER_ROLE is now bytes32(type(uint256).max)
+        // because the role admin for MINTER_ROLE is a dead role
         vm.prank(admin);
         vm.expectRevert();
         token.grantRole(minterRole, address(0xF00));
     }
 
-    /// @notice updateBridge transfers MINTER_ROLE from old to new bridge
-    function test_updateBridge() public {
+    /// @notice Only bridge has MINTER_ROLE, admin does not
+    function test_onlyBridgeHasMinterRole() public view {
+        assertTrue(token.hasRole(token.MINTER_ROLE(), bridge));
+        assertFalse(token.hasRole(token.MINTER_ROLE(), admin));
+    }
+
+    // ─── Bridge Migration ───
+
+    /// @notice Propose + execute bridge migration transfers MINTER_ROLE
+    function test_bridgeMigration() public {
         address newBridge = address(0xF1);
 
         // Bridge should have MINTER_ROLE initially
         assertTrue(token.hasRole(token.MINTER_ROLE(), bridge));
 
+        // Propose migration
         vm.prank(admin);
-        token.updateBridge(newBridge);
+        token.proposeBridgeMigration(newBridge);
+
+        // Fast-forward past timelock
+        vm.warp(block.timestamp + token.BRIDGE_MIGRATION_DELAY() + 1);
+
+        // Execute migration
+        vm.prank(admin);
+        token.executeBridgeMigration();
 
         // Old bridge loses MINTER_ROLE, new bridge gets it
         assertFalse(token.hasRole(token.MINTER_ROLE(), bridge));
@@ -166,27 +128,15 @@ contract UDAGTokenTest is Test {
         assertEq(token.bridgeAddress(), newBridge);
     }
 
-    /// @notice updateBridge reverts after genesis finalization (H5 fix)
-    function test_updateBridgeLockedAfterGenesis() public {
-        // finalize genesis
-        vm.prank(admin);
-        token.finalizeGenesis();
-
-        // try to update bridge - should revert
-        vm.prank(admin);
-        vm.expectRevert("UDAG: bridge updates locked after genesis");
-        token.updateBridge(address(0x999));
-    }
-
     /// @notice Pause blocks all token transfers
     function test_pauseBlocksTransfers() public {
-        // Mint some tokens
-        vm.prank(admin);
+        // Mint some tokens via bridge
+        vm.prank(bridge);
         token.mint(user, 1000);
 
-        // Grant PAUSER_ROLE to admin (already granted in constructor)
+        // Pause
         vm.prank(admin);
-        token.pause();
+        token.pause("test pause");
 
         // Transfer should revert when paused
         vm.prank(user);
@@ -194,8 +144,49 @@ contract UDAGTokenTest is Test {
         token.transfer(address(0xF2), 500);
 
         // Mint should also revert when paused
-        vm.prank(admin);
+        vm.prank(bridge);
         vm.expectRevert();
         token.mint(user, 100);
+    }
+
+    /// @notice renounceAdminRole is irreversible
+    function test_renounceAdminRole() public {
+        vm.prank(admin);
+        token.renounceAdminRole();
+
+        assertFalse(token.hasRole(token.DEFAULT_ADMIN_ROLE(), admin));
+        assertFalse(token.hasRole(token.PAUSER_ROLE(), admin));
+    }
+
+    /// @notice Constructor rejects zero addresses
+    function test_constructorRejectsZeroAdmin() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(UDAGToken.ZeroAddress.selector, "admin")
+        );
+        new UDAGToken(address(0), bridge);
+    }
+
+    function test_constructorRejectsZeroBridge() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(UDAGToken.ZeroAddress.selector, "bridge")
+        );
+        new UDAGToken(admin, address(0));
+    }
+
+    /// @notice isMinter view function works
+    function test_isMinter() public view {
+        assertTrue(token.isMinter(bridge));
+        assertFalse(token.isMinter(admin));
+        assertFalse(token.isMinter(user));
+    }
+
+    /// @notice remainingSupply tracks correctly
+    function test_remainingSupply() public {
+        assertEq(token.remainingSupply(), token.MAX_SUPPLY());
+
+        vm.prank(bridge);
+        token.mint(user, 1000);
+
+        assertEq(token.remainingSupply(), token.MAX_SUPPLY() - 1000);
     }
 }

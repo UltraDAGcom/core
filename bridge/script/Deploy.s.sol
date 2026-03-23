@@ -15,16 +15,10 @@ import "@openzeppelin/contracts/governance/TimelockController.sol";
 ///   RPC_URL: Arbitrum RPC endpoint
 ///   DEPLOYER_KEY: Deployer private key (for signing transactions)
 ///   GOVERNOR_ADDRESS: Governor/admin address (timelock or multisig)
-///   DEV_ADDRESS: Developer allocation recipient
-///   TREASURY_ADDRESS: Treasury allocation recipient
 contract DeployScript is Script {
     // Configuration
     uint256 public constant MIN_DELAY = 1 days; // Timelock delay
-    
-    // Genesis allocations (in sats, 8 decimals)
-    uint256 public constant DEV_ALLOCATION = 1_050_000 * 10 ** 8; // 5%
-    uint256 public constant TREASURY_ALLOCATION = 2_100_000 * 10 ** 8; // 10%
-    
+
     // Deployed contract addresses
     address public tokenAddress;
     address public bridgeAddress;
@@ -33,23 +27,17 @@ contract DeployScript is Script {
     function run() external {
         // Load configuration from environment
         address governor = vm.envAddress("GOVERNOR_ADDRESS");
-        address devAddress = vm.envAddress("DEV_ADDRESS");
-        address treasuryAddress = vm.envAddress("TREASURY_ADDRESS");
-        
+
         // Get deployer address from private key
         uint256 deployerKey = vm.envUint("DEPLOYER_KEY");
         address deployer = vm.addr(deployerKey);
 
         // Zero address checks
         require(governor != address(0), "Deploy: zero governor");
-        require(devAddress != address(0), "Deploy: zero dev address");
-        require(treasuryAddress != address(0), "Deploy: zero treasury");
 
         vm.startBroadcast(deployerKey);
 
         // Step 1: Deploy TimelockController
-        // Governor (EOA/multisig) will have TIMELOCK_ADMIN_ROLE
-        // Pass proposer and executor roles in constructor since only admin can grant roles post-construction
         address[] memory proposers = new address[](1);
         proposers[0] = governor;
         address[] memory executors = new address[](1);
@@ -64,61 +52,63 @@ contract DeployScript is Script {
 
         console.log("TimelockController deployed:", timelockAddress);
 
-        // Step 2: Deploy UDAG Token
-        // Use a throwaway address as temp bridge (so updateBridge doesn't revoke deployer's MINTER_ROLE)
-        // Deployer is admin (for setup) and genesisMinter (for genesis minting)
-        address tempBridge = address(0xdead);
-        tokenAddress = address(new UDAGToken(deployer, tempBridge, deployer));
+        // Step 2: Deploy UDAG Bridge (Validator Federation)
+        // We need the bridge address first so the token can grant MINTER_ROLE to it.
+        // Use CREATE2 or deploy bridge first with a temp token, then redeploy.
+        // Simpler approach: deploy bridge first, then token with bridge address.
+
+        // Deploy a placeholder token for bridge constructor (bridge needs a token address)
+        // Actually, the bridge constructor just stores the token address, so we can
+        // predict the token address or use a two-step approach.
+
+        // Two-step: deploy bridge with a temp token, deploy real token with bridge,
+        // then... bridge.token is immutable. So we must know the bridge address first.
+
+        // Better approach: compute the bridge address via CREATE nonce prediction.
+        // deployer nonce after timelock deploy = current + 1
+        // token will be deployed at nonce + 1, bridge at nonce + 2
+        // OR: deploy bridge first (needs token address), deploy token second (needs bridge address)
+        // This is a chicken-and-egg. The solution: deploy token with deployer as temp bridge,
+        // then deploy real bridge, then migrate the bridge address via proposeBridgeMigration.
+        //
+        // But proposeBridgeMigration has a 2-day timelock! For deployment we need something faster.
+        //
+        // Simplest correct approach: deploy token with deployer as admin, use a deterministic
+        // address for the bridge via CREATE2, or just accept that we deploy token first with
+        // a temporary bridge, then deploy real bridge, then do an immediate bridge migration.
+        //
+        // Actually, since MINTER_ROLE admin is locked in constructor, we cannot use grantRole.
+        // But executeBridgeMigration() temporarily unlocks it. The deployer would need to wait
+        // 2 days for the timelock though.
+        //
+        // The pragmatic solution: compute the bridge address ahead of time using CREATE nonce.
+        // Deployer's next nonce after timelock = creates token, nonce after token = creates bridge.
+
+        // Nonce-based address prediction:
+        // After timelock deploy, deployer nonce has incremented by 1.
+        // Next deploy (token) will be at nonce N, bridge at nonce N+1.
+        // We need bridge address for token constructor, so predict it.
+        uint256 deployerNonce = vm.getNonce(deployer);
+        // Token will be deployed at current nonce, bridge at nonce+1
+        address predictedBridge = vm.computeCreateAddress(deployer, deployerNonce + 1);
+
+        // Step 2: Deploy UDAG Token with predicted bridge address
+        tokenAddress = address(new UDAGToken(timelockAddress, predictedBridge));
         console.log("UDAGToken deployed:", tokenAddress);
 
-        // Step 3: Deploy UDAG Bridge (Validator Federation - no relayers needed!)
+        // Step 3: Deploy UDAG Bridge (Validator Federation)
         bridgeAddress = address(new UDAGBridgeValidator(
             tokenAddress,
             timelockAddress
         ));
         console.log("UDAGBridgeValidator deployed:", bridgeAddress);
 
-        // Step 4: Update token's bridge to real bridge contract
-        // Revokes MINTER_ROLE from tempBridge, grants to real bridge
-        UDAGToken(tokenAddress).updateBridge(bridgeAddress);
-        console.log("Token bridge updated to real bridge address");
+        // Verify prediction was correct
+        require(bridgeAddress == predictedBridge, "Deploy: bridge address prediction failed");
+        console.log("Bridge address prediction verified");
 
-        // Step 5: Mint genesis allocations (deployer has MINTER_ROLE as genesisMinter + admin)
-        UDAGToken(tokenAddress).mint(devAddress, DEV_ALLOCATION);
-        console.log("Minted dev allocation:", DEV_ALLOCATION, "to", devAddress);
-
-        UDAGToken(tokenAddress).mint(treasuryAddress, TREASURY_ALLOCATION);
-        console.log("Minted treasury allocation:", TREASURY_ALLOCATION, "to", treasuryAddress);
-
-        // Step 6: Finalize genesis (revoke MINTER_ROLE from deployer admin and genesisMinter)
-        UDAGToken(tokenAddress).finalizeGenesis();
-        console.log("Genesis finalized - deployer MINTER_ROLE revoked");
-
-        // Step 7: Transfer admin to timelock
-        UDAGToken(tokenAddress).grantRole(
-            UDAGToken(tokenAddress).DEFAULT_ADMIN_ROLE(),
-            timelockAddress
-        );
-        UDAGToken(tokenAddress).grantRole(
-            UDAGToken(tokenAddress).PAUSER_ROLE(),
-            timelockAddress
-        );
-        // Deployer renounces its own admin role and pauser role
-        UDAGToken(tokenAddress).renounceRole(
-            UDAGToken(tokenAddress).PAUSER_ROLE(),
-            deployer
-        );
-        UDAGToken(tokenAddress).renounceRole(
-            UDAGToken(tokenAddress).DEFAULT_ADMIN_ROLE(),
-            deployer
-        );
-        console.log("Token admin transferred to timelock, deployer PAUSER_ROLE renounced");
-
-        // Step 8: Timelock roles already configured via constructor (proposers + executors)
-        console.log("Timelock configured with proposer and executor roles via constructor");
-        
         vm.stopBroadcast();
-        
+
         // Output deployment summary
         console.log("\n========================================");
         console.log("       DEPLOYMENT SUMMARY");
@@ -128,20 +118,14 @@ contract DeployScript is Script {
         console.log("UDAGBridge:", bridgeAddress);
         console.log("TimelockController:", timelockAddress);
         console.log("Governor:", governor);
-        console.log("Dev Address:", devAddress);
-        console.log("Treasury Address:", treasuryAddress);
         console.log("Timelock Delay:", MIN_DELAY, "seconds");
         console.log("========================================\n");
 
         // Save deployment artifacts
-        _saveDeploymentArtifacts(governor, devAddress, treasuryAddress);
+        _saveDeploymentArtifacts(governor);
     }
 
-    function _saveDeploymentArtifacts(
-        address governor,
-        address devAddress,
-        address treasuryAddress
-    ) internal {
+    function _saveDeploymentArtifacts(address governor) internal {
         // Create deployment output file
         string memory deploymentInfo = string.concat(
             '{"network":', vm.toString(block.chainid),
@@ -149,38 +133,11 @@ contract DeployScript is Script {
             ',"bridge":"', vm.toString(bridgeAddress), '"',
             ',"timelock":"', vm.toString(timelockAddress), '"',
             ',"governor":"', vm.toString(governor), '"',
-            ',"devAddress":"', vm.toString(devAddress), '"',
-            ',"treasuryAddress":"', vm.toString(treasuryAddress), '"',
             ',"timelockDelay":', vm.toString(MIN_DELAY), '}'
         );
 
         // Write to file (for CI/CD integration)
         vm.writeJson(deploymentInfo, "deployment-output.json");
         console.log("Deployment artifacts saved to deployment-output.json");
-    }
-    
-    function _addressesToJson(address[] memory addrs) internal pure returns (string memory) {
-        string memory result = "";
-        for (uint256 i = 0; i < addrs.length; i++) {
-            if (i > 0) {
-                result = string.concat(result, ",");
-            }
-            result = string.concat(result, '"', vm.toString(addrs[i]), '"');
-        }
-        return result;
-    }
-    
-    function substring(string memory str, uint256 startIndex, uint256 endIndex) 
-        internal pure returns (string memory) 
-    {
-        bytes memory strBytes = bytes(str);
-        require(endIndex >= startIndex, "Invalid indices");
-        require(endIndex <= strBytes.length, "End index out of bounds");
-        
-        bytes memory result = new bytes(endIndex - startIndex);
-        for (uint256 i = startIndex; i < endIndex; i++) {
-            result[i - startIndex] = strBytes[i];
-        }
-        return string(result);
     }
 }

@@ -65,7 +65,7 @@ pub mod tx;
 pub use address::{Address, SecretKey, Signature};
 pub use block::{Block, BlockHeader};
 pub use consensus::{BlockDag, DagVertex, FinalityTracker, ValidatorSet, sync_epoch_validators, Checkpoint, EquivocationEvidence, K_PARENTS, MAX_PARENTS};
-pub use constants::{COIN, SATS_PER_UDAG, sats_to_udag, DEV_ADDRESS_SEED, DEV_ALLOCATION_SATS, EPOCH_LENGTH_ROUNDS, HALVING_INTERVAL, INITIAL_REWARD_SATS, MAX_ACTIVE_VALIDATORS, MAX_SUPPLY_SATS, OBSERVER_REWARD_PERCENT, CHECKPOINT_INTERVAL, MIN_DELEGATION_SATS, MIN_BRIDGE_AMOUNT_SATS, DEFAULT_COMMISSION_PERCENT, MAX_COMMISSION_PERCENT, SUPPORTED_BRIDGE_CHAIN_IDS, block_reward, dev_address, epoch_of, is_epoch_boundary};
+pub use constants::{COIN, SATS_PER_UDAG, sats_to_udag, DEV_ADDRESS_SEED, FOUNDER_EMISSION_PERCENT, TREASURY_EMISSION_PERCENT, EPOCH_LENGTH_ROUNDS, HALVING_INTERVAL, INITIAL_REWARD_SATS, MAX_ACTIVE_VALIDATORS, MAX_SUPPLY_SATS, OBSERVER_REWARD_PERCENT, CHECKPOINT_INTERVAL, MIN_DELEGATION_SATS, MIN_BRIDGE_AMOUNT_SATS, DEFAULT_COMMISSION_PERCENT, MAX_COMMISSION_PERCENT, SUPPORTED_BRIDGE_CHAIN_IDS, block_reward, dev_address, epoch_of, is_epoch_boundary};
 #[cfg(not(feature = "mainnet"))]
 pub use constants::{FAUCET_PREFUND_SATS, FAUCET_SEED, faucet_keypair};
 pub use error::CoinError;

@@ -468,10 +468,26 @@ impl StateEngine {
         // checkpoint snapshot. (4) If council sets diverge, total_supply will differ,
         // and the supply invariant check (SupplyInvariantBroken → process exit) catches it.
         // The member list is sorted by address for deterministic credit ordering.
+        // --- Compute emission splits ---
+        // Council: council_emission_percent (default 10%)
+        // Treasury: treasury_emission_percent (default 10%)
+        // Founder: founder_emission_percent (default 5%)
+        // Validators: remainder (default 75%)
         let council_percent = self.governance_params.council_emission_percent;
+        let treasury_percent = self.governance_params.treasury_emission_percent;
+        let founder_percent = self.governance_params.founder_emission_percent;
+
+        let council_total = total_round_reward.saturating_mul(council_percent) / 100;
+        let treasury_total = total_round_reward.saturating_mul(treasury_percent) / 100;
+        let founder_total = total_round_reward.saturating_mul(founder_percent) / 100;
+        let validator_pool = total_round_reward
+            .saturating_sub(council_total)
+            .saturating_sub(treasury_total)
+            .saturating_sub(founder_total);
+
+        // --- Council emission ---
         let council_count = self.council_members.len() as u64;
-        let validator_pool = if council_count > 0 && council_percent > 0 {
-            let council_total = total_round_reward.saturating_mul(council_percent) / 100;
+        if council_count > 0 && council_total > 0 {
             let per_member = council_total / council_count;
             if per_member > 0 {
                 let council_mint = per_member.saturating_mul(council_count).min(remaining_supply);
@@ -481,13 +497,10 @@ impl StateEngine {
                     let mut members: Vec<Address> = self.council_members.keys().copied().collect();
                     members.sort();
                     for member in &members {
-                        // Note: credit() returns Result but overflow should never occur
-                        // due to MAX_SUPPLY cap. Overflow indicates critical bug.
                         let _ = self.credit(member, capped_per);
                     }
                     let actually_minted = capped_per.saturating_mul(members.len() as u64);
                     // Canonical remainder: assign truncation dust to first member in sorted order.
-                    // This ensures the full council_mint pool is distributed rather than burned.
                     let council_remainder = council_mint.saturating_sub(actually_minted);
                     if council_remainder > 0 {
                         let _ = self.credit(&members[0], council_remainder);
@@ -495,11 +508,29 @@ impl StateEngine {
                     self.total_supply = self.total_supply.saturating_add(actually_minted.saturating_add(council_remainder));
                 }
             }
-            // Validator pool = remainder after council share
-            total_round_reward.saturating_mul(100u64.saturating_sub(council_percent)) / 100
-        } else {
-            total_round_reward
-        };
+        }
+
+        // --- Treasury emission ---
+        // Treasury credits go to treasury_balance (not an account), spent via TreasurySpend proposals.
+        if treasury_total > 0 {
+            let remaining_after_council = crate::constants::MAX_SUPPLY_SATS.saturating_sub(self.total_supply);
+            let capped_treasury = treasury_total.min(remaining_after_council);
+            if capped_treasury > 0 {
+                self.treasury_balance = self.treasury_balance.saturating_add(capped_treasury);
+                self.total_supply = self.total_supply.saturating_add(capped_treasury);
+            }
+        }
+
+        // --- Founder emission ---
+        // Founder credits go to liquid balance via credit() — can spend/stake/delegate normally.
+        if founder_total > 0 {
+            let remaining_after_treasury = crate::constants::MAX_SUPPLY_SATS.saturating_sub(self.total_supply);
+            let capped_founder = founder_total.min(remaining_after_treasury);
+            if capped_founder > 0 {
+                let _ = self.credit(&crate::constants::dev_address(), capped_founder);
+                self.total_supply = self.total_supply.saturating_add(capped_founder);
+            }
+        }
 
         if validator_pool == 0 {
             return Ok(());
@@ -693,8 +724,13 @@ impl StateEngine {
         Ok(())
     }
 
-    /// Create a new StateEngine with genesis pre-funding.
+    /// Create a new StateEngine with genesis state.
     /// All nodes must call this to start with identical initial state.
+    ///
+    /// No pre-mine: all tokens are distributed through per-round emission.
+    /// - Mainnet: total_supply = 0 (completely clean genesis)
+    /// - Testnet: total_supply = FAUCET_PREFUND_SATS (faucet for testing)
+    /// - Founder, treasury, and council all start at 0 and earn through emission.
     pub fn new_with_genesis() -> Self {
         let mut engine = Self::new();
 
@@ -705,33 +741,25 @@ impl StateEngine {
             let _ = engine.credit(&faucet_addr, crate::constants::FAUCET_PREFUND_SATS);
         }
 
-        // Developer allocation (5% of max supply)
-        let dev_addr = crate::constants::dev_address();
-        let _ = engine.credit(&dev_addr, crate::constants::DEV_ALLOCATION_SATS);
-
-        // DAO Treasury (10% of max supply) — controlled by Council of 21 via TreasurySpend proposals.
-        // Treasury is NOT an account — it's a separate balance field on StateEngine.
-        engine.treasury_balance = crate::constants::TREASURY_ALLOCATION_SATS;
-
         // Bootstrap council: dev address gets the first Foundation seat.
         // Without this, no one can create proposals (catch-22).
         // The dev/foundation member can then propose additional council members.
+        // Note: dev address starts with 0 balance — earns through emission.
+        let dev_addr = crate::constants::dev_address();
         let _ = engine.add_council_member(
             dev_addr,
             crate::governance::CouncilSeatCategory::Foundation,
         );
 
         // total_supply tracks all credited amounts + treasury
+        // No pre-mine: only faucet (testnet) contributes to genesis supply.
         #[cfg(not(feature = "mainnet"))]
         {
-            engine.total_supply = crate::constants::FAUCET_PREFUND_SATS
-                + crate::constants::DEV_ALLOCATION_SATS
-                + crate::constants::TREASURY_ALLOCATION_SATS;
+            engine.total_supply = crate::constants::FAUCET_PREFUND_SATS;
         }
         #[cfg(feature = "mainnet")]
         {
-            engine.total_supply = crate::constants::DEV_ALLOCATION_SATS
-                + crate::constants::TREASURY_ALLOCATION_SATS;
+            engine.total_supply = 0;
         }
 
         engine

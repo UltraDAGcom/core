@@ -27,6 +27,12 @@ pub struct GovernanceParams {
     /// Slash percentage on equivocation (param: "slash_percent")
     #[serde(default = "default_slash_percent")]
     pub slash_percent: u64,
+    /// Treasury emission share percentage (param: "treasury_emission_percent")
+    #[serde(default = "default_treasury_emission")]
+    pub treasury_emission_percent: u64,
+    /// Founder emission share percentage (param: "founder_emission_percent")
+    #[serde(default = "default_founder_emission")]
+    pub founder_emission_percent: u64,
 }
 
 fn default_council_emission() -> u64 {
@@ -35,6 +41,14 @@ fn default_council_emission() -> u64 {
 
 fn default_slash_percent() -> u64 {
     SLASH_PERCENTAGE
+}
+
+fn default_treasury_emission() -> u64 {
+    TREASURY_EMISSION_PERCENT
+}
+
+fn default_founder_emission() -> u64 {
+    FOUNDER_EMISSION_PERCENT
 }
 
 impl Default for GovernanceParams {
@@ -50,6 +64,8 @@ impl Default for GovernanceParams {
             observer_reward_percent: OBSERVER_REWARD_PERCENT,
             council_emission_percent: COUNCIL_EMISSION_PERCENT,
             slash_percent: SLASH_PERCENTAGE,
+            treasury_emission_percent: TREASURY_EMISSION_PERCENT,
+            founder_emission_percent: FOUNDER_EMISSION_PERCENT,
         }
     }
 }
@@ -165,6 +181,23 @@ impl GovernanceParams {
                 }
                 self.slash_percent = value;
             }
+            "treasury_emission_percent" => {
+                // Floor: 0% — treasury gets nothing (disabled)
+                // Ceiling: 20% — prevents treasury from capturing too much emission
+                // Combined with council (10%) + founder (5%) leaves at least 65% for validators.
+                if value > 20 {
+                    return Err("treasury_emission_percent must be 0-20".to_string());
+                }
+                self.treasury_emission_percent = value;
+            }
+            "founder_emission_percent" => {
+                // Floor: 0% — founder gets nothing (can be sunset)
+                // Ceiling: 10% — prevents founder from capturing too much emission
+                if value > 10 {
+                    return Err("founder_emission_percent must be 0-10".to_string());
+                }
+                self.founder_emission_percent = value;
+            }
             _ => {
                 return Err(format!("Unknown governable parameter: '{}'", param));
             }
@@ -186,6 +219,8 @@ impl GovernanceParams {
             "observer_reward_percent",
             "council_emission_percent",
             "slash_percent",
+            "treasury_emission_percent",
+            "founder_emission_percent",
         ]
     }
 }

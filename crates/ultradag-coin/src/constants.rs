@@ -12,23 +12,26 @@ pub fn sats_to_udag(sats: u64) -> f64 {
     sats as f64 / SATS_PER_UDAG as f64
 }
 
-/// Initial block reward: 1 UDAG per round (split among validators)
+/// Initial block reward: 1 UDAG per round (split among validators, council, treasury, founder)
 ///
 /// Emission timeline (at 5s/round):
-/// - Genesis pre-mine: 3,150,000 UDAG (15% of 21M: dev 5% + treasury 10%)
-/// - Remaining for emission: 17,850,000 UDAG
+/// - Genesis pre-mine: 0 UDAG (all tokens distributed through emission)
 /// - Epoch 0: 1 UDAG/round × 10.5M rounds = 10,500,000 UDAG (~1.66 years)
 /// - Epoch 1: 0.5 UDAG/round × 10.5M rounds = 5,250,000 UDAG
-/// - Epoch 2: 0.25 UDAG/round — supply cap (21M) hit mid-epoch
-/// - Total emission exhausted in ~4.7 years at 5s/round
+/// - Epoch 2: 0.25 UDAG/round × 10.5M rounds = 2,625,000 UDAG
 /// - Geometric series sum: INITIAL_REWARD × HALVING_INTERVAL × 2 = 21M UDAG
-///   (but only 17.85M remains after genesis, so cap is reached early)
+/// - Full emission over ~106 years
+///
+/// Per-round split:
+/// - 75% validators/stakers (proportional to effective stake)
+/// - 10% council (equal split among seated members)
+/// - 10% treasury (controlled by Council of 21 via TreasurySpend proposals)
+/// -  5% founder (liquid balance, can spend/stake/delegate normally)
 pub const INITIAL_REWARD_SATS: u64 = COIN;
 
 /// Reward halves every 10,500,000 rounds (~1.66 years at 5s rounds).
 /// Geometric series: reward × interval × 2 = 21M UDAG total theoretical emission.
-/// Actual emission ends sooner (~4.7 years) because genesis pre-mine (3.15M UDAG)
-/// consumes 15% of the supply cap before emission begins.
+/// No genesis pre-mine — all 21M UDAG distributed through emission.
 pub const HALVING_INTERVAL: u64 = 10_500_000;
 
 /// Genesis timestamp
@@ -81,15 +84,17 @@ pub const NETWORK_ID: &[u8] = b"ultradag-testnet-v1";
 #[cfg(feature = "mainnet")]
 pub const NETWORK_ID: &[u8] = b"ultradag-mainnet-v1";
 
-/// Developer allocation: 5% of total supply allocated at genesis.
-/// Funds protocol development. Visible and auditable from round 0.
-/// Total: 1,050,000 UDAG (5% of 21,000,000 UDAG max supply).
-pub const DEV_ALLOCATION_SATS: u64 = 1_050_000 * COIN;
+/// Founder emission share: percentage of each round's block reward credited to the founder address.
+/// The founder starts with 0 balance and earns through emission like everyone else.
+/// 5% of each round's reward is credited as liquid balance (can spend/stake/delegate normally).
+/// Governable via ParameterChange proposals (param: "founder_emission_percent", bounds: 0-10%).
+pub const FOUNDER_EMISSION_PERCENT: u64 = 5;
 
-/// DAO Treasury allocation: 10% of total supply allocated at genesis.
-/// Controlled by Council of 21 via TreasurySpend proposals.
-/// Total: 2,100,000 UDAG (10% of 21,000,000 UDAG max supply).
-pub const TREASURY_ALLOCATION_SATS: u64 = 2_100_000 * COIN;
+/// Treasury emission share: percentage of each round's block reward credited to the treasury.
+/// The treasury starts at 0 and grows through emission, controlled by Council of 21 via
+/// TreasurySpend proposals. 10% of each round's reward is added to treasury_balance.
+/// Governable via ParameterChange proposals (param: "treasury_emission_percent", bounds: 0-20%).
+pub const TREASURY_EMISSION_PERCENT: u64 = 10;
 
 /// Developer allocation address.
 /// 
@@ -224,32 +229,21 @@ pub const CHECKPOINT_INTERVAL: u64 = 100;
 /// - round: 0
 /// - state_root: computed from genesis state
 /// - dag_tip: [0u8; 32] (no vertices yet)
-/// - total_supply: genesis total (testnet includes faucet, mainnet does not)
+/// - total_supply: genesis total (testnet: faucet only, mainnet: 0)
 /// - prev_checkpoint_hash: [0u8; 32] (genesis has no predecessor)
 ///
 /// CRITICAL: This must be updated if genesis state changes.
-/// The testnet and mainnet hashes differ because mainnet excludes faucet funds.
-/// Run `cargo test --features mainnet test_compute_mainnet_genesis_hash` to recompute.
-// Recomputed after Address size change (32 -> 20 bytes).
-// Updated: Added locked_stake field to StakeAccount (governance security fix).
+/// Run `cargo test test_compute_genesis_hash -- --nocapture` to recompute.
+// TODO: Recompute after tokenomics refactor (no-premine model).
+// Run `cargo test test_compute_genesis_hash -- --nocapture` on first clean deploy.
 #[cfg(not(feature = "mainnet"))]
-pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
-    0xfe, 0x3b, 0xb9, 0xbb, 0xd6, 0xce, 0x3c, 0xd7,
-    0x6d, 0x8b, 0x7a, 0x62, 0x1d, 0xf3, 0x66, 0xaa,
-    0x80, 0x68, 0x26, 0x6a, 0xac, 0x45, 0xf6, 0x38,
-    0x79, 0x46, 0x34, 0xeb, 0xdf, 0xec, 0xb2, 0x2f,
-]; // Testnet: updated for bridge_release_votes in state root
+pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [0u8; 32];
 
-/// Mainnet genesis checkpoint hash — computed from genesis WITHOUT faucet.
-/// Computed: March 21, 2026 with `cargo test --features mainnet test_compute_genesis_hash`
-/// Genesis: 3,150,000 UDAG (dev 5% + treasury 10%), no faucet
+/// Mainnet genesis checkpoint hash — must be computed before mainnet launch.
+/// Genesis: 0 UDAG (no pre-mine), all tokens distributed through emission.
+/// Run `cargo test --features mainnet test_compute_genesis_hash -- --nocapture` to compute.
 #[cfg(feature = "mainnet")]
-pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
-    0xae, 0xba, 0x9d, 0xae, 0xca, 0xac, 0xa8, 0x3a,
-    0xbb, 0xb7, 0xa7, 0xf2, 0x6d, 0x7b, 0x6f, 0x8d,
-    0x4d, 0x9d, 0xa0, 0x55, 0xc4, 0xf6, 0x51, 0x70,
-    0x1a, 0x77, 0x8a, 0x03, 0x82, 0xcd, 0x2b, 0x13,
-];
+pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [0u8; 32];
 
 /// Compile-time assertion: GENESIS_CHECKPOINT_HASH must not be the placeholder on mainnet.
 /// This is the primary defense — prevents building a mainnet binary with [0u8; 32].

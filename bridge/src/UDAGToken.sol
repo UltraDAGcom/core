@@ -7,36 +7,39 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
 /// @title UltraDAG Token (UDAG)
-/// @notice ERC-20 representation of UDAG on Arbitrum with enhanced security controls.
+/// @notice ERC-20 representation of UDAG on Arbitrum, purely bridge-driven.
 /// @dev 8 decimals to match the native chain (1 UDAG = 100,000,000 sats).
 ///
+///      All UDAG originates on the native chain via emission. The only way
+///      ERC-20 UDAG enters Arbitrum is through the bridge (bridge mints on
+///      withdrawal claim). There is no genesis minting.
+///
 ///      Bridge model (escrow + mint):
-///        • Deposit  (Arbitrum → native): bridge calls transferFrom() to lock tokens in escrow.
-///        • Withdraw (native → Arbitrum): bridge calls mint() to create tokens for the claimant.
+///        - Deposit  (Arbitrum -> native): bridge calls transferFrom() to lock tokens in escrow.
+///        - Withdraw (native -> Arbitrum): bridge calls mint() to create tokens for the claimant.
 ///
-///      No burn-by-role is needed under this model. Users may still burn their own
-///      tokens voluntarily via burnSelf().
-///
-///      Post-genesis role lockdown:
-///        • finalizeGenesis() makes MINTER_ROLE permanently un-grantable except
-///          for the bridge, which retains its existing grant.
-///        • A timelock-gated bridge migration path remains available post-genesis
-///          so a compromised bridge can be replaced without redeploying the token.
-///        • renounceAdminRole() is the final decentralisation step and is irreversible.
+///      Role lockdown:
+///        - MINTER_ROLE admin is set to a dead role in the constructor, so no one
+///          can ever grant new MINTER_ROLE except via the internal updateBridge().
+///        - A timelock-gated bridge migration path remains available so a compromised
+///          bridge can be replaced without redeploying the token.
+///        - renounceAdminRole() is the final decentralisation step and is irreversible.
 contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable {
 
     // ─── Role Definitions ───────────────────────────────────────────────
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
 
+    /// @dev A role that no address will ever hold. Used to permanently lock
+    ///      MINTER_ROLE grants via the standard AccessControl admin mechanism.
+    bytes32 private constant DEAD_ROLE = bytes32(type(uint256).max);
+
     // ─── Supply Configuration ───────────────────────────────────────────
     /// @notice Maximum supply: 21,000,000 UDAG with 8 decimal places.
     uint256 public constant MAX_SUPPLY = 21_000_000 * 10 ** 8;
 
-    // ─── Genesis State ──────────────────────────────────────────────────
-    bool public genesisFinalized;
+    // ─── Bridge State ───────────────────────────────────────────────────
     address public bridgeAddress;
-    address public genesisMinter;
 
     // ─── Bridge Migration Timelock ──────────────────────────────────────
     /// @notice Minimum delay between proposing and executing a bridge migration.
@@ -49,7 +52,6 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable {
     BridgeMigration public pendingBridgeMigration;
 
     // ─── Events ─────────────────────────────────────────────────────────
-    event GenesisFinalized(uint256 indexed totalSupply, address indexed finalizedBy);
     event BridgeUpdated(address indexed oldBridge, address indexed newBridge);
     event BridgeMigrationProposed(address indexed newBridge, uint256 executableAfter, address indexed proposedBy);
     event BridgeMigrationCancelled(address indexed cancelledBridge, address indexed cancelledBy);
@@ -62,43 +64,39 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable {
     error MintAmountZero();
     error BurnAmountZero();
     error ExceedsMaxSupply(uint256 requested, uint256 remaining);
-    error GenesisAlreadyFinalized();
-    error GenesisNotFinalized();
     error SameBridgeAddress();
     error NoPendingMigration();
     error MigrationTimelockNotElapsed(uint256 executableAfter, uint256 currentTime);
-    error MigrationBridgeMismatch();
     error MigrationAlreadyPending();
 
     /// @notice Constructor - sets up initial roles and configuration.
-    /// @param admin       Address that will hold DEFAULT_ADMIN_ROLE (should be a timelock / multisig).
-    /// @param initialBridge Address of the bridge contract.
-    /// @param genesisMinter_ Address that can mint genesis allocations (deployer EOA, temporary).
+    /// @param admin  Address that will hold DEFAULT_ADMIN_ROLE (should be a timelock / multisig).
+    /// @param bridge Address of the bridge contract (sole minter).
     constructor(
         address admin,
-        address initialBridge,
-        address genesisMinter_
+        address bridge
     )
         ERC20("UltraDAG", "UDAG")
         ERC20Permit("UltraDAG")
     {
-        if (admin == address(0))          revert ZeroAddress("admin");
-        if (initialBridge == address(0))  revert ZeroAddress("initialBridge");
-        if (genesisMinter_ == address(0)) revert ZeroAddress("genesisMinter");
+        if (admin == address(0))  revert ZeroAddress("admin");
+        if (bridge == address(0)) revert ZeroAddress("bridge");
 
         // Admin roles
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(PAUSER_ROLE, admin);
 
-        // Minting roles (genesis minter is temporary)
-        _grantRole(MINTER_ROLE, admin);
-        _grantRole(MINTER_ROLE, genesisMinter_);
-        _grantRole(MINTER_ROLE, initialBridge);
+        // Bridge is the sole minter
+        _grantRole(MINTER_ROLE, bridge);
 
-        genesisMinter = genesisMinter_;
-        bridgeAddress = initialBridge;
+        // Permanently lock MINTER_ROLE: set its admin to a role nobody holds.
+        // After this, no one can call grantRole(MINTER_ROLE, ...) via AccessControl.
+        // Bridge migration uses _grantRole/_revokeRole internally to bypass this.
+        _setRoleAdmin(MINTER_ROLE, DEAD_ROLE);
 
-        emit BridgeUpdated(address(0), initialBridge);
+        bridgeAddress = bridge;
+
+        emit BridgeUpdated(address(0), bridge);
     }
 
     // ─── ERC-20 Overrides ───────────────────────────────────────────────
@@ -135,9 +133,8 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable {
 
     // ─── Minting ────────────────────────────────────────────────────────
 
-    /// @notice Mint tokens. Only callable by MINTER_ROLE.
-    /// @dev Used by the bridge for native → Arbitrum withdrawal claims,
-    ///      and by admin/genesisMinter for pre-genesis allocations.
+    /// @notice Mint tokens. Only callable by MINTER_ROLE (the bridge).
+    /// @dev Used by the bridge for native -> Arbitrum withdrawal claims.
     function mint(address to, uint256 amount)
         external
         onlyRole(MINTER_ROLE)
@@ -160,56 +157,18 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable {
         _burn(msg.sender, amount);
     }
 
-    // ─── Genesis Finalization ───────────────────────────────────────────
-
-    /// @notice Finalize genesis minting.
-    /// @dev Revokes MINTER_ROLE from admin and genesisMinter, then permanently
-    ///      locks MINTER_ROLE so no new grants can ever be made.
-    ///      The bridge retains its existing MINTER_ROLE grant.
-    function finalizeGenesis() external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
-        if (genesisFinalized) revert GenesisAlreadyFinalized();
-
-        genesisFinalized = true;
-
-        _revokeRole(MINTER_ROLE, msg.sender);
-        _revokeRole(MINTER_ROLE, genesisMinter);
-
-        // Set MINTER_ROLE's admin to a role nobody holds, permanently preventing
-        // new grants. The bridge keeps its existing grant.
-        _setRoleAdmin(MINTER_ROLE, bytes32(type(uint256).max));
-
-        emit GenesisFinalized(totalSupply(), msg.sender);
-    }
-
     // ─── Bridge Management ──────────────────────────────────────────────
     //
-    //  Pre-genesis  : updateBridge() for immediate swaps (deployment flexibility).
-    //  Post-genesis : two-step timelock migration via proposeBridgeMigration()
-    //                 + executeBridgeMigration() for safety.
+    //  Two-step timelock migration via proposeBridgeMigration()
+    //  + executeBridgeMigration() for safety.
 
-    /// @notice Immediately update the bridge address. Only available before genesis.
-    function updateBridge(address newBridge) external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
-        if (genesisFinalized)            revert GenesisAlreadyFinalized();
-        if (newBridge == address(0))     revert ZeroAddress("newBridge");
-        if (newBridge == bridgeAddress)  revert SameBridgeAddress();
-
-        address oldBridge = bridgeAddress;
-
-        _revokeRole(MINTER_ROLE, oldBridge);
-        _grantRole(MINTER_ROLE, newBridge);
-
-        bridgeAddress = newBridge;
-        emit BridgeUpdated(oldBridge, newBridge);
-    }
-
-    /// @notice Propose a post-genesis bridge migration (timelock-gated).
+    /// @notice Propose a bridge migration (timelock-gated).
     /// @dev Starts a BRIDGE_MIGRATION_DELAY countdown. Can be cancelled by admin.
     function proposeBridgeMigration(address newBridge)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
         whenNotPaused
     {
-        if (!genesisFinalized)           revert GenesisNotFinalized();
         if (newBridge == address(0))     revert ZeroAddress("newBridge");
         if (newBridge == bridgeAddress)  revert SameBridgeAddress();
         if (pendingBridgeMigration.newBridge != address(0)) revert MigrationAlreadyPending();
@@ -224,12 +183,8 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable {
     }
 
     /// @notice Execute a previously proposed bridge migration after the timelock.
-    /// @dev The MINTER_ROLE admin is locked post-genesis, so we cannot use
-    ///      _grantRole/_revokeRole directly. Instead we transfer the bridge's
-    ///      minter capability by low-level role slot manipulation:
-    ///        1. Temporarily reset MINTER_ROLE admin to DEFAULT_ADMIN_ROLE.
-    ///        2. Revoke from old bridge, grant to new bridge.
-    ///        3. Re-lock MINTER_ROLE admin.
+    /// @dev Temporarily resets MINTER_ROLE admin to DEFAULT_ADMIN_ROLE so we can
+    ///      revoke/grant, then re-locks it to the dead role.
     function executeBridgeMigration()
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
@@ -249,7 +204,7 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable {
         _revokeRole(MINTER_ROLE, oldBridge);
         _grantRole(MINTER_ROLE, migration.newBridge);
         // Re-lock MINTER_ROLE permanently
-        _setRoleAdmin(MINTER_ROLE, bytes32(type(uint256).max));
+        _setRoleAdmin(MINTER_ROLE, DEAD_ROLE);
 
         bridgeAddress = migration.newBridge;
 
@@ -272,10 +227,8 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable {
     // ─── Administrative Functions ───────────────────────────────────────
 
     /// @notice Irreversibly renounce DEFAULT_ADMIN_ROLE (full decentralisation).
-    /// @dev Only callable after genesis is finalized. Also removes PAUSER_ROLE.
+    /// @dev Also removes PAUSER_ROLE from the caller.
     function renounceAdminRole() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (!genesisFinalized) revert GenesisNotFinalized();
-
         _revokeRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _revokeRole(PAUSER_ROLE, msg.sender);
 
