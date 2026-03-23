@@ -5,43 +5,75 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-/// @title UltraDAG Token (UDAG) - Hardened Version
+/// @title UltraDAG Token (UDAG)
 /// @notice ERC-20 representation of UDAG on Arbitrum with enhanced security controls.
 /// @dev 8 decimals to match the native chain (1 UDAG = 100,000,000 sats).
-///      The bridge contract holds MINTER_ROLE and BURNER_ROLE.
-///      Implements emergency pause, reentrancy guard, and improved role management.
-contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable, ReentrancyGuard {
-    
-    // ─── Role Definitions ───
+///
+///      Bridge model (escrow + mint):
+///        • Deposit  (Arbitrum → native): bridge calls transferFrom() to lock tokens in escrow.
+///        • Withdraw (native → Arbitrum): bridge calls mint() to create tokens for the claimant.
+///
+///      No burn-by-role is needed under this model. Users may still burn their own
+///      tokens voluntarily via burnSelf().
+///
+///      Post-genesis role lockdown:
+///        • finalizeGenesis() makes MINTER_ROLE permanently un-grantable except
+///          for the bridge, which retains its existing grant.
+///        • A timelock-gated bridge migration path remains available post-genesis
+///          so a compromised bridge can be replaced without redeploying the token.
+///        • renounceAdminRole() is the final decentralisation step and is irreversible.
+contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable {
+
+    // ─── Role Definitions ───────────────────────────────────────────────
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
-    bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
-    
-    // ─── Supply Configuration ───
+
+    // ─── Supply Configuration ───────────────────────────────────────────
     /// @notice Maximum supply: 21,000,000 UDAG with 8 decimal places.
     uint256 public constant MAX_SUPPLY = 21_000_000 * 10 ** 8;
 
-    // ─── Genesis State ───
+    // ─── Genesis State ──────────────────────────────────────────────────
     bool public genesisFinalized;
-    address public bridgeAddress; // Track authorized bridge for monitoring
-    address public genesisMinter; // Stored for finalizeGenesis revocation
+    address public bridgeAddress;
+    address public genesisMinter;
 
-    // ─── Events ───
+    // ─── Bridge Migration Timelock ──────────────────────────────────────
+    /// @notice Minimum delay between proposing and executing a bridge migration.
+    uint256 public constant BRIDGE_MIGRATION_DELAY = 2 days;
+
+    struct BridgeMigration {
+        address newBridge;
+        uint256 executableAfter; // timestamp after which the migration can execute
+    }
+    BridgeMigration public pendingBridgeMigration;
+
+    // ─── Events ─────────────────────────────────────────────────────────
     event GenesisFinalized(uint256 indexed totalSupply, address indexed finalizedBy);
     event BridgeUpdated(address indexed oldBridge, address indexed newBridge);
+    event BridgeMigrationProposed(address indexed newBridge, uint256 executableAfter, address indexed proposedBy);
+    event BridgeMigrationCancelled(address indexed cancelledBridge, address indexed cancelledBy);
     event EmergencyPause(address indexed pausedBy, string reason);
     event EmergencyUnpause(address indexed unpausedBy);
     event AdminRoleRenounced(address indexed formerAdmin);
 
-    /// @notice Constructor - sets up initial roles and configuration
-    /// @param admin Address that will hold DEFAULT_ADMIN_ROLE initially (should be timelock)
-    /// @param initialBridge Address of the bridge contract (can be updated later)
-    /// @param genesisMinter_ Address that can mint genesis allocations (deployer EOA)
-    /// @dev Bridge receives MINTER_ROLE for minting on claims.
-    ///      Genesis minter receives MINTER_ROLE temporarily for genesis minting.
-    ///      Genesis minter role is revoked when finalizeGenesis() is called.
+    // ─── Errors ─────────────────────────────────────────────────────────
+    error ZeroAddress(string param);
+    error MintAmountZero();
+    error BurnAmountZero();
+    error ExceedsMaxSupply(uint256 requested, uint256 remaining);
+    error GenesisAlreadyFinalized();
+    error GenesisNotFinalized();
+    error SameBridgeAddress();
+    error NoPendingMigration();
+    error MigrationTimelockNotElapsed(uint256 executableAfter, uint256 currentTime);
+    error MigrationBridgeMismatch();
+    error MigrationAlreadyPending();
+
+    /// @notice Constructor - sets up initial roles and configuration.
+    /// @param admin       Address that will hold DEFAULT_ADMIN_ROLE (should be a timelock / multisig).
+    /// @param initialBridge Address of the bridge contract.
+    /// @param genesisMinter_ Address that can mint genesis allocations (deployer EOA, temporary).
     constructor(
         address admin,
         address initialBridge,
@@ -50,186 +82,33 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable, ReentrancyGua
         ERC20("UltraDAG", "UDAG")
         ERC20Permit("UltraDAG")
     {
-        require(admin != address(0), "UDAG: admin cannot be zero");
-        require(initialBridge != address(0), "UDAG: bridge cannot be zero");
-        require(genesisMinter_ != address(0), "UDAG: genesis minter cannot be zero");
+        if (admin == address(0))          revert ZeroAddress("admin");
+        if (initialBridge == address(0))  revert ZeroAddress("initialBridge");
+        if (genesisMinter_ == address(0)) revert ZeroAddress("genesisMinter");
 
+        // Admin roles
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
-        _grantRole(MINTER_ROLE, admin);
-        _grantRole(MINTER_ROLE, genesisMinter_); // Temporary for genesis minting
-        _grantRole(PAUSER_ROLE, admin); // Admin can pause initially
+        _grantRole(PAUSER_ROLE, admin);
 
-        genesisMinter = genesisMinter_; // Store for finalizeGenesis revocation
-        bridgeAddress = initialBridge;
-        // Bridge only needs MINTER_ROLE for minting on withdrawal claims
-        // Deposits use transferFrom() to lock tokens - no burn needed
+        // Minting roles (genesis minter is temporary)
+        _grantRole(MINTER_ROLE, admin);
+        _grantRole(MINTER_ROLE, genesisMinter_);
         _grantRole(MINTER_ROLE, initialBridge);
+
+        genesisMinter = genesisMinter_;
+        bridgeAddress = initialBridge;
 
         emit BridgeUpdated(address(0), initialBridge);
     }
 
-    /// @notice Override decimals to match native chain (8 decimals)
+    // ─── ERC-20 Overrides ───────────────────────────────────────────────
+
+    /// @notice 8 decimals to match the native UDAG chain.
     function decimals() public pure override returns (uint8) {
         return 8;
     }
 
-    // ─── Pause Control (Pausable) ───
-    
-    /// @notice Pause all token transfers and minting/burning
-    /// @dev Only callable by PAUSER_ROLE. Useful during emergencies.
-    function pause() external onlyRole(PAUSER_ROLE) whenNotPaused {
-        _pause();
-        emit EmergencyPause(msg.sender, "Emergency pause triggered");
-    }
-
-    /// @notice Resume token operations after emergency
-    /// @dev Only callable by DEFAULT_ADMIN_ROLE to ensure careful review
-    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) whenPaused {
-        _unpause();
-        emit EmergencyUnpause(msg.sender);
-    }
-
-    // ─── Minting Logic ───
-
-    /// @notice Mint tokens. Only callable by addresses with MINTER_ROLE.
-    /// @dev Enforces MAX_SUPPLY ceiling and pause protection.
-    ///      Used by bridge for native-to-Arbitrum transfers.
-    function mint(address to, uint256 amount) 
-        external 
-        onlyRole(MINTER_ROLE) 
-        whenNotPaused 
-        nonReentrant 
-    {
-        require(to != address(0), "UDAG: mint to zero address");
-        require(amount > 0, "UDAG: mint amount must be positive");
-        require(totalSupply() + amount <= MAX_SUPPLY, "UDAG: would exceed max supply");
-        
-        _mint(to, amount);
-    }
-
-    // ─── Burning Logic ───
-
-    /// @notice Burn tokens from an address. Only callable by BURNER_ROLE.
-    /// @dev Used by bridge when tokens move from Arbitrum → native chain.
-    ///      Requires approval if burning from another address.
-    function burn(address from, uint256 amount) 
-        external 
-        onlyRole(BURNER_ROLE) 
-        whenNotPaused 
-        nonReentrant 
-    {
-        require(from != address(0), "UDAG: burn from zero address");
-        require(amount > 0, "UDAG: burn amount must be positive");
-        
-        if (from != msg.sender) {
-            _spendAllowance(from, msg.sender, amount);
-        }
-        _burn(from, amount);
-    }
-
-    /// @notice Burn tokens from caller. Anyone can burn their own tokens.
-    /// @dev Paused during emergencies for consistency with other token operations
-    function burnSelf(uint256 amount) external whenNotPaused nonReentrant {
-        require(amount > 0, "UDAG: burn amount must be positive");
-        _burn(msg.sender, amount);
-    }
-
-    // ─── Genesis Finalization ───
-
-    /// @notice Finalize genesis minting. After this, minter roles are revoked from
-    ///         both the caller (admin) and the genesis minter.
-    /// @dev Should be called after minting dev allocation + treasury.
-    ///      Admin retains DEFAULT_ADMIN_ROLE for emergency functions.
-    function finalizeGenesis() external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
-        require(!genesisFinalized, "UDAG: already finalized");
-
-        genesisFinalized = true;
-        _revokeRole(MINTER_ROLE, msg.sender); // Revoke from caller (admin)
-        _revokeRole(MINTER_ROLE, genesisMinter); // Revoke from genesis minter
-
-        // Lock MINTER_ROLE and BURNER_ROLE permanently: set their role admin
-        // to a role that nobody has, making them unassignable after genesis.
-        // The bridge retains its existing MINTER_ROLE grant, but no new grants
-        // can ever be made.
-        _setRoleAdmin(MINTER_ROLE, bytes32(type(uint256).max));
-        _setRoleAdmin(BURNER_ROLE, bytes32(type(uint256).max));
-
-        emit GenesisFinalized(totalSupply(), msg.sender);
-    }
-
-    // ─── Bridge Management ───
-
-    /// @notice Update the authorized bridge address
-    /// @dev Only DEFAULT_ADMIN_ROLE. Transfers roles from old bridge to new.
-    function updateBridge(address newBridge) external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
-        require(!genesisFinalized, "UDAG: bridge updates locked after genesis");
-        require(newBridge != address(0), "UDAG: new bridge cannot be zero");
-        require(newBridge != bridgeAddress, "UDAG: same bridge address");
-        
-        address oldBridge = bridgeAddress;
-        
-        // Revoke MINTER_ROLE from old bridge
-        _revokeRole(MINTER_ROLE, oldBridge);
-
-        // Grant MINTER_ROLE to new bridge (for minting on withdrawal claims)
-        // Bridge does NOT need BURNER_ROLE: deposits use transferFrom (escrow), not burn
-        _grantRole(MINTER_ROLE, newBridge);
-        
-        bridgeAddress = newBridge;
-        emit BridgeUpdated(oldBridge, newBridge);
-    }
-
-    // ─── Administrative Functions ───
-
-    /// @notice Allow admin to voluntarily renounce DEFAULT_ADMIN_ROLE
-    /// @dev IRREVERSIBLE. Use only when ready to fully decentralize.
-    function renounceAdminRole() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        // Prevent renouncing if genesis not finalized (safety check)
-        require(genesisFinalized, "UDAG: finalize genesis first");
-        
-        _revokeRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _revokeRole(PAUSER_ROLE, msg.sender); // Also remove pause ability
-        
-        emit AdminRoleRenounced(msg.sender);
-    }
-
-    /// @notice Grant PAUSER_ROLE to a new address
-    /// @dev Separates emergency pause capability from full admin powers
-    function grantPauserRole(address account) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(account != address(0), "UDAG: zero address");
-        _grantRole(PAUSER_ROLE, account);
-    }
-
-    /// @notice Revoke PAUSER_ROLE from an address
-    function revokePauserRole(address account) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        _revokeRole(PAUSER_ROLE, account);
-    }
-
-    // ─── View Functions for Monitoring ───
-
-    /// @notice Check if an address has minting privileges
-    function isMinter(address account) external view returns (bool) {
-        return hasRole(MINTER_ROLE, account);
-    }
-
-    /// @notice Check if an address has burning privileges
-    function isBurner(address account) external view returns (bool) {
-        return hasRole(BURNER_ROLE, account);
-    }
-
-    /// @notice Check if contract is currently paused
-    function isPaused() external view returns (bool) {
-        return paused();
-    }
-
-    /// @notice Get remaining mintable supply
-    function remainingSupply() external view returns (uint256) {
-        return MAX_SUPPLY - totalSupply();
-    }
-
-    // ─── Override _update for pause enforcement ───
-    /// @dev In OZ v5, _update replaces _beforeTokenTransfer.
-    ///      Enforces pause on all token transfers, mints, and burns.
+    /// @dev Enforces pause on all token movements (transfers, mints, burns).
     function _update(
         address from,
         address to,
@@ -238,6 +117,196 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable, ReentrancyGua
         super._update(from, to, value);
     }
 
-    // ─── Support for EIP-712 Domain (inherited from ERC20Permit) ───
-    // No changes needed - OpenZeppelin handles domain separation correctly
+    // ─── Pause Control ──────────────────────────────────────────────────
+
+    /// @notice Pause all token transfers and minting.
+    /// @param reason Human-readable reason for the pause (emitted in the event).
+    function pause(string calldata reason) external onlyRole(PAUSER_ROLE) whenNotPaused {
+        _pause();
+        emit EmergencyPause(msg.sender, reason);
+    }
+
+    /// @notice Resume token operations after an emergency.
+    /// @dev Only DEFAULT_ADMIN_ROLE to ensure careful review before unpausing.
+    function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) whenPaused {
+        _unpause();
+        emit EmergencyUnpause(msg.sender);
+    }
+
+    // ─── Minting ────────────────────────────────────────────────────────
+
+    /// @notice Mint tokens. Only callable by MINTER_ROLE.
+    /// @dev Used by the bridge for native → Arbitrum withdrawal claims,
+    ///      and by admin/genesisMinter for pre-genesis allocations.
+    function mint(address to, uint256 amount)
+        external
+        onlyRole(MINTER_ROLE)
+        whenNotPaused
+    {
+        if (to == address(0)) revert ZeroAddress("to");
+        if (amount == 0)      revert MintAmountZero();
+
+        uint256 remaining = MAX_SUPPLY - totalSupply();
+        if (amount > remaining) revert ExceedsMaxSupply(amount, remaining);
+
+        _mint(to, amount);
+    }
+
+    // ─── Burning ────────────────────────────────────────────────────────
+
+    /// @notice Burn tokens from the caller. Anyone can burn their own tokens.
+    function burnSelf(uint256 amount) external whenNotPaused {
+        if (amount == 0) revert BurnAmountZero();
+        _burn(msg.sender, amount);
+    }
+
+    // ─── Genesis Finalization ───────────────────────────────────────────
+
+    /// @notice Finalize genesis minting.
+    /// @dev Revokes MINTER_ROLE from admin and genesisMinter, then permanently
+    ///      locks MINTER_ROLE so no new grants can ever be made.
+    ///      The bridge retains its existing MINTER_ROLE grant.
+    function finalizeGenesis() external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
+        if (genesisFinalized) revert GenesisAlreadyFinalized();
+
+        genesisFinalized = true;
+
+        _revokeRole(MINTER_ROLE, msg.sender);
+        _revokeRole(MINTER_ROLE, genesisMinter);
+
+        // Set MINTER_ROLE's admin to a role nobody holds, permanently preventing
+        // new grants. The bridge keeps its existing grant.
+        _setRoleAdmin(MINTER_ROLE, bytes32(type(uint256).max));
+
+        emit GenesisFinalized(totalSupply(), msg.sender);
+    }
+
+    // ─── Bridge Management ──────────────────────────────────────────────
+    //
+    //  Pre-genesis  : updateBridge() for immediate swaps (deployment flexibility).
+    //  Post-genesis : two-step timelock migration via proposeBridgeMigration()
+    //                 + executeBridgeMigration() for safety.
+
+    /// @notice Immediately update the bridge address. Only available before genesis.
+    function updateBridge(address newBridge) external onlyRole(DEFAULT_ADMIN_ROLE) whenNotPaused {
+        if (genesisFinalized)            revert GenesisAlreadyFinalized();
+        if (newBridge == address(0))     revert ZeroAddress("newBridge");
+        if (newBridge == bridgeAddress)  revert SameBridgeAddress();
+
+        address oldBridge = bridgeAddress;
+
+        _revokeRole(MINTER_ROLE, oldBridge);
+        _grantRole(MINTER_ROLE, newBridge);
+
+        bridgeAddress = newBridge;
+        emit BridgeUpdated(oldBridge, newBridge);
+    }
+
+    /// @notice Propose a post-genesis bridge migration (timelock-gated).
+    /// @dev Starts a BRIDGE_MIGRATION_DELAY countdown. Can be cancelled by admin.
+    function proposeBridgeMigration(address newBridge)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        whenNotPaused
+    {
+        if (!genesisFinalized)           revert GenesisNotFinalized();
+        if (newBridge == address(0))     revert ZeroAddress("newBridge");
+        if (newBridge == bridgeAddress)  revert SameBridgeAddress();
+        if (pendingBridgeMigration.newBridge != address(0)) revert MigrationAlreadyPending();
+
+        uint256 executableAfter = block.timestamp + BRIDGE_MIGRATION_DELAY;
+        pendingBridgeMigration = BridgeMigration({
+            newBridge: newBridge,
+            executableAfter: executableAfter
+        });
+
+        emit BridgeMigrationProposed(newBridge, executableAfter, msg.sender);
+    }
+
+    /// @notice Execute a previously proposed bridge migration after the timelock.
+    /// @dev The MINTER_ROLE admin is locked post-genesis, so we cannot use
+    ///      _grantRole/_revokeRole directly. Instead we transfer the bridge's
+    ///      minter capability by low-level role slot manipulation:
+    ///        1. Temporarily reset MINTER_ROLE admin to DEFAULT_ADMIN_ROLE.
+    ///        2. Revoke from old bridge, grant to new bridge.
+    ///        3. Re-lock MINTER_ROLE admin.
+    function executeBridgeMigration()
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+        whenNotPaused
+    {
+        BridgeMigration memory migration = pendingBridgeMigration;
+
+        if (migration.newBridge == address(0)) revert NoPendingMigration();
+        if (block.timestamp < migration.executableAfter) {
+            revert MigrationTimelockNotElapsed(migration.executableAfter, block.timestamp);
+        }
+
+        address oldBridge = bridgeAddress;
+
+        // Temporarily unlock MINTER_ROLE for role transfer
+        _setRoleAdmin(MINTER_ROLE, DEFAULT_ADMIN_ROLE);
+        _revokeRole(MINTER_ROLE, oldBridge);
+        _grantRole(MINTER_ROLE, migration.newBridge);
+        // Re-lock MINTER_ROLE permanently
+        _setRoleAdmin(MINTER_ROLE, bytes32(type(uint256).max));
+
+        bridgeAddress = migration.newBridge;
+
+        // Clear pending migration
+        delete pendingBridgeMigration;
+
+        emit BridgeUpdated(oldBridge, migration.newBridge);
+    }
+
+    /// @notice Cancel a pending bridge migration.
+    function cancelBridgeMigration() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        address pending = pendingBridgeMigration.newBridge;
+        if (pending == address(0)) revert NoPendingMigration();
+
+        delete pendingBridgeMigration;
+
+        emit BridgeMigrationCancelled(pending, msg.sender);
+    }
+
+    // ─── Administrative Functions ───────────────────────────────────────
+
+    /// @notice Irreversibly renounce DEFAULT_ADMIN_ROLE (full decentralisation).
+    /// @dev Only callable after genesis is finalized. Also removes PAUSER_ROLE.
+    function renounceAdminRole() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (!genesisFinalized) revert GenesisNotFinalized();
+
+        _revokeRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _revokeRole(PAUSER_ROLE, msg.sender);
+
+        emit AdminRoleRenounced(msg.sender);
+    }
+
+    /// @notice Grant PAUSER_ROLE to a new address (e.g., monitoring bot).
+    function grantPauserRole(address account) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (account == address(0)) revert ZeroAddress("account");
+        _grantRole(PAUSER_ROLE, account);
+    }
+
+    /// @notice Revoke PAUSER_ROLE from an address.
+    function revokePauserRole(address account) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _revokeRole(PAUSER_ROLE, account);
+    }
+
+    // ─── View Functions ─────────────────────────────────────────────────
+
+    /// @notice Check if an address has minting privileges.
+    function isMinter(address account) external view returns (bool) {
+        return hasRole(MINTER_ROLE, account);
+    }
+
+    /// @notice Whether the contract is currently paused.
+    function isPaused() external view returns (bool) {
+        return paused();
+    }
+
+    /// @notice Remaining tokens that can be minted before hitting MAX_SUPPLY.
+    function remainingSupply() external view returns (uint256) {
+        return MAX_SUPPLY - totalSupply();
+    }
 }

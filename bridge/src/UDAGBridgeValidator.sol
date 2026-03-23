@@ -5,39 +5,55 @@ import "./UDAGToken.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-/// @title UltraDAG Validator Federation Bridge - Hardened
-/// @notice Bridge secured by UltraDAG validator set (2/3 threshold).
-/// @dev No external relayers! DAG validators sign attestations as part of consensus.
-///      Includes reentrancy guard, internal hash computation, and emergency controls.
+/// @title UltraDAG Validator Federation Bridge
+/// @notice Bridge secured by UltraDAG validator set (strict >2/3 BFT threshold).
+/// @dev No external relayers — DAG validators sign attestations as part of consensus.
+///
+///      Bridge model:
+///        • Deposit  (Arbitrum → native): user locks UDAG in escrow via transferFrom.
+///        • Withdraw (native → Arbitrum): validators attest, bridge mints UDAG to recipient.
+///
+///      Security measures:
+///        • Reentrancy guard on all state-mutating external functions.
+///        • Internal hash computation (never trust user-provided hashes).
+///        • EIP-191 personal sign prefix for ecrecover.
+///        • Strict signature ordering with no gaps — every signature must recover
+///          to a valid validator; non-validator signers cause a revert, not a skip.
+///        • Rate limiting (per-tx and daily caps) on deposits and withdrawals.
+///        • Two-step governor transfer.
+///        • Bridge auto-enables once MIN_VALIDATORS are registered.
 contract UDAGBridgeValidator is ReentrancyGuard {
     using SafeERC20 for IERC20;
-    
+
     UDAGToken public immutable token;
-    address public governor;
-    address public pendingGovernor;
-    bool public paused;
-    
-    // ─── Validator Set Management ───
+    address   public governor;
+    address   public pendingGovernor;
+    bool      public paused;
+
+    // ─── Validator Set Management ────────────────────────────────────────
     mapping(address => bool) public isValidator;
     address[] public validators;
-    uint256 public threshold; // 2/3 of validator count
-    uint256 public constant MIN_VALIDATORS = 3; // Safety minimum
-    uint256 public constant MAX_VALIDATORS = 100; // Prevent DoS via gas exhaustion
-    bool public bridgeEnabled; // Bridge operations disabled until minimum validators set
-    
-    // ─── Replay Protection ───
-    uint256 public nonce;
-    mapping(uint256 => bool) public usedNonces;
-    
-    // ─── Rate Limiting ───
-    uint256 public constant MIN_DEPOSIT = 1 * 10 ** 8; // 1 UDAG = 10^8 smallest units
-    uint256 public constant MAX_DEPOSIT = 100_000 * 10 ** 8; // 100K UDAG per tx
-    uint256 public constant DAILY_WITHDRAWAL_LIMIT = 500_000 * 10 ** 8; // 500K UDAG/day
-    uint256 public constant DAILY_DEPOSIT_LIMIT = 500_000 * 10 ** 8; // 500K UDAG/day
-    mapping(uint256 => uint256) public dailyWithdrawalVolume; // date → volume
-    mapping(uint256 => uint256) public dailyDepositVolume; // date → volume
-    
-    // ─── Events ───
+    uint256   public threshold;
+
+    uint256 public constant MIN_VALIDATORS = 3;
+    uint256 public constant MAX_VALIDATORS = 100;
+    bool    public bridgeEnabled;
+
+    // ─── Replay Protection ──────────────────────────────────────────────
+    /// @dev Monotonic counter used to assign deposit nonces.
+    uint256 public depositNonceCounter;
+    /// @dev Guards withdrawal replay: each native-chain nonce may only be claimed once.
+    mapping(uint256 => bool) public usedWithdrawalNonces;
+
+    // ─── Rate Limiting ──────────────────────────────────────────────────
+    uint256 public constant MIN_AMOUNT       = 1 * 10 ** 8;        // 1 UDAG
+    uint256 public constant MAX_AMOUNT       = 100_000 * 10 ** 8;  // 100K UDAG per tx
+    uint256 public constant DAILY_LIMIT      = 500_000 * 10 ** 8;  // 500K UDAG per day
+
+    mapping(uint256 => uint256) public dailyWithdrawalVolume; // day-index → volume
+    mapping(uint256 => uint256) public dailyDepositVolume;    // day-index → volume
+
+    // ─── Events ─────────────────────────────────────────────────────────
     event DepositMade(
         address indexed sender,
         bytes20 indexed nativeRecipient,
@@ -47,16 +63,16 @@ contract UDAGBridgeValidator is ReentrancyGuard {
     );
 
     event WithdrawalClaimed(
-        bytes20 indexed sender,
+        bytes20 indexed nativeSender,
         address indexed recipient,
         uint256 amount,
-        uint256 indexed nonce
+        uint256 indexed withdrawalNonce
     );
 
     event ValidatorAdded(address indexed validator);
     event ValidatorRemoved(address indexed validator);
     event ThresholdUpdated(uint256 newThreshold);
-    event EmergencyWithdrawal(address indexed token, address indexed to, uint256 amount);
+    event EmergencyWithdrawal(address indexed tokenAddr, address indexed to, uint256 amount);
     event BridgePaused(address indexed pausedBy);
     event BridgeUnpaused(address indexed unpausedBy);
     event PendingGovernorSet(address indexed currentGovernor, address indexed pendingGovernor);
@@ -64,305 +80,306 @@ contract UDAGBridgeValidator is ReentrancyGuard {
     event BridgeMigration(address indexed newBridge, uint256 amount);
     event ETHReceived(address indexed sender, uint256 amount);
     event BridgeEnabled();
-    
-    // ─── Errors ───
+
+    // ─── Errors ─────────────────────────────────────────────────────────
+    error ZeroAddress(string param);
     error BridgeIsPaused();
-    error AmountTooSmall();
-    error AmountTooLarge();
-    error InvalidRecipient();
+    error BridgeNotPaused();
+    error BridgeNotEnabled();
+    error AmountBelowMinimum(uint256 amount, uint256 minimum);
+    error AmountAboveMaximum(uint256 amount, uint256 maximum);
+    error DailyLimitExceeded(uint256 requested, uint256 remaining);
+    error NonceAlreadyUsed(uint256 nonce);
     error NotGovernor();
-    error InvalidSignature();
-    error InsufficientSignatures();
-    error NonceAlreadyUsed();
-    error InvalidValidatorSet();
-    error DailyLimitExceeded();
-    error MinValidatorsNotMet();
-    error SignatureNotSorted();
-    error MalleableSignature();
     error NotPendingGovernor();
-    error NotPaused();
-    
-    // ─── Modifiers ───
+    error ValidatorAlreadyRegistered(address validator);
+    error ValidatorNotRegistered(address validator);
+    error ValidatorSetFull();
+    error BelowMinValidators(uint256 current, uint256 minimum);
+    error BelowBFTMinimum(uint256 proposed, uint256 bftMinimum);
+    error InvalidSignatureLength(uint256 length);
+    error TooFewSignatures(uint256 provided, uint256 required);
+    error TooManySignatures(uint256 provided, uint256 validatorCount);
+    error MalleableSignature(uint256 index);
+    error InvalidVValue(uint256 index, uint8 v);
+    error RecoveredZeroAddress(uint256 index);
+    error SignerNotValidator(uint256 index, address signer);
+    error SignersNotSorted(uint256 index, address current, address previous);
+    error CannotDrainManagedToken();
+    error ETHTransferFailed();
+
+    // ─── Modifiers ──────────────────────────────────────────────────────
     modifier onlyGovernor() {
         if (msg.sender != governor) revert NotGovernor();
         _;
     }
-    
+
     modifier whenNotPaused() {
         if (paused) revert BridgeIsPaused();
         _;
     }
-    
-    // ─── Constructor ───
+
+    modifier whenPaused() {
+        if (!paused) revert BridgeNotPaused();
+        _;
+    }
+
+    // ─── Constructor ────────────────────────────────────────────────────
     constructor(address _token, address _governor) {
-        if (_token == address(0) || _governor == address(0)) revert InvalidRecipient();
-        token = UDAGToken(_token);
+        if (_token == address(0))    revert ZeroAddress("token");
+        if (_governor == address(0)) revert ZeroAddress("governor");
+        token    = UDAGToken(_token);
         governor = _governor;
     }
-    
-    // ─── Bridge: Arbitrum → Native (Deposit) ───
 
-    /// @notice Deposit UDAG for bridging to native chain.
-    /// @dev Validators will sign attestation on native chain.
-    ///      Bridge must be enabled (minimum validators set).
+    // ═══════════════════════════════════════════════════════════════════
+    //  BRIDGE OPERATIONS
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// @notice Lock UDAG in escrow for bridging to the native chain.
+    /// @param nativeRecipient 20-byte address on the native UDAG chain.
+    /// @param amount          Amount of UDAG (8-decimal) to bridge.
     function deposit(bytes20 nativeRecipient, uint256 amount)
         external
         whenNotPaused
         nonReentrant
     {
-        if (!bridgeEnabled) revert InvalidValidatorSet();
-        if (nativeRecipient == bytes20(0)) revert InvalidRecipient();
-        if (amount < MIN_DEPOSIT) revert AmountTooSmall();
-        if (amount > MAX_DEPOSIT) revert AmountTooLarge();
+        if (!bridgeEnabled)               revert BridgeNotEnabled();
+        if (nativeRecipient == bytes20(0)) revert ZeroAddress("nativeRecipient");
+        _validateAmount(amount);
 
-        // Rate limiting: check daily deposit volume
         uint256 today = block.timestamp / 1 days;
-        if (dailyDepositVolume[today] + amount > DAILY_DEPOSIT_LIMIT) {
-            revert DailyLimitExceeded();
+        uint256 usedToday = dailyDepositVolume[today];
+        if (usedToday + amount > DAILY_LIMIT) {
+            revert DailyLimitExceeded(amount, DAILY_LIMIT - usedToday);
         }
 
-        // Transfer tokens into bridge escrow using SafeERC20
         IERC20(address(token)).safeTransferFrom(msg.sender, address(this), amount);
 
-        // Safe: DAILY_DEPOSIT_LIMIT (500K UDAG = 5e13) << type(uint256).max
-        unchecked {
-            dailyDepositVolume[today] += amount;
-        }
+        // Safe: DAILY_LIMIT (5e13) << type(uint256).max
+        unchecked { dailyDepositVolume[today] = usedToday + amount; }
 
-        uint256 depositNonce = nonce++;
+        uint256 thisNonce = depositNonceCounter++;
 
-        emit DepositMade(msg.sender, nativeRecipient, amount, depositNonce, block.chainid);
+        emit DepositMade(msg.sender, nativeRecipient, amount, thisNonce, block.chainid);
     }
-    
-    // ─── Bridge: Native → Arbitrum (Claim Withdrawal) ───
-    
-    /// @notice Claim withdrawal on Arbitrum with validator signatures.
-    /// @dev Requires 2/3+ validator signatures (BFT threshold).
-    ///      Message hash is computed internally to prevent forgery.
-    ///      Bridge must be enabled (minimum validators set).
-    /// @param sender Original sender on native chain
-    /// @param recipient Recipient on Arbitrum
-    /// @param amount Amount to mint
-    /// @param depositNonce Unique nonce for this withdrawal
-    /// @param signatures Concatenated signatures (65 bytes each: r, s, v)
+
+    /// @notice Claim a withdrawal on Arbitrum backed by validator attestations.
+    /// @param nativeSender    Original sender on the native chain.
+    /// @param recipient       Recipient on Arbitrum.
+    /// @param amount          Amount to mint.
+    /// @param withdrawalNonce Unique nonce for this withdrawal (assigned on native chain).
+    /// @param signatures      Concatenated 65-byte ECDSA signatures (r‖s‖v), sorted by
+    ///                        recovered signer address ascending. Every signature must
+    ///                        recover to a registered validator.
     function claimWithdrawal(
-        bytes20 sender,
+        bytes20 nativeSender,
         address recipient,
         uint256 amount,
-        uint256 depositNonce,
+        uint256 withdrawalNonce,
         bytes calldata signatures
     )
         external
         whenNotPaused
         nonReentrant
     {
-        if (!bridgeEnabled) revert InvalidValidatorSet();
-        if (recipient == address(0)) revert InvalidRecipient();
-        if (amount < MIN_DEPOSIT) revert AmountTooSmall();
-        if (amount > MAX_DEPOSIT) revert AmountTooLarge();
-        if (usedNonces[depositNonce]) revert NonceAlreadyUsed();
+        if (!bridgeEnabled)                    revert BridgeNotEnabled();
+        if (recipient == address(0))           revert ZeroAddress("recipient");
+        if (usedWithdrawalNonces[withdrawalNonce]) revert NonceAlreadyUsed(withdrawalNonce);
+        _validateAmount(amount);
 
-        // Rate limiting: check daily withdrawal volume
         uint256 today = block.timestamp / 1 days;
-        if (dailyWithdrawalVolume[today] + amount > DAILY_WITHDRAWAL_LIMIT) {
-            revert DailyLimitExceeded();
+        uint256 usedToday = dailyWithdrawalVolume[today];
+        if (usedToday + amount > DAILY_LIMIT) {
+            revert DailyLimitExceeded(amount, DAILY_LIMIT - usedToday);
         }
 
-        // ⚠️ CRITICAL: Compute message hash internally - NEVER trust user-provided hash
-        bytes32 messageHash = _getMessageHashInternal(
-            sender,
-            recipient,
-            amount,
-            depositNonce
+        bytes32 messageHash = _computeWithdrawalHash(
+            nativeSender, recipient, amount, withdrawalNonce
         );
 
-        // Verify threshold signatures from validators
         _verifyThresholdSignatures(messageHash, signatures);
 
-        // Mark nonce as used AND update daily volume
-        usedNonces[depositNonce] = true;
-        // Safe: DAILY_WITHDRAWAL_LIMIT (500K UDAG = 5e13) << type(uint256).max (1.1e77)
-        // Overflow would require 2.2e63 days of max withdrawals (~6e60 years)
-        unchecked {
-            dailyWithdrawalVolume[today] += amount;
-        }
-        
-        // Mint tokens to recipient
+        usedWithdrawalNonces[withdrawalNonce] = true;
+        unchecked { dailyWithdrawalVolume[today] = usedToday + amount; }
+
         token.mint(recipient, amount);
 
-        emit WithdrawalClaimed(sender, recipient, amount, depositNonce);
+        emit WithdrawalClaimed(nativeSender, recipient, amount, withdrawalNonce);
     }
-    
-    // ─── Internal: Message Hash Computation ───
-    
-    /// @notice Compute message hash internally (prevents forgery attacks).
-    function _getMessageHashInternal(
-        bytes20 sender,
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  MESSAGE HASH
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// @dev Internal hash — never expose raw hashes to callers for signing.
+    function _computeWithdrawalHash(
+        bytes20 nativeSender,
         address recipient,
         uint256 amount,
-        uint256 depositNonce
+        uint256 withdrawalNonce
     ) internal view returns (bytes32) {
         return keccak256(abi.encode(
-            "claimWithdrawal",
-            block.chainid,        // Domain separation by chain
-            address(this),        // Bridge address for replay protection across deployments
-            sender,
+            "UDAGBridge::claimWithdrawal",  // Domain tag
+            block.chainid,                   // Chain separation
+            address(this),                   // Deployment separation
+            nativeSender,
             recipient,
             amount,
-            depositNonce
+            withdrawalNonce
         ));
     }
-    
-    /// @notice Public view function for off-chain signature generation.
-    /// @dev Validators must sign the returned hash using eth_sign (EIP-191),
-    ///      which automatically adds "\x19Ethereum Signed Message:\n32" prefix.
-    function getMessageHash(
-        bytes20 sender,
+
+    /// @notice Off-chain helper: returns the hash validators must sign.
+    /// @dev Validators sign this hash using eth_sign (which prepends EIP-191 prefix).
+    function getWithdrawalHash(
+        bytes20 nativeSender,
         address recipient,
         uint256 amount,
-        uint256 depositNonce
+        uint256 withdrawalNonce
     ) external view returns (bytes32) {
-        return _getMessageHashInternal(sender, recipient, amount, depositNonce);
+        return _computeWithdrawalHash(nativeSender, recipient, amount, withdrawalNonce);
     }
-    
-    // ─── Signature Verification ───
-    
-    /// @notice Verify threshold signatures from validators.
-    /// @dev Enforces: unique signers, sorted order, validator membership.
-    ///      Uses EIP-191 personal sign prefix for ecrecover.
-    ///      Validators must sign using eth_sign (which adds the prefix automatically).
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  SIGNATURE VERIFICATION
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// @dev Verify that `signatures` contains at least `threshold` valid
+    ///      validator signatures over `messageHash`.
+    ///
+    ///      CRITICAL INVARIANTS:
+    ///        1. Every signature must recover to a registered validator — non-validators
+    ///           cause a revert, not a skip. This prevents an attacker from inserting
+    ///           garbage signatures to create gaps in the sorted-order check.
+    ///        2. Recovered addresses must be strictly ascending (no duplicates).
+    ///        3. Malleable signatures (high-s) are rejected.
     function _verifyThresholdSignatures(
         bytes32 messageHash,
         bytes calldata signatures
     ) internal view {
-        // Validate signature length (each signature is exactly 65 bytes)
-        if (signatures.length % 65 != 0) revert InvalidSignature();
+        uint256 len = signatures.length;
+        if (len == 0 || len % 65 != 0) revert InvalidSignatureLength(len);
 
-        uint256 sigCount = signatures.length / 65;
-        if (sigCount < threshold) revert InsufficientSignatures();
-        if (sigCount > validators.length) revert InvalidSignature();
+        uint256 sigCount = len / 65;
+        if (sigCount < threshold)        revert TooFewSignatures(sigCount, threshold);
+        if (sigCount > validators.length) revert TooManySignatures(sigCount, validators.length);
 
         // EIP-191 personal sign prefix
-        bytes32 ethSignedMessageHash = keccak256(
+        bytes32 ethSignedHash = keccak256(
             abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash)
         );
 
-        address lastSigner = address(0);
-        uint256 validCount = 0;
+        address lastSigner;
 
-        for (uint256 i = 0; i < sigCount; i++) {
-            // Extract signature components safely
-            bytes32 r;
-            bytes32 s;
-            uint8 v;
-            uint256 offset = i * 65;
+        for (uint256 i; i < sigCount; ++i) {
+            (bytes32 r, bytes32 s, uint8 v) = _extractSignature(signatures, i);
 
-            assembly {
-                r := calldataload(add(signatures.offset, offset))
-                s := calldataload(add(signatures.offset, add(offset, 32)))
-                v := byte(0, calldataload(add(signatures.offset, add(offset, 64))))
+            // Reject malleable signatures (s in upper half of the curve)
+            if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) {
+                revert MalleableSignature(i);
             }
 
-            // M5: Reject malleable signatures (s-value upper half)
-            if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) revert MalleableSignature();
+            // Normalise v
+            if (v == 0 || v == 1) v += 27;
+            if (v != 27 && v != 28) revert InvalidVValue(i, v);
 
-            // Reconstruct signer address from EIP-191 prefixed hash
-            address signer;
-            if (v == 27 || v == 28) {
-                signer = ecrecover(ethSignedMessageHash, v, r, s);
-            } else if (v == 0 || v == 1) {
-                // EIP-155 chain-specific v value - normalize to 27/28
-                signer = ecrecover(ethSignedMessageHash, v + 27, r, s);
-            } else {
-                revert InvalidSignature();
-            }
+            address signer = ecrecover(ethSignedHash, v, r, s);
+            if (signer == address(0)) revert RecoveredZeroAddress(i);
 
-            if (signer == address(0)) revert InvalidSignature();
+            // CRITICAL: every signer MUST be a validator — no skipping
+            if (!isValidator[signer]) revert SignerNotValidator(i, signer);
 
-            // Verify signer is an active validator
-            if (!isValidator[signer]) continue;
-
-            // Enforce unique, sorted signers to prevent double-counting attacks
-            if (signer <= lastSigner) revert SignatureNotSorted();
+            // Strictly ascending order — prevents double-counting
+            if (signer <= lastSigner) revert SignersNotSorted(i, signer, lastSigner);
             lastSigner = signer;
-            validCount++;
         }
-
-        if (validCount < threshold) revert InsufficientSignatures();
+        // If we reach here, sigCount >= threshold and all are unique valid validators.
     }
-    
-    // ─── Validator Management ───
 
-    /// @notice Add a new validator to the set.
-    /// @dev Bridge is automatically enabled when minimum validators reached.
+    /// @dev Extract (r, s, v) from a concatenated signature blob at position `index`.
+    function _extractSignature(bytes calldata signatures, uint256 index)
+        internal
+        pure
+        returns (bytes32 r, bytes32 s, uint8 v)
+    {
+        uint256 offset = index * 65;
+        assembly {
+            r := calldataload(add(signatures.offset, offset))
+            s := calldataload(add(signatures.offset, add(offset, 32)))
+            v := byte(0, calldataload(add(signatures.offset, add(offset, 64))))
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  VALIDATOR MANAGEMENT
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// @notice Register a new validator. Auto-enables the bridge at MIN_VALIDATORS.
     function addValidator(address validator) external onlyGovernor whenNotPaused {
-        if (validator == address(0)) revert InvalidRecipient();
-        if (isValidator[validator]) revert InvalidValidatorSet();
-        if (validators.length >= MAX_VALIDATORS) revert InvalidValidatorSet();
+        if (validator == address(0))  revert ZeroAddress("validator");
+        if (isValidator[validator])   revert ValidatorAlreadyRegistered(validator);
+        if (validators.length >= MAX_VALIDATORS) revert ValidatorSetFull();
 
         isValidator[validator] = true;
         validators.push(validator);
-
         _updateThreshold();
-        
-        // Enable bridge operations when minimum validators reached
+
         if (!bridgeEnabled && validators.length >= MIN_VALIDATORS) {
             bridgeEnabled = true;
             emit BridgeEnabled();
         }
-        
+
         emit ValidatorAdded(validator);
     }
-    
-    /// @notice Remove a validator from the set.
-    /// @dev Enforces MIN_VALIDATORS to prevent centralization attacks.
+
+    /// @notice Remove a validator. Cannot drop below MIN_VALIDATORS.
     function removeValidator(address validator) external onlyGovernor whenNotPaused {
-        if (!isValidator[validator]) revert InvalidValidatorSet();
-        if (validators.length <= MIN_VALIDATORS) revert MinValidatorsNotMet();
-        
+        if (!isValidator[validator]) revert ValidatorNotRegistered(validator);
+        if (validators.length <= MIN_VALIDATORS) {
+            revert BelowMinValidators(validators.length, MIN_VALIDATORS);
+        }
+
         isValidator[validator] = false;
-        
-        // Efficient removal: swap with last element then pop
-        for (uint256 i = 0; i < validators.length; i++) {
+
+        // Swap-and-pop removal
+        uint256 len = validators.length;
+        for (uint256 i; i < len; ++i) {
             if (validators[i] == validator) {
-                validators[i] = validators[validators.length - 1];
+                validators[i] = validators[len - 1];
                 validators.pop();
                 break;
             }
         }
-        
+
         _updateThreshold();
         emit ValidatorRemoved(validator);
     }
-    
-    /// @notice Update threshold to strictly >2/3 of validator count.
-    /// @dev Formula: floor(2n/3) + 1, which gives:
-    ///      n=3: 3 (unanimous), n=4: 3, n=5: 4, n=21: 15
+
+    /// @dev Recalculate threshold: floor(2n/3) + 1 for n ≥ MIN_VALIDATORS.
     function _updateThreshold() internal {
-        uint256 validatorCount = validators.length;
-        if (validatorCount < MIN_VALIDATORS) {
-            threshold = validatorCount; // Allow bootstrapping
-        } else {
-            // Strict BFT: floor(2n/3) + 1 ensures threshold > 2n/3
-            threshold = (2 * validatorCount) / 3 + 1;
-        }
+        uint256 n = validators.length;
+        threshold = (n < MIN_VALIDATORS) ? n : (2 * n) / 3 + 1;
         emit ThresholdUpdated(threshold);
     }
-    
-    /// @notice Set custom threshold (emergency/testing only).
-    /// @dev Enforces BFT minimum of ceil(2n/3) when enough validators exist.
+
+    /// @notice Override threshold (must still satisfy BFT minimum).
     function setThreshold(uint256 newThreshold) external onlyGovernor whenNotPaused {
-        if (newThreshold == 0 || newThreshold > validators.length) revert InvalidValidatorSet();
-        // Enforce BFT minimum when validator count is at or above MIN_VALIDATORS
-        if (validators.length >= MIN_VALIDATORS) {
-            uint256 bftMinimum = (2 * validators.length) / 3 + 1;
-            require(newThreshold >= bftMinimum, "Below BFT minimum");
+        uint256 n = validators.length;
+        if (newThreshold == 0 || newThreshold > n) {
+            revert BelowMinValidators(newThreshold, 1);
+        }
+        if (n >= MIN_VALIDATORS) {
+            uint256 bftMin = (2 * n) / 3 + 1;
+            if (newThreshold < bftMin) revert BelowBFTMinimum(newThreshold, bftMin);
         }
         threshold = newThreshold;
         emit ThresholdUpdated(newThreshold);
     }
-    
-    // ─── Admin Functions ───
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  GOVERNANCE
+    // ═══════════════════════════════════════════════════════════════════
 
     function pause() external onlyGovernor {
         paused = true;
@@ -373,91 +390,111 @@ contract UDAGBridgeValidator is ReentrancyGuard {
         paused = false;
         emit BridgeUnpaused(msg.sender);
     }
-    
-    /// @notice Initiate governor transfer (2-step).
-    /// @dev New governor must call acceptGovernor() to complete the transfer.
+
+    /// @notice Begin two-step governor transfer.
     function setGovernor(address newGovernor) external onlyGovernor {
-        if (newGovernor == address(0)) revert InvalidRecipient();
+        if (newGovernor == address(0)) revert ZeroAddress("newGovernor");
         pendingGovernor = newGovernor;
         emit PendingGovernorSet(governor, newGovernor);
     }
 
-    /// @notice Accept governor role. Only callable by pendingGovernor.
+    /// @notice Complete governor transfer.
     function acceptGovernor() external {
         if (msg.sender != pendingGovernor) revert NotPendingGovernor();
         address old = governor;
-        governor = pendingGovernor;
+        governor = msg.sender;
         pendingGovernor = address(0);
-        emit GovernorAccepted(old, governor);
+        emit GovernorAccepted(old, msg.sender);
     }
-    
-    // ─── Bridge Migration ───
 
-    /// @notice Migrate escrowed UDAG to a new bridge contract.
-    /// @dev Only callable by governor when paused (safety measure).
-    ///      Intended to be called via timelock for operational safety.
-    function migrateToNewBridge(address newBridge, uint256 amount) external onlyGovernor nonReentrant {
-        if (!paused) revert NotPaused();
-        if (newBridge == address(0)) revert InvalidRecipient();
+    // ═══════════════════════════════════════════════════════════════════
+    //  MIGRATION & EMERGENCY
+    // ═══════════════════════════════════════════════════════════════════
 
+    /// @notice Migrate escrowed UDAG to a new bridge. Only when paused.
+    function migrateToNewBridge(address newBridge, uint256 amount)
+        external
+        onlyGovernor
+        whenPaused
+        nonReentrant
+    {
+        if (newBridge == address(0)) revert ZeroAddress("newBridge");
         IERC20(address(token)).safeTransfer(newBridge, amount);
         emit BridgeMigration(newBridge, amount);
     }
 
-    // ─── Emergency Recovery ───
-    
-    /// @notice Emergency withdrawal of stuck ERC20 tokens.
-    /// @dev Should be gated by timelock/multisig in production.
-    ///      Only for tokens OTHER than the managed UDAG token.
-    ///      Uses SafeERC20 for compatibility with non-standard tokens (e.g., USDT).
+    /// @notice Recover accidentally-sent ERC-20 tokens (NOT the managed UDAG token).
+    /// @dev For UDAG recovery, use migrateToNewBridge (requires pause).
     function emergencyWithdrawERC20(
         address tokenAddress,
         address to,
         uint256 amount
-    ) external onlyGovernor {
-        if (tokenAddress == address(token)) revert InvalidRecipient(); // Prevent draining managed token
-        if (to == address(0)) revert InvalidRecipient();
-
+    ) external onlyGovernor nonReentrant {
+        if (tokenAddress == address(token)) revert CannotDrainManagedToken();
+        if (to == address(0)) revert ZeroAddress("to");
         IERC20(tokenAddress).safeTransfer(to, amount);
         emit EmergencyWithdrawal(tokenAddress, to, amount);
     }
-    
-    /// @notice Emergency withdrawal of native ETH (if any).
+
+    /// @notice Recover accidentally-sent ETH.
     function emergencyWithdrawETH(address payable to) external onlyGovernor nonReentrant {
-        if (to == address(0)) revert InvalidRecipient();
-        uint256 balance = address(this).balance;
-        if (balance == 0) return;
-        
-        // Use call instead of transfer for forward compatibility
-        (bool success, ) = to.call{value: balance}("");
-        if (!success) revert InvalidRecipient();
-        
-        emit EmergencyWithdrawal(address(0), to, balance);
+        if (to == address(0)) revert ZeroAddress("to");
+        uint256 bal = address(this).balance;
+        if (bal == 0) return;
+        (bool ok, ) = to.call{value: bal}("");
+        if (!ok) revert ETHTransferFailed();
+        emit EmergencyWithdrawal(address(0), to, bal);
     }
-    
-    // ─── View Functions ───
-    
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  VIEW HELPERS
+    // ═══════════════════════════════════════════════════════════════════
+
     function getValidatorCount() external view returns (uint256) {
         return validators.length;
     }
-    
+
     function getAllValidators() external view returns (address[] memory) {
         return validators;
     }
-    
+
     function getThreshold() external view returns (uint256) {
         return threshold;
     }
-    
-    function isNonceUsed(uint256 _nonce) external view returns (bool) {
-        return usedNonces[_nonce];
+
+    function isWithdrawalNonceUsed(uint256 _nonce) external view returns (bool) {
+        return usedWithdrawalNonces[_nonce];
     }
-    
-    function getDailyWithdrawalVolume(uint256 date) external view returns (uint256) {
-        return dailyWithdrawalVolume[date];
+
+    function getDailyWithdrawalVolume() external view returns (uint256) {
+        return dailyWithdrawalVolume[block.timestamp / 1 days];
     }
-    
-    // ─── Receive ETH (prevent accidental sends) ───
+
+    function getDailyDepositVolume() external view returns (uint256) {
+        return dailyDepositVolume[block.timestamp / 1 days];
+    }
+
+    function getDailyWithdrawalRemaining() external view returns (uint256) {
+        uint256 used = dailyWithdrawalVolume[block.timestamp / 1 days];
+        return used >= DAILY_LIMIT ? 0 : DAILY_LIMIT - used;
+    }
+
+    function getDailyDepositRemaining() external view returns (uint256) {
+        uint256 used = dailyDepositVolume[block.timestamp / 1 days];
+        return used >= DAILY_LIMIT ? 0 : DAILY_LIMIT - used;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  INTERNALS
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// @dev Shared validation for deposit and withdrawal amounts.
+    function _validateAmount(uint256 amount) internal pure {
+        if (amount < MIN_AMOUNT) revert AmountBelowMinimum(amount, MIN_AMOUNT);
+        if (amount > MAX_AMOUNT) revert AmountAboveMaximum(amount, MAX_AMOUNT);
+    }
+
+    /// @dev Accept ETH so it can be recovered via emergencyWithdrawETH.
     receive() external payable {
         emit ETHReceived(msg.sender, msg.value);
     }
