@@ -15,7 +15,7 @@ use ultradag_coin::{
     block::header::BlockHeader,
     consensus::dag::DagInsertError,
     constants::{
-        self, COIN, DEV_ALLOCATION_SATS, FAUCET_PREFUND_SATS, FAUCET_SEED, TREASURY_ALLOCATION_SATS,
+        self, COIN, FAUCET_PREFUND_SATS, FAUCET_SEED,
         faucet_keypair,
     },
     tx::CoinbaseTx,
@@ -321,10 +321,10 @@ fn b1_faucet_genesis_prefund() {
     let faucet_addr = faucet_keypair().address();
 
     assert_eq!(state.balance(&faucet_addr), FAUCET_PREFUND_SATS);
-    // Genesis total_supply = faucet + dev allocation + DAO treasury
+    // Genesis total_supply = faucet only (no pre-mine under emission-only model)
     assert_eq!(
         state.total_supply(),
-        FAUCET_PREFUND_SATS + DEV_ALLOCATION_SATS + TREASURY_ALLOCATION_SATS
+        FAUCET_PREFUND_SATS
     );
 }
 

@@ -706,13 +706,11 @@ fn supply_invariant_genesis_plus_500_rounds() {
 }
 
 #[test]
-fn dev_allocation_in_genesis() {
+fn no_premine_at_genesis() {
     let state = StateEngine::new_with_genesis();
     let dev_addr = ultradag_coin::dev_address();
-    assert_eq!(
-        state.balance(&dev_addr),
-        DEV_ALLOCATION_SATS,
-        "Dev allocation must be exactly 5% of max supply at genesis"
-    );
-    assert_eq!(DEV_ALLOCATION_SATS, MAX_SUPPLY_SATS / 20);
+    // Under emission-only model: founder starts with 0, earns through emission
+    assert_eq!(state.balance(&dev_addr), 0, "Founder should have 0 at genesis (emission-only)");
+    // Treasury also starts at 0
+    assert_eq!(state.treasury_balance(), 0, "Treasury should be 0 at genesis (emission-only)");
 }
