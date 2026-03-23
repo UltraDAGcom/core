@@ -30,16 +30,20 @@ contract UDAGBridgeValidator is ReentrancyGuard {
     mapping(uint256 => bool) public usedNonces;
     
     // ─── Rate Limiting ───
+    uint256 public constant MIN_DEPOSIT = 1 * 10 ** 8; // 1 UDAG = 10^8 smallest units
     uint256 public constant MAX_DEPOSIT = 100_000 * 10 ** 8; // 100K UDAG per tx
     uint256 public constant DAILY_WITHDRAWAL_LIMIT = 500_000 * 10 ** 8; // 500K UDAG/day
+    uint256 public constant DAILY_DEPOSIT_LIMIT = 500_000 * 10 ** 8; // 500K UDAG/day
     mapping(uint256 => uint256) public dailyWithdrawalVolume; // date → volume
+    mapping(uint256 => uint256) public dailyDepositVolume; // date → volume
     
     // ─── Events ───
     event DepositMade(
         address indexed sender,
         bytes20 indexed nativeRecipient,
         uint256 amount,
-        uint256 indexed nonce
+        uint256 indexed depositNonce,
+        uint256 sourceChainId
     );
 
     event WithdrawalClaimed(
@@ -63,6 +67,7 @@ contract UDAGBridgeValidator is ReentrancyGuard {
     
     // ─── Errors ───
     error BridgeIsPaused();
+    error AmountTooSmall();
     error AmountTooLarge();
     error InvalidRecipient();
     error NotGovernor();
@@ -107,14 +112,26 @@ contract UDAGBridgeValidator is ReentrancyGuard {
     {
         if (!bridgeEnabled) revert InvalidValidatorSet();
         if (nativeRecipient == bytes20(0)) revert InvalidRecipient();
-        if (amount == 0 || amount > MAX_DEPOSIT) revert AmountTooLarge();
+        if (amount < MIN_DEPOSIT) revert AmountTooSmall();
+        if (amount > MAX_DEPOSIT) revert AmountTooLarge();
+
+        // Rate limiting: check daily deposit volume
+        uint256 today = block.timestamp / 1 days;
+        if (dailyDepositVolume[today] + amount > DAILY_DEPOSIT_LIMIT) {
+            revert DailyLimitExceeded();
+        }
 
         // Transfer tokens into bridge escrow using SafeERC20
         IERC20(address(token)).safeTransferFrom(msg.sender, address(this), amount);
 
+        // Safe: DAILY_DEPOSIT_LIMIT (500K UDAG = 5e13) << type(uint256).max
+        unchecked {
+            dailyDepositVolume[today] += amount;
+        }
+
         uint256 depositNonce = nonce++;
 
-        emit DepositMade(msg.sender, nativeRecipient, amount, depositNonce);
+        emit DepositMade(msg.sender, nativeRecipient, amount, depositNonce, block.chainid);
     }
     
     // ─── Bridge: Native → Arbitrum (Claim Withdrawal) ───
@@ -141,7 +158,8 @@ contract UDAGBridgeValidator is ReentrancyGuard {
     {
         if (!bridgeEnabled) revert InvalidValidatorSet();
         if (recipient == address(0)) revert InvalidRecipient();
-        if (amount == 0 || amount > MAX_DEPOSIT) revert AmountTooLarge();
+        if (amount < MIN_DEPOSIT) revert AmountTooSmall();
+        if (amount > MAX_DEPOSIT) revert AmountTooLarge();
         if (usedNonces[depositNonce]) revert NonceAlreadyUsed();
 
         // Rate limiting: check daily withdrawal volume

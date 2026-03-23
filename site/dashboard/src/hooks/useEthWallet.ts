@@ -260,7 +260,6 @@ export function useEthWallet() {
         nonce,
       });
     } catch (err: any) {
-      console.error('Failed to fetch balances:', err);
       setError(err?.message || 'Failed to fetch balances');
     }
   }, []);

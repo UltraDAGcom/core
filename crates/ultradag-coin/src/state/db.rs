@@ -183,6 +183,20 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
         table.insert("bridge_nonce", engine.get_bridge_nonce().to_le_bytes().as_slice())?;
         table.insert("bridge_contract_address", engine.bridge_contract_address().as_slice())?;
 
+        // Persist used_release_nonces
+        {
+            let nonces_bytes = postcard::to_allocvec(&engine.snapshot().used_release_nonces)
+                .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+            table.insert("used_release_nonces", nonces_bytes.as_slice())?;
+        }
+
+        // Persist bridge_release_votes
+        {
+            let votes_bytes = postcard::to_allocvec(&engine.snapshot().bridge_release_votes)
+                .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+            table.insert("bridge_release_votes", votes_bytes.as_slice())?;
+        }
+
         // Compute and store state root for integrity verification on reload.
         // This catches silent corruption from disk errors, partial writes, or bugs.
         let snapshot = engine.snapshot();
@@ -407,6 +421,20 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
     // Restore bridge state that from_parts initializes to empty/0
     engine.restore_bridge_state(bridge_attestations, bridge_sigs, bridge_nonce);
     engine.set_bridge_contract_address(bridge_contract_address);
+
+    // Restore used_release_nonces from METADATA
+    if let Some(nonces_val) = meta.get("used_release_nonces")? {
+        let nonces: Vec<(u64, u64)> = postcard::from_bytes(nonces_val.value())
+            .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+        engine.restore_used_release_nonces(nonces);
+    }
+
+    // Restore bridge_release_votes from METADATA
+    if let Some(votes_val) = meta.get("bridge_release_votes")? {
+        let votes: Vec<((u64, u64), Vec<Address>)> = postcard::from_bytes(votes_val.value())
+            .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+        engine.restore_bridge_release_votes(votes);
+    }
 
     // Verify state integrity: recompute state root and compare against stored value.
     // Catches silent corruption from disk errors, partial writes, or software bugs.

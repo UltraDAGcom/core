@@ -18,6 +18,10 @@
 <meta property="og:description" content="The simplest production-ready DAG chain. Fast BFT finality, <2MB binary, bounded storage.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://ultradag.com">
+<meta property="og:image" content="https://ultradag.com/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:image" content="https://ultradag.com/og-image.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%233d9be9' stroke-width='2'/%3E%3Ccircle cx='50' cy='50' r='15' fill='%233d9be9'/%3E%3C/svg%3E">
 <title>UltraDAG — Machine-to-Machine Micropayments</title>
@@ -778,8 +782,19 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <p class="hero-subtitle">DAG-BFT consensus for IoT, sensors, and autonomous agents. Live on testnet.</p>
   <!-- HERO: Primary CTA is the launch waitlist -->
   <div class="hero-actions">
-    <a href="#launch" class="btn-primary">Join the Waitlist &rarr;</a>
-    <a href="network.html" class="btn-secondary">Watch it live &rarr;</a>
+    <a href="network.html" class="btn-primary">Watch it live &rarr;</a>
+    <a href="whitepaper.html" class="btn-secondary">Read the whitepaper &rarr;</a>
+  </div>
+
+  <!-- HERO: Inline email capture (above the fold) -->
+  <div class="hero-email" style="pointer-events:all;opacity:0;animation:fadeUp .8s .65s forwards;margin-top:24px;max-width:420px">
+    <form onsubmit="return handleEmailSubmit(event)" style="display:flex;gap:0;border:1px solid var(--border2);border-radius:6px;overflow:hidden;background:var(--bg2)">
+      <input type="hidden" name="u" value="7c006c449bd3dc3a523bce11d">
+      <input type="hidden" name="id" value="daf1702c98">
+      <input type="email" name="EMAIL" placeholder="your@email.com" required autocomplete="email" style="flex:1;padding:12px 14px;background:transparent;border:none;color:var(--white);font-family:'Syne',sans-serif;font-size:14px;outline:none;min-width:0">
+      <div style="position:absolute;left:-5000px" aria-hidden="true"><input type="text" name="b_7c006c449bd3dc3a523bce11d_daf1702c98" tabindex="-1" value=""></div>
+      <button type="submit" class="email-btn" style="padding:10px 18px;background:var(--accent);color:#fff;border:none;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap">Get Early Access</button>
+    </form>
   </div>
 
   <!-- HERO: Compact countdown + email inline -->
@@ -923,7 +938,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
       </div>
       <div class="live-sep"></div>
       <div class="live-metric">
-        <span class="live-metric-value" id="live-nodes">--<span class="live-metric-label" style="margin-left:2px">/4</span></span>
+        <span class="live-metric-value" id="live-nodes">--<span class="live-metric-label" style="margin-left:2px">/5</span></span>
         <span class="live-metric-label">Nodes</span>
       </div>
       <div class="live-sep"></div>
@@ -1030,7 +1045,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
       <div class="feature reveal reveal-delay-2">
         <div class="feature-icon">Economics</div>
         <h3>Bitcoin-Style Tokenomics</h3>
-        <p>21M max supply, halving every 210K rounds, stake-proportional rewards. Delegate to validators for passive earnings, no node required. Deflationary slashing for Byzantine behavior.</p>
+        <p>21M max supply, halving every 10.5M rounds (~1.66 years), stake-proportional rewards. Delegate to validators for passive earnings, no node required. Deflationary slashing for Byzantine behavior.</p>
       </div>
       <div class="feature reveal">
         <div class="feature-icon">Verified</div>
@@ -1045,7 +1060,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
       <div class="feature reveal reveal-delay-2">
         <div class="feature-icon">Governance</div>
         <h3>On-Chain Governance</h3>
-        <p>Decentralized parameter changes via stake-weighted voting. 10% quorum, 66% supermajority, execution delay for safety. No hard forks needed—validators vote on proposals, changes apply automatically when passed.</p>
+        <p>Council of 21 governance with 1 vote per seat. Six expertise categories, no stake requirement. 10% quorum, 66% supermajority, execution delay for safety. No hard forks needed—council members vote on proposals, changes apply automatically when passed.</p>
       </div>
     </div>
   </div>
@@ -1064,12 +1079,12 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
         <div class="token-label">Max supply cap</div>
       </div>
       <div class="token-card reveal reveal-delay-1">
-        <div class="token-value">50 UDAG</div>
-        <div class="token-label">Per vertex reward</div>
+        <div class="token-value">1 UDAG</div>
+        <div class="token-label">Per round reward</div>
       </div>
       <div class="token-card reveal reveal-delay-2">
-        <div class="token-value">210K</div>
-        <div class="token-label">Halving interval</div>
+        <div class="token-value">10.5M</div>
+        <div class="token-label">Halving interval (~1.66yr)</div>
       </div>
       <div class="token-card reveal">
         <div class="token-value">5%</div>
@@ -1446,7 +1461,8 @@ mobileMenu.querySelectorAll('a').forEach(link => {
     'https://ultradag-node-1.fly.dev',
     'https://ultradag-node-2.fly.dev',
     'https://ultradag-node-3.fly.dev',
-    'https://ultradag-node-4.fly.dev'
+    'https://ultradag-node-4.fly.dev',
+    'https://ultradag-node-5.fly.dev'
   ];
 
   const elRound = document.getElementById('live-round');
@@ -1528,7 +1544,7 @@ mobileMenu.querySelectorAll('a').forEach(link => {
 
     elRound.textContent = d.round.toLocaleString();
     elLag.textContent = lag;
-    elNodes.innerHTML = d.nodes + '<span class="live-metric-label" style="margin-left:2px">/4</span>';
+    elNodes.innerHTML = d.nodes + '<span class="live-metric-label" style="margin-left:2px">/5</span>';
     elSupply.textContent = formatUdag(d.supply) + ' UDAG';
     elSupplyPct.textContent = supplyPct + '% of 21M';
   }
@@ -1556,7 +1572,27 @@ reveals.forEach(el => observer.observe(el));
 
   function updateCountdown() {
     const now = Date.now();
-    const diff = Math.max(0, LAUNCH_DATE - now);
+    const diff = LAUNCH_DATE - now;
+
+    if (diff <= 0) {
+      document.getElementById('cd-days').textContent = '\u{1F680}';
+      document.getElementById('cd-hours').textContent = '';
+      document.getElementById('cd-mins').textContent = '';
+      document.getElementById('cd-secs').textContent = '';
+      document.querySelectorAll('.countdown-sep').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.countdown-label').forEach(el => el.textContent = '');
+      document.getElementById('cd-days').nextElementSibling.textContent = 'Launching Now!';
+      // Update hero countdown too
+      const hd = document.getElementById('cd-hero-days');
+      if (hd) { hd.textContent = '\u{1F680}'; }
+      const hh = document.getElementById('cd-hero-hours');
+      if (hh) { hh.textContent = ''; }
+      const hm = document.getElementById('cd-hero-mins');
+      if (hm) { hm.textContent = ''; }
+      const heroLabel = document.querySelector('#cd-hero-mins + span');
+      if (heroLabel) { heroLabel.textContent = 'Launching Now!'; }
+      return;
+    }
 
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
@@ -1631,6 +1667,14 @@ function handleEmailSubmit(e) {
   script.id = cbName;
   script.src = url;
   document.body.appendChild(script);
+
+  // Timeout fallback: if JSONP never responds, reset after 8 seconds
+  setTimeout(() => {
+    if (window[cbName]) {
+      // Callback never fired — assume success (email was likely submitted)
+      window[cbName]({ result: 'success', msg: '' });
+    }
+  }, 8000);
 
   return false;
 }

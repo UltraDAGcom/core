@@ -135,6 +135,13 @@ function App() {
           <Route path="vertex/:hash" element={<VertexDetailPage />} />
           <Route path="address/:address" element={<AddressPage />} />
           <Route path="search/:query" element={<SearchResultPage />} />
+          <Route path="*" element={
+            <div className="flex flex-col items-center justify-center h-64 text-center">
+              <h1 className="text-4xl font-bold text-white mb-2">404</h1>
+              <p className="text-dag-muted">Page not found</p>
+              <a href="/" className="text-dag-accent mt-4 hover:underline">Go to Dashboard</a>
+            </div>
+          } />
         </Route>
       </Routes>
 

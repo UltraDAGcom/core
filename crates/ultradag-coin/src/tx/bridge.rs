@@ -154,15 +154,7 @@ impl BridgeReleaseTx {
 
     /// Get the transaction hash.
     pub fn hash(&self) -> [u8; 32] {
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(b"bridge_release");
-        hasher.update(&self.from.0);
-        hasher.update(&self.recipient.0);
-        hasher.update(&self.amount.to_le_bytes());
-        hasher.update(&self.source_chain_id.to_le_bytes());
-        hasher.update(&self.deposit_nonce.to_le_bytes());
-        hasher.update(&self.nonce.to_le_bytes());
-        *hasher.finalize().as_bytes()
+        blake3::hash(&self.signable_bytes()).into()
     }
 }
 

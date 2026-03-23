@@ -1,1 +1,1 @@
-test_cannotClaimWithInsufficientSignatures
+test_claimWithDuplicateSignatures|test_dailyWithdrawalLimit|test_cannotGrantMinterAfterGenesis

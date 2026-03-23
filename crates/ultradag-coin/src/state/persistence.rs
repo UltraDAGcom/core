@@ -60,6 +60,10 @@ pub struct StateSnapshot {
     /// Prevents double-release of Arbitrum deposits.
     #[serde(default)]
     pub used_release_nonces: Vec<(u64, u64)>,
+    /// Bridge release votes: (chain_id, deposit_nonce) -> list of validators who voted.
+    /// Release executes when votes >= ceil(2n/3) of active validators.
+    #[serde(default)]
+    pub bridge_release_votes: Vec<((u64, u64), Vec<crate::address::Address>)>,
 }
 
 impl StateSnapshot {

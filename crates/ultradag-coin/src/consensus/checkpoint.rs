@@ -318,6 +318,19 @@ pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
         hasher.update(&nonce.to_le_bytes());
     }
 
+    // Bridge release votes (sorted for determinism)
+    let mut release_votes: Vec<_> = snapshot.bridge_release_votes.iter().collect();
+    release_votes.sort_by(|a, b| a.0.cmp(&b.0));
+    hasher.update(&(release_votes.len() as u64).to_le_bytes());
+    for ((chain_id, deposit_nonce), voters) in &release_votes {
+        hasher.update(&chain_id.to_le_bytes());
+        hasher.update(&deposit_nonce.to_le_bytes());
+        hasher.update(&(voters.len() as u64).to_le_bytes());
+        for voter in voters.iter() {
+            hasher.update(&voter.0);
+        }
+    }
+
     *hasher.finalize().as_bytes()
 }
 

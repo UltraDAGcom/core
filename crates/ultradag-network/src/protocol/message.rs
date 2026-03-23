@@ -456,6 +456,8 @@ mod tests {
             bridge_signatures: vec![],
             bridge_nonce: 0,
             bridge_contract_address: [0u8; 20],
+            used_release_nonces: vec![],
+            bridge_release_votes: vec![],
         };
 
         let msg = Message::CheckpointSync {

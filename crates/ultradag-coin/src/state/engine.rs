@@ -279,6 +279,9 @@ pub struct StateEngine {
     /// Used release nonces: (source_chain_id, deposit_nonce) pairs that have been released.
     /// Prevents double-release of the same Arbitrum deposit.
     used_release_nonces: std::collections::HashSet<(u64, u64)>,
+    /// Bridge release votes: (chain_id, deposit_nonce) -> set of validators who voted.
+    /// Release only executes when votes >= ceil(2n/3) of active validators.
+    bridge_release_votes: HashMap<(u64, u64), std::collections::HashSet<Address>>,
 }
 
 impl StateEngine {
@@ -316,6 +319,7 @@ impl StateEngine {
             bridge_nonce: 0,
             bridge_contract_address: [0u8; 20],
             used_release_nonces: std::collections::HashSet::new(),
+            bridge_release_votes: HashMap::new(),
         }
     }
 
@@ -1672,6 +1676,18 @@ impl StateEngine {
         &mut self,
         tx: &crate::tx::bridge::BridgeReleaseTx,
     ) -> Result<(), CoinError> {
+        // Verify signature
+        if !tx.verify_signature() {
+            return Err(CoinError::InvalidSignature);
+        }
+        // Verify nonce
+        let expected_nonce = self.nonce(&tx.from);
+        if tx.nonce != expected_nonce {
+            return Err(CoinError::InvalidNonce {
+                expected: expected_nonce,
+                got: tx.nonce,
+            });
+        }
         // Verify submitter is an active validator
         if !self.active_validator_set.contains(&tx.from) {
             return Err(CoinError::ValidationError("only active validators can submit bridge releases".into()));
@@ -1707,16 +1723,38 @@ impl StateEngine {
             ));
         }
 
-        // Execute the release
-        self.bridge_reserve = self.bridge_reserve.saturating_sub(tx.amount);
-        self.credit(&tx.recipient, tx.amount)?;
-        self.used_release_nonces.insert(nonce_key);
+        // Record this validator's vote for the release
+        let voters = self.bridge_release_votes.entry(nonce_key).or_default();
+        voters.insert(tx.from);
+        let vote_count = voters.len();
+
+        // Calculate threshold: ceil(2n/3) where n = active validator count
+        let n = self.active_validator_set.len();
+        let threshold = (2 * n) / 3 + 1;
+
+        // Always increment the submitting validator's nonce (vote recorded)
         self.increment_nonce(&tx.from);
 
-        tracing::info!(
-            "Bridge release: {} sats from chain {} nonce {} to {}",
-            tx.amount, tx.source_chain_id, tx.deposit_nonce, tx.recipient.to_hex()
-        );
+        // Only execute the release when threshold is reached
+        if vote_count >= threshold {
+            self.bridge_reserve = self.bridge_reserve.saturating_sub(tx.amount);
+            self.credit(&tx.recipient, tx.amount)?;
+            self.used_release_nonces.insert(nonce_key);
+            // Clean up votes for this completed release
+            self.bridge_release_votes.remove(&nonce_key);
+
+            tracing::info!(
+                "Bridge release executed: {} sats from chain {} nonce {} to {} ({}/{} votes)",
+                tx.amount, tx.source_chain_id, tx.deposit_nonce, tx.recipient.to_hex(),
+                vote_count, n
+            );
+        } else {
+            tracing::info!(
+                "Bridge release vote recorded: chain {} nonce {} by {} ({}/{} votes, need {})",
+                tx.source_chain_id, tx.deposit_nonce, tx.from.to_hex(),
+                vote_count, n, threshold
+            );
+        }
 
         Ok(())
     }
@@ -2789,6 +2827,7 @@ impl StateEngine {
             bridge_nonce: 0,
             bridge_contract_address: [0u8; 20],
             used_release_nonces: std::collections::HashSet::new(),
+            bridge_release_votes: HashMap::new(),
             last_proposal_round: HashMap::new(),
             round_lock: RwLock::new(None),
         })
@@ -2841,6 +2880,13 @@ impl StateEngine {
             bridge_nonce: self.bridge_nonce,
             bridge_contract_address: self.bridge_contract_address,
             used_release_nonces: self.used_release_nonces.iter().copied().collect(),
+            bridge_release_votes: self.bridge_release_votes.iter()
+                .map(|(k, v)| {
+                    let mut voters: Vec<Address> = v.iter().copied().collect();
+                    voters.sort_by_key(|a| a.0);
+                    (*k, voters)
+                })
+                .collect(),
         }
     }
 
@@ -2900,6 +2946,9 @@ impl StateEngine {
             bridge_nonce: snapshot.bridge_nonce,
             bridge_contract_address: snapshot.bridge_contract_address,
             used_release_nonces: snapshot.used_release_nonces.into_iter().collect(),
+            bridge_release_votes: snapshot.bridge_release_votes.into_iter()
+                .map(|(k, voters)| (k, voters.into_iter().collect()))
+                .collect(),
             last_proposal_round: HashMap::new(),
             round_lock: RwLock::new(None),
         })
@@ -2941,6 +2990,10 @@ impl StateEngine {
             .collect();
         self.bridge_nonce = snapshot.bridge_nonce;
         self.bridge_contract_address = snapshot.bridge_contract_address;
+        self.used_release_nonces = snapshot.used_release_nonces.into_iter().collect();
+        self.bridge_release_votes = snapshot.bridge_release_votes.into_iter()
+            .map(|(k, voters)| (k, voters.into_iter().collect()))
+            .collect();
         self.configured_validator_count = saved_configured;
     }
 
@@ -3230,6 +3283,20 @@ impl StateEngine {
         self.bridge_attestations = attestations;
         self.bridge_signatures = signatures;
         self.bridge_nonce = nonce;
+    }
+
+    /// Restore used_release_nonces from persistence.
+    /// Called by load_from_redb after from_parts.
+    pub fn restore_used_release_nonces(&mut self, nonces: Vec<(u64, u64)>) {
+        self.used_release_nonces = nonces.into_iter().collect();
+    }
+
+    /// Restore bridge_release_votes from persistence.
+    /// Called by load_from_redb after from_parts.
+    pub fn restore_bridge_release_votes(&mut self, votes: Vec<((u64, u64), Vec<Address>)>) {
+        self.bridge_release_votes = votes.into_iter()
+            .map(|(k, voters)| (k, voters.into_iter().collect()))
+            .collect();
     }
 
     /// Save state to redb database (ACID, crash-safe).
