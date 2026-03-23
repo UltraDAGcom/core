@@ -153,7 +153,7 @@ export function DashboardPage({ status, loading }: DashboardPageProps) {
   }
 
   const supplyPercent = (status.total_supply / MAX_SUPPLY_SATS) * 100;
-  const emitted = status.total_supply - status.treasury_balance;
+  const emitted = status.total_supply; // All supply comes from emission (no pre-mine)
   const remaining = MAX_SUPPLY_SATS - status.total_supply;
 
   return (
@@ -209,19 +209,22 @@ export function DashboardPage({ status, loading }: DashboardPageProps) {
         <MetricCard
           icon={Shield}
           iconColor="text-dag-green"
-          label="Treasury"
+          label="DAO Treasury"
           value={`${formatUdag(status.treasury_balance)} UDAG`}
-          sub="Protocol reserve"
+          sub="10% of emission, council-controlled"
         />
       </div>
 
       {/* Supply Progress */}
       <div className="bg-dag-card border border-dag-border rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <TrendingUp className="w-4 h-4 text-dag-accent" />
-          <h2 className="text-sm font-semibold text-white">Emission Progress</h2>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-dag-accent" />
+            <h2 className="text-sm font-semibold text-white">Emission Progress</h2>
+          </div>
+          <span className="text-xs text-dag-muted font-mono">{supplyPercent.toFixed(2)}% of 21M</span>
         </div>
-        <div className="w-full bg-dag-surface rounded-full h-3 overflow-hidden mb-4">
+        <div className="w-full bg-dag-surface rounded-full h-3 overflow-hidden mb-5">
           <div
             className="h-full rounded-full transition-all duration-700 relative overflow-hidden"
             style={{
@@ -232,20 +235,34 @@ export function DashboardPage({ status, loading }: DashboardPageProps) {
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-pulse" />
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-4 text-center">
-          <div>
-            <p className="text-xs text-dag-muted mb-0.5">Emitted</p>
-            <p className="text-sm font-semibold text-white">{formatUdag(emitted)} UDAG</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-dag-surface rounded-lg p-3">
+            <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Total Emitted</p>
+            <p className="text-sm font-semibold text-white font-mono">{formatUdag(emitted)}</p>
+            <p className="text-[10px] text-dag-muted">UDAG mined</p>
           </div>
-          <div>
-            <p className="text-xs text-dag-muted mb-0.5">Remaining</p>
-            <p className="text-sm font-semibold text-white">{formatUdag(remaining)} UDAG</p>
+          <div className="bg-dag-surface rounded-lg p-3">
+            <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Remaining</p>
+            <p className="text-sm font-semibold text-white font-mono">{formatUdag(remaining)}</p>
+            <p className="text-[10px] text-dag-muted">UDAG to emit</p>
           </div>
-          <div>
-            <p className="text-xs text-dag-muted mb-0.5">Treasury</p>
-            <p className="text-sm font-semibold text-dag-accent">{formatUdag(status.treasury_balance)} UDAG</p>
+          <div className="bg-dag-surface rounded-lg p-3">
+            <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">DAO Treasury</p>
+            <p className="text-sm font-semibold text-dag-green font-mono">{formatUdag(status.treasury_balance)}</p>
+            <p className="text-[10px] text-dag-muted">10% of emission</p>
+          </div>
+          <div className="bg-dag-surface rounded-lg p-3">
+            <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Emission Split</p>
+            <div className="flex gap-1 mt-1">
+              <div className="flex-[75] h-2 bg-dag-accent rounded-l" title="75% Validators" />
+              <div className="flex-[10] h-2 bg-dag-green" title="10% Treasury" />
+              <div className="flex-[10] h-2 bg-dag-purple" title="10% Council" />
+              <div className="flex-[5] h-2 bg-dag-blue rounded-r" title="5% Founder" />
+            </div>
+            <p className="text-[10px] text-dag-muted mt-1">75 / 10 / 10 / 5</p>
           </div>
         </div>
+        <p className="text-[10px] text-dag-muted text-center mt-3">Zero pre-mine — every UDAG earned through emission. No VC funding, no presale.</p>
       </div>
 
       {/* Network Vitals Grid */}
