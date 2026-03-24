@@ -149,7 +149,10 @@ export function StakingPage() {
 
   return (
     <div className="space-y-6 animate-page-enter">
-      <h1 className="text-2xl font-bold text-white">Staking & Delegation</h1>
+      <div>
+        <h1 className="text-2xl font-bold text-white">Staking & Delegation</h1>
+        <p className="text-sm text-dag-muted mt-1">Earn rewards by staking UDAG and securing the network</p>
+      </div>
 
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-4">

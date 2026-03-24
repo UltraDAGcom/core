@@ -14,16 +14,17 @@ interface SendPageProps {
   wallets: Wallet[];
   balances: Map<string, WalletBalance>;
   unlocked: boolean;
+  network?: string;
 }
 
-export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
+export function SendPage({ wallets, balances, unlocked, network }: SendPageProps) {
   const { toast } = useToast();
 
   // Send form state
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [to, setTo] = useState('');
   const [amount, setAmount] = useState('');
-  const [fee, setFee] = useState('10000');
+  const [fee, setFee] = useState('0.0001');
   const [memo, setMemo] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -44,7 +45,7 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
   if (!unlocked) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-dag-muted">Unlock your keystore to send transactions.</p>
+        <p className="text-dag-muted">Unlock your wallet to send transactions.</p>
       </div>
     );
   }
@@ -61,9 +62,9 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
     setError('');
     setSuccess('');
     const sats = Math.floor(parseFloat(amount) * 100_000_000);
-    const feeSats = parseInt(fee, 10);
+    const feeSats = Math.round(parseFloat(fee) * 100_000_000);
     if (isNaN(sats) || sats <= 0) { setError('Amount must be positive'); return; }
-    if (isNaN(feeSats) || feeSats < 10000) { setError('Minimum fee is 0.0001 UDAG (10,000 sats)'); return; }
+    if (isNaN(feeSats) || feeSats < 10000) { setError('Minimum fee is 0.0001 UDAG'); return; }
     if (!isValidAddress(to.trim())) { setError('Invalid recipient address (hex or bech32m)'); return; }
     if (memoBytes > 256) { setError('Memo exceeds 256 bytes'); return; }
 
@@ -167,10 +168,11 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
               </label>
 
               <label className="block">
-                <span className="text-sm text-dag-muted">Fee (min 0.0001 UDAG)</span>
+                <span className="text-sm text-dag-muted">Fee (UDAG)</span>
                 <input
                   type="number"
-                  min="10000"
+                  min="0.0001"
+                  step="0.0001"
                   value={fee}
                   onChange={e => setFee(e.target.value)}
                   className="mt-1 block w-full rounded bg-dag-surface border border-dag-border px-3 py-2 text-sm text-white"
@@ -206,7 +208,8 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
             </div>
           </Card>
 
-          {/* Faucet Card */}
+          {/* Faucet Card (testnet only) */}
+          {network !== 'mainnet' && (
           <Card>
             <div className="space-y-4">
               <div className="flex items-center gap-2">
@@ -234,6 +237,7 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
               </button>
             </div>
           </Card>
+          )}
         </div>
 
         {/* Right column: Receive */}

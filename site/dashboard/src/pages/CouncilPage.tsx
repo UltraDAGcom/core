@@ -69,7 +69,10 @@ export function CouncilPage() {
 
   return (
     <div className="space-y-6 animate-page-enter">
-      <h1 className="text-2xl font-bold text-white">Council of 21</h1>
+      <div>
+        <h1 className="text-2xl font-bold text-white">Council of 21</h1>
+        <p className="text-sm text-dag-muted mt-1">The elected governance body that guides UltraDAG</p>
+      </div>
 
       {/* Stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

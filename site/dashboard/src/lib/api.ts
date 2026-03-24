@@ -211,6 +211,14 @@ export function normalizeAddress(s: string): string {
 }
 
 // Helpers
+export function roundsToTime(rounds: number, roundDurationSecs: number = 5): string {
+  const totalSecs = rounds * roundDurationSecs;
+  if (totalSecs < 60) return `~${totalSecs}s`;
+  if (totalSecs < 3600) return `~${Math.round(totalSecs / 60)}min`;
+  if (totalSecs < 86400) return `~${(totalSecs / 3600).toFixed(1)}h`;
+  return `~${(totalSecs / 86400).toFixed(1)} days`;
+}
+
 export function formatUdag(sats: number): string {
   return (sats / 100_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }

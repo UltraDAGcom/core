@@ -193,6 +193,7 @@ function App() {
                 wallets={ks.wallets}
                 balances={wb.balances}
                 unlocked={ks.unlocked}
+                network={network}
               />
             }
           />

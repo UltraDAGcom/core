@@ -88,7 +88,10 @@ export function GovernancePage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">Governance</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-white">Governance</h1>
+          <p className="text-sm text-dag-muted mt-1">Vote on proposals that shape the network</p>
+        </div>
         {unlocked && wallets.length > 0 && (
           <button
             onClick={() => setShowCreate(true)}

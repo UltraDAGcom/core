@@ -27,11 +27,12 @@ export function WelcomeScreen({ onCreateWallet, onImportBlob, onUnlock, onUnlock
   const [loading, setLoading] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [confirmedBackup, setConfirmedBackup] = useState(false);
 
   const resetFields = () => {
     setPassword(''); setConfirmPassword(''); setWalletName('');
     setImportKeyHex(''); setDerivedAddress(''); setGeneratedKey(null);
-    setImportJson(''); setError('');
+    setImportJson(''); setError(''); setConfirmedBackup(false);
   };
 
   const goTo = (s: Step) => { resetFields(); setStep(s); };
@@ -87,7 +88,7 @@ export function WelcomeScreen({ onCreateWallet, onImportBlob, onUnlock, onUnlock
             </div>
             <h1 className="text-3xl font-bold text-white">Welcome to UltraDAG</h1>
             <p className="text-dag-muted text-sm max-w-sm mx-auto">
-              Create a wallet to send, receive, stake, and participate in governance on the UltraDAG network.
+              The fast, lightweight network for instant payments. Create a wallet to get started.
             </p>
           </div>
 
@@ -126,7 +127,7 @@ export function WelcomeScreen({ onCreateWallet, onImportBlob, onUnlock, onUnlock
                     <Key className="w-5 h-5 text-slate-300" />
                   </div>
                   <div>
-                    <p className="font-semibold text-white">Import Private Key</p>
+                    <p className="font-semibold text-white">Import Existing Wallet</p>
                     <p className="text-xs text-dag-muted mt-0.5">Already have a wallet? Import it here</p>
                   </div>
                 </div>
@@ -255,10 +256,19 @@ export function WelcomeScreen({ onCreateWallet, onImportBlob, onUnlock, onUnlock
                 </div>
                 <p className={`text-xs font-mono text-slate-400 break-all select-all ${showKey ? '' : 'blur-sm'} transition-all duration-200`}>{generatedKey.secret_key}</p>
               </div>
-              <div className="flex items-start gap-2 mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                <Shield className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
-                <p className="text-[11px] text-amber-300/90">Save your private key now. It cannot be recovered if lost.</p>
+              <div className="flex items-start gap-2 mt-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <Shield className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                <p className="text-[11px] text-amber-300/90 font-medium">Save your private key now. It cannot be recovered if lost.</p>
               </div>
+              <label className="flex items-center gap-2 mt-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={confirmedBackup}
+                  onChange={e => setConfirmedBackup(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-dag-accent focus:ring-dag-accent/30"
+                />
+                <span className="text-xs text-slate-300">I have saved my private key securely</span>
+              </label>
             </div>
           )}
 
@@ -292,11 +302,11 @@ export function WelcomeScreen({ onCreateWallet, onImportBlob, onUnlock, onUnlock
             />
           </div>
 
-          <p className="text-[10px] text-dag-muted text-center">Your wallet is encrypted with AES-256-GCM and stored only in your browser.</p>
+          <p className="text-[10px] text-dag-muted text-center">Your wallet is encrypted and stored only in this browser.</p>
 
           {error && <p className="text-sm text-red-400 text-center">{error}</p>}
 
-          <button onClick={handleCreate} disabled={loading}
+          <button onClick={handleCreate} disabled={loading || (!isImport && generatedKey != null && !confirmedBackup)}
             className="w-full py-3 rounded-xl bg-dag-accent text-white font-semibold text-sm hover:bg-dag-accent/80 disabled:opacity-50 transition-colors">
             {loading ? 'Creating...' : isImport ? 'Import Wallet' : 'Create Wallet'}
           </button>

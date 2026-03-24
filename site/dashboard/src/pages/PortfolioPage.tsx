@@ -51,7 +51,7 @@ export function PortfolioPage({
   if (!unlocked) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-dag-muted">Unlock your keystore to view portfolio.</p>
+        <p className="text-dag-muted">Unlock your wallet to view portfolio.</p>
       </div>
     );
   }

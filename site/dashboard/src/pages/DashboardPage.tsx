@@ -70,7 +70,7 @@ function FinalityBadge({ lag }: { lag: number }) {
   const color = lag <= 3 ? 'bg-dag-green/20 text-dag-green' : lag <= 10 ? 'bg-dag-yellow/20 text-dag-yellow' : 'bg-dag-red/20 text-dag-red';
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>
-      lag {lag}
+      ~{lag * 5}s
     </span>
   );
 }
@@ -206,7 +206,7 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
         <MetricCard
           icon={Layers}
           iconColor="text-dag-blue"
-          label="DAG Round"
+          label="Round"
           value={<AnimatedNumber value={status.dag_round} />}
           badge={<FinalityBadge lag={status.finality_lag} />}
           sub={
@@ -243,7 +243,7 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
         <MetricCard
           icon={Shield}
           iconColor="text-dag-green"
-          label="DAO Treasury"
+          label="Treasury"
           value={`${formatUdag(status.treasury_balance)} UDAG`}
           sub="10% of emission, council-controlled"
         />
@@ -273,7 +273,7 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
           <div className="bg-dag-surface rounded-lg p-3">
             <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Total Emitted</p>
             <p className="text-sm font-semibold text-white font-mono">{formatUdag(emitted)}</p>
-            <p className="text-[10px] text-dag-muted">UDAG mined</p>
+            <p className="text-[10px] text-dag-muted">UDAG emitted</p>
           </div>
           <div className="bg-dag-surface rounded-lg p-3">
             <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Remaining</p>
@@ -281,7 +281,7 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
             <p className="text-[10px] text-dag-muted">UDAG to emit</p>
           </div>
           <div className="bg-dag-surface rounded-lg p-3">
-            <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">DAO Treasury</p>
+            <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Treasury</p>
             <p className="text-sm font-semibold text-dag-green font-mono">{formatUdag(status.treasury_balance)}</p>
             <p className="text-[10px] text-dag-muted">10% of emission</p>
           </div>
@@ -296,7 +296,6 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
             <p className="text-[10px] text-dag-muted mt-1">75 / 10 / 10 / 5</p>
           </div>
         </div>
-        <p className="text-[10px] text-dag-muted text-center mt-3">Zero pre-mine — every UDAG earned through emission. No VC funding, no presale.</p>
       </div>
 
       {/* Network Vitals Grid */}
