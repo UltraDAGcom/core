@@ -57,7 +57,7 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
     const sats = Math.floor(parseFloat(amount) * 100_000_000);
     const feeSats = parseInt(fee, 10);
     if (isNaN(sats) || sats <= 0) { setError('Amount must be positive'); return; }
-    if (isNaN(feeSats) || feeSats < 10000) { setError('Minimum fee is 10,000 sats'); return; }
+    if (isNaN(feeSats) || feeSats < 10000) { setError('Minimum fee is 0.0001 UDAG (10,000 sats)'); return; }
     if (!isValidAddress(to.trim())) { setError('Invalid recipient address (hex or bech32m)'); return; }
     if (memoBytes > 256) { setError('Memo exceeds 256 bytes'); return; }
 
@@ -94,9 +94,9 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
     setFaucetSuccess('');
     setFaucetLoading(true);
     try {
-      await postFaucet({ address: faucetWallet.address, amount: 1_000_000_000_000 });
-      setFaucetSuccess(`Requested 10,000 UDAG for ${shortAddr(faucetWallet.address)}`);
-      toast('10,000 UDAG requested', 'success');
+      await postFaucet({ address: faucetWallet.address, amount: 10_000_000_000 });
+      setFaucetSuccess(`Requested 100 UDAG for ${shortAddr(faucetWallet.address)}`);
+      toast('100 UDAG requested', 'success');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Faucet request failed';
       setFaucetError(msg);
@@ -151,7 +151,7 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
               </label>
 
               <label className="block">
-                <span className="text-sm text-dag-muted">Fee (sats, min 10,000)</span>
+                <span className="text-sm text-dag-muted">Fee (min 0.0001 UDAG)</span>
                 <input
                   type="number"
                   min="10000"
@@ -201,7 +201,7 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
               </div>
 
               <p className="text-sm text-dag-muted">
-                Request free UDAG for testing. Max 10,000 UDAG per request, 1 request per 10 minutes.
+                Request free UDAG for testing. Max 100 UDAG per request, 1 request per 10 minutes.
               </p>
 
               <WalletSelector wallets={wallets} selectedIdx={faucetIdx} onChange={setFaucetIdx} />
@@ -214,7 +214,7 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
                 disabled={faucetLoading}
                 className="w-full py-2.5 rounded bg-dag-green text-white font-medium text-sm hover:bg-dag-green/80 disabled:opacity-50 transition-colors"
               >
-                {faucetLoading ? 'Requesting...' : 'Request 10,000 UDAG'}
+                {faucetLoading ? 'Requesting...' : 'Request 100 UDAG'}
               </button>
             </div>
           </Card>

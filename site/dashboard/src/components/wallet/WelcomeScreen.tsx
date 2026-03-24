@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Key, ChevronRight, Shield, Zap, Globe, ArrowRight } from 'lucide-react';
+import { Plus, Key, ChevronRight, Shield, Zap, Globe, ArrowRight, Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { deriveAddress, generateKeypair } from '../../lib/keygen';
 
 interface WelcomeScreenProps {
@@ -22,6 +22,8 @@ export function WelcomeScreen({ onCreateWallet, onImportBlob, onUnlock, hasExist
   const [importJson, setImportJson] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const resetFields = () => {
     setPassword(''); setConfirmPassword(''); setWalletName('');
@@ -104,7 +106,7 @@ export function WelcomeScreen({ onCreateWallet, onImportBlob, onUnlock, hasExist
                   </div>
                   <div>
                     <p className="font-semibold text-white">Create New Wallet</p>
-                    <p className="text-xs text-dag-muted mt-0.5">Generate a fresh keypair — takes 1 second</p>
+                    <p className="text-xs text-dag-muted mt-0.5">Instant setup — ready in seconds</p>
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-dag-accent opacity-50 group-hover:opacity-100 transition-opacity" />
@@ -122,7 +124,7 @@ export function WelcomeScreen({ onCreateWallet, onImportBlob, onUnlock, hasExist
                   </div>
                   <div>
                     <p className="font-semibold text-white">Import Private Key</p>
-                    <p className="text-xs text-dag-muted mt-0.5">Already have a wallet? Paste your private key</p>
+                    <p className="text-xs text-dag-muted mt-0.5">Already have a wallet? Import it here</p>
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-500 opacity-50 group-hover:opacity-100 transition-opacity" />
@@ -134,15 +136,15 @@ export function WelcomeScreen({ onCreateWallet, onImportBlob, onUnlock, hasExist
           <div className="grid grid-cols-3 gap-3 pt-2">
             <div className="text-center p-3 rounded-lg bg-slate-800/30 border border-slate-800">
               <Shield className="w-4 h-4 text-dag-green mx-auto mb-1.5" />
-              <p className="text-[10px] text-dag-muted">Encrypted locally</p>
+              <p className="text-[10px] text-dag-muted">Password protected</p>
             </div>
             <div className="text-center p-3 rounded-lg bg-slate-800/30 border border-slate-800">
               <Globe className="w-4 h-4 text-dag-accent mx-auto mb-1.5" />
-              <p className="text-[10px] text-dag-muted">Non-custodial</p>
+              <p className="text-[10px] text-dag-muted">You hold the keys</p>
             </div>
             <div className="text-center p-3 rounded-lg bg-slate-800/30 border border-slate-800">
               <Zap className="w-4 h-4 text-dag-yellow mx-auto mb-1.5" />
-              <p className="text-[10px] text-dag-muted">Client-side only</p>
+              <p className="text-[10px] text-dag-muted">No account needed</p>
             </div>
           </div>
 
@@ -212,8 +214,18 @@ export function WelcomeScreen({ onCreateWallet, onImportBlob, onUnlock, hasExist
                 <p className="text-sm font-mono text-dag-green break-all">{generatedKey.address}</p>
               </div>
               <div>
-                <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Private Key <span className="text-amber-400">(hover to reveal)</span></p>
-                <p className="text-xs font-mono text-slate-400 break-all blur-sm hover:blur-none transition-all duration-300 cursor-pointer select-all">{generatedKey.secret_key}</p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] text-dag-muted uppercase tracking-wider">Private Key</p>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => setShowKey(!showKey)} className="p-1 rounded text-slate-500 hover:text-white transition-colors" title={showKey ? 'Hide' : 'Reveal'}>
+                      {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                    <button onClick={() => { navigator.clipboard.writeText(generatedKey.secret_key); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-1 rounded text-slate-500 hover:text-white transition-colors" title="Copy">
+                      {copied ? <Check className="w-3.5 h-3.5 text-dag-green" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
+                <p className={`text-xs font-mono text-slate-400 break-all select-all ${showKey ? '' : 'blur-sm'} transition-all duration-200`}>{generatedKey.secret_key}</p>
               </div>
               <div className="flex items-start gap-2 mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
                 <Shield className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />

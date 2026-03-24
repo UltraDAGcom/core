@@ -1,9 +1,9 @@
-import { Menu, Wifi, WifiOff, LogOut, Wallet } from 'lucide-react';
+import { Menu, WifiOff, Lock, Wallet } from 'lucide-react';
 import type { NetworkType } from '../../lib/api';
 
 interface TopBarProps {
   connected: boolean;
-  nodeUrl: string;
+  nodeUrl?: string;
   keystoreUnlocked: boolean;
   network: NetworkType;
   walletAddress?: string;
@@ -15,7 +15,6 @@ interface TopBarProps {
 
 export function TopBar({
   connected,
-  nodeUrl,
   keystoreUnlocked,
   network,
   walletAddress,
@@ -45,15 +44,18 @@ export function TopBar({
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {connected ? (
-            <Wifi className="w-3.5 h-3.5 text-dag-green" />
+            <>
+              <span className="w-2 h-2 rounded-full bg-dag-green animate-pulse" />
+              <span className="text-[11px] text-dag-muted hidden sm:inline">Connected</span>
+            </>
           ) : (
-            <WifiOff className="w-3.5 h-3.5 text-dag-red" />
+            <>
+              <WifiOff className="w-3.5 h-3.5 text-dag-red" />
+              <span className="text-[11px] text-dag-red hidden sm:inline">Disconnected</span>
+            </>
           )}
-          <span className="text-[11px] text-dag-muted font-mono hidden sm:inline">
-            {connected ? nodeUrl.replace('https://', '').replace('.fly.dev', '') : 'Disconnected'}
-          </span>
         </div>
       </div>
 
@@ -99,10 +101,10 @@ export function TopBar({
           <button
             onClick={onToggleLock}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-            title="Sign out"
+            title="Lock wallet"
           >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Sign Out</span>
+            <Lock className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Lock</span>
           </button>
         </div>
       ) : (

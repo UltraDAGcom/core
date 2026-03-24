@@ -28,13 +28,22 @@ export function useKeystore() {
   }, []);
 
   // Auto-lock after 15 minutes of inactivity
+  // Track ALL user interactions (mouse, keyboard, touch, scroll)
   useEffect(() => {
+    const onActivity = () => { lastActivityRef.current = Date.now(); };
+    const events = ['mousedown', 'keydown', 'touchstart', 'scroll', 'mousemove'];
+    events.forEach(e => window.addEventListener(e, onActivity, { passive: true }));
+
     const interval = setInterval(() => {
       if (keystore.isUnlocked() && Date.now() - lastActivityRef.current > AUTO_LOCK_TIMEOUT_MS) {
         keystore.lock();
       }
     }, AUTO_LOCK_CHECK_INTERVAL_MS);
-    return () => clearInterval(interval);
+
+    return () => {
+      events.forEach(e => window.removeEventListener(e, onActivity));
+      clearInterval(interval);
+    };
   }, []);
 
   const create = useCallback(async (password: string) => {

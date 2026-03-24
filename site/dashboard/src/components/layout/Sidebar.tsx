@@ -4,6 +4,7 @@ import {
   Wallet,
   Coins,
   Vote,
+  Users,
   Search,
   Activity,
   X,
@@ -29,7 +30,14 @@ const navItems: NavItem[] = [
     ],
   },
   { to: '/staking', icon: Coins, label: 'Staking' },
-  { to: '/governance', icon: Vote, label: 'Governance' },
+  {
+    to: '/governance',
+    icon: Vote,
+    label: 'Governance',
+    children: [
+      { to: '/council', icon: Users, label: 'Council' },
+    ],
+  },
   { to: '/explorer', icon: Search, label: 'Explorer' },
   { to: '/bridge', icon: ArrowRightLeft, label: 'Bridge' },
   { to: '/network', icon: Activity, label: 'Network' },
