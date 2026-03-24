@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
+import { SessionBar } from './SessionTimer';
 import type { NetworkType } from '../../lib/api';
 
 interface LayoutProps {
@@ -11,11 +12,13 @@ interface LayoutProps {
   network: NetworkType;
   walletAddress?: string;
   walletBalance?: number;
+  sessionSecondsLeft?: number;
+  sessionTotalSeconds?: number;
   onToggleLock: () => void;
   onSwitchNetwork: (network: NetworkType) => void;
 }
 
-export function Layout({ connected, nodeUrl, keystoreUnlocked, network, walletAddress, walletBalance, onToggleLock, onSwitchNetwork }: LayoutProps) {
+export function Layout({ connected, nodeUrl, keystoreUnlocked, network, walletAddress, walletBalance, sessionSecondsLeft, sessionTotalSeconds, onToggleLock, onSwitchNetwork }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
@@ -29,10 +32,14 @@ export function Layout({ connected, nodeUrl, keystoreUnlocked, network, walletAd
           network={network}
           walletAddress={walletAddress}
           walletBalance={walletBalance}
+          sessionSecondsLeft={sessionSecondsLeft}
           onToggleSidebar={() => setSidebarOpen((o) => !o)}
           onToggleLock={onToggleLock}
           onSwitchNetwork={onSwitchNetwork}
         />
+        {keystoreUnlocked && sessionSecondsLeft !== undefined && sessionTotalSeconds !== undefined && (
+          <SessionBar secondsLeft={sessionSecondsLeft} totalSeconds={sessionTotalSeconds} />
+        )}
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           <div className="max-w-7xl mx-auto">
             <Outlet />

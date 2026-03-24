@@ -137,6 +137,8 @@ function App() {
               network={network}
               walletAddress={ks.wallets[0]?.address}
               walletBalance={wb.totalBalance}
+              sessionSecondsLeft={ks.sessionSecondsLeft}
+              sessionTotalSeconds={ks.sessionTotalSeconds}
               onToggleLock={handleToggleLock}
               onSwitchNetwork={handleSwitchNetwork}
             />

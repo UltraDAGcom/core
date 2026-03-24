@@ -1,4 +1,5 @@
 import { Menu, WifiOff, Lock, Wallet } from 'lucide-react';
+import { SessionBadge } from './SessionTimer';
 import type { NetworkType } from '../../lib/api';
 
 interface TopBarProps {
@@ -8,6 +9,7 @@ interface TopBarProps {
   network: NetworkType;
   walletAddress?: string;
   walletBalance?: number;
+  sessionSecondsLeft?: number;
   onToggleSidebar: () => void;
   onToggleLock: () => void;
   onSwitchNetwork: (network: NetworkType) => void;
@@ -19,6 +21,7 @@ export function TopBar({
   network,
   walletAddress,
   walletBalance,
+  sessionSecondsLeft,
   onToggleSidebar,
   onToggleLock,
   onSwitchNetwork,
@@ -83,7 +86,7 @@ export function TopBar({
         </button>
       </div>
 
-      {/* Right: wallet info + sign out */}
+      {/* Right: wallet info + session timer + lock */}
       {keystoreUnlocked ? (
         <div className="flex items-center gap-2">
           {walletAddress && (
@@ -98,6 +101,9 @@ export function TopBar({
               )}
             </div>
           )}
+          {sessionSecondsLeft !== undefined && (
+            <SessionBadge secondsLeft={sessionSecondsLeft} />
+          )}
           <button
             onClick={onToggleLock}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
@@ -108,7 +114,7 @@ export function TopBar({
           </button>
         </div>
       ) : (
-        <div className="w-20" /> // Spacer when not logged in
+        <div className="w-20" />
       )}
     </header>
   );

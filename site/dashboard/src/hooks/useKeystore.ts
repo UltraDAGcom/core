@@ -3,12 +3,12 @@ import * as keystore from '../lib/keystore.ts';
 import type { Wallet } from '../lib/keystore.ts';
 
 const AUTO_LOCK_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
-const AUTO_LOCK_CHECK_INTERVAL_MS = 60 * 1000; // check every 60 seconds
 
 export function useKeystore() {
   const [unlocked, setUnlocked] = useState(keystore.isUnlocked());
   const [hasStore, setHasStore] = useState(keystore.hasKeystore());
   const [wallets, setWallets] = useState<Wallet[]>(keystore.getWallets());
+  const [sessionSecondsLeft, setSessionSecondsLeft] = useState(AUTO_LOCK_TIMEOUT_MS / 1000);
   const lastActivityRef = useRef<number>(Date.now());
 
   const resetActivity = useCallback(() => {
@@ -29,16 +29,24 @@ export function useKeystore() {
 
   // Auto-lock after 15 minutes of inactivity
   // Track ALL user interactions (mouse, keyboard, touch, scroll)
+  // Tick every second to update the countdown timer
   useEffect(() => {
     const onActivity = () => { lastActivityRef.current = Date.now(); };
     const events = ['mousedown', 'keydown', 'touchstart', 'scroll', 'mousemove'];
     events.forEach(e => window.addEventListener(e, onActivity, { passive: true }));
 
     const interval = setInterval(() => {
-      if (keystore.isUnlocked() && Date.now() - lastActivityRef.current > AUTO_LOCK_TIMEOUT_MS) {
-        keystore.lock();
+      if (keystore.isUnlocked()) {
+        const elapsed = Date.now() - lastActivityRef.current;
+        const remaining = Math.max(0, Math.ceil((AUTO_LOCK_TIMEOUT_MS - elapsed) / 1000));
+        setSessionSecondsLeft(remaining);
+        if (remaining <= 0) {
+          keystore.lock();
+        }
+      } else {
+        setSessionSecondsLeft(AUTO_LOCK_TIMEOUT_MS / 1000);
       }
-    }, AUTO_LOCK_CHECK_INTERVAL_MS);
+    }, 1000);
 
     return () => {
       events.forEach(e => window.removeEventListener(e, onActivity));
@@ -125,6 +133,8 @@ export function useKeystore() {
     enrollWebAuthn,
     unlockWithWebAuthn,
     removeWebAuthn: removeWebAuthnCred,
+    sessionSecondsLeft,
+    sessionTotalSeconds: AUTO_LOCK_TIMEOUT_MS / 1000,
   };
 }
 
