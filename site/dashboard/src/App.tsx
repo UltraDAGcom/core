@@ -109,6 +109,9 @@ function App() {
               return true;
             }}
             onUnlock={ks.unlock}
+            onUnlockWithWebAuthn={ks.unlockWithWebAuthn}
+            webauthnAvailable={ks.webauthnAvailable}
+            webauthnEnrolled={ks.webauthnEnrolled}
             onImportBlob={ks.importBlob}
           />
         </div>
@@ -152,6 +155,10 @@ function App() {
                 onRemoveWallet={ks.removeWallet}
                 onExportBlob={ks.exportBlob}
                 onGenerateKeypair={handleGenerateKeypair}
+                webauthnAvailable={ks.webauthnAvailable}
+                webauthnEnrolled={ks.webauthnEnrolled}
+                onEnrollWebAuthn={ks.enrollWebAuthn}
+                onRemoveWebAuthn={ks.removeWebAuthn}
               />
             }
           />

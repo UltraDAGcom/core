@@ -79,6 +79,35 @@ export function useKeystore() {
     return keystore.exportBlob();
   }, []);
 
+  const webauthnAvailable = keystore.isWebAuthnAvailable();
+  const [webauthnEnrolled, setWebauthnEnrolled] = useState(keystore.isWebAuthnEnrolled());
+
+  // Keep webauthn state in sync
+  useEffect(() => {
+    const unsub2 = keystore.onKeystoreChange(() => {
+      setWebauthnEnrolled(keystore.isWebAuthnEnrolled());
+    });
+    return unsub2;
+  }, []);
+
+  const enrollWebAuthn = useCallback(async () => {
+    const ok = await keystore.enrollWebAuthn();
+    setWebauthnEnrolled(keystore.isWebAuthnEnrolled());
+    resetActivity();
+    return ok;
+  }, [resetActivity]);
+
+  const unlockWithWebAuthn = useCallback(async () => {
+    const ok = await keystore.unlockWithWebAuthn();
+    resetActivity();
+    return ok;
+  }, [resetActivity]);
+
+  const removeWebAuthnCred = useCallback(() => {
+    keystore.removeWebAuthn();
+    setWebauthnEnrolled(false);
+  }, []);
+
   return {
     unlocked,
     hasStore,
@@ -91,6 +120,11 @@ export function useKeystore() {
     importBlob,
     exportBlob,
     resetActivity,
+    webauthnAvailable,
+    webauthnEnrolled,
+    enrollWebAuthn,
+    unlockWithWebAuthn,
+    removeWebAuthn: removeWebAuthnCred,
   };
 }
 

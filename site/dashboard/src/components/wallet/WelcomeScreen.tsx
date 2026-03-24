@@ -1,17 +1,20 @@
 import { useState } from 'react';
-import { Plus, Key, ChevronRight, Shield, Zap, Globe, ArrowRight, Eye, EyeOff, Copy, Check } from 'lucide-react';
+import { Plus, Key, ChevronRight, Shield, Zap, Globe, ArrowRight, Eye, EyeOff, Copy, Check, Fingerprint } from 'lucide-react';
 import { deriveAddress, generateKeypair } from '../../lib/keygen';
 
 interface WelcomeScreenProps {
   onCreateWallet: (password: string, name: string, secretKey: string, address: string) => Promise<boolean>;
   onImportBlob: (json: string) => boolean;
   onUnlock: (password: string) => Promise<boolean>;
+  onUnlockWithWebAuthn?: () => Promise<boolean>;
+  webauthnAvailable?: boolean;
+  webauthnEnrolled?: boolean;
   hasExisting: boolean;
 }
 
 type Step = 'landing' | 'create' | 'import' | 'unlock' | 'restore';
 
-export function WelcomeScreen({ onCreateWallet, onImportBlob, onUnlock, hasExisting }: WelcomeScreenProps) {
+export function WelcomeScreen({ onCreateWallet, onImportBlob, onUnlock, onUnlockWithWebAuthn, webauthnAvailable: _webauthnAvailable, webauthnEnrolled, hasExisting }: WelcomeScreenProps) {
   const [step, setStep] = useState<Step>(hasExisting ? 'unlock' : 'landing');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -166,19 +169,44 @@ export function WelcomeScreen({ onCreateWallet, onImportBlob, onUnlock, hasExist
               <Zap className="w-7 h-7 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-white">Welcome Back</h1>
-            <p className="text-dag-muted text-sm">Enter your password to unlock your wallet.</p>
+            <p className="text-dag-muted text-sm">
+              {webauthnEnrolled ? 'Use biometrics or enter your password.' : 'Enter your password to unlock your wallet.'}
+            </p>
           </div>
           <div className="space-y-3">
+            {/* Biometric unlock — shown prominently when enrolled */}
+            {webauthnEnrolled && onUnlockWithWebAuthn && (
+              <button
+                onClick={async () => {
+                  setError(''); setLoading(true);
+                  try {
+                    const ok = await onUnlockWithWebAuthn();
+                    if (!ok) setError('Biometric authentication failed. Try your password.');
+                  } catch { setError('Biometric unavailable. Use your password.'); }
+                  finally { setLoading(false); }
+                }}
+                disabled={loading}
+                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-dag-accent to-purple-500 text-white font-semibold text-sm hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+              >
+                <Fingerprint className="w-5 h-5" />
+                {loading ? 'Verifying...' : 'Unlock with Biometrics'}
+              </button>
+            )}
+            {webauthnEnrolled && <div className="flex items-center gap-3"><div className="flex-1 h-px bg-dag-border" /><span className="text-xs text-dag-muted">or</span><div className="flex-1 h-px bg-dag-border" /></div>}
             <input
               type="password" value={password} onChange={(e) => setPassword(e.target.value)}
               placeholder="Password" className={inputCls}
               onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
-              autoFocus
+              autoFocus={!webauthnEnrolled}
             />
             {error && <p className="text-sm text-red-400 text-center">{error}</p>}
             <button onClick={handleUnlock} disabled={loading}
-              className="w-full py-3 rounded-xl bg-dag-accent text-white font-semibold text-sm hover:bg-dag-accent/80 disabled:opacity-50 transition-colors">
-              {loading ? 'Unlocking...' : 'Unlock'}
+              className={`w-full py-3 rounded-xl font-semibold text-sm disabled:opacity-50 transition-colors ${
+                webauthnEnrolled
+                  ? 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                  : 'bg-dag-accent text-white hover:bg-dag-accent/80'
+              }`}>
+              {loading ? 'Unlocking...' : 'Unlock with Password'}
             </button>
           </div>
           <button onClick={() => goTo('restore')} className="w-full text-center text-xs text-slate-500 hover:text-slate-300 transition-colors py-2">

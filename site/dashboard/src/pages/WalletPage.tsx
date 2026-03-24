@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Download, KeyRound, Wallet as WalletIcon, ShieldAlert, X } from 'lucide-react';
+import { Plus, Download, KeyRound, Wallet as WalletIcon, ShieldAlert, X, Fingerprint } from 'lucide-react';
 import { WalletCard, WalletDetail } from '../components/wallet/WalletCard';
 import { CreateKeystoreModal } from '../components/wallet/CreateKeystoreModal';
 import { AddWalletModal } from '../components/wallet/AddWalletModal';
@@ -152,6 +152,10 @@ interface WalletPageProps {
   onRemoveWallet: (index: number) => Promise<void>;
   onExportBlob: () => string | null;
   onGenerateKeypair: () => Promise<{ secret_key: string; address: string } | null>;
+  webauthnAvailable?: boolean;
+  webauthnEnrolled?: boolean;
+  onEnrollWebAuthn?: () => Promise<boolean>;
+  onRemoveWebAuthn?: () => void;
 }
 
 export function WalletPage({
@@ -166,6 +170,10 @@ export function WalletPage({
   onRemoveWallet,
   onExportBlob,
   onGenerateKeypair,
+  webauthnAvailable,
+  webauthnEnrolled,
+  onEnrollWebAuthn,
+  onRemoveWebAuthn,
 }: WalletPageProps) {
   const [showKeystoreModal, setShowKeystoreModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -255,12 +263,31 @@ export function WalletPage({
           <p className="text-sm text-dag-muted mt-1">{wallets.length} wallet{wallets.length !== 1 ? 's' : ''}</p>
         </div>
         <div className="flex gap-2">
+          {webauthnAvailable && onEnrollWebAuthn && onRemoveWebAuthn && (
+            <button
+              onClick={async () => {
+                if (webauthnEnrolled) {
+                  onRemoveWebAuthn();
+                } else {
+                  try { await onEnrollWebAuthn(); } catch {}
+                }
+              }}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                webauthnEnrolled
+                  ? 'bg-dag-green/15 text-dag-green hover:bg-dag-green/25'
+                  : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+              }`}
+            >
+              <Fingerprint className="w-3.5 h-3.5" />
+              {webauthnEnrolled ? 'Biometrics On' : 'Enable Biometrics'}
+            </button>
+          )}
           <button
             onClick={() => setShowChangePwModal(true)}
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700 text-slate-200 text-xs font-medium hover:bg-slate-600 transition-colors"
           >
             <KeyRound className="w-3.5 h-3.5" />
-            Change Password
+            Password
           </button>
           <button
             onClick={handleExport}

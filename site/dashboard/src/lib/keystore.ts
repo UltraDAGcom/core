@@ -157,3 +157,164 @@ export function importBlob(json: string, _password?: string): boolean {
     return false;
   }
 }
+
+// ========================================================================
+// WebAuthn (Biometric) Authentication
+// ========================================================================
+// Strategy: WebAuthn wraps the keystore password. The authenticator produces
+// a signature used to derive an AES key that encrypts/decrypts the password.
+// On biometric unlock: WebAuthn → derive key → decrypt password → unlock keystore.
+// Fallback to manual password always available.
+
+const WEBAUTHN_STORAGE_KEY = 'ultradag_webauthn';
+
+interface WebAuthnData {
+  credential_id: string;   // base64url
+  wrapped_password: string; // base64 (AES-GCM encrypted password)
+  wrapped_iv: string;       // base64
+  wrapped_salt: string;     // base64
+}
+
+function toBase64Url(buf: ArrayBuffer): string {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromBase64Url(str: string): Uint8Array {
+  const padded = str.replace(/-/g, '+').replace(/_/g, '/') + '=='.slice(0, (4 - str.length % 4) % 4);
+  return fromBase64(padded);
+}
+
+export function isWebAuthnAvailable(): boolean {
+  return typeof window !== 'undefined' && !!window.PublicKeyCredential;
+}
+
+export function isWebAuthnEnrolled(): boolean {
+  try {
+    const raw = localStorage.getItem(WEBAUTHN_STORAGE_KEY);
+    return raw !== null;
+  } catch { return false; }
+}
+
+/** Enroll WebAuthn after a successful password unlock. Wraps the password with biometric auth. */
+export async function enrollWebAuthn(): Promise<boolean> {
+  if (!keystoreData?._password) throw new Error('Keystore must be unlocked first');
+  if (!isWebAuthnAvailable()) throw new Error('WebAuthn not supported on this device');
+
+  const password = keystoreData._password;
+  const userId = crypto.getRandomValues(new Uint8Array(16));
+
+  // Create credential
+  const credential = await navigator.credentials.create({
+    publicKey: {
+      rp: { name: 'UltraDAG Wallet' },
+      user: {
+        id: userId,
+        name: 'wallet-user',
+        displayName: 'UltraDAG Wallet',
+      },
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      pubKeyCredParams: [
+        { alg: -7, type: 'public-key' },   // ES256
+        { alg: -257, type: 'public-key' },  // RS256
+      ],
+      authenticatorSelection: {
+        authenticatorAttachment: 'platform', // built-in biometric (Touch ID, Face ID, Windows Hello)
+        userVerification: 'required',
+      },
+      timeout: 60000,
+    },
+  }) as PublicKeyCredential | null;
+
+  if (!credential) return false;
+
+  const credentialId = toBase64Url(credential.rawId);
+
+  // Derive a wrapping key from the credential ID + a salt
+  // (the credential ID is unique and stable across assertions)
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const wrapKey = await deriveKeyFromBytes(new Uint8Array(credential.rawId), salt);
+
+  // Encrypt the password with the wrapping key
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const enc = new TextEncoder();
+  const encryptedPassword = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    wrapKey,
+    enc.encode(password),
+  );
+
+  const webauthnData: WebAuthnData = {
+    credential_id: credentialId,
+    wrapped_password: toBase64(encryptedPassword),
+    wrapped_iv: toBase64(iv.buffer as ArrayBuffer),
+    wrapped_salt: toBase64(salt.buffer as ArrayBuffer),
+  };
+
+  localStorage.setItem(WEBAUTHN_STORAGE_KEY, JSON.stringify(webauthnData));
+  notify();
+  return true;
+}
+
+/** Unlock keystore using WebAuthn (biometric). Returns true on success. */
+export async function unlockWithWebAuthn(): Promise<boolean> {
+  if (!encryptedBlob) return false;
+  if (!isWebAuthnAvailable()) return false;
+
+  const raw = localStorage.getItem(WEBAUTHN_STORAGE_KEY);
+  if (!raw) return false;
+
+  const webauthnData: WebAuthnData = JSON.parse(raw);
+  const credentialId = fromBase64Url(webauthnData.credential_id);
+
+  // Request assertion (triggers biometric prompt)
+  const assertion = await navigator.credentials.get({
+    publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{ id: credentialId as unknown as BufferSource, type: 'public-key' }],
+      userVerification: 'required',
+      timeout: 60000,
+    },
+  }) as PublicKeyCredential | null;
+
+  if (!assertion) return false;
+
+  // Derive the same wrapping key from credential ID + stored salt
+  const salt = fromBase64(webauthnData.wrapped_salt);
+  const wrapKey = await deriveKeyFromBytes(new Uint8Array(assertion.rawId), salt);
+
+  // Decrypt the password
+  const iv = fromBase64(webauthnData.wrapped_iv);
+  const ct = fromBase64(webauthnData.wrapped_password);
+  try {
+    const pt = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: iv as unknown as BufferSource },
+      wrapKey,
+      ct as unknown as BufferSource,
+    );
+    const password = new TextDecoder().decode(pt);
+
+    // Use the recovered password to unlock the keystore (existing flow)
+    return unlock(password);
+  } catch {
+    return false;
+  }
+}
+
+/** Remove WebAuthn enrollment. Reverts to password-only. */
+export function removeWebAuthn(): void {
+  localStorage.removeItem(WEBAUTHN_STORAGE_KEY);
+  notify();
+}
+
+/** Derive an AES-256-GCM key from raw bytes + salt (for wrapping the password). */
+async function deriveKeyFromBytes(keyMaterial: Uint8Array, salt: Uint8Array): Promise<CryptoKey> {
+  const imported = await crypto.subtle.importKey('raw', keyMaterial as unknown as ArrayBuffer, 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: salt.buffer as ArrayBuffer, iterations: 100000, hash: 'SHA-256' },
+    imported,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  );
+}

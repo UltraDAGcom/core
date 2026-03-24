@@ -71,6 +71,25 @@ export function generatePassword(): string {
 }
 
 /**
+ * Wallet test data interface
+ */
+export interface WalletTestData {
+  name: string;
+  password: string;
+}
+
+/**
+ * Generate wallet test data (name and password)
+ */
+export function generateWalletData(): WalletTestData {
+  const randomId = Math.random().toString(36).substring(2, 8);
+  return {
+    name: `TestWallet${randomId}`,
+    password: `SecurePass${randomId}!`,
+  };
+}
+
+/**
  * Generate random amount of DAG tokens
  */
 export function generateDagAmount(min: number = 1, max: number = 1000): number {
