@@ -1,5 +1,4 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::RwLock;
 
 use crate::address::Address;
 use crate::consensus::vertex::DagVertex;
@@ -95,19 +94,6 @@ impl StateSnapshot {
         }
 
         Ok(())
-    }
-}
-
-/// Round-based lock guard for atomic batch processing.
-/// Ensures only one round can be applied at a time.
-struct RoundLockGuard {
-    round: u64,
-    _marker: std::marker::PhantomData<()>,
-}
-
-impl Drop for RoundLockGuard {
-    fn drop(&mut self) {
-        // Lock is released automatically when guard is dropped
     }
 }
 
@@ -259,9 +245,6 @@ pub struct StateEngine {
     /// Used to enforce PROPOSAL_COOLDOWN_ROUNDS between submissions.
     /// Prevents spam and allows time for community review of failed proposals.
     last_proposal_round: HashMap<Address, u64>,
-    /// Round-based lock for atomic batch processing.
-    /// Ensures only one round can be applied at a time to prevent concurrent finalization corruption.
-    round_lock: RwLock<Option<u64>>,
     /// Bridge attestations: nonce → (attestation, collected signatures).
     /// Validators sign attestations as part of consensus. When 2/3+ signatures collected,
     /// users can claim on Arbitrum.
@@ -308,7 +291,7 @@ impl StateEngine {
             applied_validators_per_round: HashMap::new(),
             bridge_reserve: 0,
             last_proposal_round: HashMap::new(),
-            round_lock: RwLock::new(None),
+
             bridge_attestations: HashMap::new(),
             bridge_signatures: HashMap::new(),
             bridge_nonce: 0,
@@ -1272,30 +1255,6 @@ impl StateEngine {
         with_hashes.sort_by(|(ha, a), (hb, b)| a.round.cmp(&b.round).then_with(|| ha.cmp(hb)));
         let sorted: Vec<&DagVertex> = with_hashes.iter().map(|(_, v)| *v).collect();
 
-        // RACE CONDITION FIX: Acquire round lock for atomic batch processing.
-        // This ensures only one round can be applied at a time.
-        // The lock is released automatically when this function returns.
-        {
-            let mut round_lock = self.round_lock.write()
-                .map_err(|_| CoinError::ValidationError("round lock poisoned".into()))?;
-            
-            // Check if another round is currently being applied
-            if let Some(locked_round) = *round_lock {
-                // This should not happen in single-threaded usage, but protects against
-                // future concurrent usage patterns
-                tracing::warn!("Round lock held for round {}, waiting...", locked_round);
-            }
-            
-            // Set the lock to indicate we're processing (use first round as marker)
-            if let Some(first_round) = sorted.first().map(|v| v.round) {
-                *round_lock = Some(first_round);
-            }
-            
-            // Drop the write lock - we'll use read lock for the actual processing
-            // The lock field is mainly for signaling, actual mutual exclusion is via &mut self
-            drop(round_lock);
-        }
-
         // Deterministic equivocation detection (defense-in-depth):
         //
         // PRIMARY DEFENSE: The DAG rejects equivocating vertices at insertion via
@@ -1424,13 +1383,6 @@ impl StateEngine {
                 tracing::error!("State consistency check failed after applying vertices: {}", e);
                 return Err(e);
             }
-        }
-
-        // Release round lock
-        {
-            let mut round_lock = self.round_lock.write()
-                .map_err(|_| CoinError::ValidationError("round lock poisoned".into()))?;
-            *round_lock = None;
         }
 
         // Prune old entries from cross-batch equivocation tracker (keep last 1000 rounds).
@@ -2220,7 +2172,10 @@ impl StateEngine {
                 tx.commission_percent, crate::constants::MAX_COMMISSION_PERCENT
             )));
         }
-        // Enforce commission change cooldown to prevent sandwich attacks
+        // Enforce commission change cooldown to prevent sandwich attacks.
+        // NOTE: cooldown is measured from the vertex round (inclusion time), not finalization time.
+        // This is deterministic — all nodes agree on vertex round. The effective cooldown in
+        // wall-clock time depends on when the vertex was finalized, which may differ slightly.
         if let Some(last_changed) = stake.commission_last_changed {
             if round.saturating_sub(last_changed) < crate::constants::COMMISSION_COOLDOWN_ROUNDS {
                 return Err(CoinError::ValidationError(
@@ -2515,10 +2470,14 @@ impl StateEngine {
         }
 
         // 8. SECURITY: Check voter doesn't have locked stake from previous votes.
-        //    This prevents double-voting with the same stake across multiple proposals.
-        if let Some(stake_account) = self.stake_accounts.get(&tx.from) {
-            if stake_account.locked_stake > 0 {
-                return Err(CoinError::StakeLocked);
+        //    Council members use 1-vote-per-seat (not stake-weighted), so locked_stake
+        //    doesn't apply to them — they can vote on multiple proposals concurrently.
+        //    Stake-weighted voters (if ever re-enabled) would need this check.
+        if !self.is_council_member(&tx.from) {
+            if let Some(stake_account) = self.stake_accounts.get(&tx.from) {
+                if stake_account.locked_stake > 0 {
+                    return Err(CoinError::StakeLocked);
+                }
             }
         }
 
@@ -2541,10 +2500,12 @@ impl StateEngine {
         self.increment_nonce(&tx.from);
 
         // 12. SECURITY: Lock the voter's stake to prevent manipulation.
-        //     Lock the full staked amount (if any) for the duration of the vote.
-        //     This ensures voters cannot move stake after committing to a vote.
-        if let Some(stake_account) = self.stake_accounts.get_mut(&tx.from) {
-            stake_account.locked_stake = stake_account.staked;
+        //     Council members use 1-vote-per-seat, so stake locking is not needed.
+        //     For stake-weighted voters (if ever re-enabled), lock the full staked amount.
+        if !self.is_council_member(&tx.from) {
+            if let Some(stake_account) = self.stake_accounts.get_mut(&tx.from) {
+                stake_account.locked_stake = stake_account.staked;
+            }
         }
 
         // 13. Add vote weight to proposal.votes_for or votes_against
@@ -2808,7 +2769,7 @@ impl StateEngine {
     /// Above 50%, fee increases linearly up to 10x at 100% capacity.
     pub fn dynamic_min_fee(&self, mempool_size: usize) -> u64 {
         let base = self.governance_params.min_fee_sats;
-        let capacity = 10_000usize; // MAX_MEMPOOL_SIZE
+        let capacity = crate::tx::pool::MAX_MEMPOOL_SIZE;
         if mempool_size <= capacity / 2 {
             base
         } else {
@@ -2906,7 +2867,7 @@ impl StateEngine {
             used_release_nonces: std::collections::HashSet::new(),
             bridge_release_votes: HashMap::new(),
             last_proposal_round: HashMap::new(),
-            round_lock: RwLock::new(None),
+
         })
     }
 
@@ -3033,7 +2994,7 @@ impl StateEngine {
                 .map(|(k, voters)| (k, voters.into_iter().collect()))
                 .collect(),
             last_proposal_round: HashMap::new(),
-            round_lock: RwLock::new(None),
+
         })
     }
 
@@ -3998,19 +3959,13 @@ mod tests {
         let sk1 = SecretKey::generate();
         let sk2 = SecretKey::generate();
         
-        // Simulate concurrent application by applying batches sequentially
-        // In real concurrent usage, the RwLock would prevent simultaneous access
-        
+        // Simulate sequential application of batches
+        // &mut self already guarantees exclusive access
+
         // Batch 1: Round 0
         let v0 = make_vertex_for(&sk1.address(), 0, 0, vec![], &sk1);
         assert!(state.apply_finalized_vertices(&[v0]).is_ok());
-        
-        // Verify round lock is released after first batch
-        {
-            let round_lock = state.round_lock.read().unwrap();
-            assert_eq!(*round_lock, None, "Round lock should be released after batch");
-        }
-        
+
         // Batch 2: Round 1
         let v1 = make_vertex_for(&sk2.address(), 1, 1, vec![], &sk2);
         assert!(state.apply_finalized_vertices(&[v1]).is_ok());
@@ -4107,26 +4062,5 @@ mod tests {
         assert_eq!(state.last_finalized_round(), Some(99));
     }
 
-    /// Test: Round lock prevents concurrent application (unit test)
-    #[test]
-    fn round_lock_mechanism() {
-        let mut state = StateEngine::new();
-        
-        // Initially, lock should be None
-        {
-            let round_lock = state.round_lock.read().unwrap();
-            assert_eq!(*round_lock, None);
-        }
-        
-        // After applying vertices, lock should be released
-        let sk = SecretKey::generate();
-        let v = make_vertex_for(&sk.address(), 0, 0, vec![], &sk);
-        assert!(state.apply_finalized_vertices(&[v]).is_ok());
-        
-        {
-            let round_lock = state.round_lock.read().unwrap();
-            assert_eq!(*round_lock, None, "Lock should be released after apply");
-        }
-    }
 }
 

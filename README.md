@@ -179,7 +179,7 @@ HTTP RPC runs on P2P port + 1000 (e.g., P2P 9333 → RPC 10333).
 - **Note:** Stake becomes active at the next epoch boundary (every 210,000 rounds)
 
 **POST /unstake** — Begin unstake cooldown (~2.8 hours at 5s rounds)
-- **Cooldown:** 2,016 rounds before funds are returned (~2.8 hours at 5s testnet, ~16.8 hours at 30s design target)
+- **Cooldown:** 2,016 rounds before funds are returned (~2.8 hours at 5s rounds)
 - **Request:**
 ```json
 {

@@ -2098,7 +2098,14 @@ ultradag_banned_ips {ban_count}
                         "too many active proposals, please wait for existing proposals to complete"));
                 }
 
-                let proposal_id = state.next_proposal_id();
+                // Avoid TOCTOU: if another concurrent request already inserted a
+                // CreateProposal tx into the mempool with the same ID, increment past it.
+                let mut proposal_id = state.next_proposal_id();
+                if let Some(max_pending) = mp.max_pending_proposal_id() {
+                    if max_pending >= proposal_id {
+                        proposal_id = max_pending.saturating_add(1);
+                    }
+                }
 
                 let mut create_tx = CreateProposalTx {
                     from: sender,

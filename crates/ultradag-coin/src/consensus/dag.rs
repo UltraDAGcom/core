@@ -456,7 +456,7 @@ impl BlockDag {
         }
 
         // Deterministic sampling: blake3(proposer || candidate) for uniform scoring.
-        // Sort by full 32-byte hash for guaranteed determinism (no collisions).
+        // Sort by full 32-byte hash for deterministic ordering (blake3 collision is computationally infeasible).
         // Uses hashes_in_round() to avoid cloning full DagVertex structs and
         // recomputing blake3 hashes that are already stored in the rounds map.
         let mut scored: Vec<([u8; 32], [u8; 32])> = candidate_hashes

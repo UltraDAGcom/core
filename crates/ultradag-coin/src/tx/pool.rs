@@ -5,7 +5,7 @@ use crate::address::Address;
 use crate::tx::transaction::Transaction;
 
 /// Maximum transactions in mempool to prevent DoS
-const MAX_MEMPOOL_SIZE: usize = 10_000;
+pub const MAX_MEMPOOL_SIZE: usize = 10_000;
 
 /// Maximum transactions per sender address in the mempool.
 /// Prevents a single address from monopolizing mempool capacity.
@@ -199,6 +199,21 @@ impl Mempool {
                 .map(|entry| entry.tx.nonce())
                 .max()
         })
+    }
+
+    /// Get the highest pending proposal ID in the mempool, if any.
+    /// Used to avoid TOCTOU races when two concurrent RPC requests both read the same
+    /// next_proposal_id from state.
+    pub fn max_pending_proposal_id(&self) -> Option<u64> {
+        self.txs.values()
+            .filter_map(|e| {
+                if let Transaction::CreateProposal(tx) = &e.tx {
+                    Some(tx.proposal_id)
+                } else {
+                    None
+                }
+            })
+            .max()
     }
 
     /// Save mempool to disk
