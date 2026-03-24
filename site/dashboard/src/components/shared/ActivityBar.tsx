@@ -9,8 +9,6 @@ export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   // Track the last known max round to detect new rounds
   const lastMaxRoundRef = useRef<number>(0);
-  // Whether a new round just arrived (triggers wave animation)
-  const [waveRound, setWaveRound] = useState<number>(0);
   // Track previous vertex counts to detect changes
   const prevVerticesRef = useRef<Map<number, number>>(new Map());
 
@@ -27,20 +25,17 @@ export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
   useEffect(() => {
     const prevVertices = prevVerticesRef.current;
     let hasNewRound = currentMaxRound > lastMaxRoundRef.current;
-    let hasHeightChanges = false;
 
     // Check for height changes on existing bars
     for (const r of display) {
       const prevHeight = prevVertices.get(r.round);
       if (prevHeight !== undefined && prevHeight !== r.vertexCount) {
-        hasHeightChanges = true;
         break;
       }
     }
 
     if (hasNewRound) {
       lastMaxRoundRef.current = currentMaxRound;
-      setWaveRound(prev => prev + 1);
     }
 
     // Update stored vertex counts
@@ -61,8 +56,6 @@ export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
               : 'bg-dag-red';
 
         const isLatest = r.round === currentMaxRound;
-        const prevHeight = prevVerticesRef.current.get(r.round) ?? r.vertexCount;
-        const heightChanged = prevHeight !== r.vertexCount;
 
         return (
           <div

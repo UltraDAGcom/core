@@ -13,16 +13,14 @@ import {
   X,
   Zap,
   Lock,
-  ChevronDown,
   AlertTriangle,
 } from 'lucide-react';
 import { formatUnits } from 'ethers';
-import { Card } from '../components/shared/Card.tsx';
 import { useKeystore } from '../hooks/useKeystore.ts';
 import { useEthWallet } from '../hooks/useEthWallet.ts';
 import type { DiscoveredWallet } from '../hooks/useEthWallet.ts';
 import { useToast } from '../hooks/useToast.tsx';
-import { normalizeAddress, isValidAddress, formatUdag, formatUdagBigint, shortAddr, getBridgeNonce, getBridgeAttestation, getBridgeReserve, postBridgeDeposit, isConnected } from '../lib/api.ts';
+import { normalizeAddress, isValidAddress, formatUdag, formatUdagBigint, getBridgeNonce, getBridgeAttestation, getBridgeReserve, postBridgeDeposit, isConnected } from '../lib/api.ts';
 import { CopyButton } from '../components/shared/CopyButton.tsx';
 import { WalletSelector } from '../components/shared/WalletSelector.tsx';
 import { useWalletBalances } from '../hooks/useWalletBalances.ts';
