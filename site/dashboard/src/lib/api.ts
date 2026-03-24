@@ -8,12 +8,13 @@ const TESTNET_NODES = [
   'https://ultradag-node-5.fly.dev',
 ];
 
+// Mainnet nodes — same as testnet until mainnet launch
 const MAINNET_NODES = [
-  'https://ultradag-mainnet-1.fly.dev',
-  'https://ultradag-mainnet-2.fly.dev',
-  'https://ultradag-mainnet-3.fly.dev',
-  'https://ultradag-mainnet-4.fly.dev',
-  'https://ultradag-mainnet-5.fly.dev',
+  'https://ultradag-node-1.fly.dev',
+  'https://ultradag-node-2.fly.dev',
+  'https://ultradag-node-3.fly.dev',
+  'https://ultradag-node-4.fly.dev',
+  'https://ultradag-node-5.fly.dev',
 ];
 
 export type NetworkType = 'mainnet' | 'testnet';
@@ -58,18 +59,22 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
 
 export async function connectToNode(): Promise<boolean> {
   const nodes = currentNetwork === 'mainnet' ? MAINNET_NODES : TESTNET_NODES;
-  for (const node of nodes) {
-    try {
-      const res = await fetch(node + '/health', { signal: AbortSignal.timeout(5000) });
-      if (res.ok) {
-        currentNode = node;
-        connected = true;
-        return true;
-      }
-    } catch {}
+  // Race all nodes in parallel — first healthy response wins
+  try {
+    const winner = await Promise.any(
+      nodes.map(async (node) => {
+        const res = await fetch(node + '/health', { signal: AbortSignal.timeout(3000) });
+        if (!res.ok) throw new Error('unhealthy');
+        return node;
+      })
+    );
+    currentNode = winner;
+    connected = true;
+    return true;
+  } catch {
+    connected = false;
+    return false;
   }
-  connected = false;
-  return false;
 }
 
 // GET endpoints
