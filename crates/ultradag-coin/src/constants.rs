@@ -128,72 +128,72 @@ const _: () = assert!(
     "DEV_ADDRESS_SEED uses old insecure placeholder. Use new testnet seed or set mainnet key."
 );
 
-/// Return the developer address.
-/// 
-/// For mainnet, this requires ULTRADAG_DEV_KEY environment variable to be set.
-/// Panics on mainnet if key is not configured - this is intentional security behavior.
+/// Return the developer/founder address.
+///
+/// Nodes only need the ADDRESS (public) to route emission — never the private key.
+/// - Checks ULTRADAG_DEV_ADDRESS env var first (40-hex address, recommended)
+/// - Falls back to ULTRADAG_DEV_KEY env var (64-hex secret key, derives address)
+/// - Falls back to hardcoded DEV_ADDRESS_SEED (testnet only)
+///
+/// SECURITY: Use ULTRADAG_DEV_ADDRESS on production nodes. Never put private keys
+/// on network-facing machines. The private key is only needed for signing transactions
+/// in the client wallet, not on validator nodes.
 pub fn dev_address() -> crate::address::Address {
-    dev_keypair().address()
-}
+    // Preferred: public address only (no secret key on node)
+    if let Ok(addr_hex) = std::env::var("ULTRADAG_DEV_ADDRESS") {
+        if let Some(addr) = crate::address::Address::from_hex(&addr_hex) {
+            return addr;
+        }
+    }
 
-/// Get the developer keypair.
-/// 
-/// For testnet: returns deterministic keypair.
-/// For mainnet: reads from ULTRADAG_DEV_KEY environment variable (64-char hex).
-/// 
-/// # Panics
-/// 
-/// On mainnet, panics if ULTRADAG_DEV_KEY is not set or invalid.
-/// This is intentional - mainnet requires explicit key configuration.
-pub fn dev_keypair() -> crate::address::SecretKey {
-    #[cfg(not(feature = "mainnet"))]
-    {
-        // Testnet: use ULTRADAG_DEV_KEY env var if set, otherwise fall back to hardcoded seed.
-        // This lets operators use the same founder key on testnet and mainnet without
-        // exposing the private key in source code.
-        if let Ok(key_hex) = std::env::var("ULTRADAG_DEV_KEY") {
-            if key_hex.len() == 64 {
-                let mut bytes = [0u8; 32];
-                for (i, chunk) in key_hex.as_bytes().chunks(2).enumerate() {
-                    if let Ok(hex_str) = std::str::from_utf8(chunk) {
-                        if let Ok(b) = u8::from_str_radix(hex_str, 16) {
-                            bytes[i] = b;
-                        }
+    // Fallback: derive from secret key (backward compatible, less secure)
+    if let Ok(key_hex) = std::env::var("ULTRADAG_DEV_KEY") {
+        if key_hex.len() == 64 {
+            let mut bytes = [0u8; 32];
+            for (i, chunk) in key_hex.as_bytes().chunks(2).enumerate() {
+                if let Ok(hex_str) = std::str::from_utf8(chunk) {
+                    if let Ok(b) = u8::from_str_radix(hex_str, 16) {
+                        bytes[i] = b;
                     }
                 }
-                return crate::address::SecretKey::from_bytes(bytes);
             }
+            return crate::address::SecretKey::from_bytes(bytes).address();
         }
-        crate::address::SecretKey::from_bytes(DEV_ADDRESS_SEED)
     }
-    
+
+    // Testnet hardcoded fallback
+    #[cfg(not(feature = "mainnet"))]
+    {
+        return crate::address::SecretKey::from_bytes(DEV_ADDRESS_SEED).address();
+    }
+
     #[cfg(feature = "mainnet")]
     {
-        use std::env;
-        
-        // Runtime check: mainnet requires explicit key configuration
-        verify_genesis_checkpoint_hash(); // Also verify genesis hash
-        
-        let key_hex = env::var("ULTRADAG_DEV_KEY")
-            .expect("MAINNET SECURITY: ULTRADAG_DEV_KEY environment variable must be set with 64-char hex private key");
-        
-        if key_hex.len() != 64 {
-            panic!("MAINNET SECURITY ERROR: ULTRADAG_DEV_KEY must be 64 hex characters, got {}", key_hex.len());
-        }
-        
-        let mut bytes = [0u8; 32];
-        for (i, chunk) in key_hex.as_bytes().chunks(2).enumerate() {
-            let hex_str = std::str::from_utf8(chunk)
-                .expect("MAINNET SECURITY ERROR: ULTRADAG_DEV_KEY contains invalid hex");
-            bytes[i] = u8::from_str_radix(hex_str, 16)
-                .expect("MAINNET SECURITY ERROR: ULTRADAG_DEV_KEY contains invalid hex characters");
-        }
-        
-        // Zeroize the key hex from memory after use
-        drop(key_hex);
-        
-        crate::address::SecretKey::from_bytes(bytes)
+        panic!(
+            "MAINNET SECURITY: Set ULTRADAG_DEV_ADDRESS (40-hex founder address) \
+             or ULTRADAG_DEV_KEY (64-hex secret, less secure) environment variable"
+        );
     }
+}
+
+/// Get the developer keypair (testnet only — for convenience endpoints).
+/// On mainnet, this is not available. Use client-side signing via SDKs.
+#[cfg(not(feature = "mainnet"))]
+pub fn dev_keypair() -> crate::address::SecretKey {
+    if let Ok(key_hex) = std::env::var("ULTRADAG_DEV_KEY") {
+        if key_hex.len() == 64 {
+            let mut bytes = [0u8; 32];
+            for (i, chunk) in key_hex.as_bytes().chunks(2).enumerate() {
+                if let Ok(hex_str) = std::str::from_utf8(chunk) {
+                    if let Ok(b) = u8::from_str_radix(hex_str, 16) {
+                        bytes[i] = b;
+                    }
+                }
+            }
+            return crate::address::SecretKey::from_bytes(bytes);
+        }
+    }
+    crate::address::SecretKey::from_bytes(DEV_ADDRESS_SEED)
 }
 
 /// Maximum number of active validators (top stakers by amount).
