@@ -138,7 +138,7 @@ fn test_dag_vertex_hash_deterministic() {
 #[test]
 fn test_state_engine_initialization() {
     let state = StateEngine::new();
-    assert_eq!(state.current_epoch(), u64::MAX); // sentinel: epoch never initialized
+    assert_eq!(state.current_epoch(), ultradag_coin::constants::EPOCH_UNINITIALIZED); // sentinel: epoch never initialized
 }
 
 #[test]

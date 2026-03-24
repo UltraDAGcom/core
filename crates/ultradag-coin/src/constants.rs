@@ -209,6 +209,15 @@ pub const MIN_ACTIVE_VALIDATORS: usize = 4;
 /// Matches halving interval for clean alignment.
 pub const EPOCH_LENGTH_ROUNDS: u64 = 210_000;
 
+/// Sentinel value for `current_epoch` indicating "never initialized".
+/// On the first vertex, `epoch_of(round)` will differ from this sentinel,
+/// triggering the initial `recalculate_active_set()`.
+///
+/// SAFETY: This is safe because `epoch_of(round) = round / EPOCH_LENGTH_ROUNDS` (210,000),
+/// so the maximum possible epoch is `u64::MAX / 210,000 ≈ 8.78×10^13` — never `u64::MAX`.
+/// `EPOCH_LENGTH_ROUNDS` is a compile-time constant, not governable, so this invariant holds forever.
+pub const EPOCH_UNINITIALIZED: u64 = u64::MAX;
+
 /// Observer reward percentage: staked-but-not-active addresses earn 20% of normal.
 pub const OBSERVER_REWARD_PERCENT: u64 = 20;
 

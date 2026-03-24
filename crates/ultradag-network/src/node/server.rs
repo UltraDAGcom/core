@@ -2100,8 +2100,10 @@ async fn handle_peer(
                         // No validator allowlist AND no active stakers: checkpoint trust
                         // is entirely attacker-controlled (signers come from attacker's snapshot).
                         // Refuse the checkpoint and force the operator to use --validator-key.
-                        warn!("REFUSING CheckpointSync: pre-staking mode with no validator allowlist. \
-                            Use --validator-key to specify trusted validators before accepting checkpoints.");
+                        warn!("REFUSING CheckpointSync: node cannot verify checkpoint signer trust \
+                            in pre-staking mode without a validator allowlist. Configure --validator-key \
+                            with trusted validator addresses to enable checkpoint sync. Without this, \
+                            an attacker could fabricate a checkpoint with their own validator set.");
                         checkpoint_metrics.record_fast_sync_failure();
                         continue;
                     }

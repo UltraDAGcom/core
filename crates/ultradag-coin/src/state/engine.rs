@@ -292,12 +292,7 @@ impl StateEngine {
             total_supply: 0,
             last_finalized_round: None,
             active_validator_set: Vec::new(),
-            // Sentinel: epoch never initialized. On the first vertex, epoch_of(round) will
-            // differ from u64::MAX, triggering recalculate_active_set(). Safe because:
-            // - epoch_of(round) = round / EPOCH_LENGTH_ROUNDS (210,000)
-            // - Maximum epoch = u64::MAX / 210,000 ≈ 8.78×10^13 — never u64::MAX
-            // - EPOCH_LENGTH_ROUNDS is a compile-time constant, not governable
-            current_epoch: u64::MAX,
+            current_epoch: crate::constants::EPOCH_UNINITIALIZED,
             proposals: HashMap::new(),
             votes: HashMap::new(),
             council_members: HashMap::new(),
@@ -757,6 +752,14 @@ impl StateEngine {
         // Without this, no one can create proposals (catch-22).
         // The dev/foundation member can then propose additional council members.
         // Note: dev address starts with 0 balance — earns through emission.
+        //
+        // WARNING — SINGLE-POINT-OF-FAILURE RISK:
+        // At genesis, only the dev address is a council member. If this key is lost
+        // or compromised, governance is permanently locked (no one can create proposals
+        // to add new members). Operators MUST add additional council members immediately
+        // after genesis via CouncilMembership governance proposals. Use both Foundation
+        // seats at minimum, and add members across multiple categories as soon as possible.
+        // See the Mainnet Launch Checklist for key ceremony and council bootstrap procedures.
         let dev_addr = crate::constants::dev_address();
         let _ = engine.add_council_member(
             dev_addr,
@@ -948,7 +951,7 @@ impl StateEngine {
     /// Also distributes round rewards and ticks governance.
     pub fn apply_vertex(&mut self, vertex: &DagVertex) -> Result<(), CoinError> {
         // Process unstake completions at the round boundary (same as apply_finalized_vertices)
-        self.process_unstake_completions(vertex.round);
+        self.process_unstake_completions(vertex.round)?;
         self.apply_vertex_with_validators(vertex, 1)?;
         // Single-vertex convenience: distribute round rewards, update finality, tick governance.
         let mut producers = std::collections::HashSet::new();
@@ -1168,10 +1171,11 @@ impl StateEngine {
         // compute the same expected_height for coinbase validation.
 
         // Epoch boundary: recalculate active validator set
-        // Uses `!=` instead of `>` because current_epoch is initialized to u64::MAX
-        // (sentinel for "never initialized"). On the first vertex, epoch_of(0)=0
-        // which != u64::MAX, triggering the initial recalculation. Subsequent vertices
-        // in the same epoch won't trigger because epoch_of(round) == current_epoch.
+        // Uses `!=` instead of `>` because current_epoch is initialized to
+        // EPOCH_UNINITIALIZED (u64::MAX sentinel). On the first vertex, epoch_of(0)=0
+        // which != EPOCH_UNINITIALIZED, triggering the initial recalculation. Subsequent
+        // vertices in the same epoch won't trigger because epoch_of(round) == current_epoch.
+        // See constants::EPOCH_UNINITIALIZED for safety proof.
         //
         // IMPORTANT: Do NOT use `|| self.active_validator_set.is_empty()` here.
         // That caused a fatal bug where the first staker immediately became the only
@@ -1375,10 +1379,10 @@ impl StateEngine {
                 }
                 round_producers.clear();
                 // Process unstake completions once at the start of each new round
-                self.process_unstake_completions(vertex.round);
+                self.process_unstake_completions(vertex.round)?;
             } else if prev_round.is_none() {
                 // First vertex in the batch: process unstake completions for its round
-                self.process_unstake_completions(vertex.round);
+                self.process_unstake_completions(vertex.round)?;
             }
 
             let count = 1; // reward splitting now in distribute_round_rewards
@@ -1873,7 +1877,11 @@ impl StateEngine {
     /// Process unstake completions: return funds after cooldown.
     /// Also processes delegation undelegation completions.
     /// Call this at the start of each round.
-    pub fn process_unstake_completions(&mut self, current_round: u64) {
+    ///
+    /// Returns `SupplyInvariantBroken` if crediting unstaked/undelegated funds fails.
+    /// This is FATAL: the stake was already zeroed, so a credit failure means funds
+    /// are destroyed and the supply invariant is permanently broken.
+    pub fn process_unstake_completions(&mut self, current_round: u64) -> Result<(), CoinError> {
         // Process stake unstake completions
         let mut to_return: Vec<(Address, u64)> = Vec::new();
         for (addr, stake) in &self.stake_accounts {
@@ -1883,16 +1891,22 @@ impl StateEngine {
                 }
             }
         }
-        for (addr, amount) in to_return {
-            if let Some(stake) = self.stake_accounts.get_mut(&addr) {
+        for (addr, amount) in &to_return {
+            if let Some(stake) = self.stake_accounts.get_mut(addr) {
                 stake.staked = 0;
                 stake.unlock_at_round = None;
-                let _ = self.credit(&addr, amount);
+                self.credit(addr, *amount).map_err(|e| {
+                    CoinError::SupplyInvariantBroken(format!(
+                        "process_unstake_completions: failed to credit {} sats to {} after unstake: {}. \
+                         Stake was already zeroed — funds are destroyed.",
+                        amount, addr.to_hex(), e
+                    ))
+                })?;
             }
             // Remove empty stake account to prevent unbounded growth.
             // Safe: stake_of() returns 0 for missing entries, stake_account() returns None,
             // and all callers handle missing entries gracefully.
-            self.stake_accounts.remove(&addr);
+            self.stake_accounts.remove(addr);
         }
 
         // Process delegation undelegation completions
@@ -1904,10 +1918,17 @@ impl StateEngine {
                 }
             }
         }
-        for (addr, amount) in delegations_to_return {
-            self.delegation_accounts.remove(&addr);
-            let _ = self.credit(&addr, amount);
+        for (addr, amount) in &delegations_to_return {
+            self.delegation_accounts.remove(addr);
+            self.credit(addr, *amount).map_err(|e| {
+                CoinError::SupplyInvariantBroken(format!(
+                    "process_unstake_completions: failed to credit {} sats to {} after undelegation: {}. \
+                     Delegation was already removed — funds are destroyed.",
+                    amount, addr.to_hex(), e
+                ))
+            })?;
         }
+        Ok(())
     }
 
     /// Remove economically dead accounts:

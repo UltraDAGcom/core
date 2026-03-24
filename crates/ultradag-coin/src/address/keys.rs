@@ -203,7 +203,8 @@ impl Signature {
     }
 }
 
-impl Copy for Signature {}
+// NOTE: Signature intentionally does NOT implement Copy.
+// At 64 bytes, implicit stack copies are wasteful. Use .clone() or references instead.
 
 #[cfg(test)]
 mod tests {

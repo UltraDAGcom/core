@@ -369,6 +369,17 @@ async fn main() {
     // Load persisted state
     load_state(&server, &data_dir).await;
 
+    // Warn if council has single-point-of-failure risk
+    {
+        let state = server.state.read().await;
+        if state.council_member_count() <= 1 {
+            warn!("COUNCIL SINGLE-POINT-OF-FAILURE: Only {} council member(s) exist. \
+                Add additional members via CouncilMembership governance proposals to prevent \
+                governance lockout if the sole member key is lost or compromised.",
+                state.council_member_count());
+        }
+    }
+
     // Load permissioned validator allowlist BEFORE rebuilding validator set from DAG.
     // This ensures the allowlist gates which validators get registered during rebuild.
     // set_allowed_validators also purges any already-registered non-allowed validators.
@@ -464,6 +475,19 @@ async fn main() {
             server.state.write().await.set_configured_validator_count(n as u64);
             info!("Configured validator count: {} (quorum threshold fixed)", n);
         }
+    }
+
+    // Warn if pre-staking mode without validator allowlist — checkpoint sync will be refused
+    if args.validator_key.is_none() {
+        let state = server.state.read().await;
+        if state.total_staked() == 0 {
+            warn!("PRE-STAKING MODE WITHOUT VALIDATOR ALLOWLIST: This node cannot verify \
+                checkpoint signer trust and will refuse CheckpointSync from peers. \
+                Configure --validator-key with trusted validator addresses to enable \
+                checkpoint-based fast-sync. Without this, new nodes joining the network \
+                cannot safely sync state.");
+        }
+        drop(state);
     }
 
     // Rebuild tx_index from DAG vertices for /tx/:hash lookups after restart.
