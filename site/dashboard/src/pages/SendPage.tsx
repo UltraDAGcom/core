@@ -1,8 +1,11 @@
 import { useState } from 'react';
+import { Camera } from 'lucide-react';
 import { postTx, postFaucet, formatUdag, shortAddr, fullAddr, prettyAddr, isValidAddress, normalizeAddress } from '../lib/api.ts';
 import { Card } from '../components/shared/Card.tsx';
 import { WalletSelector } from '../components/shared/WalletSelector.tsx';
 import { CopyButton } from '../components/shared/CopyButton.tsx';
+import { QrCode } from '../components/shared/QrCode.tsx';
+import { QrScanner } from '../components/shared/QrScanner.tsx';
 import { useToast } from '../hooks/useToast.tsx';
 import type { Wallet } from '../lib/keystore.ts';
 import type { WalletBalance } from '../hooks/useWalletBalances.ts';
@@ -34,6 +37,9 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
 
   // Receive state
   const [receiveIdx, setReceiveIdx] = useState(0);
+
+  // QR scanner state
+  const [showScanner, setShowScanner] = useState(false);
 
   if (!unlocked) {
     return (
@@ -126,16 +132,26 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
                 </div>
               )}
 
-              <label className="block">
+              <div className="block">
                 <span className="text-sm text-dag-muted">Recipient Address (hex or bech32m)</span>
-                <input
-                  type="text"
-                  value={to}
-                  onChange={e => setTo(e.target.value)}
-                  placeholder="Enter recipient address"
-                  className="mt-1 block w-full rounded bg-dag-surface border border-dag-border px-3 py-2 text-sm text-white font-mono"
-                />
-              </label>
+                <div className="mt-1 flex gap-2">
+                  <input
+                    type="text"
+                    value={to}
+                    onChange={e => setTo(e.target.value)}
+                    placeholder="Enter recipient address"
+                    className="block w-full rounded bg-dag-surface border border-dag-border px-3 py-2 text-sm text-white font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowScanner(true)}
+                    className="flex-shrink-0 p-2 rounded bg-dag-surface border border-dag-border text-dag-muted hover:text-white hover:border-dag-accent transition-colors"
+                    title="Scan QR code"
+                  >
+                    <Camera className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
 
               <label className="block">
                 <span className="text-sm text-dag-muted">Amount (UDAG)</span>
@@ -233,7 +249,9 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
               <WalletSelector wallets={wallets} selectedIdx={receiveIdx} onChange={setReceiveIdx} />
 
               {receiveWallet && (
-                <div className="space-y-3">
+                <div className="space-y-4">
+                  <QrCode value={fullAddr(receiveWallet.address)} size={256} />
+
                   <span className="text-sm text-dag-muted">Your Address</span>
                   <div className="bg-dag-surface border border-dag-border rounded-lg p-4">
                     <div className="flex items-start justify-between gap-2 mb-3">
@@ -248,13 +266,23 @@ export function SendPage({ wallets, balances, unlocked }: SendPageProps) {
                       <CopyButton text={receiveWallet.address} />
                     </div>
                   </div>
-                  <p className="text-xs text-dag-muted">Share the address above to receive UDAG. Both formats (bech32m and hex) are accepted.</p>
+                  <p className="text-xs text-dag-muted">Scan the QR code or share the address above to receive UDAG. Both formats (bech32m and hex) are accepted.</p>
                 </div>
               )}
             </div>
           </Card>
         </div>
       </div>
+
+      <QrScanner
+        open={showScanner}
+        onClose={() => setShowScanner(false)}
+        onScan={(data) => {
+          // Strip any URI prefix (e.g. "ultradag:" or "udag:")
+          const cleaned = data.replace(/^(ultradag|udag):\/?\/?/i, '').split('?')[0];
+          setTo(cleaned);
+        }}
+      />
     </div>
   );
 }

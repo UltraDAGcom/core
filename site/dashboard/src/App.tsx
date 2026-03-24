@@ -21,6 +21,7 @@ import { BridgePage } from './pages/BridgePage';
 import { useKeystore } from './hooks/useKeystore';
 import { useNode } from './hooks/useNode';
 import { useWalletBalances } from './hooks/useWalletBalances';
+import { useNotifications } from './hooks/useNotifications';
 import { getNodeUrl, getNetwork, switchNetwork, type NetworkType } from './lib/api';
 import { ToastProvider } from './hooks/useToast';
 
@@ -28,6 +29,11 @@ function App() {
   const ks = useKeystore();
   const node = useNode();
   const wb = useWalletBalances(ks.wallets, node.connected);
+  const notifications = useNotifications({
+    addresses: ks.wallets.map(w => w.address),
+    balances: wb.balances,
+    unlocked: ks.unlocked,
+  });
   const [showLockModal, setShowLockModal] = useState(false);
   const [network, setNetwork] = useState<NetworkType>(getNetwork());
 
@@ -159,6 +165,9 @@ function App() {
                 webauthnEnrolled={ks.webauthnEnrolled}
                 onEnrollWebAuthn={ks.enrollWebAuthn}
                 onRemoveWebAuthn={ks.removeWebAuthn}
+                notificationsSupported={notifications.supported}
+                notificationsEnabled={notifications.enabled}
+                onToggleNotifications={notifications.toggle}
               />
             }
           />

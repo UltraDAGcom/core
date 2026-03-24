@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Download, KeyRound, Wallet as WalletIcon, ShieldAlert, X, Fingerprint } from 'lucide-react';
+import { Plus, Download, KeyRound, Wallet as WalletIcon, ShieldAlert, X, Fingerprint, Bell, BellOff } from 'lucide-react';
 import { WalletCard, WalletDetail } from '../components/wallet/WalletCard';
 import { CreateKeystoreModal } from '../components/wallet/CreateKeystoreModal';
 import { AddWalletModal } from '../components/wallet/AddWalletModal';
@@ -156,6 +156,9 @@ interface WalletPageProps {
   webauthnEnrolled?: boolean;
   onEnrollWebAuthn?: () => Promise<boolean>;
   onRemoveWebAuthn?: () => void;
+  notificationsSupported?: boolean;
+  notificationsEnabled?: boolean;
+  onToggleNotifications?: () => Promise<void>;
 }
 
 export function WalletPage({
@@ -174,6 +177,9 @@ export function WalletPage({
   webauthnEnrolled,
   onEnrollWebAuthn,
   onRemoveWebAuthn,
+  notificationsSupported,
+  notificationsEnabled,
+  onToggleNotifications,
 }: WalletPageProps) {
   const [showKeystoreModal, setShowKeystoreModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -263,6 +269,19 @@ export function WalletPage({
           <p className="text-sm text-dag-muted mt-1">{wallets.length} wallet{wallets.length !== 1 ? 's' : ''}</p>
         </div>
         <div className="flex gap-2">
+          {notificationsSupported && onToggleNotifications && (
+            <button
+              onClick={onToggleNotifications}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                notificationsEnabled
+                  ? 'bg-dag-green/15 text-dag-green hover:bg-dag-green/25'
+                  : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+              }`}
+            >
+              {notificationsEnabled ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
+              {notificationsEnabled ? 'Notifications On' : 'Enable Notifications'}
+            </button>
+          )}
           {webauthnAvailable && onEnrollWebAuthn && onRemoveWebAuthn && (
             <button
               onClick={async () => {
