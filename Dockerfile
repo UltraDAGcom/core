@@ -7,7 +7,8 @@ RUN apt-get update && apt-get install -y ca-certificates curl && rm -rf /var/lib
 ARG GITHUB_REPO=UltraDAGcom/core
 ARG VERSION=latest
 ARG CACHEBUST=0
-RUN curl -L "https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/ultradag-node-linux-x86_64" \
+RUN echo "cache-bust: ${CACHEBUST}" && \
+    curl -L "https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/ultradag-node-linux-x86_64" \
     -o /usr/local/bin/ultradag-node && \
     chmod +x /usr/local/bin/ultradag-node
 
