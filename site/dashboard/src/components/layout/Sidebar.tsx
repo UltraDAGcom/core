@@ -1,46 +1,53 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Wallet,
+  Send as SendIcon,
   Coins,
   Vote,
   Users,
   Search,
   Activity,
-  X,
-  Send as SendIcon,
   ArrowRightLeft,
+  X,
 } from 'lucide-react';
 
 interface NavItem {
   to: string;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-  children?: { to: string; icon: React.ComponentType<{ className?: string }>; label: string }[];
 }
 
-const navItems: NavItem[] = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+// Flat list, grouped by section dividers
+const sections: { label?: string; items: NavItem[] }[] = [
   {
-    to: '/wallet',
-    icon: Wallet,
+    items: [
+      { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+    ],
+  },
+  {
     label: 'Wallet',
-    children: [
+    items: [
+      { to: '/wallet', icon: Wallet, label: 'Wallets' },
       { to: '/wallet/send', icon: SendIcon, label: 'Send & Receive' },
     ],
   },
-  { to: '/staking', icon: Coins, label: 'Staking' },
   {
-    to: '/governance',
-    icon: Vote,
-    label: 'Governance',
-    children: [
+    label: 'Network',
+    items: [
+      { to: '/staking', icon: Coins, label: 'Staking' },
+      { to: '/governance', icon: Vote, label: 'Governance' },
       { to: '/council', icon: Users, label: 'Council' },
+      { to: '/explorer', icon: Search, label: 'Explorer' },
     ],
   },
-  { to: '/explorer', icon: Search, label: 'Explorer' },
-  { to: '/bridge', icon: ArrowRightLeft, label: 'Bridge' },
-  { to: '/network', icon: Activity, label: 'Network' },
+  {
+    label: 'Advanced',
+    items: [
+      { to: '/bridge', icon: ArrowRightLeft, label: 'Bridge' },
+      { to: '/network', icon: Activity, label: 'Node Status' },
+    ],
+  },
 ];
 
 interface SidebarProps {
@@ -50,8 +57,6 @@ interface SidebarProps {
 }
 
 export function Sidebar({ open, onClose, network = 'testnet' }: SidebarProps) {
-  const location = useLocation();
-
   return (
     <>
       {/* Mobile overlay */}
@@ -64,21 +69,19 @@ export function Sidebar({ open, onClose, network = 'testnet' }: SidebarProps) {
 
       <aside
         className={`
-          fixed top-0 left-0 z-50 h-full w-64 bg-dag-sidebar border-r border-dag-border
+          fixed top-0 left-0 z-50 h-full w-60 bg-dag-sidebar border-r border-dag-border
           flex flex-col transition-transform duration-200
           lg:translate-x-0 lg:static lg:z-auto
           ${open ? 'translate-x-0' : '-translate-x-full'}
         `}
       >
         {/* Logo */}
-        <div className="flex items-center justify-between h-16 px-5 border-b border-dag-border">
+        <div className="flex items-center justify-between h-14 px-4 border-b border-dag-border">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-dag-accent to-purple-500 flex items-center justify-center shadow-lg shadow-dag-accent/10">
-              <span className="font-bold text-sm text-white">U</span>
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-dag-accent to-purple-500 flex items-center justify-center">
+              <span className="font-bold text-xs text-white">U</span>
             </div>
-            <div>
-              <span className="text-white font-semibold text-sm tracking-wide">UltraDAG</span>
-            </div>
+            <span className="text-white font-semibold text-sm">UltraDAG</span>
           </div>
           <button onClick={onClose} className="lg:hidden p-1 text-slate-400 hover:text-white">
             <X className="w-5 h-5" />
@@ -86,55 +89,45 @@ export function Sidebar({ open, onClose, network = 'testnet' }: SidebarProps) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
-          {navItems.map(({ to, icon: Icon, label, children }) => {
-            const isParentActive = location.pathname === to || (children && location.pathname.startsWith(to + '/'));
-            return (
-              <div key={to}>
-                <NavLink
-                  to={to}
-                  end={to === '/' || !!children}
-                  onClick={onClose}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                      isActive || isParentActive
-                        ? 'bg-dag-accent/15 text-white'
-                        : 'text-slate-400 hover:text-white hover:bg-white/5'
-                    }`
-                  }
-                >
-                  <Icon className={`w-[18px] h-[18px] ${isParentActive ? 'text-dag-accent' : ''}`} />
-                  {label}
-                </NavLink>
-                {children && isParentActive && (
-                  <div className="ml-7 mt-0.5 space-y-0.5 border-l border-dag-border/50 pl-3">
-                    {children.map(({ to: childTo, icon: ChildIcon, label: childLabel }) => (
-                      <NavLink
-                        key={childTo}
-                        to={childTo}
-                        onClick={onClose}
-                        className={({ isActive }) =>
-                          `flex items-center gap-2 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                            isActive
-                              ? 'text-dag-accent'
-                              : 'text-slate-500 hover:text-slate-300'
-                          }`
-                        }
-                      >
-                        <ChildIcon className="w-3.5 h-3.5" />
-                        {childLabel}
-                      </NavLink>
-                    ))}
-                  </div>
-                )}
+        <nav className="flex-1 py-3 px-3 overflow-y-auto">
+          {sections.map((section, si) => (
+            <div key={si} className={si > 0 ? 'mt-4' : ''}>
+              {section.label && (
+                <p className="px-3 mb-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                  {section.label}
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {section.items.map(({ to, icon: Icon, label }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={to === '/' || to === '/wallet'}
+                    onClick={onClose}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all ${
+                        isActive
+                          ? 'bg-dag-accent/15 text-white'
+                          : 'text-slate-400 hover:text-white hover:bg-white/5'
+                      }`
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        <Icon className={`w-4 h-4 ${isActive ? 'text-dag-accent' : ''}`} />
+                        {label}
+                      </>
+                    )}
+                  </NavLink>
+                ))}
               </div>
-            );
-          })}
+            </div>
+          ))}
         </nav>
 
         {/* Footer */}
         <div className="px-4 py-3 border-t border-dag-border">
-          <p className={`text-[11px] ${network === 'mainnet' ? 'text-dag-green' : 'text-slate-500'}`}>
+          <p className={`text-[10px] ${network === 'mainnet' ? 'text-dag-green' : 'text-slate-500'}`}>
             {network === 'mainnet' ? 'Mainnet' : 'Testnet'} v0.1
           </p>
         </div>
