@@ -28,7 +28,12 @@ fn make_unstake_tx(sk: &SecretKey, nonce: u64) -> UnstakeTx {
 /// Compute the validator reward pool after council emission deduction.
 /// Genesis bootstraps 1 council member with 10% emission, so validators get 90%.
 fn validator_pool(round: u64) -> u64 {
-    block_reward(round) * 90 / 100
+    // Emission split: 10% council, 10% treasury, 5% founder → 75% to validators
+    let br = block_reward(round);
+    let council = br * 10 / 100;
+    let treasury = br * 10 / 100;
+    let founder = br * 5 / 100;
+    br - council - treasury - founder // 75%
 }
 
 fn make_vertex(

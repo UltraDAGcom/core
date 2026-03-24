@@ -156,6 +156,11 @@ function App() {
             return true;
           }
         }}
+        onCreateWithKey={async (pw, name, secretKey, address) => {
+          await ks.create(pw);
+          await ks.addWallet(name, secretKey, address);
+          return true;
+        }}
         onImport={ks.importBlob}
         hasExisting={ks.hasStore}
       />

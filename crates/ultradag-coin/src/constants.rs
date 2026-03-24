@@ -234,45 +234,51 @@ pub const CHECKPOINT_INTERVAL: u64 = 100;
 ///
 /// CRITICAL: This must be updated if genesis state changes.
 /// Run `cargo test test_compute_genesis_hash -- --nocapture` to recompute.
-// TODO: Recompute after tokenomics refactor (no-premine model).
-// Run `cargo test test_compute_genesis_hash -- --nocapture` on first clean deploy.
+/// Recomputed 2026-03-24 after emission-only tokenomics refactor (no-premine model).
 #[cfg(not(feature = "mainnet"))]
-pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [0u8; 32];
+pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
+    0xeb, 0xc2, 0xdc, 0x99, 0x87, 0x1f, 0x5c, 0x42,
+    0x0d, 0x59, 0xd0, 0xdc, 0x37, 0x41, 0x0b, 0x28,
+    0x35, 0x88, 0xa7, 0x7d, 0x2d, 0xa0, 0x03, 0x52,
+    0xf1, 0xad, 0x51, 0x93, 0xd2, 0x17, 0xaa, 0x53,
+];
 
-/// Mainnet genesis checkpoint hash — must be computed before mainnet launch.
+/// Mainnet genesis checkpoint hash — computed 2026-03-24 during key ceremony.
 /// Genesis: 0 UDAG (no pre-mine), all tokens distributed through emission.
-/// Run `cargo test --features mainnet test_compute_genesis_hash -- --nocapture` to compute.
+/// Founder address: 3d704cf6a3625fe5b6a66ccfc44db2fc707a69e1
+/// Recompute: ULTRADAG_DEV_KEY=<key> cargo test --features mainnet test_compute_genesis_hash -- --nocapture
 #[cfg(feature = "mainnet")]
-pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [0u8; 32];
+pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
+    0x2c, 0x21, 0xe8, 0x43, 0x0a, 0x84, 0x28, 0xbf,
+    0x5d, 0x4d, 0x6a, 0xfe, 0x30, 0x28, 0xde, 0x1c,
+    0x5e, 0x88, 0x82, 0x4c, 0x7d, 0x09, 0x7a, 0x8e,
+    0x28, 0x26, 0x4f, 0xc8, 0x4b, 0xd5, 0x7d, 0x37,
+];
 
 /// Compile-time assertion: GENESIS_CHECKPOINT_HASH must not be the placeholder on mainnet.
 /// This is the primary defense — prevents building a mainnet binary with [0u8; 32].
 /// The runtime check below is a secondary defense for extra safety.
-/// TODO: Re-enable after computing proper mainnet genesis hash
 #[cfg(feature = "mainnet")]
 const _GENESIS_HASH_GUARD: () = {
-    // Temporarily disabled for deployment
-    // assert!(
-    //     GENESIS_CHECKPOINT_HASH[0] != 0
-    //         || GENESIS_CHECKPOINT_HASH[1] != 0
-    //         || GENESIS_CHECKPOINT_HASH[2] != 0
-    //         || GENESIS_CHECKPOINT_HASH[3] != 0,
-    //     "GENESIS_CHECKPOINT_HASH is placeholder [0u8; 32]. \
-    //      Compute mainnet hash with: cargo test test_compute_genesis_hash -- --nocapture"
-    // );
+    assert!(
+        GENESIS_CHECKPOINT_HASH[0] != 0
+            || GENESIS_CHECKPOINT_HASH[1] != 0
+            || GENESIS_CHECKPOINT_HASH[2] != 0
+            || GENESIS_CHECKPOINT_HASH[3] != 0,
+        "GENESIS_CHECKPOINT_HASH is placeholder [0u8; 32]. \
+         Compute mainnet hash with: cargo test test_compute_genesis_hash -- --nocapture"
+    );
 };
 
 /// Runtime check: panics at startup if mainnet builds have the placeholder hash.
 /// Secondary defense — the compile-time assertion above should catch this first.
-/// TODO: Re-enable after computing proper mainnet genesis hash
 #[cfg(feature = "mainnet")]
 pub fn verify_genesis_checkpoint_hash() {
-    // Temporarily disabled for deployment
-    // assert_ne!(
-    //     GENESIS_CHECKPOINT_HASH, [0u8; 32],
-    //     "FATAL: GENESIS_CHECKPOINT_HASH is placeholder [0u8; 32]. \
-    //      Compute mainnet hash with: cargo test test_compute_genesis_hash -- --nocapture"
-    // );
+    assert_ne!(
+        GENESIS_CHECKPOINT_HASH, [0u8; 32],
+        "FATAL: GENESIS_CHECKPOINT_HASH is placeholder [0u8; 32]. \
+         Compute mainnet hash with: cargo test test_compute_genesis_hash -- --nocapture"
+    );
 }
 
 /// Testnet: no-op (testnet hash is already correct).

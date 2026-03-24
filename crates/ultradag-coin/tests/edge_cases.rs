@@ -85,9 +85,12 @@ fn coinbase_zero_fees() {
     let vertex = make_vertex(&sk, 0, 0, vec![], vec![]);
     state.apply_vertex(&vertex).unwrap();
 
-    let expected = block_reward(0);
-    assert_eq!(state.balance(&sk.address()), expected);
-    assert_eq!(state.total_supply(), expected);
+    // Emission split: 75% validator, 10% treasury, 5% founder (council unminted with no members)
+    let expected_balance = block_reward(0) * 75 / 100;
+    assert_eq!(state.balance(&sk.address()), expected_balance);
+    // total_supply = validator + treasury + founder (council 10% not minted)
+    let expected_supply = block_reward(0) * 75 / 100 + block_reward(0) * 10 / 100 + block_reward(0) * 5 / 100;
+    assert_eq!(state.total_supply(), expected_supply);
 }
 
 /// Test 2: Coinbase with fees after supply exhaustion (height 13,440,001)
@@ -225,9 +228,9 @@ fn fee_sum_computed_before_tx_application() {
     let sender_sk = SecretKey::generate();
     let receiver = SecretKey::generate().address();
 
-    // new_with_genesis() bootstraps 1 council member (dev address) at 10% emission,
-    // so validators receive 90% of block_reward.
-    let v0 = make_vertex_with_reward_pct(&proposer_sk, 0, 0, vec![], vec![], 90);
+    // new_with_genesis() bootstraps 1 council member (dev address).
+    // Emission split: 10% council, 10% treasury, 5% founder, 75% validators.
+    let v0 = make_vertex_with_reward_pct(&proposer_sk, 0, 0, vec![], vec![], 75);
     state.apply_vertex(&v0).unwrap();
 
     let send_amount = 1_000_000;
@@ -235,11 +238,11 @@ fn fee_sum_computed_before_tx_application() {
     state.faucet_credit(&sender_sk.address(), send_amount + fee).unwrap();
 
     let tx = make_signed_tx(&sender_sk, receiver, send_amount, fee, 0);
-    let v1 = make_vertex_with_reward_pct(&proposer_sk, 1, 1, vec![tx], vec![], 90);
+    let v1 = make_vertex_with_reward_pct(&proposer_sk, 1, 1, vec![tx], vec![], 75);
     state.apply_vertex(&v1).unwrap();
 
-    // Proposer should get 90% of block_reward(0) + 90% of block_reward(1) + fee
-    let expected_proposer = block_reward(0) * 90 / 100 + block_reward(1) * 90 / 100 + fee;
+    // Proposer should get 75% of block_reward(0) + 75% of block_reward(1) + fee
+    let expected_proposer = block_reward(0) * 75 / 100 + block_reward(1) * 75 / 100 + fee;
     assert_eq!(state.balance(&proposer_sk.address()), expected_proposer);
 }
 

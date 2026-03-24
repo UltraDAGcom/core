@@ -1274,12 +1274,12 @@ ultradag_banned_ips {ban_count}
                 return Ok(error_response(StatusCode::BAD_REQUEST, "amount must be greater than 0"));
             }
 
-            // Cap faucet amount at 10,000 UDAG per request
-            const MAX_FAUCET_SATS: u64 = 10_000 * ultradag_coin::COIN; // 10,000 UDAG
+            // Cap faucet amount at 100 UDAG per request
+            const MAX_FAUCET_SATS: u64 = 100 * ultradag_coin::COIN; // 100 UDAG
             if faucet_req.amount > MAX_FAUCET_SATS {
                 return Ok(error_response(
                     StatusCode::BAD_REQUEST,
-                    &format!("faucet amount exceeds maximum of 10,000 UDAG ({} sats)", MAX_FAUCET_SATS),
+                    &format!("faucet amount exceeds maximum of 100 UDAG ({} sats)", MAX_FAUCET_SATS),
                 ));
             }
 

@@ -31,6 +31,9 @@ fn test_compute_genesis_hash() {
 
     eprintln!("Genesis total_supply = {} sats ({} UDAG)", state.total_supply(),
         state.total_supply() / ultradag_coin::SATS_PER_UDAG);
+
+    let dev_addr = ultradag_coin::constants::dev_address();
+    eprintln!("Founder address = {}", dev_addr.to_hex());
 }
 
 #[test]

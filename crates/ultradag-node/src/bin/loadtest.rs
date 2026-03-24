@@ -101,10 +101,10 @@ async fn get_status(
 async fn main() -> Result<(), LoadTestError> {
     tracing_subscriber::fmt::init();
 
-    // Generate test accounts
-    let sender_sk = SecretKey::generate();
+    // Deterministic test accounts (loadtest is a test tool, not production)
+    let sender_sk = SecretKey::from_bytes([0x01; 32]);
     let sender_addr = sender_sk.address();
-    let receiver_sk = SecretKey::generate();
+    let receiver_sk = SecretKey::from_bytes([0x02; 32]);
     let receiver_addr = receiver_sk.address();
 
     info!("Load Test Configuration:");

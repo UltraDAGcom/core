@@ -281,7 +281,7 @@ See **Mainnet Launch Checklist** below for the complete phased plan.
 - **`--testnet` CLI flag** (default: `true`) — Controls whether secret-key-in-body RPC endpoints are available. When disabled (mainnet mode), 7 endpoints return HTTP 410 GONE: `/tx`, `/stake`, `/unstake`, `/faucet`, `/keygen`, `/proposal`, `/vote`. All responses direct users to `/tx/submit` for pre-signed transactions.
 - **`/tx/submit` is the mainnet transaction path** — Already existed, accepts JSON-serialized `Transaction` with Ed25519 signature. No secret keys transit the network. Client-side signing via SDKs.
 - **`server.testnet_mode: bool`** field on `NodeServer` — set from `--testnet` CLI arg. Checked in RPC handler before processing secret-key endpoints.
-- **Feature-gated genesis** — `#[cfg(feature = "mainnet")]` excludes faucet from `new_with_genesis()`. Mainnet genesis has only dev allocation (1,050,000 UDAG), no faucet prefund.
+- **Feature-gated genesis** — `#[cfg(feature = "mainnet")]` excludes faucet from `new_with_genesis()`. Mainnet genesis has zero supply (emission-only), no faucet prefund.
 - **Dual `GENESIS_CHECKPOINT_HASH`** — Testnet hash computed and hardcoded: `[0xda, 0x93, ...]` (recomputed for Council of 21 snapshot changes). Mainnet hash is placeholder `[0u8; 32]`. Runtime guard `verify_genesis_checkpoint_hash()` panics on mainnet if placeholder not replaced.
 - **`mainnet` feature propagation** — Defined in `ultradag-coin`, propagated via `ultradag-coin/mainnet` in both `ultradag-node` and `ultradag-network` Cargo.toml.
 - **Genesis hash computation test** — `test_compute_genesis_hash` prints hash for current build config. Run with `--features mainnet` to get mainnet hash.
@@ -2532,9 +2532,9 @@ This is a one-shot irreversible decision. Everything downstream depends on getti
   - The `DEV_ADDRESS_SEED` compile-time assertion catches the testnet placeholder, but someone must actually run the ceremony
 - [ ] **Council bootstrap plan** — Currently dev address is sole Foundation member at genesis. If that key is lost, governance is permanently locked. Need: (1) bootstrap with multiple Foundation members (use both Foundation seats), (2) document council emergency recovery path (validator supermajority override or time-locked recovery)
 - [ ] **Decide genesis state** — Who are the 21 council members (names, categories, keys)? What is the real dev allocation address? What is the treasury address? These are baked into the binary forever.
-- [ ] **Remove faucet from genesis** — Delete `FAUCET_SEED`, `FAUCET_PREFUND_SATS`, `faucet_keypair()`, faucet genesis credit. Faucet prefund (1M UDAG) inflates supply to ~4.15M instead of ~3.15M at genesis. Compile with `--features mainnet` which excludes faucet from `new_with_genesis()`.
+- [ ] **Remove faucet from genesis** — Faucet is already feature-gated (`#[cfg(not(feature = "mainnet"))]`). Verify `FAUCET_SEED`, `FAUCET_PREFUND_SATS`, `faucet_keypair()` are excluded from mainnet builds. Compile with `--features mainnet` which excludes faucet from `new_with_genesis()`.
 - [ ] **Compute mainnet GENESIS_CHECKPOINT_HASH** — Run `cargo test --features mainnet test_compute_genesis_hash -- --nocapture` with the real genesis state. Bake the resulting hash into `constants.rs`. The compile-time `_GENESIS_HASH_GUARD` assertion prevents the `[0u8; 32]` placeholder from shipping. This hash anchors the entire checkpoint chain forever.
-- [ ] **Verify max supply** — After faucet removal, confirm genesis supply = dev allocation (1,050,000 UDAG) + treasury (2,100,000 UDAG) = 3,150,000 UDAG. Max supply = 21,000,000 UDAG. Emission fills the remaining 17,850,000 UDAG over ~106 years.
+- [ ] **Verify max supply** — Confirm mainnet genesis supply = 0 UDAG (emission-only, zero pre-mine). Dev address and treasury start with 0 balance and earn through emission. Max supply = 21,000,000 UDAG. Full 21,000,000 UDAG emitted over ~106 years.
 - [ ] **Verify NETWORK_ID** — `#[cfg(feature = "mainnet")]` selects `b"ultradag-mainnet-v1"`. All signatures are cryptographically incompatible with testnet.
 
 ### Phase 2: Client SDK (mainnet has no usable tx path without this)

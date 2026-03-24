@@ -37,19 +37,20 @@ Transaction ordering is deterministic: finalized vertices are sorted by (round, 
 ## Tokenomics
 
 - **Max supply**: 21,000,000 UDAG (hard cap enforced in state engine)
-- **Halving**: every 210,000 rounds (~2.5 months at 30s design target, ~12 days at 5s testnet)
-- **Initial block reward**: 50 UDAG per vertex (each validator earns 50 UDAG per block produced)
-- **Developer allocation**: 1,050,000 UDAG (5%) allocated at genesis
-  - Funds protocol development. No VC funding. No presale.
-  - Deterministic testnet address (see `constants.rs` for seed)
-  - Visible and auditable from round 0
-- **Faucet reserve**: 1,000,000 UDAG at genesis (testnet only)
+- **Emission-only**: Zero genesis pre-mine. All tokens distributed through per-round emission.
+- **Halving**: every 10,500,000 rounds (~1.66 years at 5s rounds)
+- **Initial block reward**: 1 UDAG per round total, split by protocol:
+  - 75% validators/stakers (proportional to effective stake)
+  - 10% DAO treasury (council-controlled via TreasurySpend proposals)
+  - 10% Council of 21 (equal split among seated members)
+  - 5% founder (earned through emission, starts at 0)
+- **Faucet reserve**: 1,000,000 UDAG at genesis (testnet only, excluded from mainnet)
 - **Validator rewards**: Proportional to stake when staking is active
-  - Pre-staking fallback: each validator receives full block reward
-  - Post-staking: total round reward split proportionally by stake
+  - Pre-staking fallback: 1 UDAG/round split equally among configured validators
+  - Post-staking: validator pool split proportionally by effective stake + delegations
 - **Minimum stake**: 10,000 UDAG to become validator
-- **Unstaking cooldown**: 2,016 rounds (~2.8 hours at 5s testnet, ~16.8 hours at 30s design target)
-- **Slashing**: 50% stake burn on equivocation
+- **Unstaking cooldown**: 2,016 rounds (~2.8 hours at 5s rounds)
+- **Slashing**: 50% stake burn on equivocation (governable 10-100%)
 
 ## Running a Node
 

@@ -566,9 +566,18 @@ fn test_treasury_spend_proposal_executes() {
     fund_and_seat(&mut state, &sk1, CouncilSeatCategory::Technical);
     fund_and_seat(&mut state, &sk2, CouncilSeatCategory::Business);
 
+    // Build up treasury through emission (no genesis pre-fund in emission-only model)
+    // Each round emits 10% of block_reward to treasury = 10,000,000 sats = 0.1 UDAG
+    // Need 1000 UDAG = 10,000 rounds of emission
+    let dummy_producer = SecretKey::from_bytes([0x99; 32]);
+    let mut producers = std::collections::HashSet::new();
+    producers.insert(dummy_producer.address());
+    for r in 0..10_100u64 {
+        state.distribute_round_rewards(r, &producers).unwrap();
+    }
     let treasury_before = state.treasury_balance();
     let spend_amount = 1_000 * COIN; // 1000 UDAG
-    assert!(treasury_before >= spend_amount, "Treasury should have enough for test");
+    assert!(treasury_before >= spend_amount, "Treasury should have enough for test (has {} sats)", treasury_before);
 
     // Create TreasurySpend proposal
     let ptx = make_proposal_tx(

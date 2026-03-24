@@ -1319,6 +1319,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "simulator"))] // simulator disables timestamp validation
     fn reject_future_timestamp_vertex() {
         let mut dag = BlockDag::new();
         let sk = random_sk();

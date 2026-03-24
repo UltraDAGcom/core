@@ -433,18 +433,22 @@ fn test_37_zero_stakers_pre_staking_fallback() {
     check_supply_invariant(&state);
 
     let total_minted = state.total_supply() - supply_before;
-    // Genesis has 1 council member. Council gets 10% of block_reward.
-    let council_emission = block_reward(0) * 10 / 100; // 10M sats to 1 member
-    let validator_pool = block_reward(0) * 90 / 100; // 90M sats for validators
+    // Emission split: 10% council, 10% treasury, 5% founder, 75% validator pool
+    // Genesis has 1 council member → council share minted
+    let br = block_reward(0);
+    let council_emission = br * 10 / 100;
+    let treasury_emission = br * 10 / 100;
+    let founder_emission = br * 5 / 100;
+    let validator_pool = br - council_emission - treasury_emission - founder_emission; // 75%
 
     // Per-producer reward = validator_pool / configured_count = validator_pool / 4
     // Only 1 producer, so validator_minted = validator_pool / 4
     let expected_validator = validator_pool / 4;
-    let expected_total = council_emission + expected_validator;
+    let expected_total = council_emission + treasury_emission + founder_emission + expected_validator;
     assert_eq!(
         total_minted, expected_total,
-        "Pre-staking fallback: council ({}) + 1-of-4 producer ({}). Got {} expected {}",
-        council_emission, expected_validator, total_minted, expected_total
+        "Pre-staking fallback: council+treasury+founder+1-of-4 producer. Got {} expected {}",
+        total_minted, expected_total
     );
 }
 
@@ -459,16 +463,18 @@ fn test_38_zero_producers_no_rewards() {
     let producers: HashSet<Address> = HashSet::new();
     state.distribute_round_rewards(0, &producers).unwrap();
 
-    // Council emission still happens (no producers doesn't block council)
+    // Council, treasury, and founder emission still happen (no producers doesn't block them)
     // But validator rewards require producers in pre-staking mode
     let minted = state.total_supply() - supply_before;
-    // With 1 council member, council gets their share even with no producers
-    let council_emission = block_reward(0) * 10 / 100; // 10% council
-    // per_member = council_emission / 1 council member = council_emission
+    let br = block_reward(0);
+    let council_emission = br * 10 / 100;
+    let treasury_emission = br * 10 / 100;
+    let founder_emission = br * 5 / 100;
+    let expected = council_emission + treasury_emission + founder_emission;
     assert_eq!(
-        minted, council_emission,
-        "With 0 producers, only council emission should be minted. Got {} expected {}",
-        minted, council_emission
+        minted, expected,
+        "With 0 producers, council+treasury+founder emission minted. Got {} expected {}",
+        minted, expected
     );
 }
 

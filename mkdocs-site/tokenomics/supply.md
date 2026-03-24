@@ -4,7 +4,7 @@ title: Supply & Emission
 
 # Supply & Emission
 
-UltraDAG has a fixed maximum supply of 21 million UDAG with a Bitcoin-style halving schedule. This page covers the emission curve, genesis allocations, and supply enforcement.
+UltraDAG has a fixed maximum supply of 21 million UDAG with a Bitcoin-style halving schedule. Zero pre-mine — all tokens distributed through per-round emission. This page covers the emission curve, distribution model, and supply enforcement.
 
 ---
 
@@ -67,19 +67,19 @@ Era 64:          < 1 sat      (100.00% of max)
 
 ---
 
-## Genesis Allocations
+## Emission-Only Genesis (Zero Pre-Mine)
 
-At genesis (round 0), the following allocations are made:
+**No genesis allocations.** Total supply starts at 0 on mainnet. Every UDAG enters circulation through per-round protocol emission:
 
-| Allocation | Amount | Percentage | Purpose |
-|-----------|--------|------------|---------|
-| Dev fund | 1,050,000 UDAG | 5% | Protocol development and maintenance |
-| Treasury | 2,100,000 UDAG | 10% | DAO-controlled via TreasurySpend proposals |
-| Faucet | 1,000,000 UDAG | ~4.76% | Testnet distribution only |
-| **Total genesis** | **4,150,000 UDAG** | **~19.76%** | |
+| Recipient | Share | Mechanism |
+|-----------|-------|-----------|
+| Validators & Stakers | 75% | Proportional to effective stake (own + delegated) |
+| DAO Treasury | 10% | Governed by Council proposals (TreasurySpend) |
+| Council of 21 | 10% | Equal split among seated council members |
+| Founder | 5% | Protocol development, earned through emission |
 
-!!! note "Testnet-only faucet"
-    The 1,000,000 UDAG faucet allocation exists only on testnet. On mainnet, the genesis allocation is the 1,050,000 UDAG dev fund plus the 2,100,000 UDAG treasury (3,150,000 UDAG total). The faucet address and its balance do not exist in the mainnet genesis state.
+!!! note "Testnet faucet"
+    Testnet builds include a 1,000,000 UDAG faucet reserve for testing. This is feature-gated and excluded from mainnet genesis. On mainnet, all participants (founder, treasury, council) start at 0 and earn through emission.
 
 ---
 
@@ -91,20 +91,21 @@ Each round, newly minted UDAG is distributed as follows:
 
 ```mermaid
 graph TD
-    M[Minted Reward] --> V[Validator Pool]
-    M --> C[Council Pool: council_emission_percent]
+    M[Round Reward: 1 UDAG] --> V[Validator Pool: 75%]
+    M --> C[Council Pool: 10%]
+    M --> T[DAO Treasury: 10%]
+    M --> F[Founder: 5%]
 
     V --> A1[Active Validator 1]
     V --> A2[Active Validator 2]
-    V --> A3[Active Validator ...]
     V --> AN[Active Validator N]
 
-    C --> CS[Council Seats]
+    C --> CS[Council Seats: equal split]
 ```
 
 ### Validator Rewards
 
-The remainder after council emission (default 10%, governable 0-30%) is distributed to validators:
+The validator pool (75% of round reward) is distributed to validators:
 
 - **Active validators** (producing vertices): receive rewards proportional to effective stake
 - **Passive stakers** (staked but not in top 21): receive 20% of what an equivalent active validator would earn

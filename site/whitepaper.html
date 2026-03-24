@@ -911,26 +911,28 @@ ol li::marker { color: var(--subtle); font-size: 11px; font-family: 'DM Mono', m
             <tbody>
               <tr><td>Maximum supply</td><td class="td-accent">21,000,000 UDAG</td></tr>
               <tr><td>Smallest unit</td><td>1 satoshi = 10⁻⁸ UDAG</td></tr>
-              <tr><td>Initial block reward</td><td>50 UDAG per round</td></tr>
-              <tr><td>Halving interval</td><td>Every 210,000 finalized rounds</td></tr>
+              <tr><td>Initial block reward</td><td>1 UDAG per round</td></tr>
+              <tr><td>Halving interval</td><td>Every 10,500,000 finalized rounds (~1.66 years at 5s rounds)</td></tr>
               <tr><td>Default round time</td><td>5 seconds</td></tr>
             </tbody>
           </table>
         </div>
-        <h3>10.2 Genesis Allocations</h3>
+        <h3>10.2 Emission-Only Distribution</h3>
+        <p><strong>Zero pre-mine. Zero genesis allocations.</strong> Total supply starts at 0. Every UDAG enters circulation through per-round protocol emission:</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Allocation</th><th>Amount</th><th>Purpose</th></tr></thead>
+            <thead><tr><th>Recipient</th><th>Share</th><th>Mechanism</th></tr></thead>
             <tbody>
-              <tr><td>Developer allocation</td><td>1,050,000 UDAG (5%)</td><td>Protocol development</td></tr>
-              <tr><td>Faucet reserve</td><td>1,000,000 UDAG</td><td>Testnet only</td></tr>
-              <tr><td>Mining rewards</td><td class="td-accent">~19,000,000 UDAG (95%)</td><td>Validator rewards over time</td></tr>
+              <tr><td>Validators &amp; Stakers</td><td class="td-accent">75%</td><td>Proportional to effective stake (own + delegated)</td></tr>
+              <tr><td>DAO Treasury</td><td>10%</td><td>Governed by Council proposals (TreasurySpend)</td></tr>
+              <tr><td>Council of 21</td><td>10%</td><td>Equal split among seated council members</td></tr>
+              <tr><td>Founder</td><td>5%</td><td>Protocol development, earned through emission</td></tr>
             </tbody>
           </table>
         </div>
         <div class="callout-info accent-border">
-          <div class="callout-label">Genesis Transparency</div>
-          <p>Developer allocation is credited at genesis to a deterministic address derived from <code>"ultradag-dev-addr-testnet-v1"</code>. No VC funding. No presale. Auditable from block 0.</p>
+          <div class="callout-label">No Pre-Mine</div>
+          <p>There are no genesis allocations. No developer pre-mine, no VC funding, no presale. All tokens are distributed through per-round emission starting from round 1. The founder earns 5% of each round's reward on the same timeline as validators. Auditable from block 0.</p>
         </div>
         <h3>10.3 Validator Staking</h3>
         <div class="table-wrap">
@@ -938,7 +940,7 @@ ol li::marker { color: var(--subtle); font-size: 11px; font-family: 'DM Mono', m
             <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
             <tbody>
               <tr><td>Minimum stake</td><td>10,000 UDAG</td></tr>
-              <tr><td>Unstaking cooldown</td><td>2,016 rounds (~1 week)</td></tr>
+              <tr><td>Unstaking cooldown</td><td>2,016 rounds (~2.8 hours at 5s rounds)</td></tr>
               <tr><td>Slashing penalty</td><td class="td-accent">50% on equivocation</td></tr>
               <tr><td>Reward distribution</td><td>Proportional to stake</td></tr>
               <tr><td>Epoch length</td><td>210,000 rounds (~12 days at 5s rounds)</td></tr>
@@ -949,9 +951,9 @@ ol li::marker { color: var(--subtle); font-size: 11px; font-family: 'DM Mono', m
         <h3>10.4 Emission Model</h3>
         <div class="def-block">
           <div class="def-label">Block Reward Formula</div>
-          <code>reward(h) = ⌊50 × 10⁸ / 2^(h / 210000)⌋</code>
+          <code>reward(r) = ⌊1 × 10⁸ / 2^(r / 10500000)⌋</code>
         </div>
-        <p>Split among validators proportionally to their stake. Reward = 0 after 64 halvings. Slashed stake is burned.</p>
+        <p>Distributed per round by the protocol (not per vertex). 75% to validators/stakers proportional to effective stake, 10% to DAO treasury, 10% to Council of 21, 5% to founder. Coinbase contains only transaction fees. Reward = 0 after 64 halvings. Slashed stake is burned.</p>
       </section>
 
       <!-- §11 -->
@@ -1023,7 +1025,7 @@ ol li::marker { color: var(--subtle); font-size: 11px; font-family: 'DM Mono', m
         <ul>
           <li><span class="resolved">✓</span> <strong>Finality performance:</strong> O(V²) → O(1) via incremental descendant tracking (2,238× faster)</li>
           <li><span class="resolved">✓</span> <strong>Optimistic responsiveness:</strong> Sub-second finality under normal conditions</li>
-          <li><span class="resolved">✓</span> <strong>Epoch-based validator reconfiguration:</strong> Dynamic set transitions every 210,000 rounds</li>
+          <li><span class="resolved">✓</span> <strong>Epoch-based validator reconfiguration:</strong> Dynamic set transitions every 210,000 rounds (~12 days at 5s rounds)</li>
         </ul>
       </section>
 

@@ -232,6 +232,11 @@ export function WalletPage({
               return true;
             }
           }}
+          onCreateWithKey={async (pw, name, secretKey, address) => {
+            await onCreate(pw);
+            await onAddWallet(name, secretKey, address);
+            return true;
+          }}
           onImport={onImportBlob}
           hasExisting={hasStore}
         />

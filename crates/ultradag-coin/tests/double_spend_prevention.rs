@@ -273,7 +273,8 @@ fn transaction_for_exact_balance_minus_fee_succeeds() {
     assert!(result.is_ok(), "Transaction for exact balance minus fee should succeed");
     
     // Sender should have 0 left (spent all on amount + fee, but got new reward)
-    let reward1 = ultradag_coin::constants::block_reward(1);
+    // Proposer gets 75% of block reward (emission split: 75% validators, 10% treasury, 10% council, 5% founder)
+    let reward1 = ultradag_coin::constants::block_reward(1) * 75 / 100;
     assert_eq!(state.balance(&addr), reward1 + fee, "Sender gets new reward + fee back");
     assert_eq!(state.balance(&to), amount, "Recipient gets amount");
     
@@ -376,8 +377,9 @@ fn balance_updates_correctly_after_transfer() {
     let v1 = make_vertex(&sk_proposer, 1, 1, vec![], vec![tx]);
     state.apply_vertex(&v1).unwrap();
     
-    let reward1 = ultradag_coin::constants::block_reward(1);
-    
+    // Proposer gets 75% of block reward (emission split: 75% validators, 10% treasury, 10% council, 5% founder)
+    let reward1 = ultradag_coin::constants::block_reward(1) * 75 / 100;
+
     // Verify balances
     let expected_sender = initial_sender - amount - fee;
     let expected_receiver = amount;

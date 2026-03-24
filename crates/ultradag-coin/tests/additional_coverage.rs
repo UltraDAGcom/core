@@ -144,6 +144,7 @@ fn test_two_nodes_produce_identical_finalized_ordering() {
 // ============================================================================
 
 #[test]
+#[cfg(not(feature = "simulator"))] // simulator disables timestamp validation
 fn test_reject_vertex_with_timestamp_too_far_in_future() {
     let mut dag = BlockDag::new();
     let sk = SecretKey::generate();

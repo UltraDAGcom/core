@@ -375,9 +375,11 @@ fn test_state_correctness_with_transactions() {
     assert!(any_finalized, "Round 1 should be finalized");
 
     // Check initial balances after round 1 finalized
-    // Round 1: 3 validators share block_reward(1) equally via pre-staking split.
-    // Canonical remainder (block_reward % n) goes to first address in sorted order.
-    let reward = ultradag_coin::constants::block_reward(1);
+    // Round 1: 3 validators share the validator pool (75% of block_reward) equally.
+    // Emission split: 10% council (no members → unminted), 10% treasury, 5% founder, 75% validators.
+    // Canonical remainder (pool % n) goes to first address in sorted order.
+    let full_reward = ultradag_coin::constants::block_reward(1);
+    let reward = full_reward * 75 / 100; // validator pool = 75%
     let per_producer = reward / num_v;
     let remainder = reward.saturating_sub(per_producer.saturating_mul(num_v));
     let mut sorted_addrs = vec![addr_a, addr_b, addr_c];
@@ -395,8 +397,11 @@ fn test_state_correctness_with_transactions() {
     }
 
     let supply_after_r1 = state.total_supply();
-    assert_eq!(supply_after_r1, per_producer * num_v + remainder,
-        "Total supply should be sum of round 1 rewards including remainder");
+    // total_supply = validator pool (75%) + treasury (10%) + founder (5%) [council unminted]
+    let treasury_share = full_reward * 10 / 100;
+    let founder_share = full_reward * 5 / 100;
+    assert_eq!(supply_after_r1, per_producer * num_v + remainder + treasury_share + founder_share,
+        "Total supply should be sum of all emission shares including remainder");
     
     // Round 3: Account A sends 1000 to Account B
     let tx1 = make_signed_tx(&sk_a, addr_b, 1000, 10, 0);
@@ -450,9 +455,10 @@ fn test_state_correctness_with_transactions() {
     assert_eq!(state.balance(&addr_b), expected_b, "Account B balance incorrect");
     assert_eq!(state.balance(&addr_c), expected_c, "Account C balance incorrect");
 
-    // Verify total supply: 3 rounds × (per_producer × 3 + remainder) = 3 × block_reward
+    // Verify total supply: 3 rounds × (validator_pool + treasury + founder)
+    // Council has no members so council share is not minted.
     let final_supply = state.total_supply();
-    let expected_supply = (per_producer * num_v + remainder) * rounds_applied;
+    let expected_supply = (per_producer * num_v + remainder + treasury_share + founder_share) * rounds_applied;
     assert_eq!(final_supply, expected_supply, "Total supply should be conserved");
     
     println!("State correctness verified!");

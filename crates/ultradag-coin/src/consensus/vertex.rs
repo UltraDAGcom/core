@@ -284,10 +284,13 @@ mod tests {
         // Allow timestamps up to 5 minutes (300 seconds) in the past
         let current_time = 1_000_200; // 200 seconds after vertex timestamp (within 5 min window)
         assert!(v.verify_timestamp(current_time), "Recent past timestamps should be accepted");
-        
-        // Old timestamps should be rejected
-        let old_current_time = 1_500_000; // 500_000 seconds after vertex timestamp (way too old)
-        assert!(!v.verify_timestamp(old_current_time), "Very old timestamps should be rejected");
+
+        // Old timestamps should be rejected (skipped under simulator feature — verify_timestamp always returns true)
+        #[cfg(not(feature = "simulator"))]
+        {
+            let old_current_time = 1_500_000; // 500_000 seconds after vertex timestamp (way too old)
+            assert!(!v.verify_timestamp(old_current_time), "Very old timestamps should be rejected");
+        }
     }
 
     #[test]
@@ -301,6 +304,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "simulator"))] // simulator disables timestamp validation
     fn timestamp_validation_rejects_far_future() {
         let sk = SecretKey::generate();
         let mut v = make_signed_vertex_with_parents(0, vec![], &sk);
@@ -321,6 +325,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "simulator"))] // simulator disables timestamp validation
     fn timestamp_validation_boundary_plus_one() {
         let sk = SecretKey::generate();
         let mut v = make_signed_vertex_with_parents(0, vec![], &sk);
@@ -331,6 +336,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "simulator"))] // simulator disables timestamp validation
     fn timestamp_validation_rejects_old_timestamps() {
         let sk = SecretKey::generate();
         let mut v = make_signed_vertex_with_parents(0, vec![], &sk);

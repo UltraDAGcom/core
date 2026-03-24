@@ -103,7 +103,7 @@ const LEVENTS=[
   ()=>({k:'rnd', l1:`round ${(++rnC).toLocaleString()}`,l2:`4 vertices`}),
   ()=>({k:'val', l1:`validator online`,                 l2:`stake 10k UDAG`}),
   ()=>({k:'val', l1:`checkpoint`,                       l2:`quorum 3/4`}),
-  ()=>({k:'val', l1:`block reward`,                     l2:`+50 UDAG`}),
+  ()=>({k:'val', l1:`round reward`,                      l2:`+1 UDAG`}),
   ()=>({k:'val', l1:`peer connected`,                   l2:`${rHex(4)}:9333`}),
 ];
 

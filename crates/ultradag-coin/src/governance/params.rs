@@ -203,6 +203,25 @@ impl GovernanceParams {
             }
         }
 
+        // Cross-parameter validation: total non-validator emission cannot exceed 100%
+        let total_non_validator = self.council_emission_percent
+            .saturating_add(self.treasury_emission_percent)
+            .saturating_add(self.founder_emission_percent);
+        if total_non_validator > 60 {
+            // Revert the change by re-parsing defaults would be complex,
+            // so we enforce this as a hard rejection. The individual bounds
+            // (council max 30 + treasury max 20 + founder max 10 = 60) already
+            // prevent exceeding 60%, but this is defense-in-depth.
+            return Err(format!(
+                "combined emission shares (council {}% + treasury {}% + founder {}% = {}%) \
+                 cannot exceed 60% — at least 40% must go to validators",
+                self.council_emission_percent,
+                self.treasury_emission_percent,
+                self.founder_emission_percent,
+                total_non_validator,
+            ));
+        }
+
         Ok(())
     }
 

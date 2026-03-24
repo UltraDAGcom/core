@@ -497,13 +497,21 @@ impl StateEngine {
                     let mut members: Vec<Address> = self.council_members.keys().copied().collect();
                     members.sort();
                     for member in &members {
-                        let _ = self.credit(member, capped_per);
+                        if let Err(e) = self.credit(member, capped_per) {
+                            return Err(CoinError::SupplyInvariantBroken(
+                                format!("council emission credit failed: {}", e),
+                            ));
+                        }
                     }
                     let actually_minted = capped_per.saturating_mul(members.len() as u64);
                     // Canonical remainder: assign truncation dust to first member in sorted order.
                     let council_remainder = council_mint.saturating_sub(actually_minted);
                     if council_remainder > 0 {
-                        let _ = self.credit(&members[0], council_remainder);
+                        if let Err(e) = self.credit(&members[0], council_remainder) {
+                            return Err(CoinError::SupplyInvariantBroken(
+                                format!("council remainder credit failed: {}", e),
+                            ));
+                        }
                     }
                     self.total_supply = self.total_supply.saturating_add(actually_minted.saturating_add(council_remainder));
                 }
@@ -527,7 +535,11 @@ impl StateEngine {
             let remaining_after_treasury = crate::constants::MAX_SUPPLY_SATS.saturating_sub(self.total_supply);
             let capped_founder = founder_total.min(remaining_after_treasury);
             if capped_founder > 0 {
-                let _ = self.credit(&crate::constants::dev_address(), capped_founder);
+                if let Err(e) = self.credit(&crate::constants::dev_address(), capped_founder) {
+                    return Err(crate::error::CoinError::SupplyInvariantBroken(
+                        format!("founder emission credit failed: {}", e),
+                    ));
+                }
                 self.total_supply = self.total_supply.saturating_add(capped_founder);
             }
         }
@@ -3462,9 +3474,15 @@ mod tests {
         let vertex = make_vertex_for(&proposer, 0, 0, vec![], &proposer_sk);
         state.apply_vertex(&vertex).unwrap();
 
-        let reward = crate::constants::block_reward(0);
-        assert_eq!(state.balance(&proposer), reward);
-        assert_eq!(state.total_supply(), reward);
+        // Per-round emission split: 75% validators, 10% treasury, 10% council, 5% founder
+        // With no council members, council share is not minted.
+        let total_reward = crate::constants::block_reward(0);
+        let validator_share = total_reward * 75 / 100; // 75% to validator pool
+        assert_eq!(state.balance(&proposer), validator_share);
+        // total_supply = validator + treasury (10%) + founder (5%) [council 10% unminted]
+        let treasury_share = total_reward * 10 / 100;
+        let founder_share = total_reward * 5 / 100;
+        assert_eq!(state.total_supply(), validator_share + treasury_share + founder_share);
         assert_eq!(state.last_finalized_round(), Some(0));
     }
 
@@ -3475,11 +3493,11 @@ mod tests {
         let proposer = proposer_sk.address();
         let receiver = SecretKey::generate().address();
 
-        // First vertex gives proposer some coins
+        // First vertex gives proposer some coins (75% of block reward)
         let v0 = make_vertex_for(&proposer, 0, 0, vec![], &proposer_sk);
         state.apply_vertex(&v0).unwrap();
 
-        let reward = crate::constants::block_reward(0);
+        let reward0 = crate::constants::block_reward(0) * 75 / 100;
         let amount = 100;
         let fee = 10;
 
@@ -3488,9 +3506,9 @@ mod tests {
         let v1 = make_vertex_for(&proposer, 1, 1, vec![tx], &proposer_sk);
         state.apply_vertex(&v1).unwrap();
 
-        let reward1 = crate::constants::block_reward(1);
+        let reward1 = crate::constants::block_reward(1) * 75 / 100;
         // Proposer: reward0 - (amount + fee) + (reward1 + fee)
-        let expected_proposer = reward - (amount + fee) + reward1 + fee;
+        let expected_proposer = reward0 - (amount + fee) + reward1 + fee;
         assert_eq!(state.balance(&proposer), expected_proposer);
         assert_eq!(state.balance(&receiver), amount);
         assert_eq!(state.nonce(&proposer), 1);
@@ -3535,19 +3553,15 @@ mod tests {
 
         // nonce should be 0, but we pass 5 — tx should be skipped
         let tx = make_signed_tx(&proposer_sk, receiver, 100, 10, 5);
-        let fee = 10u64; // fee from the skipped tx
 
         let v1 = make_vertex_for(&proposer, 1, 1, vec![tx], &proposer_sk);
         let result = state.apply_vertex(&v1);
         assert!(result.is_ok(), "Vertex should apply despite bad nonce");
         // Receiver should NOT have received the transfer
         assert_eq!(state.balance(&receiver), 0);
-        // Proposer gets coinbase reward but fee is deducted for the skipped tx
-        let reward = crate::constants::block_reward(1);
-        // Proposer was credited: reward + fee (coinbase), then debited: fee (skipped tx collection)
-        // Net: balance_after_v0 + reward + fee - fee = balance_after_v0 + reward
-        // But fee may or may not be collected depending on balance — check approximately
-        assert!(state.balance(&proposer) >= balance_after_v0 + reward - fee);
+        // Proposer gets 75% of block reward (emission split) — skipped tx has no fee effect
+        let reward = crate::constants::block_reward(1) * 75 / 100;
+        assert!(state.balance(&proposer) >= balance_after_v0 + reward - 10);
     }
 
     #[test]
@@ -3624,14 +3638,20 @@ mod tests {
 
         state.apply_finalized_vertices(&[v0, v1, v2]).unwrap();
 
-        let r0 = crate::constants::block_reward(0);
-        let r1 = crate::constants::block_reward(1);
-        let r2 = crate::constants::block_reward(2);
+        // Per-round emission: 75% validator, 10% treasury, 5% founder (council unminted)
+        let r0 = crate::constants::block_reward(0) * 75 / 100;
+        let r1 = crate::constants::block_reward(1) * 75 / 100;
+        let r2 = crate::constants::block_reward(2) * 75 / 100;
 
         assert_eq!(state.balance(&sk1.address()), r0);
         assert_eq!(state.balance(&sk2.address()), r1);
         assert_eq!(state.balance(&sk3.address()), r2);
-        assert_eq!(state.total_supply(), r0 + r1 + r2);
+        // total_supply includes validator (75%) + treasury (10%) + founder (5%) per round
+        let per_round_total = |h: u64| {
+            let br = crate::constants::block_reward(h);
+            br * 75 / 100 + br * 10 / 100 + br * 5 / 100
+        };
+        assert_eq!(state.total_supply(), per_round_total(0) + per_round_total(1) + per_round_total(2));
         assert_eq!(state.last_finalized_round(), Some(2));
     }
 
