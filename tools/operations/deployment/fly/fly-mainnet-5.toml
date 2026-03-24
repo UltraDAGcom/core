@@ -2,6 +2,8 @@ app = "ultradag-mainnet-5"
 primary_region = "ams"
 
 [build]
+  [build.args]
+    VARIANT = "-mainnet"
 
 [env]
   RUST_LOG = "info"

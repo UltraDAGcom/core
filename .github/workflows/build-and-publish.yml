@@ -11,9 +11,9 @@ permissions:
 
 jobs:
   build-linux:
-    name: Build Linux Binary
+    name: Build Linux Binaries
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
 
@@ -25,28 +25,36 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libssl-dev pkg-config
 
-      - name: Build
-        run: cargo build --release -p ultradag-node
-
-      - name: Prepare binary
+      - name: Build testnet and mainnet binaries
         run: |
           mkdir -p release
+
+          # Testnet binary (includes faucet prefund)
+          cargo build --release -p ultradag-node
           cp target/release/ultradag-node release/ultradag-node-linux-x86_64
           chmod +x release/ultradag-node-linux-x86_64
+
+          # Mainnet binary (no faucet, emission-only genesis, genesis hash enforced)
+          cargo build --release -p ultradag-node --features mainnet
+          cp target/release/ultradag-node release/ultradag-node-mainnet-linux-x86_64
+          chmod +x release/ultradag-node-mainnet-linux-x86_64
 
       - name: Upload to latest release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: latest
           name: Latest Build
-          files: release/ultradag-node-linux-x86_64
+          files: |
+            release/ultradag-node-linux-x86_64
+            release/ultradag-node-mainnet-linux-x86_64
           draft: false
           prerelease: true
           generate_release_notes: false
           body: |
             Latest automated build from main branch.
             Commit: ${{ github.sha }}
-            
-            This is a pre-release for deployment purposes.
+
+            **ultradag-node-linux-x86_64** — Testnet binary (includes faucet)
+            **ultradag-node-mainnet-linux-x86_64** — Mainnet binary (no faucet, emission-only genesis)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
