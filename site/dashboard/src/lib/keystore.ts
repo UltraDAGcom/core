@@ -25,6 +25,12 @@ const STORAGE_KEY = 'ultradag_keystore';
 let keystoreData: KeystoreData | null = null;
 let encryptedBlob: EncryptedBlob | null = null;
 
+// Auto-load from localStorage on module import (synchronous, runs before first render)
+try {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw) encryptedBlob = JSON.parse(raw);
+} catch { /* ignore */ }
+
 // Listeners for state changes
 type Listener = () => void;
 const listeners: Listener[] = [];
