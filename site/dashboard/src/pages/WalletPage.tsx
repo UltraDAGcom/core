@@ -187,37 +187,22 @@ export function WalletPage({
             <ShieldAlert className="w-10 h-10 text-dag-muted" />
           </div>
           <div className="text-center">
-            <h2 className="text-lg font-semibold text-white">Keystore Locked</h2>
+            <h2 className="text-lg font-semibold text-white">
+              {hasStore ? 'Wallet Locked' : 'No Wallet Yet'}
+            </h2>
             <p className="text-sm text-dag-muted mt-1 max-w-sm">
               {hasStore
-                ? 'Unlock your keystore to access your wallets.'
-                : 'Create a new keystore to get started, or import an existing one.'}
+                ? 'Enter your password to access your wallets.'
+                : 'Create a new wallet or import an existing one to get started.'}
             </p>
           </div>
           <div className="flex gap-3">
-            {hasStore ? (
-              <button
-                onClick={() => setShowKeystoreModal(true)}
-                className="px-5 py-2.5 rounded-lg bg-dag-accent text-white font-medium text-sm hover:bg-dag-accent/80 transition-colors"
-              >
-                Unlock Keystore
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={() => setShowKeystoreModal(true)}
-                  className="px-5 py-2.5 rounded-lg bg-dag-accent text-white font-medium text-sm hover:bg-dag-accent/80 transition-colors"
-                >
-                  Create Keystore
-                </button>
-                <button
-                  onClick={() => setShowKeystoreModal(true)}
-                  className="px-5 py-2.5 rounded-lg bg-slate-700 text-slate-200 font-medium text-sm hover:bg-slate-600 transition-colors"
-                >
-                  Import Keystore
-                </button>
-              </>
-            )}
+            <button
+              onClick={() => setShowKeystoreModal(true)}
+              className="px-5 py-2.5 rounded-lg bg-dag-accent text-white font-medium text-sm hover:bg-dag-accent/80 transition-colors"
+            >
+              {hasStore ? 'Unlock' : 'Get Started'}
+            </button>
           </div>
         </div>
 
