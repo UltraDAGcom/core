@@ -81,7 +81,7 @@ function App() {
         >
           <Route
             index
-            element={<DashboardPage status={node.status} loading={node.loading} />}
+            element={<DashboardPage status={node.status} loading={node.loading} network={network} />}
           />
           <Route
             path="wallet"

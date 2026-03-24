@@ -24,7 +24,6 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 ///        • Bridge auto-enables once MIN_VALIDATORS are registered.
 contract UDAGBridgeValidator is ReentrancyGuard {
     using SafeERC20 for IERC20;
-
     UDAGToken public immutable token;
     address   public governor;
     address   public pendingGovernor;

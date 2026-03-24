@@ -26,6 +26,7 @@ import type { NodeStatus } from '../hooks/useNode';
 interface DashboardPageProps {
   status: NodeStatus | null;
   loading: boolean;
+  network: string;
 }
 
 interface HealthData {
@@ -70,7 +71,7 @@ function FinalityBadge({ lag }: { lag: number }) {
   );
 }
 
-export function DashboardPage({ status, loading }: DashboardPageProps) {
+export function DashboardPage({ status, loading, network }: DashboardPageProps) {
   const [health, setHealth] = useState<HealthData | null>(null);
   const [recentRounds, setRecentRounds] = useState<RoundData[]>([]);
   const [vertexHistory, setVertexHistory] = useState<number[]>([]);
@@ -88,7 +89,7 @@ export function DashboardPage({ status, loading }: DashboardPageProps) {
     fetchHealth();
     const iv = setInterval(fetchHealth, 10_000);
     return () => { cancelled = true; clearInterval(iv); };
-  }, []);
+  }, [network]);
 
   // Fetch recent rounds (20 in parallel for sparkline + activity bar)
   useEffect(() => {
@@ -130,7 +131,7 @@ export function DashboardPage({ status, loading }: DashboardPageProps) {
     }
     fetchRounds();
     return () => { cancelled = true; };
-  }, [status?.last_finalized_round]);
+  }, [status?.last_finalized_round, network]);
 
   if (loading) {
     return (

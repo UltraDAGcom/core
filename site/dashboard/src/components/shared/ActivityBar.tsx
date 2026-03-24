@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 
 interface ActivityBarProps {
   rounds: Array<{ round: number; vertexCount: number; txCount: number }>;
@@ -7,10 +7,6 @@ interface ActivityBarProps {
 
 export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  // Track the last known max round to detect new rounds
-  const lastMaxRoundRef = useRef<number>(0);
-  // Track previous vertex counts to detect changes
-  const prevVerticesRef = useRef<Map<number, number>>(new Map());
 
   if (!rounds || rounds.length === 0) return null;
 
@@ -19,30 +15,6 @@ export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
     .sort((a, b) => a.round - b.round);
 
   const maxVertices = Math.max(...display.map(r => r.vertexCount), 1);
-  const currentMaxRound = display[display.length - 1]?.round || 0;
-
-  // Detect new rounds and height changes
-  useEffect(() => {
-    const prevVertices = prevVerticesRef.current;
-    let hasNewRound = currentMaxRound > lastMaxRoundRef.current;
-
-    // Check for height changes on existing bars
-    for (const r of display) {
-      const prevHeight = prevVertices.get(r.round);
-      if (prevHeight !== undefined && prevHeight !== r.vertexCount) {
-        break;
-      }
-    }
-
-    if (hasNewRound) {
-      lastMaxRoundRef.current = currentMaxRound;
-    }
-
-    // Update stored vertex counts
-    for (const r of display) {
-      prevVertices.set(r.round, r.vertexCount);
-    }
-  }, [currentMaxRound, display.map(r => `${r.round}-${r.vertexCount}`).join(',')]);
 
   return (
     <div className="relative flex items-end gap-[3px] h-12 px-1 mb-3">
@@ -55,12 +27,10 @@ export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
               ? 'bg-dag-yellow'
               : 'bg-dag-red';
 
-        const isLatest = r.round === currentMaxRound;
-
         return (
           <div
             key={r.round}
-            className="relative flex-1 flex flex-col items-center justify-end cursor-pointer"
+            className="relative flex-1 flex flex-col items-center justify-end cursor-pointer group"
             style={{ height: '100%' }}
             onMouseEnter={() => setHoveredIndex(i)}
             onMouseLeave={() => setHoveredIndex(null)}
@@ -92,10 +62,9 @@ export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
               className={`w-full rounded-sm ${barColor} min-w-[4px]`}
               style={{
                 height: `${heightPercent}%`,
-                opacity: hoveredIndex === i ? 1 : isLatest ? 0.85 : 0.7,
+                opacity: hoveredIndex === i ? 1 : 0.7,
                 transformOrigin: 'bottom',
-                transition: 'height 0.5s ease, opacity 0.2s ease, box-shadow 0.3s ease',
-                boxShadow: isLatest ? '0 0 8px rgba(59, 130, 246, 0.4)' : 'none',
+                transition: 'height 0.5s ease, opacity 0.2s ease',
               }}
             />
           </div>
