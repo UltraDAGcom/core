@@ -23,6 +23,8 @@ export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
   const maxVertices = Math.max(...display.map(r => r.vertexCount), 1);
 
   // Detect new rounds on data change
+  const roundIds = display.map(r => r.round).join(',');
+  
   useEffect(() => {
     const currentRounds = display.map(r => r.round);
     const brandNew: number[] = [];
@@ -51,7 +53,7 @@ export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
       const sorted = [...knownRef.current].sort((a, b) => a - b);
       knownRef.current = new Set(sorted.slice(-maxRounds * 2));
     }
-  }, [rounds.map(r => r.round).join(',')]);
+  }, [roundIds]);
 
   return (
     <div className="relative flex items-end gap-[3px] h-12 px-1 mb-3">

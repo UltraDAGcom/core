@@ -1015,18 +1015,22 @@ When a vertex fails insertion due to missing parents, the node:
 - Halving: every 10,500,000 rounds (~1.66 years at 5s rounds)
 - Default round time: 5 seconds (configurable via `--round-ms`)
 
-### Genesis Allocations
-- **Faucet reserve**: 1,000,000 UDAG (testnet only) — `SecretKey::from_bytes([0xFA; 32])`
-- **Developer allocation**: 1,050,000 UDAG (5% of max supply) — `SecretKey::from_bytes([0xDE; 32])`
-- Both credited in `StateEngine::new_with_genesis()`
+### Genesis — Zero Pre-Mine
+- **Mainnet**: `total_supply = 0` at genesis. Every UDAG enters through emission.
+- **Testnet only**: Faucet reserve of 1,000,000 UDAG for testing — `SecretKey::from_bytes([0xFA; 32])`
+- **No founder pre-mine, no treasury pre-fund, no VC allocation, no presale.**
+- Founder address `dev_address()` exists but starts with 0 balance (earns through emission).
 
 ### Emission Model (Per-Round Protocol Distribution)
-- **Rewards distributed per round, not per vertex** — `distribute_round_rewards()` called once per finalized round in `apply_finalized_vertices()`. All stakers earn proportionally without needing to run a node.
+- **Rewards distributed per round, not per vertex** — `distribute_round_rewards()` called once per finalized round in `apply_finalized_vertices()`.
 - **Coinbase = fees only** — vertex coinbase contains only collected transaction fees (no block reward). Block rewards are minted and credited by the protocol, not by the vertex producer.
-- **Active validators** (stakers who produce vertices): earn 100% of their proportional share of `block_reward(round)`
-- **Passive stakers** (staked but not producing vertices): earn 20% of proportional share (`OBSERVER_REWARD_PERCENT`)
+- **Emission split per round:**
+  - **75% → Validators/Stakers** (proportional to effective stake). Active producers get 100% of share; passive stakers get `OBSERVER_REWARD_PERCENT` (20%).
+  - **10% → DAO Treasury** (`treasury_balance`, spent via council governance proposals)
+  - **10% → Council of 21** (equal split among seated members)
+  - **5% → Founder** (`dev_address()`, liquid balance, can stake/bridge/spend)
 - **Delegators**: earn proportionally through their validator's effective stake, minus commission
-- **Council emission**: council members receive `COUNCIL_EMISSION_PERCENT` share of each round's reward
+- **Governable**: Council can adjust `treasury_emission_percent` (0-20%), `founder_emission_percent` (0-10%), `council_emission_percent` (0-30%) via ParameterChange proposals.
 - **Pre-staking fallback**: `block_reward(height) / configured_validators` split equally among vertex producers
 - Remainder from integer division is implicitly burned (sum of rewards <= block_reward)
 - Supply cap enforced: total minted per round capped at `MAX_SUPPLY_SATS - total_supply`
@@ -1687,12 +1691,13 @@ The faucet creates real signed transactions that propagate through DAG consensus
 - **Dashboard UI**: Faucet card at top of dashboard.html — paste address, click "Get 100 UDAG", no login/email required
 - **Rate limiting**: 1 request per 10 minutes per IP (`limits::FAUCET`)
 
-## Developer Allocation
+## Founder Emission
 
-- **5% of max supply**: 1,050,000 UDAG allocated at genesis
-- **Deterministic keypair**: `SecretKey::from_bytes([0xDE; 32])` — auditable from block 0
-- **Constants**: `DEV_ALLOCATION_SATS`, `DEV_ADDRESS_SEED`, `dev_address()` in `constants.rs`
-- Credited in `StateEngine::new_with_genesis()` alongside faucet pre-fund
+- **5% of each round's block reward** — earned through emission, same timeline as validators
+- **No genesis pre-mine** — founder address starts with 0 balance
+- **Deterministic address**: `SecretKey::from_bytes([0xDE; 32])` → `dev_address()` in `constants.rs`
+- **Governable**: Council can adjust `founder_emission_percent` (0-10%) via ParameterChange proposal — the community can reduce or eliminate the founder share over time
+- **Constants**: `FOUNDER_EMISSION_PERCENT`, `DEV_ADDRESS_SEED`, `dev_address()` in `constants.rs`
 
 ## Public Bootstrap Nodes
 
