@@ -148,6 +148,22 @@ pub fn dev_address() -> crate::address::Address {
 pub fn dev_keypair() -> crate::address::SecretKey {
     #[cfg(not(feature = "mainnet"))]
     {
+        // Testnet: use ULTRADAG_DEV_KEY env var if set, otherwise fall back to hardcoded seed.
+        // This lets operators use the same founder key on testnet and mainnet without
+        // exposing the private key in source code.
+        if let Ok(key_hex) = std::env::var("ULTRADAG_DEV_KEY") {
+            if key_hex.len() == 64 {
+                let mut bytes = [0u8; 32];
+                for (i, chunk) in key_hex.as_bytes().chunks(2).enumerate() {
+                    if let Ok(hex_str) = std::str::from_utf8(chunk) {
+                        if let Ok(b) = u8::from_str_radix(hex_str, 16) {
+                            bytes[i] = b;
+                        }
+                    }
+                }
+                return crate::address::SecretKey::from_bytes(bytes);
+            }
+        }
         crate::address::SecretKey::from_bytes(DEV_ADDRESS_SEED)
     }
     
@@ -234,14 +250,10 @@ pub const CHECKPOINT_INTERVAL: u64 = 100;
 ///
 /// CRITICAL: This must be updated if genesis state changes.
 /// Run `cargo test test_compute_genesis_hash -- --nocapture` to recompute.
-/// Recomputed 2026-03-24 after emission-only tokenomics refactor (no-premine model).
+/// Testnet: genesis hash verification skipped (dev key may be overridden via ULTRADAG_DEV_KEY).
+/// Mainnet hash below is the security-critical one.
 #[cfg(not(feature = "mainnet"))]
-pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
-    0xeb, 0xc2, 0xdc, 0x99, 0x87, 0x1f, 0x5c, 0x42,
-    0x0d, 0x59, 0xd0, 0xdc, 0x37, 0x41, 0x0b, 0x28,
-    0x35, 0x88, 0xa7, 0x7d, 0x2d, 0xa0, 0x03, 0x52,
-    0xf1, 0xad, 0x51, 0x93, 0xd2, 0x17, 0xaa, 0x53,
-];
+pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [0u8; 32];
 
 /// Mainnet genesis checkpoint hash — computed 2026-03-24 during key ceremony.
 /// Genesis: 0 UDAG (no pre-mine), all tokens distributed through emission.
