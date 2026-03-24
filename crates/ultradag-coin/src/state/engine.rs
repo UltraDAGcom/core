@@ -2588,7 +2588,8 @@ impl StateEngine {
                     // TextProposals and CouncilMembership execute regardless.
                     if matches!(&proposal.proposal_type,
                         crate::governance::ProposalType::ParameterChange { .. } |
-                        crate::governance::ProposalType::TreasurySpend { .. }
+                        crate::governance::ProposalType::TreasurySpend { .. } |
+                        crate::governance::ProposalType::BridgeRefund { .. }
                     ) && !self.dao_is_active() {
                         // DAO hibernating — skip execution, leave as PassedPending
                         continue;
@@ -2682,6 +2683,21 @@ impl StateEngine {
                             "TreasurySpend proposal {} executed: {} sats to {}. Treasury remaining: {} sats",
                             id, amount, recipient.to_hex(), self.treasury_balance
                         );
+                    }
+                }
+                crate::governance::ProposalType::BridgeRefund { nonce } => {
+                    match self.bridge_refund(nonce, true) {
+                        Ok(()) => {
+                            tracing::warn!(
+                                "BridgeRefund proposal {} executed: nonce {} refunded",
+                                id, nonce
+                            );
+                        }
+                        Err(e) => {
+                            let reason = format!("Bridge refund failed: {}", e);
+                            tracing::warn!("Proposal {} execution failed: {}", id, reason);
+                            failed.insert(id, reason);
+                        }
                     }
                 }
                 crate::governance::ProposalType::TextProposal => {}
@@ -2892,9 +2908,15 @@ impl StateEngine {
         delegation_accounts.sort_by_key(|(addr, _)| addr.0);
         let mut bridge_attestations: Vec<_> = self.bridge_attestations.iter().map(|(k, v)| (*k, v.clone())).collect();
         bridge_attestations.sort_by_key(|(nonce, _)| *nonce);
+        // NOTE: bridge_signatures are NON-DETERMINISTIC across nodes (each validator
+        // signs locally, and nodes may have different subsets of signatures). They are:
+        // - Included in snapshots for fast-sync convenience (saves re-signing)
+        // - EXCLUDED from state_root hash (compute_state_root in checkpoint.rs)
+        // - NOT used in any consensus-critical decision (only RPC display)
+        // Nodes that fast-sync from different peers may have different signature sets,
+        // but this does not affect consensus, finality, or supply invariant.
         let mut bridge_signatures: Vec<_> = self.bridge_signatures.iter()
             .map(|((nonce, validator), packed)| {
-                // Serialize as 85 bytes: eth_address (20) + ecdsa_sig (65)
                 ((*nonce, *validator), packed.to_vec())
             })
             .collect();
@@ -3300,7 +3322,9 @@ impl StateEngine {
             // before the user claims on Arbitrum.
             if self.bridge_reserve >= *amount {
                 self.bridge_reserve = self.bridge_reserve.saturating_sub(*amount);
-                let _ = self.credit(sender, *amount);
+                if let Err(e) = self.credit(sender, *amount) {
+                    tracing::error!("Bridge auto-refund credit failed for nonce {}: {}", nonce, e);
+                }
                 tracing::warn!(
                     "Bridge auto-refund: {} sats returned to {} (attestation #{} expired after {} rounds)",
                     amount, sender.to_hex(), nonce, retention

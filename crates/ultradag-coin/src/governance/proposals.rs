@@ -20,6 +20,12 @@ pub enum ProposalType {
         recipient: Address,
         amount: u64,
     },
+    /// Emergency refund of a bridge deposit before the retention period expires.
+    /// The council can authorize returning locked funds to the original sender
+    /// if the Arbitrum-side claim failed or the bridge is stuck.
+    BridgeRefund {
+        nonce: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

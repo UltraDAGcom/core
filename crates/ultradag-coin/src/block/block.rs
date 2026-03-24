@@ -43,6 +43,13 @@ impl Block {
 /// Includes the leaf count in the final hash to prevent CVE-2012-2459
 /// (duplicate trailing leaf attack where `[A,B,C]` and `[A,B,C,C]`
 /// would otherwise produce the same root).
+/// Compute Merkle root from a list of leaf hashes.
+///
+/// Odd-leaf strategy: promote the unpaired leaf to the next level (no duplication).
+/// This prevents CVE-2012-2459 where duplicating the last leaf makes `[A,B,C]` and
+/// `[A,B,C,C]` produce the same intermediate tree. With promotion, the odd leaf is
+/// carried forward unpaired, producing structurally different trees for different inputs.
+/// Leaf count is still mixed into the final hash as defense-in-depth.
 pub fn merkle_root(leaves: &[[u8; 32]]) -> [u8; 32] {
     if leaves.is_empty() {
         return [0u8; 32];
@@ -54,24 +61,22 @@ pub fn merkle_root(leaves: &[[u8; 32]]) -> [u8; 32] {
     let leaf_count = leaves.len();
     let mut level = leaves.to_vec();
     while level.len() > 1 {
-        if level.len() % 2 != 0 {
-            let Some(last) = level.last() else {
-                // Should never happen: loop invariant guarantees at least 1 element
-                return blake3::hash(b"empty").into();
-            };
-            level.push(*last);
+        let mut next = Vec::with_capacity((level.len() + 1) / 2);
+        let mut i = 0;
+        while i + 1 < level.len() {
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(&level[i]);
+            hasher.update(&level[i + 1]);
+            next.push(*hasher.finalize().as_bytes());
+            i += 2;
         }
-        level = level
-            .chunks(2)
-            .map(|pair| {
-                let mut hasher = blake3::Hasher::new();
-                hasher.update(&pair[0]);
-                hasher.update(&pair[1]);
-                *hasher.finalize().as_bytes()
-            })
-            .collect();
+        // Odd leaf: promote directly (no duplication)
+        if i < level.len() {
+            next.push(level[i]);
+        }
+        level = next;
     }
-    // Mix in leaf count to prevent CVE-2012-2459 duplicate-leaf collision
+    // Mix in leaf count as defense-in-depth
     let mut final_hasher = blake3::Hasher::new();
     final_hasher.update(&level[0]);
     final_hasher.update(&(leaf_count as u64).to_le_bytes());

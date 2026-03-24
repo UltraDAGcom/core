@@ -58,6 +58,10 @@ impl CreateProposalTx {
                 buf.extend_from_slice(&recipient.0);
                 buf.extend_from_slice(&amount.to_le_bytes());
             }
+            ProposalType::BridgeRefund { nonce } => {
+                buf.push(4);
+                buf.extend_from_slice(&nonce.to_le_bytes());
+            }
         }
 
         buf.extend_from_slice(&self.fee.to_le_bytes());
@@ -105,6 +109,10 @@ impl CreateProposalTx {
                 hasher.update(&[3]);
                 hasher.update(&recipient.0);
                 hasher.update(&amount.to_le_bytes());
+            }
+            ProposalType::BridgeRefund { nonce } => {
+                hasher.update(&[4]);
+                hasher.update(&nonce.to_le_bytes());
             }
         }
         hasher.update(&self.fee.to_le_bytes());

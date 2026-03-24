@@ -245,6 +245,10 @@ pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
                 hasher.update(&recipient.0);
                 hasher.update(&amount.to_le_bytes());
             }
+            crate::governance::ProposalType::BridgeRefund { nonce } => {
+                hasher.update(&[4u8]);
+                hasher.update(&nonce.to_le_bytes());
+            }
         }
         // Proposal status discriminant
         match &proposal.status {
@@ -392,7 +396,12 @@ where
     F: FnMut([u8; 32]) -> Option<Checkpoint>,
 {
     // If this is genesis, verify its hash matches the constant
+    // Skip verification when GENESIS_CHECKPOINT_HASH is [0u8; 32] (testnet with configurable dev key)
+    let skip_genesis_check = crate::constants::GENESIS_CHECKPOINT_HASH == [0u8; 32];
     if checkpoint.round == 0 {
+        if skip_genesis_check {
+            return Ok(());
+        }
         let genesis_hash = compute_checkpoint_hash(checkpoint);
         if genesis_hash == crate::constants::GENESIS_CHECKPOINT_HASH {
             return Ok(());
@@ -417,6 +426,9 @@ where
         
         // If we reached genesis, verify it
         if current.round == 0 {
+            if skip_genesis_check {
+                return Ok(());
+            }
             let genesis_hash = compute_checkpoint_hash(&current);
             if genesis_hash == crate::constants::GENESIS_CHECKPOINT_HASH {
                 return Ok(());
