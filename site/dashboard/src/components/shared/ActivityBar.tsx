@@ -7,12 +7,12 @@ interface ActivityBarProps {
 
 export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  // Rounds that should play their entry animation (one-shot, cleared after animation ends)
-  const [enteringRounds, setEnteringRounds] = useState<Set<number>>(new Set());
-  // All rounds we've ever rendered — persists across re-renders
-  const knownRef = useRef<Set<number>>(new Set());
-  // Whether this is the very first render (don't animate initial batch)
-  const isFirstRender = useRef(true);
+  // Track the last known max round to detect new rounds
+  const lastMaxRoundRef = useRef<number>(0);
+  // Whether a new round just arrived (triggers wave animation)
+  const [waveRound, setWaveRound] = useState<number>(0);
+  // Track previous vertex counts to detect changes
+  const prevVerticesRef = useRef<Map<number, number>>(new Map());
 
   if (!rounds || rounds.length === 0) return null;
 
@@ -21,39 +21,33 @@ export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
     .sort((a, b) => a.round - b.round);
 
   const maxVertices = Math.max(...display.map(r => r.vertexCount), 1);
+  const currentMaxRound = display[display.length - 1]?.round || 0;
 
-  // Detect new rounds on data change
-  const roundIds = display.map(r => r.round).join(',');
-  
+  // Detect new rounds and height changes
   useEffect(() => {
-    const currentRounds = display.map(r => r.round);
-    const brandNew: number[] = [];
+    const prevVertices = prevVerticesRef.current;
+    let hasNewRound = currentMaxRound > lastMaxRoundRef.current;
+    let hasHeightChanges = false;
 
-    for (const round of currentRounds) {
-      if (!knownRef.current.has(round)) {
-        knownRef.current.add(round);
-        // Don't animate on first load — only on subsequent data refreshes
-        if (!isFirstRender.current) {
-          brandNew.push(round);
-        }
+    // Check for height changes on existing bars
+    for (const r of display) {
+      const prevHeight = prevVertices.get(r.round);
+      if (prevHeight !== undefined && prevHeight !== r.vertexCount) {
+        hasHeightChanges = true;
+        break;
       }
     }
 
-    isFirstRender.current = false;
-
-    if (brandNew.length > 0) {
-      setEnteringRounds(new Set(brandNew));
-      // Clear after animation completes (500ms)
-      const timer = setTimeout(() => setEnteringRounds(new Set()), 500);
-      return () => clearTimeout(timer);
+    if (hasNewRound) {
+      lastMaxRoundRef.current = currentMaxRound;
+      setWaveRound(prev => prev + 1);
     }
 
-    // Prune old entries from known set
-    if (knownRef.current.size > maxRounds * 3) {
-      const sorted = [...knownRef.current].sort((a, b) => a - b);
-      knownRef.current = new Set(sorted.slice(-maxRounds * 2));
+    // Update stored vertex counts
+    for (const r of display) {
+      prevVertices.set(r.round, r.vertexCount);
     }
-  }, [roundIds]);
+  }, [currentMaxRound, display.map(r => `${r.round}-${r.vertexCount}`).join(',')]);
 
   return (
     <div className="relative flex items-end gap-[3px] h-12 px-1 mb-3">
@@ -66,7 +60,9 @@ export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
               ? 'bg-dag-yellow'
               : 'bg-dag-red';
 
-        const isEntering = enteringRounds.has(r.round);
+        const isLatest = r.round === currentMaxRound;
+        const prevHeight = prevVerticesRef.current.get(r.round) ?? r.vertexCount;
+        const heightChanged = prevHeight !== r.vertexCount;
 
         return (
           <div
@@ -100,23 +96,18 @@ export function ActivityBar({ rounds, maxRounds = 20 }: ActivityBarProps) {
             )}
             {/* Bar */}
             <div
-              className={`w-full rounded-sm ${barColor} min-w-[4px] transition-opacity duration-200`}
+              className={`w-full rounded-sm ${barColor} min-w-[4px]`}
               style={{
                 height: `${heightPercent}%`,
-                opacity: hoveredIndex === i ? 1 : 0.7,
+                opacity: hoveredIndex === i ? 1 : isLatest ? 0.85 : 0.7,
                 transformOrigin: 'bottom',
-                animation: isEntering ? 'activityBarIn 0.4s ease-out' : undefined,
+                transition: 'height 0.5s ease, opacity 0.2s ease, box-shadow 0.3s ease',
+                boxShadow: isLatest ? '0 0 8px rgba(59, 130, 246, 0.4)' : 'none',
               }}
             />
           </div>
         );
       })}
-      <style>{`
-        @keyframes activityBarIn {
-          from { transform: scaleY(0); opacity: 0.2; }
-          to { transform: scaleY(1); opacity: 0.7; }
-        }
-      `}</style>
     </div>
   );
 }
