@@ -9,11 +9,13 @@ interface LayoutProps {
   nodeUrl: string;
   keystoreUnlocked: boolean;
   network: NetworkType;
+  walletAddress?: string;
+  walletBalance?: number;
   onToggleLock: () => void;
   onSwitchNetwork: (network: NetworkType) => void;
 }
 
-export function Layout({ connected, nodeUrl, keystoreUnlocked, network, onToggleLock, onSwitchNetwork }: LayoutProps) {
+export function Layout({ connected, nodeUrl, keystoreUnlocked, network, walletAddress, walletBalance, onToggleLock, onSwitchNetwork }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
@@ -25,6 +27,8 @@ export function Layout({ connected, nodeUrl, keystoreUnlocked, network, onToggle
           nodeUrl={nodeUrl}
           keystoreUnlocked={keystoreUnlocked}
           network={network}
+          walletAddress={walletAddress}
+          walletBalance={walletBalance}
           onToggleSidebar={() => setSidebarOpen((o) => !o)}
           onToggleLock={onToggleLock}
           onSwitchNetwork={onSwitchNetwork}

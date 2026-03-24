@@ -1,4 +1,4 @@
-import { Menu, Lock, Unlock, Wifi, WifiOff } from 'lucide-react';
+import { Menu, Wifi, WifiOff, LogOut, Wallet } from 'lucide-react';
 import type { NetworkType } from '../../lib/api';
 
 interface TopBarProps {
@@ -6,6 +6,8 @@ interface TopBarProps {
   nodeUrl: string;
   keystoreUnlocked: boolean;
   network: NetworkType;
+  walletAddress?: string;
+  walletBalance?: number;
   onToggleSidebar: () => void;
   onToggleLock: () => void;
   onSwitchNetwork: (network: NetworkType) => void;
@@ -16,15 +18,25 @@ export function TopBar({
   nodeUrl,
   keystoreUnlocked,
   network,
+  walletAddress,
+  walletBalance,
   onToggleSidebar,
   onToggleLock,
   onSwitchNetwork,
 }: TopBarProps) {
   const isMainnet = network === 'mainnet';
+  const shortAddr = walletAddress
+    ? walletAddress.slice(0, 6) + '...' + walletAddress.slice(-4)
+    : '';
+
+  const formatBalance = (sats: number) => {
+    const udag = sats / 100_000_000;
+    return udag < 0.01 && udag > 0 ? '<0.01' : udag.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  };
 
   return (
     <header className="h-14 bg-dag-sidebar/80 backdrop-blur border-b border-dag-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
-      {/* Left: hamburger + node status */}
+      {/* Left: hamburger + connection */}
       <div className="flex items-center gap-3">
         <button
           onClick={onToggleSidebar}
@@ -35,18 +47,13 @@ export function TopBar({
 
         <div className="flex items-center gap-2">
           {connected ? (
-            <Wifi className="w-4 h-4 text-dag-green" />
+            <Wifi className="w-3.5 h-3.5 text-dag-green" />
           ) : (
-            <WifiOff className="w-4 h-4 text-dag-red" />
+            <WifiOff className="w-3.5 h-3.5 text-dag-red" />
           )}
-          <span className="text-xs text-dag-muted font-mono hidden sm:inline">
-            {connected ? nodeUrl.replace('https://', '') : 'Disconnected'}
+          <span className="text-[11px] text-dag-muted font-mono hidden sm:inline">
+            {connected ? nodeUrl.replace('https://', '').replace('.fly.dev', '') : 'Disconnected'}
           </span>
-          <span
-            className={`w-2 h-2 rounded-full ${
-              connected ? 'bg-dag-green animate-pulse' : 'bg-dag-red'
-            }`}
-          />
         </div>
       </div>
 
@@ -74,28 +81,33 @@ export function TopBar({
         </button>
       </div>
 
-      {/* Right: lock button */}
-      <button
-        onClick={onToggleLock}
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-          keystoreUnlocked
-            ? 'bg-green-500/15 text-green-400 hover:bg-green-500/25'
-            : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
-        }`}
-        title={keystoreUnlocked ? 'Lock keystore' : 'Unlock keystore'}
-      >
-        {keystoreUnlocked ? (
-          <>
-            <Unlock className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Unlocked</span>
-          </>
-        ) : (
-          <>
-            <Lock className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Locked</span>
-          </>
-        )}
-      </button>
+      {/* Right: wallet info + sign out */}
+      {keystoreUnlocked ? (
+        <div className="flex items-center gap-2">
+          {walletAddress && (
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dag-surface border border-dag-border">
+              <Wallet className="w-3.5 h-3.5 text-dag-accent" />
+              <span className="text-xs font-mono text-slate-300">{shortAddr}</span>
+              {walletBalance !== undefined && (
+                <>
+                  <span className="text-slate-600">|</span>
+                  <span className="text-xs font-semibold text-dag-green">{formatBalance(walletBalance)} UDAG</span>
+                </>
+              )}
+            </div>
+          )}
+          <button
+            onClick={onToggleLock}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            title="Sign out"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Sign Out</span>
+          </button>
+        </div>
+      ) : (
+        <div className="w-20" /> // Spacer when not logged in
+      )}
     </header>
   );
 }

@@ -27,6 +27,10 @@ interface DashboardPageProps {
   status: NodeStatus | null;
   loading: boolean;
   network: string;
+  wallets?: { name: string; address: string }[];
+  totalBalance?: number;
+  totalStaked?: number;
+  totalDelegated?: number;
 }
 
 interface HealthData {
@@ -71,7 +75,7 @@ function FinalityBadge({ lag }: { lag: number }) {
   );
 }
 
-export function DashboardPage({ status, loading, network }: DashboardPageProps) {
+export function DashboardPage({ status, loading, network, wallets, totalBalance, totalStaked, totalDelegated }: DashboardPageProps) {
   const [health, setHealth] = useState<HealthData | null>(null);
   const [recentRounds, setRecentRounds] = useState<RoundData[]>([]);
   const [vertexHistory, setVertexHistory] = useState<number[]>([]);
@@ -157,13 +161,42 @@ export function DashboardPage({ status, loading, network }: DashboardPageProps) 
   const emitted = status.total_supply; // All supply comes from emission (no pre-mine)
   const remaining = MAX_SUPPLY_SATS - status.total_supply;
 
+  const hasWallet = wallets && wallets.length > 0;
+  const totalValue = (totalBalance || 0) + (totalStaked || 0) + (totalDelegated || 0);
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-sm text-dag-muted mt-1">UltraDAG network overview</p>
-      </div>
+      {/* Your Portfolio — the first thing users see */}
+      {hasWallet && (
+        <div className="rounded-xl bg-gradient-to-br from-dag-accent/10 via-dag-card to-purple-500/5 border border-dag-accent/20 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-dag-muted uppercase tracking-wider">Your Portfolio</h2>
+            <Link to="/wallet" className="text-xs text-dag-accent hover:underline">Manage Wallets</Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div>
+              <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Total Value</p>
+              <p className="text-2xl font-bold text-white">{formatUdag(totalValue)}</p>
+              <p className="text-[10px] text-dag-muted">UDAG</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Available</p>
+              <p className="text-lg font-semibold text-white">{formatUdag(totalBalance || 0)}</p>
+              <p className="text-[10px] text-dag-muted">UDAG</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Staked</p>
+              <p className="text-lg font-semibold text-dag-green">{formatUdag(totalStaked || 0)}</p>
+              <p className="text-[10px] text-dag-muted">UDAG</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Delegated</p>
+              <p className="text-lg font-semibold text-dag-purple">{formatUdag(totalDelegated || 0)}</p>
+              <p className="text-[10px] text-dag-muted">UDAG</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Health Banner */}
       <HealthBanner health={health} />

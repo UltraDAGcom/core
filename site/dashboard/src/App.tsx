@@ -126,6 +126,8 @@ function App() {
               nodeUrl={node.nodeUrl}
               keystoreUnlocked={ks.unlocked}
               network={network}
+              walletAddress={ks.wallets[0]?.address}
+              walletBalance={wb.totalBalance}
               onToggleLock={handleToggleLock}
               onSwitchNetwork={handleSwitchNetwork}
             />
@@ -133,7 +135,7 @@ function App() {
         >
           <Route
             index
-            element={<DashboardPage status={node.status} loading={node.loading} network={network} />}
+            element={<DashboardPage status={node.status} loading={node.loading} network={network} wallets={ks.wallets} totalBalance={wb.totalBalance} totalStaked={wb.totalStaked} totalDelegated={wb.totalDelegated} />}
           />
           <Route
             path="wallet"
