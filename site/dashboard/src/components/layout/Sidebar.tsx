@@ -18,6 +18,53 @@ interface NavItem {
   label: string;
 }
 
+function SessionIndicator({ secondsLeft, totalSeconds }: { secondsLeft: number; totalSeconds: number }) {
+  const fraction = Math.max(0, Math.min(1, secondsLeft / totalSeconds));
+  const mins = Math.floor(secondsLeft / 60);
+  const secs = secondsLeft % 60;
+  const timeStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+
+  const urgent = secondsLeft <= 120;
+  const critical = secondsLeft <= 30;
+
+  const trackColor = 'bg-slate-800';
+  const barColor = critical
+    ? 'bg-gradient-to-r from-red-500 to-rose-400'
+    : urgent
+      ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+      : 'bg-gradient-to-r from-dag-accent to-indigo-400';
+
+  const textColor = critical
+    ? 'text-red-400'
+    : urgent
+      ? 'text-amber-400'
+      : 'text-slate-500';
+
+  const dotColor = critical
+    ? 'bg-red-400'
+    : urgent
+      ? 'bg-amber-400'
+      : 'bg-dag-accent/60';
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-1.5">
+          <span className={`w-1.5 h-1.5 rounded-full ${dotColor} ${critical ? 'animate-pulse' : ''}`} />
+          <span className={`text-[10px] font-medium ${textColor}`}>Session</span>
+        </div>
+        <span className={`text-[10px] font-mono tabular-nums ${textColor}`}>{timeStr}</span>
+      </div>
+      <div className={`h-1 w-full ${trackColor} rounded-full overflow-hidden`}>
+        <div
+          className={`h-full ${barColor} rounded-full transition-all duration-1000 ease-linear ${critical ? 'animate-pulse' : ''}`}
+          style={{ width: `${fraction * 100}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 // Flat list, grouped by section dividers
 const sections: { label?: string; items: NavItem[] }[] = [
   {
@@ -54,9 +101,11 @@ interface SidebarProps {
   open: boolean;
   onClose: () => void;
   network?: 'mainnet' | 'testnet';
+  sessionSecondsLeft?: number;
+  sessionTotalSeconds?: number;
 }
 
-export function Sidebar({ open, onClose, network = 'testnet' }: SidebarProps) {
+export function Sidebar({ open, onClose, network = 'testnet', sessionSecondsLeft, sessionTotalSeconds }: SidebarProps) {
   return (
     <>
       {/* Mobile overlay */}
@@ -125,9 +174,12 @@ export function Sidebar({ open, onClose, network = 'testnet' }: SidebarProps) {
           ))}
         </nav>
 
-        {/* Footer */}
-        <div className="px-4 py-3 border-t border-dag-border">
-          <p className={`text-[10px] ${network === 'mainnet' ? 'text-dag-green' : 'text-slate-500'}`}>
+        {/* Footer: session timer + version */}
+        <div className="px-3 py-3 border-t border-dag-border space-y-2.5">
+          {sessionSecondsLeft !== undefined && sessionTotalSeconds !== undefined && sessionTotalSeconds > 0 && (
+            <SessionIndicator secondsLeft={sessionSecondsLeft} totalSeconds={sessionTotalSeconds} />
+          )}
+          <p className={`text-[10px] px-1 ${network === 'mainnet' ? 'text-dag-green' : 'text-slate-500'}`}>
             {network === 'mainnet' ? 'Mainnet' : 'Testnet'} v0.1
           </p>
         </div>
