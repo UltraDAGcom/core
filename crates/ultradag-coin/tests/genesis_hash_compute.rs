@@ -3,10 +3,12 @@
 /// For testnet hash: `cargo test test_compute_genesis_hash -- --nocapture`
 #[test]
 fn test_compute_genesis_hash() {
-    // For mainnet: we need to set ULTRADAG_DEV_KEY to compute genesis
-    // Use a deterministic test key for genesis computation
+    // For mainnet: ULTRADAG_DEV_KEY must be set in the environment.
+    // If not set, use a deterministic test key for CI/development.
     #[cfg(feature = "mainnet")]
-    std::env::set_var("ULTRADAG_DEV_KEY", "0000000000000000000000000000000000000000000000000000000000000001");
+    if std::env::var("ULTRADAG_DEV_KEY").is_err() {
+        std::env::set_var("ULTRADAG_DEV_KEY", "0000000000000000000000000000000000000000000000000000000000000001");
+    }
     
     let state = ultradag_coin::StateEngine::new_with_genesis();
     let snapshot = state.snapshot();
@@ -32,16 +34,21 @@ fn test_compute_genesis_hash() {
     eprintln!("Genesis total_supply = {} sats ({} UDAG)", state.total_supply(),
         state.total_supply() / ultradag_coin::SATS_PER_UDAG);
 
-    let dev_addr = ultradag_coin::constants::dev_address();
+    let dev_kp = ultradag_coin::constants::dev_keypair();
+    let dev_pubkey = dev_kp.verifying_key().to_bytes();
+    let dev_addr = dev_kp.address();
+    eprintln!("Founder pubkey  = {}", dev_pubkey.iter().map(|b| format!("{:02x}", b)).collect::<String>());
     eprintln!("Founder address = {}", dev_addr.to_hex());
 }
 
 #[test]
 fn genesis_hash_matches_constant() {
-    // For mainnet: set ULTRADAG_DEV_KEY for genesis computation
+    // For mainnet: ULTRADAG_DEV_KEY must be set in the environment.
     #[cfg(feature = "mainnet")]
-    std::env::set_var("ULTRADAG_DEV_KEY", "0000000000000000000000000000000000000000000000000000000000000001");
-    
+    if std::env::var("ULTRADAG_DEV_KEY").is_err() {
+        std::env::set_var("ULTRADAG_DEV_KEY", "0000000000000000000000000000000000000000000000000000000000000001");
+    }
+
     let state = ultradag_coin::StateEngine::new_with_genesis();
     let snapshot = state.snapshot();
     let state_root = ultradag_coin::consensus::checkpoint::compute_state_root(&snapshot);
