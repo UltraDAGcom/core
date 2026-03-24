@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
+import { WelcomeScreen } from './components/wallet/WelcomeScreen';
 import { CreateKeystoreModal } from './components/wallet/CreateKeystoreModal';
 import { DashboardPage } from './pages/DashboardPage';
 import { WalletPage } from './pages/WalletPage';
@@ -63,6 +64,57 @@ function App() {
       }
     }
   }, []);
+
+  // Show welcome/onboarding when wallet is not unlocked
+  if (!ks.unlocked) {
+    return (
+      <ToastProvider>
+        <div className="min-h-screen bg-dag-bg">
+          {/* Minimal top bar for network switching */}
+          <header className="h-14 bg-dag-sidebar/80 backdrop-blur border-b border-dag-border flex items-center justify-between px-4 lg:px-6">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-dag-accent to-purple-500 flex items-center justify-center">
+                <span className="text-white font-bold text-xs">U</span>
+              </div>
+              <span className="font-semibold text-white text-sm">UltraDAG</span>
+            </div>
+            <div className="flex items-center bg-dag-surface border border-dag-border rounded-lg p-0.5">
+              <button
+                onClick={() => handleSwitchNetwork('mainnet')}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                  network === 'mainnet'
+                    ? 'bg-dag-green/20 text-dag-green border border-dag-green/30'
+                    : 'text-dag-muted hover:text-white'
+                }`}
+              >
+                Mainnet
+              </button>
+              <button
+                onClick={() => handleSwitchNetwork('testnet')}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                  network === 'testnet'
+                    ? 'bg-dag-yellow/20 text-dag-yellow border border-dag-yellow/30'
+                    : 'text-dag-muted hover:text-white'
+                }`}
+              >
+                Testnet
+              </button>
+            </div>
+          </header>
+          <WelcomeScreen
+            hasExisting={ks.hasStore}
+            onCreateWallet={async (pw, name, secretKey, address) => {
+              await ks.create(pw);
+              await ks.addWallet(name, secretKey, address);
+              return true;
+            }}
+            onUnlock={ks.unlock}
+            onImportBlob={ks.importBlob}
+          />
+        </div>
+      </ToastProvider>
+    );
+  }
 
   return (
     <ToastProvider>
