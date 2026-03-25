@@ -207,6 +207,16 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
             }
         }
 
+        // Persist last_proposal_round (spam prevention cooldown)
+        {
+            let snap = engine.snapshot();
+            if !snap.last_proposal_round.is_empty() {
+                let lpr_bytes = postcard::to_allocvec(&snap.last_proposal_round)
+                    .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+                table.insert("last_proposal_round", lpr_bytes.as_slice())?;
+            }
+        }
+
         // Compute and store state root for integrity verification on reload.
         // This catches silent corruption from disk errors, partial writes, or bugs.
         let snapshot = engine.snapshot();
@@ -451,6 +461,13 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         let params: Vec<((u64, u64), (Address, u64))> = postcard::from_bytes(params_val.value())
             .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
         engine.restore_bridge_release_params(params);
+    }
+
+    // Restore last_proposal_round from METADATA (spam prevention cooldown)
+    if let Some(lpr_val) = meta.get("last_proposal_round")? {
+        let lpr: Vec<(Address, u64)> = postcard::from_bytes(lpr_val.value())
+            .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+        engine.restore_last_proposal_round(lpr);
     }
 
     // Verify state integrity: recompute state root and compare against stored value.

@@ -269,6 +269,9 @@ pub struct StateEngine {
     /// First voter's values are stored; subsequent voters must match.
     /// Cleaned up when release executes or attestation expires.
     bridge_release_params: HashMap<(u64, u64), (Address, u64)>,
+    /// Round when the first vote was cast for each in-progress bridge release.
+    /// Used for age-based pruning of stale votes that never reach quorum.
+    bridge_release_first_vote_round: HashMap<(u64, u64), u64>,
 }
 
 impl StateEngine {
@@ -303,6 +306,7 @@ impl StateEngine {
             used_release_nonces: std::collections::HashSet::new(),
             bridge_release_votes: HashMap::new(),
             bridge_release_params: HashMap::new(),
+            bridge_release_first_vote_round: HashMap::new(),
         }
     }
 
@@ -392,13 +396,12 @@ impl StateEngine {
         }
     }
 
-    /// Compute the total council emission for a single vertex at the given round.
+    /// Compute the total council emission for a round.
     /// Returns (per_member_amount, total_council_amount).
-    /// Compute council emission per vertex.
     ///
-    /// Since council emission is paid once per vertex (not per round), we divide
-    /// the per-round council budget by `active_validator_count` so that the total
-    /// council emission across all vertices in a round equals `block_reward * council_percent / 100`.
+    /// The per-round council budget = `block_reward(round) * council_emission_percent / 100`,
+    /// split equally among seated council members. Used by the `/council` RPC endpoint
+    /// for display purposes. Actual emission happens in `distribute_round_rewards()`.
     pub fn compute_council_emission(&self, round: u64) -> (u64, u64) {
         let council_count = self.council_members.len() as u64;
         let council_percent = self.governance_params.council_emission_percent;
@@ -1780,8 +1783,11 @@ impl StateEngine {
                 )));
             }
         } else {
-            // First voter: record the canonical (recipient, amount) for this nonce
+            // First voter: record the canonical (recipient, amount) and start round
             self.bridge_release_params.insert(params_key, (tx.recipient, tx.amount));
+            // Record round of first vote for age-based pruning of stale releases
+            let current_round = self.last_finalized_round.unwrap_or(0);
+            self.bridge_release_first_vote_round.entry(params_key).or_insert(current_round);
         }
 
         voters.insert(tx.from);
@@ -1799,9 +1805,10 @@ impl StateEngine {
             self.bridge_reserve = self.bridge_reserve.saturating_sub(tx.amount);
             self.credit(&tx.recipient, tx.amount)?;
             self.used_release_nonces.insert(nonce_key);
-            // Clean up votes and params for this completed release
+            // Clean up votes, params, and first-vote tracking for this completed release
             self.bridge_release_votes.remove(&nonce_key);
             self.bridge_release_params.remove(&params_key);
+            self.bridge_release_first_vote_round.remove(&params_key);
 
             tracing::info!(
                 "Bridge release executed: {} sats from chain {} nonce {} to {} ({}/{} votes)",
@@ -2938,6 +2945,7 @@ impl StateEngine {
             used_release_nonces: std::collections::HashSet::new(),
             bridge_release_votes: HashMap::new(),
             bridge_release_params: HashMap::new(),
+            bridge_release_first_vote_round: HashMap::new(),
             last_proposal_round: HashMap::new(),
 
         })
@@ -3081,6 +3089,7 @@ impl StateEngine {
                 .collect(),
             bridge_release_params: snapshot.bridge_release_params.clone().unwrap_or_default()
                 .into_iter().collect(),
+            bridge_release_first_vote_round: HashMap::new(), // Transient — rebuilt from first vote
             last_proposal_round: snapshot.last_proposal_round.into_iter().collect(),
 
         })
@@ -3128,6 +3137,7 @@ impl StateEngine {
             .collect();
         self.bridge_release_params = snapshot.bridge_release_params.unwrap_or_default()
             .into_iter().collect();
+        self.bridge_release_first_vote_round = HashMap::new(); // Transient — rebuilt from first vote
         self.last_proposal_round = snapshot.last_proposal_round.into_iter().collect();
         self.configured_validator_count = saved_configured;
     }
@@ -3419,6 +3429,23 @@ impl StateEngine {
             self.bridge_attestations.remove(nonce);
             self.bridge_signatures.retain(|(n, _), _| n != nonce);
         }
+
+        // Prune stale bridge_release_votes and bridge_release_params.
+        // Remove entries that have been pending longer than the retention period.
+        // This prevents unbounded growth from releases that never reach quorum
+        // (e.g., poisoned params, validator set changes, or abandoned votes).
+        // We use the same retention period as attestations for consistency.
+        let stale_vote_keys: Vec<(u64, u64)> = self.bridge_release_first_vote_round.iter()
+            .filter(|(_, &first_round)| first_round.saturating_add(retention) < current_round)
+            .map(|(k, _)| *k)
+            .collect();
+        for key in &stale_vote_keys {
+            self.bridge_release_votes.remove(key);
+            self.bridge_release_params.remove(key);
+            self.bridge_release_first_vote_round.remove(key);
+            tracing::debug!("Pruned stale bridge release votes/params for {:?} (pending > {} rounds)", key, retention);
+        }
+
         pruned
     }
 
@@ -3454,6 +3481,12 @@ impl StateEngine {
     /// retain their canonical (recipient, amount) across node restarts.
     pub fn restore_bridge_release_params(&mut self, params: Vec<((u64, u64), (Address, u64))>) {
         self.bridge_release_params = params.into_iter().collect();
+    }
+
+    /// Restore last_proposal_round from persistence.
+    /// Called by load_from_redb after from_parts.
+    pub fn restore_last_proposal_round(&mut self, lpr: Vec<(Address, u64)>) {
+        self.last_proposal_round = lpr.into_iter().collect();
     }
 
     /// Save state to redb database (ACID, crash-safe).
