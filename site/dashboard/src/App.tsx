@@ -36,6 +36,7 @@ function App() {
   });
   const [showLockModal, setShowLockModal] = useState(false);
   const [network, setNetwork] = useState<NetworkType>(getNetwork());
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const handleSwitchNetwork = useCallback((net: NetworkType) => {
     switchNetwork(net);
@@ -71,8 +72,8 @@ function App() {
     }
   }, []);
 
-  // Show welcome/onboarding when wallet is not unlocked
-  if (!ks.unlocked) {
+  // Show welcome/onboarding when wallet is not unlocked, or during post-create onboarding
+  if (!ks.unlocked || showOnboarding) {
     return (
       <ToastProvider>
         <div className="min-h-screen bg-dag-bg">
@@ -109,16 +110,20 @@ function App() {
           </header>
           <WelcomeScreen
             hasExisting={ks.hasStore}
+            isPostCreate={showOnboarding}
             onCreateWallet={async (pw, name, secretKey, address) => {
+              setShowOnboarding(true);
               await ks.create(pw);
               await ks.addWallet(name, secretKey, address);
               return true;
             }}
             onUnlock={ks.unlock}
             onUnlockWithWebAuthn={ks.unlockWithWebAuthn}
+            onEnrollWebAuthn={ks.enrollWebAuthn}
             webauthnAvailable={ks.webauthnAvailable}
             webauthnEnrolled={ks.webauthnEnrolled}
             onImportBlob={ks.importBlob}
+            onFinishOnboarding={() => setShowOnboarding(false)}
           />
         </div>
       </ToastProvider>
