@@ -8,6 +8,14 @@
 
 ## Recent Updates (March 2026)
 
+**Bridge + Persistence Hardening — Final Review (March 25, 2026):**
+- **Bug #240 (HIGH): Unbounded `bridge_release_votes`/`bridge_release_params` growth** — When a bridge release never reaches quorum (poisoned params, validator set changes), entries persisted forever with no pruning path. Fix: added `bridge_release_first_vote_round` tracking; stale releases (pending > `BRIDGE_ATTESTATION_RETENTION_ROUNDS`) pruned in `prune_old_bridge_attestations`. Cleanup also on successful execution.
+- **Bug #241 (MEDIUM): `last_proposal_round` not persisted in redb** — After node restart, proposal cooldown (`PROPOSAL_COOLDOWN_ROUNDS = 1008`) was bypassed for all addresses. Fix: persisted in METADATA table via `save_to_redb`/`load_from_redb` + `restore_last_proposal_round()`.
+- **Bug #242 (LOW): `compute_council_emission` doc comment incorrect** — Said "divide by active_validator_count" but code divides by council member count. Fix: corrected doc comment.
+- **Known design tradeoffs documented:**
+  - Pre-staking emission permanently under-mints when validators are absent (~10% uptime loss = ~1.9M UDAG never minted). Intentional — punishes absent validators. 21M supply cap is a theoretical maximum.
+  - Checkpoint co-signing window is narrow — requires `state_fin == checkpoint.round`. On fast networks, the window may be too brief for quorum. Doesn't affect safety, only checkpoint production rate.
+
 **Critical Consensus Safety Fixes (March 25, 2026):**
 - **Bug #237 (CRITICAL): Non-zero coinbase permanently halts finality** — `try_insert()` never validated `coinbase.amount`. A Byzantine validator could produce a vertex with `coinbase.amount = 999999`, get it finalized (valid signature, accumulates 2f+1 descendants), then `apply_vertex_with_validators` fails with `InvalidCoinbase` error, aborting the entire finality batch mid-application. The finality tracker already marked all vertices as finalized, so the gap between "finalized" and "applied" is permanent → network permanently stuck. Fix: added `InvalidCoinbase` variant to `DagInsertError`, coinbase check in `try_insert()` (primary defense), and changed `apply_finalized_vertices` to skip bad vertices instead of aborting (defense-in-depth). `SupplyInvariantBroken` remains fatal.
 - **Bug #238 (CRITICAL): `apply_finalized_vertices` has no mid-batch error recovery** — Any error in `apply_vertex_with_validators` propagated via `?`, aborting the batch after partial state application. The `_snapshot_before` was created but never used for rollback. Finalized vertices that fail application can never be retried. Fix: non-fatal errors (InvalidCoinbase, ValidationError) now skip the vertex with error logging instead of aborting. Fatal errors (SupplyInvariantBroken) still propagate.
