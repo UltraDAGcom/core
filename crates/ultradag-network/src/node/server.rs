@@ -126,12 +126,18 @@ fn orphan_buffer_bytes(orphans: &HashMap<[u8; 32], OrphanEntry>) -> usize {
 
 /// Insert a vertex into the orphan buffer with per-peer and global eviction.
 /// Returns false if rejected due to per-peer cap.
-fn insert_orphan(orphans: &mut HashMap<[u8; 32], OrphanEntry>, hash: [u8; 32], vertex: DagVertex, peer: &str) -> bool {
+fn insert_orphan(orphans: &mut HashMap<[u8; 32], OrphanEntry>, hash: [u8; 32], vertex: DagVertex, peer: &str, max_round: u64) -> bool {
     // Defense-in-depth: verify Ed25519 signature before buffering.
     // All call sites already verify signatures, but this prevents a future
     // code path from accidentally buffering unverified vertices.
     if !vertex.verify_signature() {
         warn!("Orphan buffer: rejecting vertex with invalid signature from {}", peer);
+        return false;
+    }
+
+    // Reject vertices too far in the future — prevents buffer stuffing with unreachable junk
+    if max_round > 0 && vertex.round > max_round.saturating_add(ultradag_coin::constants::MAX_FUTURE_ROUNDS as u64) {
+        warn!("Orphan buffer: rejecting vertex from {} at round {} (too far ahead of {})", peer, vertex.round, max_round);
         return false;
     }
 
@@ -1282,8 +1288,9 @@ async fn handle_peer(
                         );
                         // Buffer as orphan and request missing parents from peer
                         {
+                            let dag_round = dag.read().await.current_round();
                             let mut orph = orphans.lock().await;
-                            insert_orphan(&mut orph, vertex_hash, vertex, &peer_addr);
+                            insert_orphan(&mut orph, vertex_hash, vertex, &peer_addr, dag_round);
                         }
                         // Request the missing parent vertices (cap at 32)
                         let hashes: Vec<[u8; 32]> = missing.into_iter().take(32).collect();
@@ -1461,6 +1468,7 @@ async fn handle_peer(
                             }
                         }
                     }
+                    let dag_round = dag_w.current_round();
                     drop(dag_w);
 
                     // Slashing applied deterministically during finalized vertex
@@ -1471,9 +1479,10 @@ async fn handle_peer(
                 }
                 // Buffer failed inserts as orphans (outside dag lock)
                 if !failed_vertices.is_empty() {
+                    let dag_round = dag.read().await.current_round();
                     let mut orph = orphans.lock().await;
                     for (hash, vertex) in failed_vertices {
-                        insert_orphan(&mut orph, hash, vertex, &peer_addr);
+                        insert_orphan(&mut orph, hash, vertex, &peer_addr, dag_round);
                     }
                 }
                 // Request missing parent vertices from the peer
@@ -1594,8 +1603,9 @@ async fn handle_peer(
                         }
                         Err(DagInsertError::MissingParents(missing)) => {
                             all_missing.extend(&missing);
+                            let dag_round = dag.read().await.current_round();
                             let mut orph = orphans.lock().await;
-                            insert_orphan(&mut orph, hash, vertex, &peer_addr);
+                            insert_orphan(&mut orph, hash, vertex, &peer_addr, dag_round);
                         }
                         _ => {}
                     }

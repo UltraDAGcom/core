@@ -79,6 +79,11 @@ impl GovernanceParams {
         let value: u64 = new_value.parse::<u64>()
             .map_err(|_| format!("Invalid value '{}': must be a positive integer", new_value))?;
 
+        // Save emission params before mutation for rollback on cross-parameter validation failure
+        let old_council = self.council_emission_percent;
+        let old_treasury = self.treasury_emission_percent;
+        let old_founder = self.founder_emission_percent;
+
         match param {
             "min_fee_sats" => {
                 // Floor: 1 sat (no free transactions)
@@ -203,21 +208,18 @@ impl GovernanceParams {
             }
         }
 
-        // Cross-parameter validation: total non-validator emission cannot exceed 100%
+        // Cross-parameter validation: total non-validator emission cannot exceed 60%
         let total_non_validator = self.council_emission_percent
             .saturating_add(self.treasury_emission_percent)
             .saturating_add(self.founder_emission_percent);
         if total_non_validator > 60 {
-            // Revert the change by re-parsing defaults would be complex,
-            // so we enforce this as a hard rejection. The individual bounds
-            // (council max 30 + treasury max 20 + founder max 10 = 60) already
-            // prevent exceeding 60%, but this is defense-in-depth.
+            // Revert emission params to pre-mutation state
+            self.council_emission_percent = old_council;
+            self.treasury_emission_percent = old_treasury;
+            self.founder_emission_percent = old_founder;
             return Err(format!(
-                "combined emission shares (council {}% + treasury {}% + founder {}% = {}%) \
-                 cannot exceed 60% — at least 40% must go to validators",
-                self.council_emission_percent,
-                self.treasury_emission_percent,
-                self.founder_emission_percent,
+                "combined emission shares would be {}% (council + treasury + founder) — \
+                 cannot exceed 60%, at least 40% must go to validators",
                 total_non_validator,
             ));
         }

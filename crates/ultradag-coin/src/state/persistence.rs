@@ -64,6 +64,9 @@ pub struct StateSnapshot {
     /// Release executes when votes >= ceil(2n/3) of active validators.
     #[serde(default)]
     pub bridge_release_votes: Vec<((u64, u64), Vec<crate::address::Address>)>,
+    /// Last round each address created a proposal (spam prevention).
+    #[serde(default)]
+    pub last_proposal_round: Vec<(crate::address::Address, u64)>,
 }
 
 impl StateSnapshot {

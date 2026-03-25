@@ -362,27 +362,8 @@ impl BlockDag {
             return Err(DagInsertError::TooLarge);
         }
 
-        // Reject vertices from Byzantine validators
-        if self.is_byzantine(&vertex.validator) {
-            return Ok(false);
-        }
-
-        // Reject vertices claiming rounds too far in the future
-        use crate::constants::MAX_FUTURE_ROUNDS;
-        if vertex.round > self.current_round + MAX_FUTURE_ROUNDS {
-            return Err(DagInsertError::FutureRound);
-        }
-
-        // Reject vertices with timestamps too far in the future
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64;
-        if !vertex.verify_timestamp(now) {
-            return Err(DagInsertError::FutureTimestamp);
-        }
-
         // Equivocation: same validator, same round, different vertex (O(1) via secondary index)
+        // Check this BEFORE Byzantine check to detect equivocation from known Byzantine validators
         if let Some(&existing_hash) = self.validator_round_vertex.get(&(vertex.validator, vertex.round)) {
             // existing_hash is the first vertex from this validator in this round;
             // if it differs from the new vertex hash, this is equivocation
@@ -402,6 +383,26 @@ impl BlockDag {
                 validator: vertex.validator,
                 round: vertex.round,
             });
+        }
+
+        // Reject vertices from Byzantine validators (after equivocation check)
+        if self.is_byzantine(&vertex.validator) {
+            return Ok(false);
+        }
+
+        // Reject vertices claiming rounds too far in the future
+        use crate::constants::MAX_FUTURE_ROUNDS;
+        if vertex.round > self.current_round + MAX_FUTURE_ROUNDS {
+            return Err(DagInsertError::FutureRound);
+        }
+
+        // Reject vertices with timestamps too far in the future
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        if !vertex.verify_timestamp(now) {
+            return Err(DagInsertError::FutureTimestamp);
         }
 
         // Check for missing parents before inserting

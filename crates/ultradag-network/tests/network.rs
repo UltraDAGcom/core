@@ -102,7 +102,7 @@ async fn dag_proposal_roundtrip() {
     let original_hash = vertex.hash();
     let original_round = vertex.round;
     let original_validator = vertex.validator;
-    let original_sig = vertex.signature;
+    let original_sig = vertex.signature.clone();
 
     let (server, client) = tcp_pair().await;
     let (_, server_writer) = split_connection(server, "s".into(), None);

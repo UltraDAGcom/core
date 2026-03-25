@@ -189,6 +189,7 @@ fn test_compute_state_root_deterministic() {
         bridge_contract_address: [0u8; 20],
         used_release_nonces: vec![],
         bridge_release_votes: vec![],
+        last_proposal_round: vec![],
     };
 
     let root1 = compute_state_root(&snapshot);
@@ -221,6 +222,7 @@ fn test_compute_state_root_different_for_different_state() {
         bridge_contract_address: [0u8; 20],
         used_release_nonces: vec![],
         bridge_release_votes: vec![],
+        last_proposal_round: vec![],
     };
 
     let snapshot2 = StateSnapshot {
@@ -245,6 +247,7 @@ fn test_compute_state_root_different_for_different_state() {
         bridge_contract_address: [0u8; 20],
         used_release_nonces: vec![],
         bridge_release_votes: vec![],
+        last_proposal_round: vec![],
     };
 
     let root1 = compute_state_root(&snapshot1);

@@ -60,6 +60,7 @@ fn known_fixture() -> StateSnapshot {
         bridge_contract_address: [0u8; 20],
         used_release_nonces: vec![],
         bridge_release_votes: vec![],
+        last_proposal_round: vec![],
     }
 }
 
@@ -166,6 +167,7 @@ fn state_root_empty_state() {
         bridge_contract_address: [0u8; 20],
         used_release_nonces: vec![],
         bridge_release_votes: vec![],
+        last_proposal_round: vec![],
     };
     let root = compute_state_root(&snapshot);
     assert_ne!(root, [0u8; 32], "Empty state root should not be all zeros");

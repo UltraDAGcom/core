@@ -400,6 +400,7 @@ fn test_checkpoint_sync_message() {
         bridge_contract_address: [0u8; 20],
         used_release_nonces: vec![],
         bridge_release_votes: vec![],
+        last_proposal_round: vec![],
     };
 
     let msg = Message::CheckpointSync {

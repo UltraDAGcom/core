@@ -110,7 +110,8 @@ fn produce_equivocation(validator: &mut SimValidator, round: u64) -> Vec<(DagVer
     // Use deterministic timestamp for simulation reproducibility
     const GENESIS_TIMESTAMP: i64 = 1741132800; // 2025-03-05T00:00:00Z
     let current_timestamp = GENESIS_TIMESTAMP + (round as i64 * 5);
-    let block = build_block(validator, round, &parents, vec![], current_timestamp);
+    // Build v2 with DIFFERENT content - use different timestamp to ensure different hash
+    let block = build_block(validator, round, &parents, vec![], current_timestamp + 1);
     let v2 = build_and_sign_vertex(validator, block, parents, round);
     vec![(v1, None), (v2, None)]
 }

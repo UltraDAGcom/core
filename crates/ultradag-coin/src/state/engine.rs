@@ -694,7 +694,7 @@ impl StateEngine {
                     let mut sorted_producers: Vec<_> = producers.iter().collect();
                     sorted_producers.sort();
                     for producer in &sorted_producers {
-                        let _ = self.credit(producer, capped); // Overflow impossible
+                        self.credit(producer, capped)?;
                     }
                     let minted = capped.saturating_mul(producers.len() as u64);
                     // Canonical remainder: assign truncation dust from `validator_pool / n`
@@ -704,7 +704,7 @@ impl StateEngine {
                     let division_dust = validator_pool.saturating_sub(per_producer.saturating_mul(n));
                     let pre_stake_remainder = division_dust.min(remaining_supply.saturating_sub(minted));
                     if pre_stake_remainder > 0 {
-                        let _ = self.credit(sorted_producers[0], pre_stake_remainder);
+                        self.credit(sorted_producers[0], pre_stake_remainder)?;
                     }
                     self.total_supply = self.total_supply.saturating_add(minted.saturating_add(pre_stake_remainder));
                 }
@@ -1030,7 +1030,9 @@ impl StateEngine {
                     }
                     self.increment_nonce(&transfer_tx.from);
                     // Credit recipient
-                    let _ = self.credit(&transfer_tx.to, transfer_tx.amount);
+                    self.credit(&transfer_tx.to, transfer_tx.amount).map_err(|e| {
+                        CoinError::ValidationError(format!("Failed to credit transfer recipient: {}", e))
+                    })?;
                     // Fee credited to proposer via deferred coinbase after loop
                 }
                 crate::tx::Transaction::Stake(stake_tx) => {
@@ -1146,7 +1148,9 @@ impl StateEngine {
         // vulnerability (DuplicateTxFlooder: malicious validator includes stale-nonce
         // txs whose fees were credited upfront but couldn't be clawed back).
         if collected_fees > 0 {
-            let _ = self.credit(proposer, collected_fees);
+            self.credit(proposer, collected_fees).map_err(|e| {
+                CoinError::SupplyInvariantBroken(format!("Failed to credit proposer fees: {}", e))
+            })?;
         }
 
         // NOTE: last_finalized_round is NOT updated here — it's updated per-round
@@ -1726,7 +1730,7 @@ impl StateEngine {
 
         // Calculate threshold: ceil(2n/3) where n = active validator count
         let n = self.active_validator_set.len();
-        let threshold = (2 * n) / 3 + 1;
+        let threshold = (2 * n).div_ceil(3);
 
         // Always increment the submitting validator's nonce (vote recorded)
         self.increment_nonce(&tx.from);
@@ -2660,7 +2664,14 @@ impl StateEngine {
                         failed.insert(id, reason);
                     } else {
                         self.treasury_balance = self.treasury_balance.saturating_sub(amount);
-                        let _ = self.credit(&recipient, amount);
+                        if let Err(e) = self.credit(&recipient, amount) {
+                            // Credit failed — restore treasury balance to preserve supply invariant
+                            self.treasury_balance = self.treasury_balance.saturating_add(amount);
+                            let reason = format!("TreasurySpend credit failed: {}", e);
+                            tracing::error!("Proposal {} treasury spend credit failed for {}: {}", id, recipient.to_hex(), e);
+                            failed.insert(id, reason);
+                            continue;
+                        }
                         tracing::warn!(
                             "TreasurySpend proposal {} executed: {} sats to {}. Treasury remaining: {} sats",
                             id, amount, recipient.to_hex(), self.treasury_balance
@@ -2931,6 +2942,11 @@ impl StateEngine {
                     (*k, voters)
                 })
                 .collect(),
+            last_proposal_round: {
+                let mut lpr: Vec<_> = self.last_proposal_round.iter().map(|(a, r)| (*a, *r)).collect();
+                lpr.sort_by_key(|(addr, _)| addr.0);
+                lpr
+            },
         }
     }
 
@@ -2993,7 +3009,7 @@ impl StateEngine {
             bridge_release_votes: snapshot.bridge_release_votes.into_iter()
                 .map(|(k, voters)| (k, voters.into_iter().collect()))
                 .collect(),
-            last_proposal_round: HashMap::new(),
+            last_proposal_round: snapshot.last_proposal_round.into_iter().collect(),
 
         })
     }
@@ -3038,6 +3054,7 @@ impl StateEngine {
         self.bridge_release_votes = snapshot.bridge_release_votes.into_iter()
             .map(|(k, voters)| (k, voters.into_iter().collect()))
             .collect();
+        self.last_proposal_round = snapshot.last_proposal_round.into_iter().collect();
         self.configured_validator_count = saved_configured;
     }
 
@@ -3297,15 +3314,23 @@ impl StateEngine {
             }
         }
 
+        // Sort for deterministic processing order across all nodes
+        to_prune.sort_by_key(|(nonce, _, _)| *nonce);
+
         let pruned = to_prune.len();
         for (nonce, sender, amount) in &to_prune {
             // Auto-refund: return locked funds from bridge_reserve to the original sender.
             // This prevents funds from being permanently stuck when attestations expire
             // before the user claims on Arbitrum.
             if self.bridge_reserve >= *amount {
-                self.bridge_reserve = self.bridge_reserve.saturating_sub(*amount);
-                if let Err(e) = self.credit(sender, *amount) {
-                    tracing::error!("Bridge auto-refund credit failed for nonce {}: {}", nonce, e);
+                match self.credit(sender, *amount) {
+                    Ok(()) => {
+                        self.bridge_reserve = self.bridge_reserve.saturating_sub(*amount);
+                    }
+                    Err(e) => {
+                        tracing::error!("Bridge auto-refund credit failed for nonce {}: {}", nonce, e);
+                        // Do NOT subtract from bridge_reserve if credit failed — preserves supply invariant
+                    }
                 }
                 tracing::warn!(
                     "Bridge auto-refund: {} sats returned to {} (attestation #{} expired after {} rounds)",
