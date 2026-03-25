@@ -8,6 +8,17 @@
 
 ## Recent Updates (March 2026)
 
+**Security Fixes — Sixth Review Pass (March 25, 2026):**
+- **Bug #243 (MEDIUM): BridgeDeposit fee debit error ignored** — `let _ = self.debit()` in error handler added fee to `collected_fees` even if debit failed → supply inflation. Fix: only add to `collected_fees` if debit succeeds.
+- **Bug #244 (HIGH): Bridge release parameter poisoning** — First voter permanently set canonical `(recipient, amount)` with no override mechanism. Malicious validator could block a release for days until stale-vote pruning. Fix: when a disagreeing voter outnumbers agreeing voters, params + votes are cleared and voting restarts from scratch.
+- **Bug #245 (MEDIUM): `bridge_release_first_vote_round` not persisted** — After restart, stale vote pruning was broken (empty map, never populated from old votes). Fix: persisted in redb METADATA table with restore on load.
+- **Bug #246 (MEDIUM): Merkle root inconsistency for single-leaf trees** — Single-leaf trees returned raw hash without leaf-count mixing, while multi-leaf trees mixed in count as CVE-2012-2459 defense. Fix: single-leaf path now applies same `blake3(leaf || 1u64)` hashing. **Breaking change** — requires clean testnet restart.
+- **Bug #247 (MEDIUM): `slash_at_round` has no idempotency guard** — Could double-slash same equivocation if evidence re-encountered after `applied_validators_per_round` pruned (1000 rounds). Fix: permanent `slashed_events: HashSet<(Address, u64)>` checked before slashing.
+- **Known issues documented but not fixed:**
+  - `from_bech32` accepts both mainnet/testnet prefixes on any network — UX confusion but no security risk (NETWORK_ID prevents cross-network replay)
+  - `clear_byzantine` in validator loop could mask real equivocation from compromised key — documented, operator should investigate logs
+  - `GetParents` fan-out from resolve_orphans bounded by MAX_ORPHAN_RESOLUTION_PASSES × per-peer cap (max ~1000 messages) — acceptable for current scale
+
 **Bridge + Persistence Hardening — Final Review (March 25, 2026):**
 - **Bug #240 (HIGH): Unbounded `bridge_release_votes`/`bridge_release_params` growth** — When a bridge release never reaches quorum (poisoned params, validator set changes), entries persisted forever with no pruning path. Fix: added `bridge_release_first_vote_round` tracking; stale releases (pending > `BRIDGE_ATTESTATION_RETENTION_ROUNDS`) pruned in `prune_old_bridge_attestations`. Cleanup also on successful execution.
 - **Bug #241 (MEDIUM): `last_proposal_round` not persisted in redb** — After node restart, proposal cooldown (`PROPOSAL_COOLDOWN_ROUNDS = 1008`) was bypassed for all addresses. Fix: persisted in METADATA table via `save_to_redb`/`load_from_redb` + `restore_last_proposal_round()`.
