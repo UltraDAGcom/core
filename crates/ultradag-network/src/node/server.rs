@@ -140,6 +140,13 @@ fn insert_orphan(orphans: &mut HashMap<[u8; 32], OrphanEntry>, hash: [u8; 32], v
         return false;
     }
 
+    // Reject vertices with non-zero coinbase — these will fail try_insert() and
+    // waste buffer space. Catches malformed vertices before buffering.
+    if vertex.block.coinbase.amount != 0 {
+        warn!("Orphan buffer: rejecting vertex with non-zero coinbase ({}) from {}", vertex.block.coinbase.amount, peer);
+        return false;
+    }
+
     // Reject vertices too far in the future — prevents buffer stuffing with unreachable junk
     if max_round > 0 && vertex.round > max_round.saturating_add(ultradag_coin::constants::MAX_FUTURE_ROUNDS as u64) {
         warn!("Orphan buffer: rejecting vertex from {} at round {} (too far ahead of {})", peer, vertex.round, max_round);
@@ -1278,6 +1285,10 @@ async fn handle_peer(
                         warn!("Rejected oversized vertex from {} round={}", peer_addr, round);
                         continue;
                     }
+                    Err(DagInsertError::InvalidCoinbase) => {
+                        warn!("Rejected vertex with non-zero coinbase from {} round={}", peer_addr, round);
+                        continue;
+                    }
                     Err(DagInsertError::FutureRound) => {
                         debug!("Skipped vertex from {} round={}: future round", peer_addr, round);
                         continue;
@@ -1451,7 +1462,7 @@ async fn handle_peer(
                             Err(DagInsertError::InvalidSignature) => {
                                 warn!("Rejected sync vertex from {} round={}: invalid signature", peer_addr, vertex.round);
                             }
-                            Err(DagInsertError::TooManyParents) | Err(DagInsertError::TooLarge) => {
+                            Err(DagInsertError::TooManyParents) | Err(DagInsertError::TooLarge) | Err(DagInsertError::InvalidCoinbase) => {
                                 // Silently reject
                             }
                             Err(DagInsertError::FutureRound) | Err(DagInsertError::FutureTimestamp) => {

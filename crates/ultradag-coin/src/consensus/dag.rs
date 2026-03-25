@@ -71,6 +71,8 @@ pub enum DagInsertError {
     TooLarge,
     /// Vertex has an invalid Ed25519 signature.
     InvalidSignature,
+    /// Vertex has a non-zero coinbase amount (must be 0 — rewards are protocol-distributed).
+    InvalidCoinbase,
 }
 
 /// Maximum number of parent references allowed per DagVertex.
@@ -403,6 +405,14 @@ impl BlockDag {
             .as_secs() as i64;
         if !vertex.verify_timestamp(now) {
             return Err(DagInsertError::FutureTimestamp);
+        }
+
+        // Reject vertices with non-zero coinbase (rewards are protocol-distributed per round,
+        // coinbase must be 0 — only transaction fees are credited via deferred coinbase).
+        // This prevents a Byzantine validator from crafting a vertex that passes DAG insertion
+        // but fails at apply_vertex_with_validators, permanently halting finality.
+        if vertex.block.coinbase.amount != 0 {
+            return Err(DagInsertError::InvalidCoinbase);
         }
 
         // Check for missing parents before inserting

@@ -1354,8 +1354,37 @@ impl StateEngine {
             }
 
             let count = 1; // reward splitting now in distribute_round_rewards
-            self.apply_vertex_with_validators(vertex, count)?;
-            round_producers.insert(vertex.validator);
+            match self.apply_vertex_with_validators(vertex, count) {
+                Ok(()) => {
+                    round_producers.insert(vertex.validator);
+                }
+                Err(CoinError::InvalidCoinbase { expected, got }) => {
+                    // Defense-in-depth: skip vertices with invalid coinbase rather than
+                    // aborting the entire batch. The primary defense (try_insert rejecting
+                    // non-zero coinbase) should prevent this. If we get here, it means
+                    // a vertex somehow bypassed the DAG check (e.g., CheckpointSync suffix).
+                    // Aborting would permanently halt finality since the vertex is already
+                    // in the finalized set and would fail again on retry.
+                    tracing::error!(
+                        "SKIPPING finalized vertex with invalid coinbase (expected={}, got={}) from {} round={}. \
+                         This should never happen — vertex should have been rejected by try_insert().",
+                        expected, got, vertex.validator.to_hex(), vertex.round
+                    );
+                    // Don't add to round_producers — skipped vertex earns no rewards
+                }
+                Err(CoinError::SupplyInvariantBroken(msg)) => {
+                    // Supply invariant broken is FATAL — cannot continue safely
+                    return Err(CoinError::SupplyInvariantBroken(msg));
+                }
+                Err(e) => {
+                    // Other errors: skip the vertex and log, rather than halting finality.
+                    // The vertex is already in the finalized set and can't be retried.
+                    tracing::error!(
+                        "SKIPPING finalized vertex due to error: {} (validator={}, round={})",
+                        e, vertex.validator.to_hex(), vertex.round
+                    );
+                }
+            }
 
             // Record this validator's participation for cross-batch equivocation detection
             self.applied_validators_per_round
