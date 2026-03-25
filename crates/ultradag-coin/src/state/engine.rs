@@ -3420,6 +3420,13 @@ impl StateEngine {
             .collect();
     }
 
+    /// Restore bridge_release_params from persistence.
+    /// Called by load_from_redb after from_parts. Ensures in-progress bridge releases
+    /// retain their canonical (recipient, amount) across node restarts.
+    pub fn restore_bridge_release_params(&mut self, params: Vec<((u64, u64), (Address, u64))>) {
+        self.bridge_release_params = params.into_iter().collect();
+    }
+
     /// Save state to redb database (ACID, crash-safe).
     pub fn save(&self, path: &std::path::Path) -> Result<(), crate::persistence::PersistenceError> {
         crate::state::db::save_to_redb(self, path)

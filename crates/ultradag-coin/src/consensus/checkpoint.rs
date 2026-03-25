@@ -337,6 +337,29 @@ pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
         }
     }
 
+    // Bridge release params — canonical (recipient, amount) for in-progress releases (sorted)
+    if let Some(ref params) = snapshot.bridge_release_params {
+        hasher.update(&(params.len() as u64).to_le_bytes());
+        // params should already be sorted by key in snapshot(), but sort defensively
+        let mut sorted_params = params.clone();
+        sorted_params.sort_by_key(|(k, _)| *k);
+        for ((chain_id, deposit_nonce), (recipient, amount)) in &sorted_params {
+            hasher.update(&chain_id.to_le_bytes());
+            hasher.update(&deposit_nonce.to_le_bytes());
+            hasher.update(&recipient.0);
+            hasher.update(&amount.to_le_bytes());
+        }
+    } else {
+        hasher.update(&0u64.to_le_bytes()); // empty params
+    }
+
+    // Last proposal round — spam prevention cooldown (sorted for determinism)
+    hasher.update(&(snapshot.last_proposal_round.len() as u64).to_le_bytes());
+    for (addr, round) in &snapshot.last_proposal_round {
+        hasher.update(&addr.0);
+        hasher.update(&round.to_le_bytes());
+    }
+
     *hasher.finalize().as_bytes()
 }
 

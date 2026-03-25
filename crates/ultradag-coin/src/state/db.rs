@@ -197,6 +197,16 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
             table.insert("bridge_release_votes", votes_bytes.as_slice())?;
         }
 
+        // Persist bridge_release_params (canonical recipient+amount for in-progress releases)
+        {
+            let snap = engine.snapshot();
+            if let Some(ref params) = snap.bridge_release_params {
+                let params_bytes = postcard::to_allocvec(params)
+                    .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+                table.insert("bridge_release_params", params_bytes.as_slice())?;
+            }
+        }
+
         // Compute and store state root for integrity verification on reload.
         // This catches silent corruption from disk errors, partial writes, or bugs.
         let snapshot = engine.snapshot();
@@ -434,6 +444,13 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         let votes: Vec<((u64, u64), Vec<Address>)> = postcard::from_bytes(votes_val.value())
             .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
         engine.restore_bridge_release_votes(votes);
+    }
+
+    // Restore bridge_release_params from METADATA (canonical recipient+amount for in-progress releases)
+    if let Some(params_val) = meta.get("bridge_release_params")? {
+        let params: Vec<((u64, u64), (Address, u64))> = postcard::from_bytes(params_val.value())
+            .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+        engine.restore_bridge_release_params(params);
     }
 
     // Verify state integrity: recompute state root and compare against stored value.
