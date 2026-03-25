@@ -207,6 +207,15 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
             }
         }
 
+        // Persist bridge_release_first_vote_round (age tracking for stale vote pruning)
+        {
+            if !engine.bridge_release_first_vote_round_snapshot().is_empty() {
+                let fvr_bytes = postcard::to_allocvec(&engine.bridge_release_first_vote_round_snapshot())
+                    .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+                table.insert("bridge_release_first_vote_round", fvr_bytes.as_slice())?;
+            }
+        }
+
         // Persist last_proposal_round (spam prevention cooldown)
         {
             let snap = engine.snapshot();
@@ -461,6 +470,13 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         let params: Vec<((u64, u64), (Address, u64))> = postcard::from_bytes(params_val.value())
             .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
         engine.restore_bridge_release_params(params);
+    }
+
+    // Restore bridge_release_first_vote_round (age tracking for stale vote pruning)
+    if let Some(fvr_val) = meta.get("bridge_release_first_vote_round")? {
+        let fvr: Vec<((u64, u64), u64)> = postcard::from_bytes(fvr_val.value())
+            .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+        engine.restore_bridge_release_first_vote_round(fvr);
     }
 
     // Restore last_proposal_round from METADATA (spam prevention cooldown)

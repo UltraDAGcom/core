@@ -55,7 +55,13 @@ pub fn merkle_root(leaves: &[[u8; 32]]) -> [u8; 32] {
         return [0u8; 32];
     }
     if leaves.len() == 1 {
-        return leaves[0];
+        // Apply the same leaf-count mixing as multi-leaf trees for consistency.
+        // Without this, single-leaf trees return raw hash while multi-leaf trees
+        // mix in count — violating the invariant and breaking future merkle proofs.
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&leaves[0]);
+        hasher.update(&1u64.to_le_bytes());
+        return *hasher.finalize().as_bytes();
     }
 
     let leaf_count = leaves.len();

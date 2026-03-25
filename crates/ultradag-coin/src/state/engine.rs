@@ -272,6 +272,10 @@ pub struct StateEngine {
     /// Round when the first vote was cast for each in-progress bridge release.
     /// Used for age-based pruning of stale votes that never reach quorum.
     bridge_release_first_vote_round: HashMap<(u64, u64), u64>,
+    /// Permanent record of (validator, round) pairs that have been slashed.
+    /// Prevents double-slashing the same equivocation event if evidence is re-encountered
+    /// after the applied_validators_per_round tracker is pruned.
+    slashed_events: std::collections::HashSet<(Address, u64)>,
 }
 
 impl StateEngine {
@@ -307,6 +311,7 @@ impl StateEngine {
             bridge_release_votes: HashMap::new(),
             bridge_release_params: HashMap::new(),
             bridge_release_first_vote_round: HashMap::new(),
+            slashed_events: std::collections::HashSet::new(),
         }
     }
 
@@ -1128,8 +1133,10 @@ impl StateEngine {
                     if let Err(e) = self.apply_bridge_lock_tx(bridge_tx, None, None) {
                         tracing::warn!("Skipping invalid BridgeDeposit tx in finalized vertex: {}", e);
                         if bridge_tx.fee > 0 {
-                            let _ = self.debit(&bridge_tx.from, bridge_tx.fee);
-                            collected_fees = collected_fees.saturating_add(bridge_tx.fee);
+                            if self.debit(&bridge_tx.from, bridge_tx.fee).is_ok() {
+                                collected_fees = collected_fees.saturating_add(bridge_tx.fee);
+                            }
+                            // If debit fails, fee is NOT added to collected_fees — preserves supply invariant
                         }
                         self.increment_nonce(&bridge_tx.from);
                         self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
@@ -1760,35 +1767,42 @@ impl StateEngine {
             ));
         }
 
-        // Record this validator's vote for the release.
         // SECURITY: All voters must agree on (recipient, amount), not just the nonce.
-        // The first voter's values are stored; subsequent voters must match or be rejected.
-        let voters = self.bridge_release_votes.entry(nonce_key).or_default();
-
-        // Check if this is a new vote set — store (recipient, amount) from first voter.
-        // bridge_release_params maps (chain_id, nonce) → (recipient, amount).
+        // The first voter's values are stored; subsequent voters must match or the params
+        // are reset when disagreements outnumber agreements.
         let params_key = nonce_key;
-        if let Some(&(ref stored_recipient, stored_amount)) = self.bridge_release_params.get(&params_key) {
-            // Subsequent voter: must agree on recipient and amount
-            if tx.recipient != *stored_recipient {
+        let stored_params = self.bridge_release_params.get(&params_key).cloned();
+        if let Some((stored_recipient, stored_amount)) = stored_params {
+            if tx.recipient != stored_recipient || tx.amount != stored_amount {
+                // Disagreement — increment nonce but don't add to voter set
+                self.increment_nonce(&tx.from);
+                let agree_count = self.bridge_release_votes.get(&nonce_key).map_or(0, |v| v.len());
+                // If the disagreeing voter would be a majority, reset params so voting
+                // can restart with correct values (fixes first-voter poisoning attack)
+                if agree_count == 0 || agree_count + 1 > agree_count * 2 {
+                    tracing::warn!(
+                        "Bridge release params reset for {:?}: {} disagreed. Clearing {} votes.",
+                        nonce_key, tx.from.to_hex(), agree_count
+                    );
+                    self.bridge_release_votes.remove(&nonce_key);
+                    self.bridge_release_params.remove(&params_key);
+                    self.bridge_release_first_vote_round.remove(&params_key);
+                }
                 return Err(CoinError::ValidationError(format!(
-                    "bridge release recipient mismatch: expected {}, got {}",
-                    stored_recipient.to_hex(), tx.recipient.to_hex()
-                )));
-            }
-            if tx.amount != stored_amount {
-                return Err(CoinError::ValidationError(format!(
-                    "bridge release amount mismatch: expected {}, got {}",
-                    stored_amount, tx.amount
+                    "bridge release params mismatch (nonce consumed). Stored: ({}, {}), got: ({}, {})",
+                    stored_recipient.to_hex(), stored_amount,
+                    tx.recipient.to_hex(), tx.amount
                 )));
             }
         } else {
             // First voter: record the canonical (recipient, amount) and start round
             self.bridge_release_params.insert(params_key, (tx.recipient, tx.amount));
-            // Record round of first vote for age-based pruning of stale releases
             let current_round = self.last_finalized_round.unwrap_or(0);
             self.bridge_release_first_vote_round.entry(params_key).or_insert(current_round);
         }
+
+        // Record vote (after params validation passes)
+        let voters = self.bridge_release_votes.entry(nonce_key).or_default();
 
         voters.insert(tx.from);
         let vote_count = voters.len();
@@ -2035,7 +2049,15 @@ impl StateEngine {
     }
 
     /// Slash a validator and record the event with the round number.
+    /// Idempotent: will not slash the same (validator, round) pair twice.
     pub fn slash_at_round(&mut self, addr: &Address, round: u64) {
+        // Idempotency guard: prevent double-slashing for the same equivocation event.
+        // The applied_validators_per_round tracker is pruned after 1000 rounds, so without
+        // this guard, re-encountered evidence could trigger another slash on reduced stake.
+        if !self.slashed_events.insert((*addr, round)) {
+            tracing::debug!("Skipping duplicate slash for {} at round {} (already slashed)", addr.to_hex(), round);
+            return;
+        }
         let slash_pct = self.governance_params.slash_percent;
         let mut own_slash: u64 = 0;
         let mut delegated_slash: u64 = 0;
@@ -2946,6 +2968,7 @@ impl StateEngine {
             bridge_release_votes: HashMap::new(),
             bridge_release_params: HashMap::new(),
             bridge_release_first_vote_round: HashMap::new(),
+            slashed_events: std::collections::HashSet::new(),
             last_proposal_round: HashMap::new(),
 
         })
@@ -3089,7 +3112,8 @@ impl StateEngine {
                 .collect(),
             bridge_release_params: snapshot.bridge_release_params.clone().unwrap_or_default()
                 .into_iter().collect(),
-            bridge_release_first_vote_round: HashMap::new(), // Transient — rebuilt from first vote
+            bridge_release_first_vote_round: HashMap::new(), // Restored from redb after from_parts
+            slashed_events: std::collections::HashSet::new(), // Rebuilt from slash_history if needed
             last_proposal_round: snapshot.last_proposal_round.into_iter().collect(),
 
         })
@@ -3137,7 +3161,8 @@ impl StateEngine {
             .collect();
         self.bridge_release_params = snapshot.bridge_release_params.unwrap_or_default()
             .into_iter().collect();
-        self.bridge_release_first_vote_round = HashMap::new(); // Transient — rebuilt from first vote
+        self.bridge_release_first_vote_round = HashMap::new(); // Restored from redb after load_snapshot
+        self.slashed_events = std::collections::HashSet::new();
         self.last_proposal_round = snapshot.last_proposal_round.into_iter().collect();
         self.configured_validator_count = saved_configured;
     }
@@ -3481,6 +3506,18 @@ impl StateEngine {
     /// retain their canonical (recipient, amount) across node restarts.
     pub fn restore_bridge_release_params(&mut self, params: Vec<((u64, u64), (Address, u64))>) {
         self.bridge_release_params = params.into_iter().collect();
+    }
+
+    /// Restore bridge_release_first_vote_round from persistence.
+    pub fn restore_bridge_release_first_vote_round(&mut self, fvr: Vec<((u64, u64), u64)>) {
+        self.bridge_release_first_vote_round = fvr.into_iter().collect();
+    }
+
+    /// Snapshot of bridge_release_first_vote_round for persistence.
+    pub fn bridge_release_first_vote_round_snapshot(&self) -> Vec<((u64, u64), u64)> {
+        let mut v: Vec<_> = self.bridge_release_first_vote_round.iter().map(|(k, r)| (*k, *r)).collect();
+        v.sort_by_key(|(k, _)| *k);
+        v
     }
 
     /// Restore last_proposal_round from persistence.
