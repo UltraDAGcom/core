@@ -265,6 +265,10 @@ pub struct StateEngine {
     /// Bridge release votes: (chain_id, deposit_nonce) -> set of validators who voted.
     /// Release only executes when votes >= ceil(2n/3) of active validators.
     bridge_release_votes: HashMap<(u64, u64), std::collections::HashSet<Address>>,
+    /// Canonical (recipient, amount) for each in-progress bridge release.
+    /// First voter's values are stored; subsequent voters must match.
+    /// Cleaned up when release executes or attestation expires.
+    bridge_release_params: HashMap<(u64, u64), (Address, u64)>,
 }
 
 impl StateEngine {
@@ -298,6 +302,7 @@ impl StateEngine {
             bridge_contract_address: [0u8; 20],
             used_release_nonces: std::collections::HashSet::new(),
             bridge_release_votes: HashMap::new(),
+            bridge_release_params: HashMap::new(),
         }
     }
 
@@ -1723,8 +1728,33 @@ impl StateEngine {
             ));
         }
 
-        // Record this validator's vote for the release
+        // Record this validator's vote for the release.
+        // SECURITY: All voters must agree on (recipient, amount), not just the nonce.
+        // The first voter's values are stored; subsequent voters must match or be rejected.
         let voters = self.bridge_release_votes.entry(nonce_key).or_default();
+
+        // Check if this is a new vote set — store (recipient, amount) from first voter.
+        // bridge_release_params maps (chain_id, nonce) → (recipient, amount).
+        let params_key = nonce_key;
+        if let Some(&(ref stored_recipient, stored_amount)) = self.bridge_release_params.get(&params_key) {
+            // Subsequent voter: must agree on recipient and amount
+            if tx.recipient != *stored_recipient {
+                return Err(CoinError::ValidationError(format!(
+                    "bridge release recipient mismatch: expected {}, got {}",
+                    stored_recipient.to_hex(), tx.recipient.to_hex()
+                )));
+            }
+            if tx.amount != stored_amount {
+                return Err(CoinError::ValidationError(format!(
+                    "bridge release amount mismatch: expected {}, got {}",
+                    stored_amount, tx.amount
+                )));
+            }
+        } else {
+            // First voter: record the canonical (recipient, amount) for this nonce
+            self.bridge_release_params.insert(params_key, (tx.recipient, tx.amount));
+        }
+
         voters.insert(tx.from);
         let vote_count = voters.len();
 
@@ -1740,8 +1770,9 @@ impl StateEngine {
             self.bridge_reserve = self.bridge_reserve.saturating_sub(tx.amount);
             self.credit(&tx.recipient, tx.amount)?;
             self.used_release_nonces.insert(nonce_key);
-            // Clean up votes for this completed release
+            // Clean up votes and params for this completed release
             self.bridge_release_votes.remove(&nonce_key);
+            self.bridge_release_params.remove(&params_key);
 
             tracing::info!(
                 "Bridge release executed: {} sats from chain {} nonce {} to {} ({}/{} votes)",
@@ -2877,6 +2908,7 @@ impl StateEngine {
             bridge_contract_address: [0u8; 20],
             used_release_nonces: std::collections::HashSet::new(),
             bridge_release_votes: HashMap::new(),
+            bridge_release_params: HashMap::new(),
             last_proposal_round: HashMap::new(),
 
         })
@@ -2942,6 +2974,15 @@ impl StateEngine {
                     (*k, voters)
                 })
                 .collect(),
+            bridge_release_params: if self.bridge_release_params.is_empty() {
+                None
+            } else {
+                let mut params: Vec<_> = self.bridge_release_params.iter()
+                    .map(|(k, v)| (*k, v.clone()))
+                    .collect();
+                params.sort_by_key(|(k, _)| *k);
+                Some(params)
+            },
             last_proposal_round: {
                 let mut lpr: Vec<_> = self.last_proposal_round.iter().map(|(a, r)| (*a, *r)).collect();
                 lpr.sort_by_key(|(addr, _)| addr.0);
@@ -3009,6 +3050,8 @@ impl StateEngine {
             bridge_release_votes: snapshot.bridge_release_votes.into_iter()
                 .map(|(k, voters)| (k, voters.into_iter().collect()))
                 .collect(),
+            bridge_release_params: snapshot.bridge_release_params.clone().unwrap_or_default()
+                .into_iter().collect(),
             last_proposal_round: snapshot.last_proposal_round.into_iter().collect(),
 
         })
@@ -3054,6 +3097,8 @@ impl StateEngine {
         self.bridge_release_votes = snapshot.bridge_release_votes.into_iter()
             .map(|(k, voters)| (k, voters.into_iter().collect()))
             .collect();
+        self.bridge_release_params = snapshot.bridge_release_params.unwrap_or_default()
+            .into_iter().collect();
         self.last_proposal_round = snapshot.last_proposal_round.into_iter().collect();
         self.configured_validator_count = saved_configured;
     }
