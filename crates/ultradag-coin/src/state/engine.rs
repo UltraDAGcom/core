@@ -3263,10 +3263,15 @@ impl StateEngine {
                 "bridge_reserve insufficient for refund (state corruption?)".into()
             ));
         }
+        // Credit the original sender BEFORE decrementing reserve.
+        // If credit fails, bridge_reserve is untouched — preserves supply invariant.
+        self.credit(&sender, amount).map_err(|e| {
+            CoinError::SupplyInvariantBroken(format!(
+                "bridge_refund credit failed for {} (nonce {}): {}",
+                sender.to_hex(), nonce, e
+            ))
+        })?;
         self.bridge_reserve = self.bridge_reserve.saturating_sub(amount);
-
-        // Credit the original sender
-        self.credit(&sender, amount);
 
         // Remove attestation and associated signatures (marks as refunded)
         self.bridge_attestations.remove(&nonce);

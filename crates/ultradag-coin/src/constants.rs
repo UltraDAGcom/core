@@ -130,50 +130,57 @@ const _: () = assert!(
 
 /// Return the developer/founder address.
 ///
+/// DETERMINISM: The address is resolved ONCE at first call and cached via OnceLock.
+/// All nodes compute the same address from the same env vars / seed, and the result
+/// never changes during the process lifetime. This prevents state divergence if env
+/// vars were hypothetically modified mid-run.
+///
 /// Nodes only need the ADDRESS (public) to route emission — never the private key.
 /// - Checks ULTRADAG_DEV_ADDRESS env var first (40-hex address, recommended)
 /// - Falls back to ULTRADAG_DEV_KEY env var (64-hex secret key, derives address)
 /// - Falls back to hardcoded DEV_ADDRESS_SEED (testnet only)
 ///
 /// SECURITY: Use ULTRADAG_DEV_ADDRESS on production nodes. Never put private keys
-/// on network-facing machines. The private key is only needed for signing transactions
-/// in the client wallet, not on validator nodes.
+/// on network-facing machines.
 pub fn dev_address() -> crate::address::Address {
-    // Preferred: public address only (no secret key on node)
-    if let Ok(addr_hex) = std::env::var("ULTRADAG_DEV_ADDRESS") {
-        if let Some(addr) = crate::address::Address::from_hex(&addr_hex) {
-            return addr;
+    static CACHED: std::sync::OnceLock<crate::address::Address> = std::sync::OnceLock::new();
+    *CACHED.get_or_init(|| {
+        // Preferred: public address only (no secret key on node)
+        if let Ok(addr_hex) = std::env::var("ULTRADAG_DEV_ADDRESS") {
+            if let Some(addr) = crate::address::Address::from_hex(&addr_hex) {
+                return addr;
+            }
         }
-    }
 
-    // Fallback: derive from secret key (backward compatible, less secure)
-    if let Ok(key_hex) = std::env::var("ULTRADAG_DEV_KEY") {
-        if key_hex.len() == 64 {
-            let mut bytes = [0u8; 32];
-            for (i, chunk) in key_hex.as_bytes().chunks(2).enumerate() {
-                if let Ok(hex_str) = std::str::from_utf8(chunk) {
-                    if let Ok(b) = u8::from_str_radix(hex_str, 16) {
-                        bytes[i] = b;
+        // Fallback: derive from secret key (backward compatible, less secure)
+        if let Ok(key_hex) = std::env::var("ULTRADAG_DEV_KEY") {
+            if key_hex.len() == 64 {
+                let mut bytes = [0u8; 32];
+                for (i, chunk) in key_hex.as_bytes().chunks(2).enumerate() {
+                    if let Ok(hex_str) = std::str::from_utf8(chunk) {
+                        if let Ok(b) = u8::from_str_radix(hex_str, 16) {
+                            bytes[i] = b;
+                        }
                     }
                 }
+                return crate::address::SecretKey::from_bytes(bytes).address();
             }
-            return crate::address::SecretKey::from_bytes(bytes).address();
         }
-    }
 
-    // Testnet hardcoded fallback
-    #[cfg(not(feature = "mainnet"))]
-    {
-        return crate::address::SecretKey::from_bytes(DEV_ADDRESS_SEED).address();
-    }
+        // Testnet hardcoded fallback
+        #[cfg(not(feature = "mainnet"))]
+        {
+            return crate::address::SecretKey::from_bytes(DEV_ADDRESS_SEED).address();
+        }
 
-    #[cfg(feature = "mainnet")]
-    {
-        panic!(
-            "MAINNET SECURITY: Set ULTRADAG_DEV_ADDRESS (40-hex founder address) \
-             or ULTRADAG_DEV_KEY (64-hex secret, less secure) environment variable"
-        );
-    }
+        #[cfg(feature = "mainnet")]
+        {
+            panic!(
+                "MAINNET SECURITY: Set ULTRADAG_DEV_ADDRESS (40-hex founder address) \
+                 or ULTRADAG_DEV_KEY (64-hex secret, less secure) environment variable"
+            );
+        }
+    })
 }
 
 /// Get the developer keypair (testnet only — for convenience endpoints).

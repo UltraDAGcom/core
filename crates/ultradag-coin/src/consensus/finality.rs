@@ -148,7 +148,11 @@ impl FinalityTracker {
                                 *p == genesis
                                     || self.finalized.contains(p)
                                     || dag.get(p).is_none()
-                                    || dag.get(p).is_some_and(|pv| pv.round < stuck_threshold)
+                                    // Stuck parent escape: treat as finalized if >100 rounds behind,
+                                    // BUT only if the parent's validator is NOT known-Byzantine.
+                                    // A Byzantine validator's stuck vertex should never be auto-finalized.
+                                    || dag.get(p).is_some_and(|pv|
+                                        pv.round < stuck_threshold && !dag.is_byzantine(&pv.validator))
                             });
 
                     if !parents_ok {

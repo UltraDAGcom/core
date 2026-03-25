@@ -126,12 +126,17 @@ fn orphan_buffer_bytes(orphans: &HashMap<[u8; 32], OrphanEntry>) -> usize {
 
 /// Insert a vertex into the orphan buffer with per-peer and global eviction.
 /// Returns false if rejected due to per-peer cap.
-fn insert_orphan(orphans: &mut HashMap<[u8; 32], OrphanEntry>, hash: [u8; 32], vertex: DagVertex, peer: &str, max_round: u64) -> bool {
+fn insert_orphan(orphans: &mut HashMap<[u8; 32], OrphanEntry>, hash: [u8; 32], vertex: DagVertex, peer: &str, max_round: u64, is_byzantine: bool) -> bool {
     // Defense-in-depth: verify Ed25519 signature before buffering.
-    // All call sites already verify signatures, but this prevents a future
-    // code path from accidentally buffering unverified vertices.
     if !vertex.verify_signature() {
         warn!("Orphan buffer: rejecting vertex with invalid signature from {}", peer);
+        return false;
+    }
+
+    // Reject vertices from known-Byzantine validators — they'll never pass try_insert()
+    // and would just consume buffer space, crowding out legitimate orphans.
+    if is_byzantine {
+        warn!("Orphan buffer: rejecting vertex from Byzantine validator {} via {}", vertex.validator.to_hex(), peer);
         return false;
     }
 
@@ -1288,9 +1293,12 @@ async fn handle_peer(
                         );
                         // Buffer as orphan and request missing parents from peer
                         {
-                            let dag_round = dag.read().await.current_round();
+                            let dag_r = dag.read().await;
+                            let dag_round = dag_r.current_round();
+                            let byz = dag_r.is_byzantine(&vertex.validator);
+                            drop(dag_r);
                             let mut orph = orphans.lock().await;
-                            insert_orphan(&mut orph, vertex_hash, vertex, &peer_addr, dag_round);
+                            insert_orphan(&mut orph, vertex_hash, vertex, &peer_addr, dag_round, byz);
                         }
                         // Request the missing parent vertices (cap at 32)
                         let hashes: Vec<[u8; 32]> = missing.into_iter().take(32).collect();
@@ -1479,11 +1487,14 @@ async fn handle_peer(
                 }
                 // Buffer failed inserts as orphans (outside dag lock)
                 if !failed_vertices.is_empty() {
-                    let dag_round = dag.read().await.current_round();
+                    let dag_r = dag.read().await;
+                    let dag_round = dag_r.current_round();
                     let mut orph = orphans.lock().await;
                     for (hash, vertex) in failed_vertices {
-                        insert_orphan(&mut orph, hash, vertex, &peer_addr, dag_round);
+                        let byz = dag_r.is_byzantine(&vertex.validator);
+                        insert_orphan(&mut orph, hash, vertex, &peer_addr, dag_round, byz);
                     }
+                    drop(dag_r);
                 }
                 // Request missing parent vertices from the peer
                 if !all_missing_parents.is_empty() {
@@ -1603,9 +1614,12 @@ async fn handle_peer(
                         }
                         Err(DagInsertError::MissingParents(missing)) => {
                             all_missing.extend(&missing);
-                            let dag_round = dag.read().await.current_round();
+                            let dag_r = dag.read().await;
+                            let dag_round = dag_r.current_round();
+                            let byz = dag_r.is_byzantine(&vertex.validator);
+                            drop(dag_r);
                             let mut orph = orphans.lock().await;
-                            insert_orphan(&mut orph, hash, vertex, &peer_addr, dag_round);
+                            insert_orphan(&mut orph, hash, vertex, &peer_addr, dag_round, byz);
                         }
                         _ => {}
                     }
@@ -2110,12 +2124,11 @@ async fn handle_peer(
                         // No validator allowlist AND no active stakers: checkpoint trust
                         // is entirely attacker-controlled (signers come from attacker's snapshot).
                         // Refuse the checkpoint and force the operator to use --validator-key.
-                        warn!("REFUSING CheckpointSync: node cannot verify checkpoint signer trust \
-                            in pre-staking mode without a validator allowlist. Configure --validator-key \
-                            with trusted validator addresses to enable checkpoint sync. Without this, \
-                            an attacker could fabricate a checkpoint with their own validator set.");
+                        warn!("REFUSING CheckpointSync from {}: cannot verify checkpoint signer trust \
+                            in pre-staking mode without --validator-key. Disconnecting peer to prevent \
+                            repeated fabricated checkpoint CPU waste.", peer_addr);
                         checkpoint_metrics.record_fast_sync_failure();
-                        continue;
+                        return Ok(()); // Disconnect — exit handler, closing connection
                     }
                 } else if !checkpoint.is_accepted(&active, quorum) {
                     warn!("Received CheckpointSync with insufficient signatures ({} valid, need {})",
