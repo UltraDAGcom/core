@@ -8,6 +8,38 @@
 
 ## Recent Updates (March 2026)
 
+**Security Hardening Pass — External Review Fixes (March 25, 2026):**
+- **Bug #221 (CRITICAL): `bridge_refund` credit result ignored** — Governance-authorized refund decremented `bridge_reserve` before calling `credit()` and ignored the Result. If credit failed, funds permanently destroyed → supply invariant violation. Fix: credit BEFORE decrementing reserve, propagate error as `SupplyInvariantBroken`.
+- **Bug #222 (CRITICAL): Non-deterministic bridge attestation pruning** — `prune_old_bridge_attestations` iterated HashMap (non-deterministic order) for auto-refunds. Different nodes could process refunds in different order → state divergence. Fix: sort by nonce before processing. Also: `bridge_reserve` only decremented after successful credit.
+- **Bug #223 (HIGH): `dev_address()` reads env vars on every call** — Called every reward distribution round, reading `ULTRADAG_DEV_ADDRESS`/`ULTRADAG_DEV_KEY`. If two validators had different env configs → different founder addresses → state divergence. Fix: cached in `OnceLock`, resolved once at first call, immutable for process lifetime.
+- **Bug #224 (HIGH): Silent `credit()` errors in 5 locations** — `let _ = self.credit(...)` silently ignored failures for transfer recipient (line 1033), proposer fees (line 1149), pre-staking rewards (lines 697, 707), treasury spend (line 2663). Fix: all propagate errors via `?` or `map_err`. Treasury spend restores `treasury_balance` on failure.
+- **Bug #225 (HIGH): Governance `apply_change` mutation before validation** — `apply_change()` mutated emission params before cross-parameter validation (>60% total). If validation failed, the mutation persisted. Fix: save old values before match, restore all three on cross-parameter validation failure.
+- **Bug #226 (HIGH): Bridge release threshold off-by-one** — `(2 * n) / 3 + 1` required 15/21 votes instead of correct 14/21 for BFT `ceil(2n/3)`. Fix: `(2 * n).div_ceil(3)`.
+- **Bug #227 (MEDIUM): Stuck parent heuristic accepts Byzantine vertices** — The 100-round stuck parent escape in `find_newly_finalized` treated any old parent as finalized regardless of Byzantine status. Fix: added `!dag.is_byzantine(&pv.validator)` check — Byzantine validators' stuck vertices never auto-finalized.
+- **Bug #228 (MEDIUM): `last_proposal_round` not persisted** — Proposal cooldown map lost on restart/fast-sync, allowing spam bypass. Fix: added to `StateSnapshot`, `snapshot()`, `from_snapshot()`, `load_snapshot()`.
+- **Bug #229 (MEDIUM): Orphan buffer accepts Byzantine vertices** — `insert_orphan` didn't check Byzantine status. Known equivocators could fill per-peer orphan slots. Fix: added `is_byzantine` parameter checked before buffering at all 3 call sites.
+- **Bug #230 (MEDIUM): CheckpointSync `continue` instead of disconnect** — Refusing fabricated CheckpointSync used `continue`, letting malicious peers retry. Fix: `return Ok(())` to close connection.
+- **Bug #231: Equivocation check ordering in `try_insert()`** — Reordered so equivocation detection runs before Byzantine validator check, allowing detection of equivocation from already-known Byzantine validators.
+
+**Dashboard Wallet Onboarding Overhaul (March 25, 2026):**
+- **12-word BIP39 mnemonic recovery phrases** — New wallets generate mnemonics via `@scure/bip39`. Displayed as numbered 3-column word grid. Import supports both mnemonic and hex key via tabbed UI.
+- **Mnemonic verification (MetaMask-style)** — After writing down phrase, user must verify 3 randomly selected words before proceeding. Catches miswritten phrases before they become unrecoverable.
+- **Explicit network choice** — "Choose Your Network" step with clear Testnet vs Mainnet cards. Network badge shown on every subsequent step.
+- **Separated create vs import flows** — Create: Network → Backup+Verify → Secure → Biometrics → Done (5 steps). Import: Network → Import (phrase/key + name + password, all-in-one) → Biometrics → Done (4 steps). Each flow has its own step indicator and labels.
+- **Password strength meter** — 4-bar visual indicator (Weak/Fair/Good/Strong) based on length + character variety.
+- **Keystore file download** — Success screen offers one-click encrypted backup download (`ultradag-{network}-keystore.json`).
+- **Biometrics in onboarding** — WebAuthn enrollment offered as a step, with "Try Again" / "Continue Without" on failure.
+- **Unlock rate limiting** — 5 attempts then exponential backoff (30s → 5min). Live countdown timer.
+- **Auto-blur recovery phrase** — Re-blurs after 30 seconds. Clipboard copy shows security warning.
+- **Wallet reset** — "Start Fresh" option on unlock screen with red confirmation panel. `destroy()` clears localStorage.
+- **Mobile step indicator** — Desktop: numbered circles + labels. Mobile: compact animated progress bar.
+- **Form state cleanup** — Full reset when switching between create/import flows.
+
+**Full Site Responsiveness Pass (March 25, 2026):**
+- **Static HTML** (index.html, explorer.html, testnet.html): Mobile media queries for padding, grid stacking, font scaling. Stats/feature/SDK grids collapse to 1 column. Headings scale down on phones.
+- **Dashboard pages** (7 files): DashboardPage portfolio grid 1→2→4 cols, StakingPage stats 1→2→3, GovernancePage stats 1→2, ExplorerPage 1→2→4, NetworkPage 1→2→3→4 with break-all on peer addresses, WalletPage flex-wrap buttons + xl breakpoint, SendPage text-xs + break-all on addresses. All tables use responsive cell padding.
+- **Sidebar** already had mobile overlay (hamburger + backdrop + slide-in).
+
 **Deterministic DAG-BFT Simulation Harness (March 17, 2026):**
 - **New `ultradag-sim` crate** — Tests consensus and state logic by running multiple validators in-process with a virtual network. Uses REAL `BlockDag`, `FinalityTracker`, `StateEngine`, `Mempool` from `ultradag-coin` — only the network is simulated. No TCP, no Tokio, no async.
 - **Master invariant**: all honest validators that finalize the same round produce identical `compute_state_root()` output.
