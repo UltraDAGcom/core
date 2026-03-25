@@ -70,8 +70,12 @@ function NetworkBadge({ network }: { network: NetworkType }) {
   );
 }
 
-const TOTAL_STEPS = 5;
-const STEP_LABELS = ['Network', 'Backup', 'Secure', 'Biometrics', 'Done'];
+// Create flow: Network → Backup → Secure → Biometrics → Done
+const CREATE_STEPS = 5;
+const CREATE_LABELS = ['Network', 'Backup', 'Secure', 'Biometrics', 'Done'];
+// Import flow: Network → Import → Biometrics → Done
+const IMPORT_STEPS = 4;
+const IMPORT_LABELS = ['Network', 'Import', 'Biometrics', 'Done'];
 
 export function WelcomeScreen({
   onCreateWallet, onImportBlob, onUnlock, onUnlockWithWebAuthn, onEnrollWebAuthn,
@@ -142,7 +146,23 @@ export function WelcomeScreen({
     }
   };
 
+  // Create flow: save generated key with name + password
   const handleSecureSubmit = async () => {
+    setError('');
+    if (!walletName.trim()) { setError('Please enter a wallet name'); return; }
+    if (password.length < 8) { setError('Password must be at least 8 characters'); return; }
+    if (password !== confirmPassword) { setError('Passwords do not match'); return; }
+    if (!generatedKey) { setError('No key generated'); return; }
+    if (!/^[0-9a-f]{64}$/.test(generatedKey.secret_key)) { setError('Invalid key'); return; }
+    setLoading(true);
+    try {
+      await onCreateWallet(password, walletName.trim(), generatedKey.secret_key, generatedKey.address);
+      goTo(webauthnAvailable ? 'biometrics' : 'success');
+    } catch (err) { setError(String(err)); } finally { setLoading(false); }
+  };
+
+  // Import flow: import existing key with name + password (all on one screen)
+  const handleImportSubmit = async () => {
     setError('');
     if (!walletName.trim()) { setError('Please enter a wallet name'); return; }
     if (password.length < 8) { setError('Password must be at least 8 characters'); return; }
@@ -150,25 +170,21 @@ export function WelcomeScreen({
 
     let key: string;
     let addr: string;
-    if (generatedKey) {
+    if (importMode === 'mnemonic' && generatedKey) {
       key = generatedKey.secret_key;
       addr = generatedKey.address;
-    } else if (isImportFlow && importMode === 'hex') {
+    } else if (importMode === 'hex') {
       key = importKeyHex.replace(/\s/g, '').toLowerCase();
       addr = derivedAddress;
     } else {
-      setError('No key available'); return;
+      setError('No valid key entered'); return;
     }
 
-    if (!/^[0-9a-f]{64}$/.test(key)) { setError('Invalid private key'); return; }
+    if (!/^[0-9a-f]{64}$/.test(key) || !addr) { setError('Invalid key'); return; }
     setLoading(true);
     try {
       await onCreateWallet(password, walletName.trim(), key, addr);
-      if (webauthnAvailable) {
-        goTo('biometrics');
-      } else {
-        goTo('success');
-      }
+      goTo(webauthnAvailable ? 'biometrics' : 'success');
     } catch (err) { setError(String(err)); } finally { setLoading(false); }
   };
 
@@ -217,10 +233,20 @@ export function WelcomeScreen({
     }
   };
 
-  const stepNum = step === 'network' ? 1 : step === 'backup' || step === 'import' ? 2 : step === 'secure' ? 3 : step === 'biometrics' ? 4 : step === 'success' ? 5 : 0;
+  const totalSteps = isImportFlow ? IMPORT_STEPS : CREATE_STEPS;
+  const stepLabels = isImportFlow ? IMPORT_LABELS : CREATE_LABELS;
   const inputCls = "w-full px-4 py-3 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-dag-accent focus:ring-1 focus:ring-dag-accent/30 transition-all";
-  // stepNum used below for step indicator
-  void stepNum;
+
+  // Step numbers differ per flow
+  const stepNum = (() => {
+    if (step === 'network') return 1;
+    if (step === 'backup') return 2; // create only
+    if (step === 'import') return 2; // import only
+    if (step === 'secure') return 3; // create only
+    if (step === 'biometrics') return isImportFlow ? 3 : 4;
+    if (step === 'success') return isImportFlow ? 4 : 5;
+    return 0;
+  })();
 
   // ===== LANDING =====
   if (step === 'landing') {
@@ -425,7 +451,7 @@ export function WelcomeScreen({
     return (
       <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
         <div className="max-w-md w-full">
-          <StepIndicator current={1} total={TOTAL_STEPS} labels={STEP_LABELS} />
+          <StepIndicator current={stepNum} total={totalSteps} labels={stepLabels} />
           <div className="space-y-5">
             <div className="flex items-center gap-3">
               <button onClick={() => goTo('landing')} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
@@ -531,7 +557,7 @@ export function WelcomeScreen({
     return (
       <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
         <div className="max-w-md w-full">
-          <StepIndicator current={2} total={TOTAL_STEPS} labels={STEP_LABELS} />
+          <StepIndicator current={stepNum} total={totalSteps} labels={stepLabels} />
           <div className="space-y-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -606,18 +632,19 @@ export function WelcomeScreen({
     );
   }
 
-  // ===== STEP 2: IMPORT (import flow) =====
+  // ===== STEP 2: IMPORT (self-contained — key input + name + password + submit) =====
   if (step === 'import') {
     const mnemonicWords = importMnemonic.trim().split(/\s+/).filter(Boolean);
     const wordCount = mnemonicWords.length;
     const mnemonicComplete = wordCount === 12;
     const mnemonicValid = mnemonicComplete && isValidMnemonic(importMnemonic);
     const mnemonicPartial = wordCount > 0 && wordCount < 12;
+    const importReady = !!derivedAddress && walletName.trim().length > 0 && password.length >= 8 && password === confirmPassword;
 
     return (
       <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
         <div className="max-w-md w-full">
-          <StepIndicator current={2} total={TOTAL_STEPS} labels={STEP_LABELS} />
+          <StepIndicator current={stepNum} total={totalSteps} labels={stepLabels} />
           <div className="space-y-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -626,13 +653,13 @@ export function WelcomeScreen({
                 </button>
                 <div>
                   <h1 className="text-xl font-bold text-white">Import Your Wallet</h1>
-                  <p className="text-xs text-dag-muted">Restore access with your backup</p>
+                  <p className="text-xs text-dag-muted">Restore access with your recovery phrase or key</p>
                 </div>
               </div>
               <NetworkBadge network={network} />
             </div>
 
-            {/* Import method selector — 3 tabs */}
+            {/* Import method tabs */}
             <div className="flex bg-slate-800/60 rounded-xl p-1 border border-slate-700/50">
               <button onClick={() => { setImportMode('mnemonic'); setDerivedAddress(''); setError(''); }}
                 className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
@@ -650,102 +677,78 @@ export function WelcomeScreen({
               </button>
             </div>
 
-            {/* Mnemonic import */}
+            {/* ---- Mnemonic import ---- */}
             {importMode === 'mnemonic' && (
-              <div className="space-y-4">
-                <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] text-dag-muted uppercase tracking-wider">Enter your 12 words</p>
-                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                      mnemonicValid ? 'bg-dag-green/15 text-dag-green' :
-                      mnemonicComplete ? 'bg-red-500/15 text-red-400' :
-                      'bg-slate-700/50 text-slate-500'
-                    }`}>
-                      {wordCount}/12
-                    </span>
-                  </div>
-
-                  {/* Word grid — mirrors the creation backup display */}
-                  <div className="grid grid-cols-3 gap-2">
-                    {Array.from({ length: 12 }, (_, i) => {
-                      const word = mnemonicWords[i] || '';
-                      const hasWord = word.length > 0;
-                      const isCurrent = i === wordCount || (i === 11 && wordCount === 12);
-                      return (
-                        <div key={i} className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-all ${
-                          hasWord && mnemonicValid ? 'bg-dag-green/8 border border-dag-green/20' :
-                          hasWord && mnemonicComplete && !mnemonicValid ? 'bg-red-500/8 border border-red-500/20' :
-                          hasWord ? 'bg-dag-accent/8 border border-dag-accent/20' :
-                          isCurrent ? 'bg-slate-700/30 border border-dag-accent/30 border-dashed' :
-                          'bg-slate-800/40 border border-slate-700/30'
-                        }`}>
-                          <span className="text-[10px] text-slate-500 font-mono w-4 text-right">{i + 1}</span>
-                          <span className={`text-sm font-medium truncate ${
-                            hasWord ? 'text-white' : 'text-slate-600'
-                          }`}>
-                            {word || '\u00B7\u00B7\u00B7'}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Text input for typing/pasting all words */}
-                  <textarea
-                    value={importMnemonic}
-                    onChange={(e) => handleMnemonicChange(e.target.value)}
-                    placeholder="Type or paste your 12-word recovery phrase..."
-                    rows={2}
-                    className="w-full px-3 py-2.5 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-dag-accent/40 focus:ring-1 focus:ring-dag-accent/20 transition-all resize-none font-mono"
-                    autoFocus
-                  />
-
-                  {/* Status messages */}
-                  {mnemonicPartial && (
-                    <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-dag-accent/50 animate-pulse" />
-                      {12 - wordCount} more {12 - wordCount === 1 ? 'word' : 'words'} needed
-                    </p>
-                  )}
-                  {mnemonicComplete && !mnemonicValid && (
-                    <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/15">
-                      <Shield className="w-3.5 h-3.5 text-red-400 mt-0.5 flex-shrink-0" />
-                      <p className="text-[11px] text-red-400">Invalid recovery phrase. Please check each word carefully — spelling and order matter.</p>
-                    </div>
-                  )}
+              <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] text-dag-muted uppercase tracking-wider">Enter your 12 words</p>
+                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                    mnemonicValid ? 'bg-dag-green/15 text-dag-green' :
+                    mnemonicComplete ? 'bg-red-500/15 text-red-400' :
+                    'bg-slate-700/50 text-slate-500'
+                  }`}>{wordCount}/12</span>
                 </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {Array.from({ length: 12 }, (_, i) => {
+                    const word = mnemonicWords[i] || '';
+                    const hasWord = word.length > 0;
+                    const isCurrent = i === wordCount || (i === 11 && wordCount === 12);
+                    return (
+                      <div key={i} className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-all ${
+                        hasWord && mnemonicValid ? 'bg-dag-green/8 border border-dag-green/20' :
+                        hasWord && mnemonicComplete && !mnemonicValid ? 'bg-red-500/8 border border-red-500/20' :
+                        hasWord ? 'bg-dag-accent/8 border border-dag-accent/20' :
+                        isCurrent ? 'bg-slate-700/30 border border-dag-accent/30 border-dashed' :
+                        'bg-slate-800/40 border border-slate-700/30'
+                      }`}>
+                        <span className="text-[10px] text-slate-500 font-mono w-4 text-right">{i + 1}</span>
+                        <span className={`text-sm font-medium truncate ${hasWord ? 'text-white' : 'text-slate-600'}`}>
+                          {word || '\u00B7\u00B7\u00B7'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <textarea value={importMnemonic} onChange={(e) => handleMnemonicChange(e.target.value)}
+                  placeholder="Type or paste your 12-word recovery phrase..."
+                  rows={2}
+                  className="w-full px-3 py-2.5 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-dag-accent/40 focus:ring-1 focus:ring-dag-accent/20 transition-all resize-none font-mono"
+                  autoFocus
+                />
+                {mnemonicPartial && (
+                  <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-dag-accent/50 animate-pulse" />
+                    {12 - wordCount} more {12 - wordCount === 1 ? 'word' : 'words'} needed
+                  </p>
+                )}
+                {mnemonicComplete && !mnemonicValid && (
+                  <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/15">
+                    <Shield className="w-3.5 h-3.5 text-red-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-[11px] text-red-400">Invalid recovery phrase. Check each word carefully — spelling and order matter.</p>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Hex private key import */}
+            {/* ---- Hex key import ---- */}
             {importMode === 'hex' && (
-              <div className="space-y-4">
-                <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 space-y-3">
-                  <p className="text-[10px] text-dag-muted uppercase tracking-wider">Private Key (64 hex characters)</p>
-                  <input
-                    type="password"
-                    value={importKeyHex}
-                    onChange={(e) => handleHexKeyChange(e.target.value)}
-                    placeholder="Enter or paste your private key..."
-                    className="w-full px-3 py-2.5 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-dag-accent/40 focus:ring-1 focus:ring-dag-accent/20 transition-all font-mono"
-                    autoFocus
-                  />
-                  {importKeyHex.length > 0 && importKeyHex.length < 64 && (
-                    <p className="text-[10px] text-slate-500">{64 - importKeyHex.replace(/\s/g, '').length} characters remaining</p>
-                  )}
-                  {importKeyHex.length > 0 && !/^[0-9a-fA-F\s]*$/.test(importKeyHex) && (
-                    <p className="text-[10px] text-red-400">Private key must contain only hex characters (0-9, a-f)</p>
-                  )}
-                </div>
-
-                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-slate-800/40 border border-slate-700/30">
-                  <Shield className="w-3.5 h-3.5 text-slate-500 mt-0.5 flex-shrink-0" />
-                  <p className="text-[10px] text-slate-500">If you created your wallet with a recovery phrase, use that tab instead. The hex key is for advanced users who backed up the raw key.</p>
-                </div>
+              <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 space-y-3">
+                <p className="text-[10px] text-dag-muted uppercase tracking-wider">Private Key (64 hex characters)</p>
+                <input type="password" value={importKeyHex} onChange={(e) => handleHexKeyChange(e.target.value)}
+                  placeholder="Enter or paste your private key..."
+                  className="w-full px-3 py-2.5 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-dag-accent/40 focus:ring-1 focus:ring-dag-accent/20 transition-all font-mono"
+                  autoFocus
+                />
+                {importKeyHex.length > 0 && importKeyHex.replace(/\s/g, '').length < 64 && /^[0-9a-fA-F\s]*$/.test(importKeyHex) && (
+                  <p className="text-[10px] text-slate-500">{64 - importKeyHex.replace(/\s/g, '').length} characters remaining</p>
+                )}
+                {importKeyHex.length > 0 && !/^[0-9a-fA-F\s]*$/.test(importKeyHex) && (
+                  <p className="text-[10px] text-red-400">Must contain only hex characters (0-9, a-f)</p>
+                )}
               </div>
             )}
 
-            {/* Wallet found confirmation */}
+            {/* Wallet found */}
             {derivedAddress && (
               <div className="rounded-xl bg-dag-green/5 border border-dag-green/25 p-4">
                 <div className="flex items-center gap-3">
@@ -762,14 +765,46 @@ export function WelcomeScreen({
               </div>
             )}
 
+            {/* Name + password — shown once wallet is found */}
+            {derivedAddress && (
+              <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 space-y-4">
+                <div className="flex items-start gap-2.5 pb-3 border-b border-slate-700/30">
+                  <Lock className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs text-white font-medium">Protect this wallet on your device</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Set a name and password to encrypt your keys in this browser.</p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <input type="text" value={walletName} onChange={(e) => setWalletName(e.target.value)}
+                    placeholder="Wallet name" className={inputCls} />
+                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Password (min 8 characters)" className={inputCls} />
+                  <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm password" className={inputCls}
+                    onKeyDown={(e) => e.key === 'Enter' && importReady && handleImportSubmit()} />
+                  {confirmPassword.length > 0 && password !== confirmPassword && (
+                    <p className="text-[10px] text-red-400 ml-1">Passwords don't match</p>
+                  )}
+                  {confirmPassword.length > 0 && password === confirmPassword && password.length >= 8 && (
+                    <p className="text-[10px] text-dag-green ml-1 flex items-center gap-1"><Check className="w-3 h-3" /> Ready</p>
+                  )}
+                </div>
+              </div>
+            )}
+
             {error && <p className="text-sm text-red-400 text-center">{error}</p>}
 
-            <button onClick={() => goTo('secure')} disabled={!derivedAddress}
+            <button onClick={handleImportSubmit} disabled={loading || !importReady}
               className="w-full py-3.5 rounded-xl bg-dag-accent text-white font-semibold text-sm hover:bg-dag-accent/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2">
-              Continue <ArrowRight className="w-4 h-4" />
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Importing...
+                </span>
+              ) : (<>Import Wallet <ArrowRight className="w-4 h-4" /></>)}
             </button>
 
-            {/* Backup file restore link */}
             <button onClick={() => goTo('restore')} className="w-full text-center text-xs text-slate-500 hover:text-slate-300 transition-colors py-1">
               Or restore from a keystore backup file
             </button>
@@ -784,7 +819,7 @@ export function WelcomeScreen({
     return (
       <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
         <div className="max-w-md w-full">
-          <StepIndicator current={3} total={TOTAL_STEPS} labels={STEP_LABELS} />
+          <StepIndicator current={stepNum} total={totalSteps} labels={stepLabels} />
           <div className="space-y-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -858,7 +893,7 @@ export function WelcomeScreen({
     return (
       <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
         <div className="max-w-md w-full">
-          <StepIndicator current={4} total={TOTAL_STEPS} labels={STEP_LABELS} />
+          <StepIndicator current={stepNum} total={totalSteps} labels={stepLabels} />
           <div className="space-y-6 text-center">
             <div className="space-y-3">
               <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mx-auto shadow-lg transition-all duration-500 ${
@@ -918,7 +953,7 @@ export function WelcomeScreen({
     return (
       <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
         <div className="max-w-md w-full">
-          <StepIndicator current={5} total={TOTAL_STEPS} labels={STEP_LABELS} />
+          <StepIndicator current={stepNum} total={totalSteps} labels={stepLabels} />
           <div className="space-y-6 text-center">
             <div className="space-y-3">
               <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-dag-green to-emerald-500 flex items-center justify-center mx-auto shadow-lg shadow-dag-green/20">
