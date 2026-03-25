@@ -8,6 +8,14 @@
 
 ## Recent Updates (March 2026)
 
+**Bridge Release Voter Consensus + Persistence Hardening (March 25, 2026):**
+- **Bug #232 (HIGH): Bridge release accepted mismatched voter parameters** — `apply_bridge_release_tx` only verified voters agreed on `(chain_id, nonce)`, not `(recipient, amount)`. The submitting tx's values executed at quorum, allowing colluding 2/3 majority to redirect funds. Fix: `bridge_release_params` map stores first voter's canonical `(recipient, amount)` — subsequent voters must match or tx is rejected.
+- **Bug #233 (CRITICAL): `bridge_release_params` not persisted in redb** — After normal node restart, in-progress bridge releases lost their canonical params. Next voter became "first voter" with arbitrary (recipient, amount). Fix: persist in METADATA table via `save_to_redb`/`load_from_redb` + `restore_bridge_release_params()`.
+- **Bug #234 (MEDIUM): `bridge_release_params` excluded from `compute_state_root`** — Two nodes with different canonical params for a pending release computed identical state roots. Fix: added to `compute_state_root` with deterministic sorting.
+- **Bug #235 (MEDIUM): Forward propagation missing Byzantine stuck-parent check** — Initial scan in `find_newly_finalized` correctly rejected Byzantine stuck parents, but the forward propagation loop (cascading through children) omitted the `!dag.is_byzantine()` check. Fix: added to both paths.
+- **Bug #236 (LOW): `last_proposal_round` excluded from `compute_state_root`** — Spam prevention cooldown not covered by state root hash. Fix: added to `compute_state_root` with sorted iteration.
+- **State root changed** — `compute_state_root` now covers `bridge_release_params` and `last_proposal_round`. GENESIS_CHECKPOINT_HASH will need recomputation for mainnet.
+
 **Security Hardening Pass — External Review Fixes (March 25, 2026):**
 - **Bug #221 (CRITICAL): `bridge_refund` credit result ignored** — Governance-authorized refund decremented `bridge_reserve` before calling `credit()` and ignored the Result. If credit failed, funds permanently destroyed → supply invariant violation. Fix: credit BEFORE decrementing reserve, propagate error as `SupplyInvariantBroken`.
 - **Bug #222 (CRITICAL): Non-deterministic bridge attestation pruning** — `prune_old_bridge_attestations` iterated HashMap (non-deterministic order) for auto-refunds. Different nodes could process refunds in different order → state divergence. Fix: sort by nonce before processing. Also: `bridge_reserve` only decremented after successful credit.
