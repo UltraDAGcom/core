@@ -101,6 +101,7 @@ function App() {
             onUnlockWithWebAuthn={ks.unlockWithWebAuthn}
             onEnrollWebAuthn={ks.enrollWebAuthn}
             onExportBlob={ks.exportBlob}
+            onResetWallet={ks.destroy}
             webauthnAvailable={ks.webauthnAvailable}
             webauthnEnrolled={ks.webauthnEnrolled}
             onImportBlob={ks.importBlob}

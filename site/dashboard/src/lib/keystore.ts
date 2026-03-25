@@ -115,6 +115,15 @@ export function lock(): void {
   notify();
 }
 
+/** Permanently delete the keystore and all wallets from this browser. */
+export function destroy(): void {
+  keystoreData = null;
+  encryptedBlob = null;
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(WEBAUTHN_STORAGE_KEY);
+  notify();
+}
+
 export async function addWallet(name: string, secretKey: string, address: string): Promise<void> {
   if (!keystoreData) throw new Error('Keystore not unlocked');
   keystoreData.wallets.push({ name, secret_key: secretKey, address });

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Key, ChevronRight, Shield, Zap, Globe, ArrowRight, Eye, EyeOff, Copy, Check, Fingerprint, Lock, Sparkles, Wallet, ArrowDown, Download, TestTube, Rocket } from 'lucide-react';
+import { Plus, Key, ChevronRight, Shield, Zap, Globe, ArrowRight, Eye, EyeOff, Copy, Check, Fingerprint, Lock, Sparkles, Wallet, ArrowDown, Download, TestTube, Rocket, AlertTriangle, Trash2 } from 'lucide-react';
 import { deriveAddress } from '../../lib/keygen';
 import { generateWithMnemonic, mnemonicToKeypair, isValidMnemonic } from '../../lib/mnemonic';
 import type { NetworkType } from '../../lib/api';
@@ -11,6 +11,7 @@ interface WelcomeScreenProps {
   onUnlockWithWebAuthn?: () => Promise<boolean>;
   onEnrollWebAuthn?: () => Promise<boolean>;
   onExportBlob?: () => string | null;
+  onResetWallet?: () => void;
   webauthnAvailable?: boolean;
   webauthnEnrolled?: boolean;
   hasExisting: boolean;
@@ -74,7 +75,7 @@ const STEP_LABELS = ['Network', 'Backup', 'Secure', 'Biometrics', 'Done'];
 
 export function WelcomeScreen({
   onCreateWallet, onImportBlob, onUnlock, onUnlockWithWebAuthn, onEnrollWebAuthn,
-  onExportBlob, webauthnAvailable, webauthnEnrolled, hasExisting, onFinishOnboarding,
+  onExportBlob, onResetWallet, webauthnAvailable, webauthnEnrolled, hasExisting, onFinishOnboarding,
   isPostCreate, network, onSwitchNetwork,
 }: WelcomeScreenProps) {
   const initialStep: Step = isPostCreate
@@ -99,6 +100,7 @@ export function WelcomeScreen({
   const [isImportFlow, setIsImportFlow] = useState(false);
   const [biometricsDone, setBiometricsDone] = useState(false);
   const [keystoreDownloaded, setKeystoreDownloaded] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const goTo = (s: Step) => { setError(''); setStep(s); };
 
@@ -331,9 +333,46 @@ export function WelcomeScreen({
               {loading ? 'Unlocking...' : 'Unlock with Password'}
             </button>
           </div>
-          <button onClick={() => goTo('restore')} className="w-full text-center text-xs text-slate-500 hover:text-slate-300 transition-colors py-2">
-            Restore from backup
-          </button>
+
+          <div className="flex items-center gap-3"><div className="flex-1 h-px bg-dag-border" /><span className="text-xs text-dag-muted">or</span><div className="flex-1 h-px bg-dag-border" /></div>
+
+          <div className="space-y-2">
+            <button onClick={() => goTo('restore')} className="w-full text-center text-xs text-slate-500 hover:text-slate-300 transition-colors py-1">
+              Restore from backup
+            </button>
+
+            {onResetWallet && !showResetConfirm && (
+              <button onClick={() => setShowResetConfirm(true)} className="w-full text-center text-xs text-slate-600 hover:text-red-400 transition-colors py-1">
+                Use a different wallet
+              </button>
+            )}
+          </div>
+
+          {/* Reset confirmation */}
+          {showResetConfirm && onResetWallet && (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-red-500/15 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="w-4.5 h-4.5 text-red-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-red-400">Remove wallet from this browser?</p>
+                  <p className="text-[11px] text-red-300/70 mt-1">This will delete the encrypted keystore from this device. If you don't have your recovery phrase or a backup file, your funds will be lost forever.</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setShowResetConfirm(false)}
+                  className="flex-1 py-2.5 rounded-lg bg-slate-700 text-slate-200 text-xs font-medium hover:bg-slate-600 transition-colors">
+                  Cancel
+                </button>
+                <button onClick={() => { onResetWallet(); setShowResetConfirm(false); }}
+                  className="flex-1 py-2.5 rounded-lg bg-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/30 transition-colors flex items-center justify-center gap-1.5 border border-red-500/20">
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Remove Wallet
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );

@@ -69,6 +69,10 @@ export function useKeystore() {
     keystore.lock();
   }, []);
 
+  const destroy = useCallback(() => {
+    keystore.destroy();
+  }, []);
+
   const addWallet = useCallback(async (name: string, secretKey: string, address: string) => {
     await keystore.addWallet(name, secretKey, address);
     resetActivity();
@@ -123,6 +127,7 @@ export function useKeystore() {
     create,
     unlock,
     lock,
+    destroy,
     addWallet,
     removeWallet,
     importBlob,
