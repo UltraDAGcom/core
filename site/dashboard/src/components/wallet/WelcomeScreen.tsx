@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Key, ChevronRight, Shield, Zap, Globe, ArrowRight, Eye, EyeOff, Copy, Check, Fingerprint, Lock, Sparkles, Wallet, ArrowDown, Download, TestTube, Rocket, AlertTriangle, Trash2 } from 'lucide-react';
 import { deriveAddress } from '../../lib/keygen';
 import { generateWithMnemonic, mnemonicToKeypair, isValidMnemonic } from '../../lib/mnemonic';
@@ -83,6 +83,17 @@ export function WelcomeScreen({
     : (hasExisting ? 'unlock' : 'landing');
 
   const [step, setStep] = useState<Step>(initialStep);
+
+  // When keystore is destroyed, go back to landing
+  useEffect(() => {
+    if (!hasExisting && !isPostCreate && step === 'unlock') {
+      setStep('landing');
+      setShowResetConfirm(false);
+      setError('');
+      setPassword('');
+    }
+  }, [hasExisting]);
+
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [walletName, setWalletName] = useState('');
@@ -291,81 +302,112 @@ export function WelcomeScreen({
   if (step === 'unlock') {
     return (
       <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
-        <div className="max-w-sm w-full space-y-6">
+        <div className="max-w-md w-full space-y-6">
+          {/* Header */}
           <div className="text-center space-y-3">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-dag-accent to-purple-500 flex items-center justify-center mx-auto shadow-lg shadow-dag-accent/20">
               <Zap className="w-7 h-7 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-white">Welcome Back</h1>
-            <p className="text-dag-muted text-sm">
-              {webauthnEnrolled ? 'Use biometrics or enter your password.' : 'Enter your password to unlock your wallet.'}
-            </p>
+            <p className="text-dag-muted text-sm">Unlock your wallet to continue</p>
           </div>
-          <div className="space-y-3">
+
+          {/* Primary unlock card */}
+          <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-5 space-y-4">
+            {/* Biometric unlock — big prominent option */}
             {webauthnEnrolled && onUnlockWithWebAuthn && (
-              <button
-                onClick={async () => {
-                  setError(''); setLoading(true);
-                  try {
-                    const ok = await onUnlockWithWebAuthn();
-                    if (!ok) setError('Biometric authentication failed. Try your password.');
-                  } catch { setError('Biometric unavailable. Use your password.'); }
-                  finally { setLoading(false); }
-                }}
-                disabled={loading}
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-dag-accent to-purple-500 text-white font-semibold text-sm hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-              >
-                <Fingerprint className="w-5 h-5" />
-                {loading ? 'Verifying...' : 'Unlock with Biometrics'}
-              </button>
+              <>
+                <button
+                  onClick={async () => {
+                    setError(''); setLoading(true);
+                    try {
+                      const ok = await onUnlockWithWebAuthn();
+                      if (!ok) setError('Biometric authentication failed. Try your password.');
+                    } catch { setError('Biometric unavailable. Use your password.'); }
+                    finally { setLoading(false); }
+                  }}
+                  disabled={loading}
+                  className="w-full py-3.5 rounded-xl bg-gradient-to-r from-dag-accent to-purple-500 text-white font-semibold text-sm hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                >
+                  <Fingerprint className="w-5 h-5" />
+                  {loading ? 'Verifying...' : 'Unlock with Biometrics'}
+                </button>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-slate-700/50" />
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider">or use password</span>
+                  <div className="flex-1 h-px bg-slate-700/50" />
+                </div>
+              </>
             )}
-            {webauthnEnrolled && <div className="flex items-center gap-3"><div className="flex-1 h-px bg-dag-border" /><span className="text-xs text-dag-muted">or</span><div className="flex-1 h-px bg-dag-border" /></div>}
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password" className={inputCls}
-              onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
-              autoFocus={!webauthnEnrolled}
-            />
-            {error && <p className="text-sm text-red-400 text-center">{error}</p>}
-            <button onClick={handleUnlock} disabled={loading}
-              className={`w-full py-3 rounded-xl font-semibold text-sm disabled:opacity-50 transition-colors ${
+
+            {/* Password field */}
+            <div>
+              <input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                placeholder="Enter your password" className={inputCls}
+                onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
+                autoFocus={!webauthnEnrolled}
+              />
+            </div>
+
+            {error && (
+              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/15">
+                <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                <p className="text-[11px] text-red-400">{error}</p>
+              </div>
+            )}
+
+            <button onClick={handleUnlock} disabled={loading || !password}
+              className={`w-full py-3 rounded-xl font-semibold text-sm disabled:opacity-40 transition-colors ${
                 webauthnEnrolled ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-dag-accent text-white hover:bg-dag-accent/80'
               }`}>
-              {loading ? 'Unlocking...' : 'Unlock with Password'}
+              {loading ? 'Unlocking...' : 'Unlock'}
             </button>
           </div>
 
-          <div className="flex items-center gap-3"><div className="flex-1 h-px bg-dag-border" /><span className="text-xs text-dag-muted">or</span><div className="flex-1 h-px bg-dag-border" /></div>
-
-          <div className="space-y-2">
-            <button onClick={() => goTo('restore')} className="w-full text-center text-xs text-slate-500 hover:text-slate-300 transition-colors py-1">
-              Restore from backup
-            </button>
-
-            {onResetWallet && !showResetConfirm && (
-              <button onClick={() => setShowResetConfirm(true)} className="w-full text-center text-xs text-slate-600 hover:text-red-400 transition-colors py-1">
-                Use a different wallet
-              </button>
-            )}
-          </div>
+          {/* Alternative actions — proper cards, not just links */}
+          {!showResetConfirm && (
+            <div className="space-y-2">
+              <p className="text-[10px] text-slate-600 uppercase tracking-wider text-center">Can't unlock?</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => goTo('restore')}
+                  className="group p-3.5 rounded-xl border border-slate-700/50 bg-slate-800/20 hover:bg-slate-800/50 hover:border-slate-600 transition-all text-left">
+                  <Download className="w-4 h-4 text-slate-500 group-hover:text-dag-accent mb-2 transition-colors" />
+                  <p className="text-xs text-white font-medium">Restore Backup</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">From a keystore file</p>
+                </button>
+                {onResetWallet && (
+                  <button onClick={() => setShowResetConfirm(true)}
+                    className="group p-3.5 rounded-xl border border-slate-700/50 bg-slate-800/20 hover:bg-slate-800/50 hover:border-slate-600 transition-all text-left">
+                    <Plus className="w-4 h-4 text-slate-500 group-hover:text-dag-accent mb-2 transition-colors" />
+                    <p className="text-xs text-white font-medium">Start Fresh</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Create or import wallet</p>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Reset confirmation */}
           {showResetConfirm && onResetWallet && (
-            <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 space-y-3">
+            <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-4 space-y-3">
               <div className="flex items-start gap-3">
                 <div className="w-9 h-9 rounded-lg bg-red-500/15 flex items-center justify-center flex-shrink-0">
-                  <AlertTriangle className="w-4.5 h-4.5 text-red-400" />
+                  <AlertTriangle className="w-5 h-5 text-red-400" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-red-400">Remove wallet from this browser?</p>
-                  <p className="text-[11px] text-red-300/70 mt-1">This will delete the encrypted keystore from this device. If you don't have your recovery phrase or a backup file, your funds will be lost forever.</p>
+                  <p className="text-[11px] text-red-300/70 mt-1.5 leading-relaxed">
+                    This will permanently delete the encrypted wallet from this device.
+                    <span className="text-red-300 font-medium"> If you don't have your 12-word recovery phrase or a backup file, your funds will be lost forever.</span>
+                  </p>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 pt-1">
                 <button onClick={() => setShowResetConfirm(false)}
                   className="flex-1 py-2.5 rounded-lg bg-slate-700 text-slate-200 text-xs font-medium hover:bg-slate-600 transition-colors">
                   Cancel
                 </button>
-                <button onClick={() => { onResetWallet(); setShowResetConfirm(false); }}
+                <button onClick={onResetWallet}
                   className="flex-1 py-2.5 rounded-lg bg-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/30 transition-colors flex items-center justify-center gap-1.5 border border-red-500/20">
                   <Trash2 className="w-3.5 h-3.5" />
                   Remove Wallet
