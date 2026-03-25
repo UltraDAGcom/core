@@ -268,7 +268,7 @@ export function WalletPage({
           <h1 className="text-2xl font-bold text-white">Wallet</h1>
           <p className="text-sm text-dag-muted mt-1">{wallets.length} wallet{wallets.length !== 1 ? 's' : ''}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {notificationsSupported && onToggleNotifications && (
             <button
               onClick={onToggleNotifications}
@@ -337,7 +337,7 @@ export function WalletPage({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {/* Wallet list */}
           <div className="space-y-3">
             {pagedWallets.map((w, i) => {

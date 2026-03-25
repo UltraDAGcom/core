@@ -117,15 +117,15 @@ export function NetworkPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-slate-400 border-b border-slate-700">
-                  <th className="py-2 px-3 font-medium">#</th>
-                  <th className="py-2 px-3 font-medium">Peer Address</th>
+                  <th className="py-2 px-2 sm:px-3 font-medium">#</th>
+                  <th className="py-2 px-2 sm:px-3 font-medium">Peer Address</th>
                 </tr>
               </thead>
               <tbody>
                 {peerList.map((peer, i) => (
                   <tr key={peer} className="border-b border-slate-800">
-                    <td className="py-2 px-3 text-xs text-slate-500">{i + 1}</td>
-                    <td className="py-2 px-3 font-mono text-xs text-slate-300">{peer}</td>
+                    <td className="py-2 px-2 sm:px-3 text-xs text-slate-500">{i + 1}</td>
+                    <td className="py-2 px-2 sm:px-3 font-mono text-xs text-slate-300 break-all">{peer}</td>
                   </tr>
                 ))}
               </tbody>
@@ -314,7 +314,7 @@ function MetricsGrid({ metrics }: { metrics: MetricsData }) {
       {sections.map((section) => (
         <div key={section.title}>
           <h3 className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">{section.title}</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
             {section.entries.map((entry) => (
               <div key={entry.label} className="bg-slate-800 border border-slate-700 rounded p-2">
                 <p className="text-xs text-slate-500 truncate" title={entry.label}>{entry.label}</p>

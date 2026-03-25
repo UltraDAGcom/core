@@ -155,7 +155,7 @@ export function StakingPage() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         <div className="rounded-lg bg-dag-card border border-dag-border p-4">
           <span className="text-dag-muted text-xs block mb-1">Total Staked</span>
           <span className="text-white font-bold text-lg font-mono">{formatUdag(totalStaked)} <span className="text-dag-muted text-sm font-normal">UDAG</span></span>
@@ -243,7 +243,7 @@ export function StakingPage() {
                         </span>
                       )}
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-sm">
                       <div>
                         <span className="text-dag-muted block text-xs">Staked</span>
                         <span className="text-white">{formatUdag(s.staked)} UDAG</span>

@@ -117,7 +117,7 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-white">Send & Receive</h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Left column: Send + Faucet */}
         <div className="space-y-6">
           {/* Send Card */}
@@ -259,7 +259,7 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
                   <span className="text-sm text-dag-muted">Your Address</span>
                   <div className="bg-dag-surface border border-dag-border rounded-lg p-4">
                     <div className="flex items-start justify-between gap-2 mb-3">
-                      <code className="text-base text-white font-mono leading-relaxed tracking-wide">
+                      <code className="text-xs sm:text-base text-white font-mono leading-relaxed tracking-wide break-all">
                         {prettyAddr(receiveWallet.address)}
                       </code>
                       <CopyButton text={fullAddr(receiveWallet.address)} />

@@ -132,7 +132,7 @@ export function ExplorerPage() {
 
       {/* Network stats */}
       {stats.dagRound > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard label="DAG Round" value={stats.dagRound.toLocaleString()} />
           <StatCard label="Finalized Round" value={stats.lastFinalized.toLocaleString()} highlight />
           <StatCard label="Finality Lag" value={String(stats.finalityLag)} badge={stats.finalityLag <= 3 ? 'green' : stats.finalityLag <= 10 ? 'yellow' : 'red'} />

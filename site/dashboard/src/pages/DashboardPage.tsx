@@ -173,7 +173,7 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
             <h2 className="text-sm font-semibold text-dag-muted uppercase tracking-wider">Your Portfolio</h2>
             <Link to="/wallet" className="text-xs text-dag-accent hover:underline">Manage Wallets</Link>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Total Value</p>
               <p className="text-2xl font-bold text-white">{formatUdag(totalValue)}</p>
@@ -269,7 +269,7 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-pulse" />
           </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="bg-dag-surface rounded-lg p-3">
             <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Total Emitted</p>
             <p className="text-sm font-semibold text-white font-mono">{formatUdag(emitted)}</p>
@@ -403,10 +403,10 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-dag-muted text-xs uppercase tracking-wider border-b border-dag-border">
-                  <th className="text-left pb-2 pr-4">Round</th>
-                  <th className="text-center pb-2 px-4">Vertices</th>
-                  <th className="text-center pb-2 px-4">Transactions</th>
-                  <th className="text-right pb-2 pl-4">Status</th>
+                  <th className="text-left pb-2 pr-2 sm:pr-4">Round</th>
+                  <th className="text-center pb-2 px-2 sm:px-4">Vertices</th>
+                  <th className="text-center pb-2 px-2 sm:px-4">Transactions</th>
+                  <th className="text-right pb-2 pl-2 sm:pl-4">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -414,7 +414,7 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
                   const totalTx = r.vertices.reduce((s, v) => s + v.tx_count, 0);
                   return (
                     <tr key={r.round} className="border-b border-dag-border/50 hover:bg-dag-surface/50 transition-colors">
-                      <td className="py-2.5 pr-4">
+                      <td className="py-2.5 pr-2 sm:pr-4">
                         <Link
                           to={`/round/${r.round}`}
                           className="text-dag-accent hover:text-dag-accent/80 font-mono font-medium transition-colors"
@@ -422,9 +422,9 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
                           #{r.round.toLocaleString()}
                         </Link>
                       </td>
-                      <td className="py-2.5 px-4 text-center text-white">{r.vertices.length}</td>
-                      <td className="py-2.5 px-4 text-center text-white">{totalTx}</td>
-                      <td className="py-2.5 pl-4 text-right">
+                      <td className="py-2.5 px-2 sm:px-4 text-center text-white">{r.vertices.length}</td>
+                      <td className="py-2.5 px-2 sm:px-4 text-center text-white">{totalTx}</td>
+                      <td className="py-2.5 pl-2 sm:pl-4 text-right">
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-dag-green/20 text-dag-green">
                           Finalized
                         </span>

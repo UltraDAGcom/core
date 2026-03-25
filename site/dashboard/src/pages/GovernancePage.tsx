@@ -160,7 +160,7 @@ export function GovernancePage() {
                 </div>
                 <h3 className="text-white font-medium">{selected.title}</h3>
                 <p className="text-sm text-dag-muted whitespace-pre-wrap">{selected.description}</p>
-                <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                   <div>
                     <span className="text-dag-muted block text-xs">Proposer</span>
                     <span className="text-white font-mono text-xs">{shortAddr(selected.proposer)}</span>
