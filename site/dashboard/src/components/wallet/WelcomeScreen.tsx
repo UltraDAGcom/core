@@ -527,6 +527,12 @@ export function WelcomeScreen({
 
   // ===== STEP 2: IMPORT (import flow) =====
   if (step === 'import') {
+    const mnemonicWords = importMnemonic.trim().split(/\s+/).filter(Boolean);
+    const wordCount = mnemonicWords.length;
+    const mnemonicComplete = wordCount === 12;
+    const mnemonicValid = mnemonicComplete && isValidMnemonic(importMnemonic);
+    const mnemonicPartial = wordCount > 0 && wordCount < 12;
+
     return (
       <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
         <div className="max-w-md w-full">
@@ -539,52 +545,137 @@ export function WelcomeScreen({
                 </button>
                 <div>
                   <h1 className="text-xl font-bold text-white">Import Your Wallet</h1>
-                  <p className="text-xs text-dag-muted">Enter your recovery phrase or private key</p>
+                  <p className="text-xs text-dag-muted">Restore access with your backup</p>
                 </div>
               </div>
               <NetworkBadge network={network} />
             </div>
 
+            {/* Import method selector — 3 tabs */}
             <div className="flex bg-slate-800/60 rounded-xl p-1 border border-slate-700/50">
-              <button onClick={() => { setImportMode('mnemonic'); setDerivedAddress(''); }}
-                className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+              <button onClick={() => { setImportMode('mnemonic'); setDerivedAddress(''); setError(''); }}
+                className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
                   importMode === 'mnemonic' ? 'bg-dag-accent/15 text-dag-accent border border-dag-accent/20' : 'text-slate-400 hover:text-white'
                 }`}>
+                <Key className="w-3 h-3" />
                 Recovery Phrase
               </button>
-              <button onClick={() => { setImportMode('hex'); setDerivedAddress(''); setGeneratedKey(null); }}
-                className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+              <button onClick={() => { setImportMode('hex'); setDerivedAddress(''); setGeneratedKey(null); setError(''); }}
+                className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
                   importMode === 'hex' ? 'bg-dag-accent/15 text-dag-accent border border-dag-accent/20' : 'text-slate-400 hover:text-white'
                 }`}>
-                Private Key (Hex)
+                <Lock className="w-3 h-3" />
+                Private Key
               </button>
             </div>
 
-            {importMode === 'mnemonic' ? (
-              <div className="space-y-3">
-                <label className="text-[10px] text-dag-muted uppercase tracking-wider block">12-Word Recovery Phrase</label>
-                <textarea value={importMnemonic} onChange={(e) => handleMnemonicChange(e.target.value)}
-                  placeholder="word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12"
-                  rows={3} className={inputCls + ' font-mono text-xs resize-none'} autoFocus />
-                {importMnemonic.trim().split(/\s+/).length === 12 && !isValidMnemonic(importMnemonic) && (
-                  <p className="text-[10px] text-red-400 ml-1">Invalid recovery phrase. Check your words and try again.</p>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <label className="text-[10px] text-dag-muted uppercase tracking-wider block">Private Key</label>
-                <input type="password" value={importKeyHex} onChange={(e) => handleHexKeyChange(e.target.value)}
-                  placeholder="64-character hex private key" className={inputCls + ' font-mono text-xs'} autoFocus />
+            {/* Mnemonic import */}
+            {importMode === 'mnemonic' && (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-dag-muted uppercase tracking-wider">Enter your 12 words</p>
+                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                      mnemonicValid ? 'bg-dag-green/15 text-dag-green' :
+                      mnemonicComplete ? 'bg-red-500/15 text-red-400' :
+                      'bg-slate-700/50 text-slate-500'
+                    }`}>
+                      {wordCount}/12
+                    </span>
+                  </div>
+
+                  {/* Word grid — mirrors the creation backup display */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {Array.from({ length: 12 }, (_, i) => {
+                      const word = mnemonicWords[i] || '';
+                      const hasWord = word.length > 0;
+                      const isCurrent = i === wordCount || (i === 11 && wordCount === 12);
+                      return (
+                        <div key={i} className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-all ${
+                          hasWord && mnemonicValid ? 'bg-dag-green/8 border border-dag-green/20' :
+                          hasWord && mnemonicComplete && !mnemonicValid ? 'bg-red-500/8 border border-red-500/20' :
+                          hasWord ? 'bg-dag-accent/8 border border-dag-accent/20' :
+                          isCurrent ? 'bg-slate-700/30 border border-dag-accent/30 border-dashed' :
+                          'bg-slate-800/40 border border-slate-700/30'
+                        }`}>
+                          <span className="text-[10px] text-slate-500 font-mono w-4 text-right">{i + 1}</span>
+                          <span className={`text-sm font-medium truncate ${
+                            hasWord ? 'text-white' : 'text-slate-600'
+                          }`}>
+                            {word || '\u00B7\u00B7\u00B7'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Text input for typing/pasting all words */}
+                  <textarea
+                    value={importMnemonic}
+                    onChange={(e) => handleMnemonicChange(e.target.value)}
+                    placeholder="Type or paste your 12-word recovery phrase..."
+                    rows={2}
+                    className="w-full px-3 py-2.5 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-dag-accent/40 focus:ring-1 focus:ring-dag-accent/20 transition-all resize-none font-mono"
+                    autoFocus
+                  />
+
+                  {/* Status messages */}
+                  {mnemonicPartial && (
+                    <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-dag-accent/50 animate-pulse" />
+                      {12 - wordCount} more {12 - wordCount === 1 ? 'word' : 'words'} needed
+                    </p>
+                  )}
+                  {mnemonicComplete && !mnemonicValid && (
+                    <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-500/10 border border-red-500/15">
+                      <Shield className="w-3.5 h-3.5 text-red-400 mt-0.5 flex-shrink-0" />
+                      <p className="text-[11px] text-red-400">Invalid recovery phrase. Please check each word carefully — spelling and order matter.</p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
+            {/* Hex private key import */}
+            {importMode === 'hex' && (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 space-y-3">
+                  <p className="text-[10px] text-dag-muted uppercase tracking-wider">Private Key (64 hex characters)</p>
+                  <input
+                    type="password"
+                    value={importKeyHex}
+                    onChange={(e) => handleHexKeyChange(e.target.value)}
+                    placeholder="Enter or paste your private key..."
+                    className="w-full px-3 py-2.5 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-dag-accent/40 focus:ring-1 focus:ring-dag-accent/20 transition-all font-mono"
+                    autoFocus
+                  />
+                  {importKeyHex.length > 0 && importKeyHex.length < 64 && (
+                    <p className="text-[10px] text-slate-500">{64 - importKeyHex.replace(/\s/g, '').length} characters remaining</p>
+                  )}
+                  {importKeyHex.length > 0 && !/^[0-9a-fA-F\s]*$/.test(importKeyHex) && (
+                    <p className="text-[10px] text-red-400">Private key must contain only hex characters (0-9, a-f)</p>
+                  )}
+                </div>
+
+                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-slate-800/40 border border-slate-700/30">
+                  <Shield className="w-3.5 h-3.5 text-slate-500 mt-0.5 flex-shrink-0" />
+                  <p className="text-[10px] text-slate-500">If you created your wallet with a recovery phrase, use that tab instead. The hex key is for advanced users who backed up the raw key.</p>
+                </div>
+              </div>
+            )}
+
+            {/* Wallet found confirmation */}
             {derivedAddress && (
-              <div className="rounded-xl bg-dag-green/5 border border-dag-green/20 p-3">
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-dag-green flex-shrink-0" />
-                  <div>
-                    <p className="text-[10px] text-dag-muted uppercase tracking-wider">Wallet Found</p>
-                    <p className="text-sm font-mono text-dag-green break-all">{derivedAddress}</p>
+              <div className="rounded-xl bg-dag-green/5 border border-dag-green/25 p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-dag-green/15 flex items-center justify-center flex-shrink-0">
+                    <Wallet className="w-5 h-5 text-dag-green" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-dag-green font-semibold flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5" /> Wallet Found
+                    </p>
+                    <p className="text-xs font-mono text-dag-green/80 break-all mt-0.5">{derivedAddress}</p>
                   </div>
                 </div>
               </div>
@@ -595,6 +686,11 @@ export function WelcomeScreen({
             <button onClick={() => goTo('secure')} disabled={!derivedAddress}
               className="w-full py-3.5 rounded-xl bg-dag-accent text-white font-semibold text-sm hover:bg-dag-accent/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2">
               Continue <ArrowRight className="w-4 h-4" />
+            </button>
+
+            {/* Backup file restore link */}
+            <button onClick={() => goTo('restore')} className="w-full text-center text-xs text-slate-500 hover:text-slate-300 transition-colors py-1">
+              Or restore from a keystore backup file
             </button>
           </div>
         </div>
@@ -821,25 +917,60 @@ export function WelcomeScreen({
   }
 
   // ===== RESTORE =====
+  const restoreBack = () => goTo(hasExisting ? 'unlock' : isImportFlow ? 'import' : 'landing');
+  const jsonLooksValid = (() => {
+    try { const p = JSON.parse(importJson); return p && p.version && p.ciphertext; } catch { return false; }
+  })();
+
   return (
     <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
       <div className="max-w-md w-full space-y-5">
         <div className="flex items-center gap-3">
-          <button onClick={() => goTo(hasExisting ? 'unlock' : 'landing')} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
+          <button onClick={restoreBack} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
             <ArrowRight className="w-4 h-4 rotate-180" />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-white">Restore from Backup</h1>
-            <p className="text-xs text-dag-muted">Paste a previously exported wallet backup</p>
+            <h1 className="text-xl font-bold text-white">Restore from Backup File</h1>
+            <p className="text-xs text-dag-muted">Use a previously downloaded keystore file</p>
           </div>
         </div>
-        <textarea value={importJson} onChange={(e) => setImportJson(e.target.value)}
-          placeholder="Paste your backup JSON here..." rows={6}
-          className={inputCls + ' font-mono text-xs resize-none'} autoFocus />
+
+        <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 space-y-4">
+          <div className="flex items-center gap-3 pb-3 border-b border-slate-700/30">
+            <div className="w-10 h-10 rounded-lg bg-dag-accent/10 flex items-center justify-center flex-shrink-0">
+              <Download className="w-5 h-5 text-dag-accent" />
+            </div>
+            <div>
+              <p className="text-sm text-white font-medium">Keystore JSON</p>
+              <p className="text-[10px] text-slate-500">Paste the contents of your <span className="font-mono text-slate-400">ultradag-*-keystore.json</span> file</p>
+            </div>
+          </div>
+
+          <textarea value={importJson} onChange={(e) => { setImportJson(e.target.value); setError(''); }}
+            placeholder='{"version":1,"kdf":"pbkdf2-sha256",...}'
+            rows={5}
+            className="w-full px-3 py-2.5 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-dag-accent/40 focus:ring-1 focus:ring-dag-accent/20 transition-all resize-none font-mono text-xs"
+            autoFocus
+          />
+
+          {importJson.trim().length > 0 && (
+            <div className={`flex items-center gap-2 text-[10px] ${jsonLooksValid ? 'text-dag-green' : 'text-slate-500'}`}>
+              {jsonLooksValid ? <Check className="w-3 h-3" /> : <span className="w-3 h-3" />}
+              {jsonLooksValid ? 'Valid keystore format detected' : 'Paste the full JSON contents of your backup file'}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-start gap-2.5 p-3 rounded-lg bg-slate-800/40 border border-slate-700/30">
+          <Shield className="w-3.5 h-3.5 text-slate-500 mt-0.5 flex-shrink-0" />
+          <p className="text-[10px] text-slate-500">Your backup is encrypted. After restoring, you'll need to enter the password you used when the wallet was created.</p>
+        </div>
+
         {error && <p className="text-sm text-red-400 text-center">{error}</p>}
-        <button onClick={handleRestore} disabled={loading}
-          className="w-full py-3 rounded-xl bg-dag-accent text-white font-semibold text-sm hover:bg-dag-accent/80 disabled:opacity-50 transition-colors">
-          Restore
+
+        <button onClick={handleRestore} disabled={loading || !jsonLooksValid}
+          className="w-full py-3.5 rounded-xl bg-dag-accent text-white font-semibold text-sm hover:bg-dag-accent/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2">
+          Restore Wallet
         </button>
       </div>
     </div>
