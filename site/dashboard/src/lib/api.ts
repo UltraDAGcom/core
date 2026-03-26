@@ -24,7 +24,7 @@ function loadNetwork(): NetworkType {
     const stored = localStorage.getItem('ultradag_network');
     if (stored === 'mainnet' || stored === 'testnet') return stored;
   } catch {}
-  return 'testnet'; // default
+  return 'mainnet'; // default — matches explorer/network pages
 }
 
 let currentNetwork: NetworkType = loadNetwork();

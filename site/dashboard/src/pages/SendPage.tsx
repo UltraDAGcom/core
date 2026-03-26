@@ -208,13 +208,25 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
             </div>
           </Card>
 
-          {/* Faucet Card (testnet only) */}
-          {network !== 'mainnet' && (
+          {/* Faucet Card */}
+          {network === 'mainnet' ? (
+          <Card>
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold text-white">Fund Your Wallet</h2>
+              <p className="text-sm text-dag-muted">
+                The faucet is only available on testnet. To get UDAG on mainnet, receive it from another wallet or use the bridge.
+              </p>
+              <p className="text-xs text-dag-muted">
+                Switch to testnet in Settings to access the faucet with free test tokens.
+              </p>
+            </div>
+          </Card>
+          ) : (
           <Card>
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-semibold text-white">Testnet Faucet</h2>
-                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-dag-accent/20 text-dag-accent border border-dag-accent/30">
+                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-amber-400/20 text-amber-400 border border-amber-400/30">
                   TESTNET
                 </span>
               </div>

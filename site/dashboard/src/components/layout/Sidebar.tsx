@@ -82,7 +82,7 @@ const sections: { label?: string; items: NavItem[] }[] = [
   {
     label: 'Network',
     items: [
-      { to: '/staking', icon: Coins, label: 'Earn' },
+      { to: '/staking', icon: Coins, label: 'Staking' },
       { to: '/governance', icon: Vote, label: 'Governance' },
       { to: '/council', icon: Users, label: 'Council' },
       { to: '/explorer', icon: Search, label: 'Explorer' },
@@ -179,7 +179,7 @@ export function Sidebar({ open, onClose, network = 'testnet', sessionSecondsLeft
           {sessionSecondsLeft !== undefined && sessionTotalSeconds !== undefined && sessionTotalSeconds > 0 && (
             <SessionIndicator secondsLeft={sessionSecondsLeft} totalSeconds={sessionTotalSeconds} />
           )}
-          <p className={`text-[10px] px-1 ${network === 'mainnet' ? 'text-dag-green' : 'text-slate-500'}`}>
+          <p className={`text-[10px] px-1 font-medium ${network === 'mainnet' ? 'text-dag-green' : 'text-amber-400'}`}>
             {network === 'mainnet' ? 'Mainnet' : 'Testnet'} v0.1
           </p>
         </div>
