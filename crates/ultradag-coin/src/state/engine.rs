@@ -1680,6 +1680,12 @@ impl StateEngine {
             ));
         }
 
+        // Pre-validate bridge nonce BEFORE any state mutations.
+        // This prevents double-debit if the error handler in apply_vertex_with_validators
+        // charges a fee after apply_bridge_lock_tx fails post-debit.
+        let next_nonce = self.bridge_nonce.checked_add(1)
+            .ok_or_else(|| CoinError::ValidationError("bridge nonce overflow".into()))?;
+
         let total = tx.amount.saturating_add(tx.fee);
         let bal = self.balance(&tx.from);
         if bal < total {
@@ -1689,6 +1695,8 @@ impl StateEngine {
                 available: bal,
             });
         }
+
+        // All validation passed — mutate state (no error paths after this point)
         self.debit(&tx.from, total)?;
         self.bridge_reserve = self.bridge_reserve.saturating_add(tx.amount);
         self.increment_nonce(&tx.from);
@@ -1708,10 +1716,9 @@ impl StateEngine {
             current_round,
         );
 
-        // Store attestation
+        // Store attestation and advance nonce (pre-validated above)
         self.bridge_attestations.insert(self.bridge_nonce, attestation.clone());
-        self.bridge_nonce = self.bridge_nonce.checked_add(1)
-            .ok_or_else(|| CoinError::ValidationError("bridge nonce overflow".into()))?;
+        self.bridge_nonce = next_nonce;
 
         // NOTE: validators sign attestations separately via sign_pending_bridge_attestations()
         // during the validator loop, not here. This prevents double-application.

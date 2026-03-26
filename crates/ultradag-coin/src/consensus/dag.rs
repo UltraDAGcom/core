@@ -221,10 +221,15 @@ impl BlockDag {
     /// The caller must ensure parents are truncated to MAX_PARENTS before calling.
     /// Insert a vertex into the DAG without signature verification or equivocation checks.
     ///
-    /// **WARNING**: This method bypasses the safety checks in `try_insert()`.
-    /// Production code should use `try_insert()` instead, which validates signatures,
-    /// enforces MAX_PARENTS, checks for equivocation, and rejects future-round/timestamp
-    /// vertices. This method is retained for test code that constructs pre-validated vertices.
+    /// Insert a pre-validated vertex into the DAG WITHOUT safety checks.
+    ///
+    /// # Safety (logical, not memory)
+    /// This bypasses signature verification, equivocation detection, coinbase validation,
+    /// size limits, and future-round/timestamp checks. Only use in:
+    /// - **Simulation** (`ultradag-sim`): vertices are constructed by the harness
+    /// - **Tests**: vertices are pre-validated by construction
+    ///
+    /// **Production code MUST use `try_insert()` instead.**
     pub fn insert(&mut self, vertex: DagVertex) -> bool {
         let hash = vertex.hash();
 
