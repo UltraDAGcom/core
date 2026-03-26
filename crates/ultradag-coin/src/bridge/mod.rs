@@ -101,7 +101,7 @@ impl BridgeAttestation {
 
     /// Compute the message hash that matches the Solidity contract.
     /// Uses keccak256 with ABI encoding to match Solidity's
-    /// `keccak256(abi.encode("claimWithdrawal", block.chainid, address(this), sender, recipient, amount, depositNonce))`.
+    /// `keccak256(abi.encode("UDAGBridge::claimWithdrawal", block.chainid, address(this), sender, recipient, amount, depositNonce))`.
     ///
     /// ABI encoding pads each argument to 32 bytes. String is encoded as
     /// (offset, length, data padded to 32-byte boundary). Integers are big-endian
@@ -112,7 +112,7 @@ impl BridgeAttestation {
     pub fn solidity_message_hash(&self) -> [u8; 32] {
         use sha3::{Digest, Keccak256};
 
-        // ABI-encode "claimWithdrawal" as a string:
+        // ABI-encode "UDAGBridge::claimWithdrawal" as a string:
         // Slot 0: offset to string data (7 * 32 = 224 = 0xE0) — 7 slots: offset + 6 fixed args
         // Then the fixed args:
         // Slot 1: destination_chain_id (uint256, big-endian, padded to 32 bytes)
@@ -163,14 +163,14 @@ impl BridgeAttestation {
         slot[24..32].copy_from_slice(&self.nonce.to_be_bytes());
         buf.extend_from_slice(&slot);
 
-        // Slot 7: string length = 15
+        // Slot 7: string length = 27 ("UDAGBridge::claimWithdrawal".len())
         let mut slot = [0u8; 32];
-        slot[31] = 15;
+        slot[31] = 27;
         buf.extend_from_slice(&slot);
 
-        // Slot 8: string data "claimWithdrawal" (15 bytes), right-padded
+        // Slot 8: string data "UDAGBridge::claimWithdrawal" (27 bytes), right-padded
         let mut slot = [0u8; 32];
-        slot[..15].copy_from_slice(b"claimWithdrawal");
+        slot[..27].copy_from_slice(b"UDAGBridge::claimWithdrawal");
         buf.extend_from_slice(&slot);
 
         let result = Keccak256::digest(&buf);

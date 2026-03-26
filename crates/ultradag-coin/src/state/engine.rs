@@ -2948,8 +2948,11 @@ impl StateEngine {
         let liquid: u64 = accounts.values().map(|a| a.balance).fold(0, |a, b| a.saturating_add(b));
         let staked: u64 = stake_accounts.values().map(|s| s.staked).fold(0, |a, b| a.saturating_add(b));
         let delegated: u64 = delegation_accounts.values().map(|d| d.delegated).fold(0, |a, b| a.saturating_add(b));
-        let total = liquid.saturating_add(staked).saturating_add(delegated)
-            .saturating_add(treasury_balance).saturating_add(bridge_reserve);
+        let total = liquid.checked_add(staked).and_then(|t| t.checked_add(delegated))
+            .and_then(|t| t.checked_add(treasury_balance)).and_then(|t| t.checked_add(bridge_reserve))
+            .ok_or_else(|| CoinError::SupplyInvariantBroken(
+                "from_parts: supply components overflow u64".into()
+            ))?;
         if total != total_supply {
             return Err(CoinError::SupplyInvariantBroken(format!(
                 "from_parts: liquid={} staked={} delegated={} treasury={} bridge={} sum={} != total_supply={}",
@@ -3099,8 +3102,11 @@ impl StateEngine {
         let liquid: u64 = snapshot.accounts.iter().map(|(_, a)| a.balance).fold(0, |a, b| a.saturating_add(b));
         let staked: u64 = snapshot.stake_accounts.iter().map(|(_, s)| s.staked).fold(0, |a, b| a.saturating_add(b));
         let delegated: u64 = snapshot.delegation_accounts.iter().map(|(_, d)| d.delegated).fold(0, |a, b| a.saturating_add(b));
-        let total = liquid.saturating_add(staked).saturating_add(delegated)
-            .saturating_add(snapshot.treasury_balance).saturating_add(snapshot.bridge_reserve);
+        let total = liquid.checked_add(staked).and_then(|t| t.checked_add(delegated))
+            .and_then(|t| t.checked_add(snapshot.treasury_balance)).and_then(|t| t.checked_add(snapshot.bridge_reserve))
+            .ok_or_else(|| CoinError::SupplyInvariantBroken(
+                "from_snapshot: supply components overflow u64".into()
+            ))?;
         if total != snapshot.total_supply {
             return Err(CoinError::SupplyInvariantBroken(format!(
                 "from_snapshot: liquid={} staked={} delegated={} treasury={} bridge={} sum={} != total_supply={}",
