@@ -1419,16 +1419,24 @@ async fn handle_peer(
                 // Cap incoming rounds to prevent amplification attacks.
                 // Each missing hash generates a GetParents request, so bound total.
                 let capped_rounds = rounds.into_iter().take(1000);
+                // Cap total missing hashes to 256 to prevent amplification:
+                // Without cap, 1000 rounds × 100 hashes = 100K → 3,125 GetParents msgs
                 let missing_hashes: Vec<[u8; 32]> = {
                     let dag_r = dag.read().await;
-                    capped_rounds
-                        .flat_map(|(_, hashes)| hashes.into_iter().take(100))
-                        .filter(|h| dag_r.get(h).is_none())
-                        .collect()
+                    let mut missing = Vec::new();
+                    for (_, hashes) in capped_rounds {
+                        for h in hashes.into_iter().take(100) {
+                            if dag_r.get(&h).is_none() {
+                                missing.push(h);
+                                if missing.len() >= 256 { break; }
+                            }
+                        }
+                        if missing.len() >= 256 { break; }
+                    }
+                    missing
                 };
                 if !missing_hashes.is_empty() {
                     info!("Hash gossip: {} missing vertices from {}, requesting", missing_hashes.len(), peer_addr);
-                    // Request in batches of 32 (matching GetParents cap)
                     for chunk in missing_hashes.chunks(32) {
                         let _ = peers.send_to(&peer_addr, &Message::GetParents { hashes: chunk.to_vec() }).await;
                     }

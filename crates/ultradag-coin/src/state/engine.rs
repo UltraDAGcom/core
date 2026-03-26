@@ -1290,6 +1290,7 @@ impl StateEngine {
         // The applied_validators_per_round map persists across calls to this method,
         // so equivocation is detected regardless of how finality batches are split.
         // This is the ONLY place slashing happens — P2P handlers only broadcast evidence.
+        let mut batch_equivocators: std::collections::HashSet<(crate::Address, u64)> = std::collections::HashSet::new();
         {
             // Track (validator, round) pairs already slashed in this pass to prevent
             // double/triple slashing when both intra-batch and cross-batch detection
@@ -1305,12 +1306,15 @@ impl StateEngine {
                 *batch_seen.entry(key).or_insert(0) += 1;
             }
             for ((validator, round), count) in &batch_seen {
-                if *count > 1 && already_slashed.insert((*validator, *round)) {
-                    tracing::warn!(
-                        "Deterministic slash (intra-batch): validator {} equivocated in round {} ({} vertices)",
-                        validator.to_hex(), round, count
-                    );
-                    self.slash_at_round(validator, *round);
+                if *count > 1 {
+                    batch_equivocators.insert((*validator, *round));
+                    if already_slashed.insert((*validator, *round)) {
+                        tracing::warn!(
+                            "Deterministic slash (intra-batch): validator {} equivocated in round {} ({} vertices)",
+                            validator.to_hex(), round, count
+                        );
+                        self.slash_at_round(validator, *round);
+                    }
                 }
             }
 
@@ -1357,6 +1361,24 @@ impl StateEngine {
             } else if prev_round.is_none() {
                 // First vertex in the batch: process unstake completions for its round
                 self.process_unstake_completions(vertex.round)?;
+            }
+
+            // Skip vertices from validators that equivocated in this batch.
+            // Both equivocating vertices are in the sorted list, but only the first
+            // should be applied — the second is the equivocation. The intra-batch
+            // check already slashed them; applying both vertices' transactions would
+            // execute conflicting tx sets.
+            if batch_equivocators.contains(&(vertex.validator, vertex.round)) {
+                // Check if we already applied one vertex from this validator in this round
+                if let Some(existing) = self.applied_validators_per_round.get(&vertex.round) {
+                    if existing.contains(&vertex.validator) {
+                        tracing::warn!(
+                            "Skipping equivocating vertex from {} round={} (already applied one)",
+                            vertex.validator.to_hex(), vertex.round
+                        );
+                        continue;
+                    }
+                }
             }
 
             let count = 1; // reward splitting now in distribute_round_rewards
@@ -1445,10 +1467,10 @@ impl StateEngine {
             let floor = fin.saturating_sub(1000);
             self.applied_validators_per_round.retain(|round, _| *round >= floor);
 
-            // Prune slashed_events older than PRUNING_HORIZON rounds behind last_finalized_round.
-            // Events are kept long enough for any re-encountered evidence to be caught, then cleaned up.
-            let slash_floor = fin.saturating_sub(1000);
-            self.slashed_events.retain(|(_, round)| *round >= slash_floor);
+            // NOTE: slashed_events is NEVER pruned — it's a permanent idempotency guard.
+            // Equivocation events are rare (bounded by actual Byzantine behavior), so unbounded
+            // growth is not a concern. Pruning would re-enable double-slash after CheckpointSync
+            // re-introduces old equivocating vertices in the suffix.
 
             // Periodic state bloat pruning
             if fin % crate::constants::STATE_PRUNING_INTERVAL == 0 {
