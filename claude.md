@@ -8,6 +8,12 @@
 
 ## Recent Updates (March 2026)
 
+**Security Fixes — Seventeenth Review Pass (March 26, 2026):**
+- **Bug #276 (MEDIUM-HIGH): `slashed_events` pruning enables double-slash** — After 1000 rounds, pruned entries allowed re-slash via CheckpointSync suffix. Fix: `slashed_events` is now PERMANENT (never pruned). Bounded by actual equivocation events (rare).
+- **Bug #277 (MEDIUM): Intra-batch equivocating vertices both applied to state** — Both equivocating vertices' transactions were processed. Fix: `batch_equivocators` set tracks which (validator, round) pairs had equivocation. Second vertex from same pair is skipped with warning log.
+- **Bug #278 (MEDIUM): RoundHashes amplification — 100K missing hashes → 3,125 GetParents** — Capped total missing hashes to 256 (max 8 GetParents messages). Previously 1000 rounds × 100 hashes was uncapped.
+- **Known design tradeoffs:** Bridge first-voter poisoning (disagree-reset works but can be cycled), status cache staleness (monitoring concern), tx_receipts random eviction (display-only, not consensus).
+
 **Final Security Audit — Sixteenth Review Pass (March 26, 2026):**
 - **Verdict: Architecture is solid.** Reviewer verified deferred coinbase, checked arithmetic, deterministic ordering, cross-network replay prevention, multi-layer equivocation detection.
 - **Bug #275 (LOW): Stale bridge hash comment** — Overview comment still said `"claimWithdrawal"` (15 bytes) after the string was changed to `"UDAGBridge::claimWithdrawal"` (27 bytes). Fixed.
