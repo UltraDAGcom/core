@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Coins, Server, Users, ArrowRight, Info, ExternalLink } from 'lucide-react';
+import { Coins, TrendingUp, Shield, ChevronDown, ChevronUp, Server, ExternalLink } from 'lucide-react';
 import { getValidators, getStake, getDelegation, formatUdag, shortAddr, postDelegate, postUndelegate } from '../lib/api';
 import { useKeystore } from '../hooks/useKeystore';
 import { Card } from '../components/shared/Card';
-import { Pagination } from '../components/shared/Pagination';
 import { ValidatorCard } from '../components/staking/ValidatorCard';
+import { Pagination } from '../components/shared/Pagination';
 
 const PER_PAGE = 10;
+const SATS = 100_000_000;
 
 interface ValidatorInfo {
   address: string;
@@ -15,17 +16,6 @@ interface ValidatorInfo {
   delegator_count: number;
   commission_percent: number;
   is_active?: boolean;
-}
-
-interface StakeInfo {
-  address: string;
-  name: string;
-  staked: number;
-  staked_udag: number;
-  effective_stake: number;
-  commission_percent: number;
-  is_active_validator: boolean;
-  unlock_at_round: number | null;
 }
 
 interface DelegationInfo {
@@ -37,22 +27,43 @@ interface DelegationInfo {
   unlock_at_round: number | null;
 }
 
+/** Pick the best validator for auto-delegation:
+ *  1. Active validators only
+ *  2. Lowest commission first
+ *  3. Tie-break: lowest effective_stake (helps decentralization)
+ */
+function pickBestValidator(validators: ValidatorInfo[]): ValidatorInfo | null {
+  const active = validators.filter(v => v.is_active);
+  if (active.length === 0) return null;
+  const sorted = [...active].sort((a, b) => {
+    if (a.commission_percent !== b.commission_percent) return a.commission_percent - b.commission_percent;
+    return a.effective_stake - b.effective_stake; // prefer less concentrated
+  });
+  return sorted[0];
+}
+
 export function StakingPage() {
   const { wallets, unlocked } = useKeystore();
   const [validators, setValidators] = useState<ValidatorInfo[]>([]);
   const [totalStaked, setTotalStaked] = useState(0);
   const [totalDelegated, setTotalDelegated] = useState(0);
   const [validatorCount, setValidatorCount] = useState(0);
-  const [stakes, setStakes] = useState<StakeInfo[]>([]);
   const [delegations, setDelegations] = useState<DelegationInfo[]>([]);
-  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [delegateTarget, setDelegateTarget] = useState<string | null>(null);
-  const [delegateAmount, setDelegateAmount] = useState('');
-  const [delegateWalletIdx, setDelegateWalletIdx] = useState(0);
-  const [delegateLoading, setDelegateLoading] = useState(false);
-  const [delegateError, setDelegateError] = useState('');
-  const [delegateSuccess, setDelegateSuccess] = useState('');
+
+  // Simple stake form
+  const [amount, setAmount] = useState('');
+  const [walletIdx, setWalletIdx] = useState(0);
+  const [stakeLoading, setStakeLoading] = useState(false);
+  const [stakeError, setStakeError] = useState('');
+  const [stakeSuccess, setStakeSuccess] = useState('');
+
+  // Advanced mode
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [customValidator, setCustomValidator] = useState<string | null>(null);
+  const [advancedPage, setAdvancedPage] = useState(1);
+
+  // Undelegate
   const [undelegateLoading, setUndelegateLoading] = useState('');
   const [undelegateError, setUndelegateError] = useState('');
 
@@ -69,32 +80,18 @@ export function StakingPage() {
       } else {
         setValidatorCount(list.length);
       }
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
 
     if (unlocked && wallets.length > 0) {
-      const stakeResults: StakeInfo[] = [];
       const delResults: DelegationInfo[] = [];
       for (const w of wallets) {
-        try {
-          const s = await getStake(w.address);
-          if (s.staked > 0 || s.unlock_at_round) {
-            stakeResults.push({ address: w.address, name: w.name, ...s });
-          }
-        } catch {
-          /* no stake */
-        }
         try {
           const d = await getDelegation(w.address);
           if (d.delegated > 0 || d.is_undelegating) {
             delResults.push({ address: w.address, name: w.name, ...d });
           }
-        } catch {
-          /* no delegation */
-        }
+        } catch { /* no delegation */ }
       }
-      setStakes(stakeResults);
       setDelegations(delResults);
     }
     setLoading(false);
@@ -106,30 +103,30 @@ export function StakingPage() {
     return () => clearInterval(interval);
   }, [refresh]);
 
-  const totalPages = Math.max(1, Math.ceil(validators.length / PER_PAGE));
-  const pageValidators = validators.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  const bestValidator = pickBestValidator(validators);
+  const targetValidator = customValidator || bestValidator?.address || null;
 
-  const handleDelegate = async () => {
-    const wallet = wallets[delegateWalletIdx];
-    if (!wallet || !delegateTarget) return;
-    const sats = Math.floor(parseFloat(delegateAmount) * 100_000_000);
-    if (isNaN(sats) || sats < 100 * 100_000_000) {
-      setDelegateError('Minimum delegation is 100 UDAG');
+  const handleStake = async () => {
+    const wallet = wallets[walletIdx];
+    if (!wallet || !targetValidator) return;
+    const sats = Math.floor(parseFloat(amount) * SATS);
+    if (isNaN(sats) || sats < 100 * SATS) {
+      setStakeError('Minimum is 100 UDAG');
       return;
     }
-    setDelegateLoading(true);
-    setDelegateError('');
-    setDelegateSuccess('');
+    setStakeLoading(true);
+    setStakeError('');
+    setStakeSuccess('');
     try {
-      await postDelegate({ secret_key: wallet.secret_key, validator: delegateTarget, amount: sats });
-      setDelegateSuccess('Delegation submitted');
-      setDelegateTarget(null);
-      setDelegateAmount('');
+      await postDelegate({ secret_key: wallet.secret_key, validator: targetValidator, amount: sats });
+      setStakeSuccess(`${amount} UDAG staked successfully!`);
+      setAmount('');
+      setCustomValidator(null);
       refresh();
     } catch (e: unknown) {
-      setDelegateError(e instanceof Error ? e.message : 'Delegation failed');
+      setStakeError(e instanceof Error ? e.message : 'Staking failed');
     } finally {
-      setDelegateLoading(false);
+      setStakeLoading(false);
     }
   };
 
@@ -142,20 +139,23 @@ export function StakingPage() {
       await postUndelegate({ secret_key: wallet.secret_key });
       refresh();
     } catch (e: unknown) {
-      setUndelegateError(e instanceof Error ? e.message : 'Undelegate failed');
+      setUndelegateError(e instanceof Error ? e.message : 'Unstaking failed');
     } finally {
       setUndelegateLoading('');
     }
   };
 
+  const totalPages = Math.max(1, Math.ceil(validators.length / PER_PAGE));
+  const pageValidators = validators.slice((advancedPage - 1) * PER_PAGE, advancedPage * PER_PAGE);
+
   return (
     <div className="space-y-6 animate-page-enter">
       <div>
-        <h1 className="text-2xl font-bold text-white">Earn Rewards</h1>
-        <p className="text-sm text-dag-muted mt-1">Delegate UDAG to validators and earn passive staking rewards</p>
+        <h1 className="text-2xl font-bold text-white">Staking</h1>
+        <p className="text-sm text-dag-muted mt-1">Stake UDAG to earn passive rewards — no node required</p>
       </div>
 
-      {/* Stats row */}
+      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         <div className="rounded-lg bg-dag-card border border-dag-border p-4">
           <span className="text-dag-muted text-xs block mb-1">Total Staked</span>
@@ -171,224 +171,224 @@ export function StakingPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column: delegate + info */}
-        <div className="space-y-4">
-          {/* Delegate form — shown when a validator is selected */}
-          {delegateTarget ? (
-            <Card title={`Delegate to ${shortAddr(delegateTarget)}`}>
-              <div className="space-y-3">
-                <label className="block">
-                  <span className="text-sm text-dag-muted">Wallet</span>
-                  <select
-                    value={delegateWalletIdx}
-                    onChange={e => setDelegateWalletIdx(Number(e.target.value))}
-                    className="mt-1 block w-full rounded bg-dag-surface border border-dag-border px-3 py-2 text-sm text-white"
-                  >
-                    {wallets.map((w, i) => (
-                      <option key={i} value={i}>{w.name} ({shortAddr(w.address)})</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="text-sm text-dag-muted">Amount (UDAG, min 100)</span>
-                  <input
-                    type="number"
-                    min="100"
-                    step="1"
-                    value={delegateAmount}
-                    onChange={e => setDelegateAmount(e.target.value)}
-                    placeholder="100"
-                    className="mt-1 block w-full rounded bg-dag-surface border border-dag-border px-3 py-2 text-sm text-white"
-                  />
-                </label>
-                {delegateError && <p className="text-sm text-dag-red">{delegateError}</p>}
-                {delegateSuccess && <p className="text-sm text-dag-green">{delegateSuccess}</p>}
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleDelegate}
-                    disabled={delegateLoading}
-                    className="flex-1 py-2 rounded bg-dag-accent text-white font-medium text-sm hover:bg-dag-accent/90 disabled:opacity-50"
-                  >
-                    {delegateLoading ? 'Submitting...' : 'Delegate'}
-                  </button>
-                  <button
-                    onClick={() => { setDelegateTarget(null); setDelegateError(''); setDelegateSuccess(''); }}
-                    className="px-4 py-2 rounded bg-dag-surface border border-dag-border text-dag-muted text-sm hover:text-white"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </Card>
-          ) : (
-            /* How it works — shown when no validator selected */
-            <Card title="How Delegation Works">
-              <div className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-dag-accent/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Users className="w-4 h-4 text-dag-accent" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-white font-medium">Choose a validator</p>
-                    <p className="text-xs text-dag-muted mt-0.5">Select from the list and click "Delegate". Your UDAG backs their stake.</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-dag-green/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Coins className="w-4 h-4 text-dag-green" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-white font-medium">Earn passive rewards</p>
-                    <p className="text-xs text-dag-muted mt-0.5">Rewards are proportional to your delegation, minus the validator's commission.</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-dag-yellow/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Info className="w-4 h-4 text-dag-yellow" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-white font-medium">Minimum 100 UDAG</p>
-                    <p className="text-xs text-dag-muted mt-0.5">Undelegating has a ~2.8 hour cooldown before funds are returned.</p>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          )}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* ── LEFT: STAKE FORM ── */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Primary one-click staking card */}
+          <div className="rounded-xl bg-gradient-to-b from-dag-accent/5 to-transparent border border-dag-accent/20 p-6 space-y-5">
+            <div className="space-y-1">
+              <h2 className="text-lg font-bold text-white">Stake UDAG</h2>
+              <p className="text-xs text-dag-muted">Enter an amount and we'll stake it with the best validator automatically.</p>
+            </div>
 
-          {/* Run a validator info */}
-          <div className="rounded-lg bg-dag-surface/50 border border-dag-border/50 p-4">
-            <div className="flex items-start gap-3">
-              <Server className="w-4 h-4 text-dag-muted mt-0.5 flex-shrink-0" />
+            {!unlocked ? (
+              <p className="text-sm text-dag-muted py-4 text-center">Unlock your wallet to stake.</p>
+            ) : (
+              <div className="space-y-4">
+                {/* Wallet selector (only if multiple) */}
+                {wallets.length > 1 && (
+                  <div>
+                    <label htmlFor="stake-wallet" className="text-[10px] text-dag-muted uppercase tracking-wider block mb-1">Wallet</label>
+                    <select id="stake-wallet" value={walletIdx} onChange={e => setWalletIdx(Number(e.target.value))}
+                      className="w-full rounded-lg bg-dag-surface border border-dag-border px-3 py-2.5 text-sm text-white">
+                      {wallets.map((w, i) => (
+                        <option key={i} value={i}>{w.name} ({shortAddr(w.address)})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Amount input */}
+                <div>
+                  <label htmlFor="stake-amount" className="text-[10px] text-dag-muted uppercase tracking-wider block mb-1">Amount</label>
+                  <div className="relative">
+                    <input
+                      id="stake-amount"
+                      type="number"
+                      min="100"
+                      step="1"
+                      value={amount}
+                      onChange={e => { setAmount(e.target.value); setStakeError(''); setStakeSuccess(''); }}
+                      placeholder="100"
+                      className="w-full rounded-lg bg-dag-surface border border-dag-border px-3 py-3 pr-16 text-white text-lg font-mono"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-dag-muted text-sm">UDAG</span>
+                  </div>
+                  <p className="text-[10px] text-dag-muted mt-1.5">Minimum 100 UDAG</p>
+                </div>
+
+                {/* Auto-selected validator info */}
+                {targetValidator && (
+                  <div className="rounded-lg bg-dag-surface/50 border border-dag-border/50 p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] text-dag-muted uppercase tracking-wider">
+                          {customValidator ? 'Selected validator' : 'Auto-selected validator'}
+                        </p>
+                        <p className="text-sm text-white font-mono mt-0.5">{shortAddr(targetValidator)}</p>
+                      </div>
+                      {bestValidator && !customValidator && (
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-dag-green/15 text-dag-green border border-dag-green/20">
+                          {bestValidator.commission_percent}% commission
+                        </span>
+                      )}
+                    </div>
+                    {customValidator && (
+                      <button onClick={() => setCustomValidator(null)} className="text-[10px] text-dag-accent hover:underline mt-1">
+                        Use auto-selection instead
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {!targetValidator && validators.length === 0 && !loading && (
+                  <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 p-3">
+                    <p className="text-xs text-amber-400">No validators available yet. Staking will be enabled when validators join the network.</p>
+                  </div>
+                )}
+
+                {stakeError && (
+                  <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-2.5">
+                    <p className="text-sm text-red-400">{stakeError}</p>
+                  </div>
+                )}
+                {stakeSuccess && (
+                  <div className="rounded-lg bg-dag-green/10 border border-dag-green/20 p-2.5">
+                    <p className="text-sm text-dag-green">{stakeSuccess}</p>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleStake}
+                  disabled={stakeLoading || !targetValidator || !amount}
+                  className="w-full py-3 rounded-xl bg-dag-accent text-white font-semibold text-sm hover:bg-dag-accent/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                >
+                  {stakeLoading ? 'Staking...' : 'Stake'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* How it works */}
+          <div className="rounded-lg bg-dag-surface/30 border border-dag-border/50 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-dag-green" />
+              <p className="text-xs text-white font-medium">How staking works</p>
+            </div>
+            <div className="space-y-2 text-[11px] text-dag-muted leading-relaxed">
+              <p>Your UDAG is delegated to a validator who secures the network. You earn rewards proportional to your stake, minus the validator's commission.</p>
+              <p>Unstaking has a ~2.8 hour cooldown before your funds are returned.</p>
+            </div>
+          </div>
+
+          {/* Validator info */}
+          <div className="rounded-lg bg-dag-surface/30 border border-dag-border/50 p-3">
+            <div className="flex items-start gap-2.5">
+              <Server className="w-3.5 h-3.5 text-dag-muted mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-xs text-dag-muted">
-                  <span className="text-slate-300 font-medium">Want to run a validator?</span> Staking requires running a node with the CLI.
-                  Use <code className="text-dag-accent text-[10px]">--auto-stake</code> when starting your node.
+                <p className="text-[11px] text-dag-muted">
+                  <span className="text-slate-400">Run a validator?</span> Requires CLI setup with <code className="text-dag-accent text-[10px]">--auto-stake</code>.
                 </p>
-                <a href="/docs.html#staking" className="text-xs text-dag-accent hover:underline mt-1 inline-flex items-center gap-1">
-                  Validator setup guide <ExternalLink className="w-3 h-3" />
+                <a href="/docs.html#staking" className="text-[11px] text-dag-accent hover:underline inline-flex items-center gap-1 mt-0.5">
+                  Setup guide <ExternalLink className="w-2.5 h-2.5" />
                 </a>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right columns: delegations + validators */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Your validator stake (read-only) */}
-          {unlocked && stakes.length > 0 && (
-            <Card title="Your Validator Stake">
-              <div className="space-y-3">
-                {stakes.map(s => (
-                  <div key={s.address} className="rounded bg-dag-surface border border-dag-border p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-white">{s.name}</span>
-                      {s.is_active_validator ? (
-                        <span className="text-xs px-2 py-0.5 rounded bg-dag-green/20 text-dag-green border border-dag-green/40">
-                          Active Validator
-                        </span>
-                      ) : (
-                        <span className="text-xs px-2 py-0.5 rounded bg-slate-700 text-dag-muted">
-                          {s.unlock_at_round ? 'Unstaking' : 'Observer'}
-                        </span>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-sm">
-                      <div>
-                        <span className="text-dag-muted block text-xs">Staked</span>
-                        <span className="text-white">{formatUdag(s.staked)} UDAG</span>
-                      </div>
-                      <div>
-                        <span className="text-dag-muted block text-xs">Effective Stake</span>
-                        <span className="text-white">{formatUdag(s.effective_stake ?? 0)} UDAG</span>
-                      </div>
-                      <div>
-                        <span className="text-dag-muted block text-xs">Commission</span>
-                        <span className="text-white">{s.commission_percent ?? 10}%</span>
-                      </div>
-                      <div>
-                        <span className="text-dag-muted block text-xs">Status</span>
-                        <span className={s.unlock_at_round ? 'text-dag-yellow' : 'text-dag-green'}>
-                          {s.unlock_at_round ? `Cooldown (round ${s.unlock_at_round})` : 'Active'}
-                        </span>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-dag-muted mt-2">Manage your validator stake via the CLI — <code className="text-dag-accent">ultradag-node --unstake</code></p>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* Your delegations */}
+        {/* ── RIGHT: DELEGATIONS + VALIDATORS ── */}
+        <div className="lg:col-span-3 space-y-6">
+          {/* Your active delegations */}
           {unlocked && delegations.length > 0 && (
-            <Card title="Your Delegations">
+            <Card title="Your Staked UDAG">
               <div className="space-y-3">
                 {delegations.map(d => (
-                  <div key={d.address} className="rounded bg-dag-surface border border-dag-border p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-white">{d.name}</span>
-                      <span className={`text-xs ${d.is_undelegating ? 'text-dag-yellow' : 'text-dag-accent'}`}>
-                        {d.is_undelegating ? `Undelegating (round ${d.unlock_at_round})` : 'Earning rewards'}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div key={d.address} className="rounded-lg bg-dag-surface border border-dag-border p-4">
+                    <div className="flex items-center justify-between mb-3">
                       <div>
-                        <span className="text-dag-muted block text-xs">Delegated</span>
-                        <span className="text-white">{formatUdag(d.delegated)} UDAG</span>
+                        <span className="text-sm font-medium text-white">{d.name}</span>
+                        <span className={`ml-2 text-[10px] px-2 py-0.5 rounded-full ${
+                          d.is_undelegating ? 'bg-amber-400/15 text-amber-400' : 'bg-dag-green/15 text-dag-green'
+                        }`}>
+                          {d.is_undelegating ? 'Unstaking' : 'Earning rewards'}
+                        </span>
                       </div>
-                      <div>
-                        <span className="text-dag-muted block text-xs">Validator</span>
-                        <span className="text-white font-mono text-xs">{shortAddr(d.validator)}</span>
-                      </div>
+                      <span className="text-lg font-bold text-white font-mono">{formatUdag(d.delegated)} <span className="text-sm text-dag-muted font-normal">UDAG</span></span>
                     </div>
-                    {!d.is_undelegating && (
-                      <button
-                        onClick={() => handleUndelegate(d.address)}
-                        disabled={undelegateLoading === d.address}
-                        className="mt-2 text-sm px-3 py-1 rounded bg-dag-red/20 text-dag-red border border-dag-red/40 hover:bg-dag-red/30 disabled:opacity-50"
-                      >
-                        {undelegateLoading === d.address ? 'Submitting...' : 'Undelegate'}
-                      </button>
-                    )}
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-dag-muted">Validator: <span className="font-mono text-slate-400">{shortAddr(d.validator)}</span></span>
+                      {d.is_undelegating ? (
+                        <span className="text-amber-400">Cooldown until round {d.unlock_at_round}</span>
+                      ) : (
+                        <button
+                          onClick={() => handleUndelegate(d.address)}
+                          disabled={undelegateLoading === d.address}
+                          className="px-3 py-1 rounded bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 disabled:opacity-50 transition-colors"
+                        >
+                          {undelegateLoading === d.address ? 'Unstaking...' : 'Unstake'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
-                {undelegateError && <p className="text-sm text-dag-red mt-2">{undelegateError}</p>}
+                {undelegateError && <p className="text-sm text-red-400 mt-2">{undelegateError}</p>}
               </div>
             </Card>
           )}
 
-          {/* Validator list */}
-          <Card title={`Validators (${validators.length})`}>
-            {loading ? (
-              <p className="text-dag-muted text-sm">Loading validators...</p>
-            ) : validators.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mb-4">
-                  <Coins className="w-7 h-7 text-purple-400" />
-                </div>
-                <h4 className="text-white font-medium mb-1">No validators yet</h4>
-                <p className="text-sm text-dag-muted max-w-xs">Validators join by running a node and staking via the CLI. Once active, you can delegate to them here.</p>
+          {/* Advanced: choose your own validator */}
+          <div className="rounded-lg bg-dag-surface/30 border border-dag-border/50 overflow-hidden">
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="w-full flex items-center justify-between p-4 text-left hover:bg-dag-surface/50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-dag-muted" />
+                <span className="text-sm text-slate-300 font-medium">Choose your own validator</span>
+                <span className="text-[10px] text-dag-muted">Advanced</span>
               </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {pageValidators.map(v => (
-                    <ValidatorCard
-                      key={v.address}
-                      address={v.address}
-                      effective_stake={v.effective_stake}
-                      delegator_count={v.delegator_count}
-                      commission_percent={v.commission_percent}
-                      is_active={v.is_active || false}
-                      onDelegate={unlocked && wallets.length > 0 ? () => setDelegateTarget(v.address) : undefined}
-                    />
-                  ))}
-                </div>
-                <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
-              </>
+              {showAdvanced ? <ChevronUp className="w-4 h-4 text-dag-muted" /> : <ChevronDown className="w-4 h-4 text-dag-muted" />}
+            </button>
+
+            {showAdvanced && (
+              <div className="px-4 pb-4 space-y-3">
+                <p className="text-xs text-dag-muted">
+                  Select a specific validator to stake with instead of automatic selection. Consider commission rate, uptime, and stake concentration.
+                </p>
+                {loading ? (
+                  <p className="text-sm text-dag-muted py-4 text-center">Loading validators...</p>
+                ) : validators.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Coins className="w-8 h-8 text-purple-400/50 mx-auto mb-2" />
+                    <p className="text-sm text-dag-muted">No validators yet</p>
+                    <p className="text-xs text-dag-muted mt-1">Validators join by running a node with the CLI</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {pageValidators.map(v => (
+                        <ValidatorCard
+                          key={v.address}
+                          address={v.address}
+                          effective_stake={v.effective_stake}
+                          delegator_count={v.delegator_count}
+                          commission_percent={v.commission_percent}
+                          is_active={v.is_active || false}
+                          onDelegate={unlocked && wallets.length > 0 ? () => {
+                            setCustomValidator(v.address);
+                            setShowAdvanced(false);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          } : undefined}
+                        />
+                      ))}
+                    </div>
+                    <Pagination currentPage={advancedPage} totalPages={totalPages} onPageChange={setAdvancedPage} />
+                  </>
+                )}
+              </div>
             )}
-          </Card>
+          </div>
         </div>
       </div>
     </div>
