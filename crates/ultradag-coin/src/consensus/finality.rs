@@ -160,8 +160,8 @@ impl FinalityTracker {
                                     || dag.get(p).is_some_and(|pv| {
                                         let is_byz = dag.is_byzantine(&pv.validator);
                                         // Non-Byzantine: 100-round escape. Byzantine: 200-round escape.
-                                        let threshold = if is_byz { byzantine_stuck_threshold } else { stuck_threshold };
-                                        pv.round < threshold
+                                        let round_threshold = if is_byz { byzantine_stuck_threshold } else { stuck_threshold };
+                                        pv.round < round_threshold
                                     })
                             });
 
@@ -212,8 +212,8 @@ impl FinalityTracker {
                                     || dag.get(p).is_some_and(|pv| {
                                         let is_byz = dag.is_byzantine(&pv.validator);
                                         // Non-Byzantine: 100-round escape. Byzantine: 200-round escape.
-                                        let threshold = if is_byz { byzantine_stuck_threshold } else { stuck_threshold };
-                                        pv.round < threshold
+                                        let round_threshold = if is_byz { byzantine_stuck_threshold } else { stuck_threshold };
+                                        pv.round < round_threshold
                                     })
                             });
                         if parents_ok {

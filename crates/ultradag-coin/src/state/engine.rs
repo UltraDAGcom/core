@@ -1337,10 +1337,6 @@ impl StateEngine {
             }
         }
 
-        // RACE CONDITION FIX: Create snapshot before applying for atomic verification
-        // Note: snapshot_before is used for future atomic rollback implementation
-        let _snapshot_before = StateSnapshot::from_engine(self);
-
         // Group vertices by round. Update last_finalized_round only BETWEEN rounds.
         // Rewards distributed once per completed round via distribute_round_rewards().
         // DETERMINISM: tick_governance runs at the boundary between round N and N+1,
@@ -1787,9 +1783,9 @@ impl StateEngine {
         let stored_params = self.bridge_release_params.get(&params_key).cloned();
         if let Some((stored_recipient, stored_amount)) = stored_params {
             if tx.recipient != stored_recipient || tx.amount != stored_amount {
-                // Disagreement — increment nonce but don't add to agreeing voter set.
+                // Disagreement — don't add to agreeing voter set.
+                // Nonce increment is handled by the outer error handler in apply_vertex_with_validators.
                 // Track disagreements separately to detect poisoned first-voter params.
-                self.increment_nonce(&tx.from);
                 let disagree_count = self.bridge_release_disagree_count
                     .entry(nonce_key).or_insert(0);
                 *disagree_count = disagree_count.saturating_add(1);
@@ -1948,16 +1944,17 @@ impl StateEngine {
             }
         }
         for (addr, amount) in &to_return {
+            // Credit first, then zero the stake. If credit fails, stake remains intact.
+            self.credit(addr, *amount).map_err(|e| {
+                CoinError::SupplyInvariantBroken(format!(
+                    "process_unstake_completions: failed to credit {} sats to {} after unstake: {}. \
+                     Stake is still intact — retry may succeed.",
+                    amount, addr.to_hex(), e
+                ))
+            })?;
             if let Some(stake) = self.stake_accounts.get_mut(addr) {
                 stake.staked = 0;
                 stake.unlock_at_round = None;
-                self.credit(addr, *amount).map_err(|e| {
-                    CoinError::SupplyInvariantBroken(format!(
-                        "process_unstake_completions: failed to credit {} sats to {} after unstake: {}. \
-                         Stake was already zeroed — funds are destroyed.",
-                        amount, addr.to_hex(), e
-                    ))
-                })?;
             }
             // Remove empty stake account to prevent unbounded growth.
             // Safe: stake_of() returns 0 for missing entries, stake_account() returns None,

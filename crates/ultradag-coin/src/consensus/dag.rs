@@ -140,7 +140,7 @@ pub struct DagMemoryStats {
     pub byzantine_validators_count: usize,
     /// Number of entries in the temporary equivocation_evidence map.
     pub equivocation_evidence_count: usize,
-    /// Number of validators with permanent evidence in evidence_store.
+    /// Number of validators with evidence in evidence_store.
     pub evidence_store_validators: usize,
     /// Total number of evidence entries in evidence_store.
     pub evidence_store_entries: usize,
@@ -159,8 +159,8 @@ pub struct DagMemoryStats {
 /// New nodes sync from the pruned state via snapshots.
 /// 
 /// # Equivocation Evidence
-/// Evidence of Byzantine behavior is stored permanently in `evidence_store`, separate from
-/// the prunable DAG vertices. This ensures slashing proofs remain available indefinitely.
+/// Evidence of Byzantine behavior is stored in `evidence_store`, separate from
+/// the prunable DAG vertices. Both are pruned by round during DAG pruning.
 pub struct BlockDag {
     /// All vertices by hash.
     vertices: HashMap<[u8; 32], DagVertex>,
@@ -175,10 +175,10 @@ pub struct BlockDag {
     /// Byzantine validators detected via equivocation.
     byzantine_validators: HashSet<Address>,
     /// Equivocation evidence: (validator, round) -> [vertex1_hash, vertex2_hash]
-    /// NOTE: This is the old temporary store. Use evidence_store for permanent retention.
+    /// NOTE: This is the old temporary store. evidence_store provides more complete tracking.
     equivocation_evidence: HashMap<(Address, u64), [[u8; 32]; 2]>,
-    /// Permanent equivocation evidence store (survives pruning).
-    /// Multiple equivocations per validator are tracked.
+    /// Equivocation evidence store. Entries older than the pruning floor are
+    /// cleaned up alongside DAG pruning. Multiple equivocations per validator are tracked.
     evidence_store: HashMap<Address, Vec<EquivocationEvidence>>,
     /// Rejected equivocation vertices stored for evidence broadcasting.
     /// These vertices were NOT inserted into the DAG but are needed to prove equivocation.
@@ -656,7 +656,7 @@ impl BlockDag {
 
     /// Store equivocation evidence (two vertices from same validator, same round).
     /// Returns true if this is new evidence.
-    /// Evidence is stored both in the temporary map and the permanent evidence_store.
+    /// Evidence is stored in both the temporary map and evidence_store.
     pub fn store_equivocation_evidence(
         &mut self,
         validator: Address,
@@ -670,7 +670,7 @@ impl BlockDag {
         }
         self.equivocation_evidence.insert(key, [vertex1_hash, vertex2_hash]);
         
-        // Also store in permanent evidence_store (survives pruning)
+        // Also store in evidence_store (pruned by round alongside DAG pruning)
         let entries = self.evidence_store.entry(validator).or_default();
         // Avoid duplicate evidence for the same round
         if !entries.iter().any(|e| e.round == round) {
@@ -687,12 +687,12 @@ impl BlockDag {
     }
 
     /// Get equivocation evidence for a validator in a specific round.
-    /// Checks both the prunable `equivocation_evidence` map and the permanent `evidence_store`.
+    /// Checks both the `equivocation_evidence` map and `evidence_store`.
     pub fn get_equivocation_evidence(&self, validator: &Address, round: u64) -> Option<[[u8; 32]; 2]> {
         if let Some(hashes) = self.equivocation_evidence.get(&(*validator, round)) {
             return Some(*hashes);
         }
-        // Fallback: check permanent evidence_store (survives pruning)
+        // Fallback: check evidence_store
         if let Some(evidences) = self.evidence_store.get(validator) {
             for ev in evidences {
                 if ev.round == round {
@@ -703,12 +703,12 @@ impl BlockDag {
         None
     }
 
-    /// Get permanent equivocation evidence for a validator (survives pruning).
+    /// Get equivocation evidence for a validator from the evidence_store.
     pub fn get_permanent_evidence(&self, validator: &Address) -> Option<&[EquivocationEvidence]> {
         self.evidence_store.get(validator).map(|v| v.as_slice())
     }
 
-    /// Get all permanent equivocation evidence.
+    /// Get all equivocation evidence from the evidence_store.
     pub fn all_evidence(&self) -> Vec<&EquivocationEvidence> {
         self.evidence_store.values().flat_map(|v| v.iter()).collect()
     }
@@ -849,7 +849,7 @@ impl BlockDag {
         self.equivocation_vertices.retain(|_, v| v.round >= new_floor);
 
         // Prune old equivocation evidence entries (keep only recent rounds)
-        // Evidence is still permanently stored in evidence_store for slashing proofs
+        // Old evidence map pruned by round (evidence_store pruned below)
         self.equivocation_evidence.retain(|(_, round), _| *round >= new_floor);
 
         // Prune old evidence entries (keep evidence for validators who equivocated in recent rounds)

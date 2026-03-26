@@ -156,14 +156,18 @@ pub fn dev_address() -> crate::address::Address {
         if let Ok(key_hex) = std::env::var("ULTRADAG_DEV_KEY") {
             if key_hex.len() == 64 {
                 let mut bytes = [0u8; 32];
+                let mut valid = true;
                 for (i, chunk) in key_hex.as_bytes().chunks(2).enumerate() {
                     if let Ok(hex_str) = std::str::from_utf8(chunk) {
                         if let Ok(b) = u8::from_str_radix(hex_str, 16) {
                             bytes[i] = b;
-                        }
-                    }
+                        } else { valid = false; break; }
+                    } else { valid = false; break; }
                 }
-                return crate::address::SecretKey::from_bytes(bytes).address();
+                if valid {
+                    return crate::address::SecretKey::from_bytes(bytes).address();
+                }
+                // Invalid hex in ULTRADAG_DEV_KEY — fall through to testnet fallback
             }
         }
 

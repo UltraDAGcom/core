@@ -1092,8 +1092,8 @@ ultradag_banned_ips {ban_count}
                 let tx_hash = tx.hash();
 
                 // Insert into mempool while still holding the lock
-                if !mp.insert(tx.clone()) {
-                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                if let Err(reason) = mp.insert_with_reason(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, reason));
                 }
 
                 (tx, tx_hash, nonce)
@@ -1323,8 +1323,8 @@ ultradag_banned_ips {ban_count}
                 let tx = Transaction::Transfer(transfer);
                 let tx_hash = tx.hash();
 
-                if !mp.insert(tx.clone()) {
-                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                if let Err(reason) = mp.insert_with_reason(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, reason));
                 }
 
                 (tx, tx_hash, nonce)
@@ -1434,8 +1434,8 @@ ultradag_banned_ips {ban_count}
                 let tx = Transaction::Stake(stake_tx);
                 let tx_hash = tx.hash();
 
-                if !mp.insert(tx.clone()) {
-                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                if let Err(reason) = mp.insert_with_reason(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, reason));
                 }
 
                 (tx, tx_hash, nonce)
@@ -1515,8 +1515,8 @@ ultradag_banned_ips {ban_count}
                 let tx = Transaction::Unstake(unstake_tx);
                 let tx_hash = tx.hash();
 
-                if !mp.insert(tx.clone()) {
-                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                if let Err(reason) = mp.insert_with_reason(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, reason));
                 }
 
                 (tx, tx_hash, nonce)
@@ -1772,8 +1772,8 @@ ultradag_banned_ips {ban_count}
                 let tx_hash = tx.hash();
 
                 // Insert into mempool while still holding the lock
-                if !mp.insert(tx.clone()) {
-                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                if let Err(reason) = mp.insert_with_reason(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, reason));
                 }
 
                 (tx, tx_hash, nonce)
@@ -1895,8 +1895,8 @@ ultradag_banned_ips {ban_count}
                 let tx = Transaction::BridgeRelease(release_tx);
                 let tx_hash = tx.hash();
 
-                if !mp.insert(tx.clone()) {
-                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                if let Err(reason) = mp.insert_with_reason(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, reason));
                 }
 
                 (tx, tx_hash, pending_nonce)
@@ -2124,8 +2124,8 @@ ultradag_banned_ips {ban_count}
                 let tx = Transaction::CreateProposal(create_tx);
                 let tx_hash = tx.hash();
 
-                if !mp.insert(tx.clone()) {
-                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                if let Err(reason) = mp.insert_with_reason(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, reason));
                 }
 
                 (tx, tx_hash, proposal_id)
@@ -2229,8 +2229,8 @@ ultradag_banned_ips {ban_count}
                 let tx = Transaction::Vote(vote_tx);
                 let tx_hash = tx.hash();
 
-                if !mp.insert(tx.clone()) {
-                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                if let Err(reason) = mp.insert_with_reason(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, reason));
                 }
 
                 (tx, tx_hash)
@@ -2647,8 +2647,8 @@ ultradag_banned_ips {ban_count}
                 }
 
                 // Insert into mempool while still holding the locks
-                if !mp.insert(tx.clone()) {
-                    return Ok(error_response(StatusCode::CONFLICT, "transaction rejected by mempool (duplicate or fee too low)"));
+                if let Err(reason) = mp.insert_with_reason(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, reason));
                 }
             }
 
@@ -2745,8 +2745,8 @@ ultradag_banned_ips {ban_count}
                 let tx = Transaction::Delegate(delegate_tx);
                 let tx_hash = tx.hash();
 
-                if !mp.insert(tx.clone()) {
-                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                if let Err(reason) = mp.insert_with_reason(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, reason));
                 }
 
                 (tx, tx_hash, nonce)
@@ -2824,8 +2824,8 @@ ultradag_banned_ips {ban_count}
                 let tx = Transaction::Undelegate(undelegate_tx);
                 let tx_hash = tx.hash();
 
-                if !mp.insert(tx.clone()) {
-                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                if let Err(reason) = mp.insert_with_reason(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, reason));
                 }
 
                 (tx, tx_hash, nonce)
@@ -2899,8 +2899,8 @@ ultradag_banned_ips {ban_count}
                 let tx = Transaction::SetCommission(set_commission_tx);
                 let tx_hash = tx.hash();
 
-                if !mp.insert(tx.clone()) {
-                    return Ok(error_response(StatusCode::CONFLICT, "duplicate transaction"));
+                if let Err(reason) = mp.insert_with_reason(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, reason));
                 }
 
                 (tx, tx_hash, nonce)

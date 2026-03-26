@@ -34,16 +34,16 @@ impl Mempool {
         }
     }
 
-    /// Add a transaction. Returns true if it was new.
+    /// Add a transaction with a specific rejection reason on failure.
     /// If mempool is full, evicts lowest-fee transaction if new tx has higher fee.
-    pub fn insert(&mut self, tx: Transaction) -> bool {
+    pub fn insert_with_reason(&mut self, tx: Transaction) -> Result<(), &'static str> {
         let hash = tx.hash();
         if self.txs.contains_key(&hash) {
-            return false;
+            return Err("duplicate transaction");
         }
 
         // Reject transactions with fee below minimum (spam prevention).
-        // Stake/Unstake/Delegate/Undelegate/SetCommission are fee-exempt (they have fee=0 by design).
+        // Stake/Unstake/Delegate/Undelegate/SetCommission/BridgeRelease are fee-exempt (they have fee=0 by design).
         let fee_exempt = matches!(
             tx,
             Transaction::Stake(_)
@@ -51,16 +51,17 @@ impl Mempool {
             | Transaction::Delegate(_)
             | Transaction::Undelegate(_)
             | Transaction::SetCommission(_)
+            | Transaction::BridgeRelease(_)
         );
         if !fee_exempt && tx.fee() < crate::constants::MIN_FEE_SATS {
-            return false;
+            return Err("fee below minimum");
         }
 
         // Per-sender limit: prevent one address from filling the entire mempool
         let sender = tx.from();
         let sender_count = self.by_sender.get(&sender).map_or(0, |v| v.len());
         if sender_count >= MAX_TXS_PER_SENDER {
-            return false;
+            return Err("per-sender limit reached");
         }
 
         // If mempool is full, try to evict lowest-fee transaction
@@ -71,9 +72,6 @@ impl Mempool {
                 .min_by_key(|(_, fee)| *fee)
             {
                 let new_fee = tx.fee();
-                // Fee-exempt transactions (Stake, Unstake, Delegate, etc.) have fee=0
-                // but are protocol-critical and should be able to enter a full mempool
-                // by evicting the lowest-fee entry (which may also be fee=0).
                 let can_evict = new_fee > lowest_fee || (fee_exempt && lowest_fee == 0);
                 if can_evict {
                     if let Some(evicted) = self.txs.remove(&lowest_hash) {
@@ -86,15 +84,21 @@ impl Mempool {
                         }
                     }
                 } else {
-                    // Mempool full and new tx has lower/equal fee - reject
-                    return false;
+                    return Err("mempool full");
                 }
             }
         }
 
         self.by_sender.entry(sender).or_default().push(hash);
         self.txs.insert(hash, MempoolEntry { tx, inserted_at: Instant::now() });
-        true
+        Ok(())
+    }
+
+    /// Add a transaction. Returns true if it was new.
+    /// If mempool is full, evicts lowest-fee transaction if new tx has higher fee.
+    /// For specific rejection reasons, use `insert_with_reason()` instead.
+    pub fn insert(&mut self, tx: Transaction) -> bool {
+        self.insert_with_reason(tx).is_ok()
     }
 
     /// Remove a transaction by hash (after it's been included in a block).
