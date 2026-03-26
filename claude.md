@@ -8,6 +8,15 @@
 
 ## Recent Updates (March 2026)
 
+**Security Fixes — Fourteenth Review Pass (March 26, 2026):**
+- **Bug #273 (CRITICAL): Bridge hash domain tag mismatch — bridge non-functional** — Rust encoded `"claimWithdrawal"` (15 bytes) while Solidity contract uses `"UDAGBridge::claimWithdrawal"` (27 bytes). Validator signatures from native chain would NEVER verify on Arbitrum. Fix: changed string to `"UDAGBridge::claimWithdrawal"` with correct length byte (27). **Breaking change** — all bridge signatures invalidated.
+- **Bug #274 (MEDIUM): `from_parts`/`from_snapshot` supply check uses `saturating_add`** — Overflow would silently clamp instead of detecting corruption. Fix: changed to `checked_add` chain returning `SupplyInvariantBroken` on overflow.
+- **Known issues documented:**
+  - Insufficient-balance nonce increment is a design tradeoff (prevents infinite retry). Byzantine validator can burn victim's nonces by including known-failing txs.
+  - Orphan buffer has no TTL — 50MB of stale memory. Per-peer cap + round cap are the defenses. Future: add expiration in heartbeat.
+  - `tick_governance` parameter mutation during execution is deterministic (sorted by ID) but could surprise participants. Documented as Bug #207.
+  - Testnet `GENESIS_CHECKPOINT_HASH = [0u8; 32]` bypasses chain verification — mitigated by requiring `--validator-key` for pre-staking fast-sync.
+
 **Security Fixes — Thirteenth Review Pass (March 26, 2026):**
 - **Bug #269 (HIGH): `BlockDag::insert()` bypasses all safety checks and is `pub`** — Renamed internal implementation to `insert_internal()` (private). Public `insert()` gated behind `#[cfg(any(test, feature = "unsafe-dag-insert"))]`. Sim crate and test code use the feature flag. Production code can only use `try_insert()`.
 - **Bug #270 (MEDIUM): Failed BridgeDeposit charges fee — inconsistent with all other tx types** — A validator could craft vertices with known-invalid bridge deposits and collect fees. Removed fee debit from error handler, matching all other tx types (nonce increment only on failure).
