@@ -8,6 +8,18 @@
 
 ## Recent Updates (March 2026)
 
+**Security Fixes — Ninth Review Pass (March 26, 2026):**
+- **Bug #256 (MEDIUM): BridgeDeposit double-debit on late failure** — `apply_bridge_lock_tx` could fail after debit+nonce (only via `bridge_nonce` overflow at u64::MAX). The outer error handler would debit fee + increment nonce again → double-debit + nonce +2. Fix: moved `checked_add` nonce validation BEFORE any state mutations. No error paths remain after debit.
+- **Bug #257 (LOW): `BlockDag::insert()` doc comment unclear** — Public method bypasses all safety checks. Updated doc comment to explicitly list what's bypassed and restrict usage to simulation/tests. Production code must use `try_insert()`.
+- **Design note documented:** Failed BridgeDeposit charges fees while other failed tx types don't. Intentional spam deterrent for bridge operations, documented as known asymmetry.
+
+**Staking Page — One-Click Auto-Delegation (March 26, 2026):**
+- Users just enter amount and click "Stake" — system auto-selects best validator (lowest commission, least concentrated stake). No validator selection needed.
+- Auto-selection algorithm: filter active only → sort by lowest commission → tie-break by least concentrated stake (decentralization).
+- "Your Staked UDAG" shows active delegations with one-click unstake.
+- "Choose your own validator" collapsible advanced section for power users.
+- Matches UX of Coinbase, Lido, Rocket Pool: one-click staking, no crypto knowledge required.
+
 **Security Fixes — Eighth Review Pass (March 26, 2026):**
 - **Bug #252 (HIGH): Duplicate `/metrics` endpoint — checkpoint metrics unreachable** — Two `(&Method::GET, ["metrics"])` match arms in rpc.rs. The second (checkpoint Prometheus metrics) was dead code. Fix: merged checkpoint metrics into the first handler, removed duplicate arm.
 - **Bug #253 (MEDIUM): `slashed_events` not persisted in redb** — Double-slash prevention lost on restart. Fix: persisted in METADATA table with `slashed_events_snapshot()`/`restore_slashed_events()`.
