@@ -8,6 +8,27 @@
 
 ## Recent Updates (March 2026)
 
+**Security Fixes — Eleventh Review Pass (March 26, 2026):**
+- **Bug #258 (CRITICAL): BridgeRelease blocked from mempool — bridge broken** — `BridgeRelease` (fee=0) missing from fee-exempt list in pool.rs. Every BridgeRelease silently rejected → Arbitrum→Native bridge completely non-functional. Fix: added to fee-exempt matches.
+- **Bug #259 (HIGH): Double nonce on BridgeRelease param mismatch** — `apply_bridge_release_tx` incremented nonce in disagreement path, then outer handler incremented again → nonce +2. Fix: removed inner increment.
+- **Bug #260 (HIGH): dev_address() silently uses zeroed bytes on invalid hex** — Single typo in `ULTRADAG_DEV_KEY` env var would send all founder emission (5% of every block) to unrecoverable address forever. Fix: added validation flag, falls through to testnet fallback on parse failure.
+- **Bug #261 (MEDIUM): evidence_store doc said "permanent" but is pruned** — Updated 9 doc comments to accurately describe round-based pruning.
+- **Bug #262 (MEDIUM): process_unstake_completions zeros stake before credit** — If credit failed, stake already zeroed → funds destroyed. Fix: credit first, then zero stake.
+- **Bug #263 (LOW): threshold variable shadowing in finality.rs** — Renamed inner `threshold` (round number) to `round_threshold` to avoid confusion with outer `threshold` (validator count).
+- **Bug #264 (LOW): _snapshot_before dead code removed** — Cloned entire state engine every finalization batch for nothing.
+- **Bug #265 (LOW): Mempool "duplicate" error for all rejection reasons** — Added `insert_with_reason()` with specific errors: "duplicate transaction", "fee below minimum", "per-sender limit reached", "mempool full". Updated all 13 RPC callers.
+
+**Persistence Layer — All Gaps Closed (March 26, 2026):**
+- Systematic audit of all 30+ StateEngine fields verified every field survives both redb roundtrip (normal restart) and snapshot roundtrip (fast-sync).
+- **3 gaps fixed:** `bridge_release_first_vote_round`, `bridge_release_disagree_count`, `slashed_events` — all now in StateSnapshot, snapshot(), from_snapshot(), load_snapshot(), and redb METADATA.
+- **7 crash recovery tests** including `test_every_field_survives_redb_roundtrip` and `test_every_field_survives_snapshot_roundtrip` that assert every persisted field matches after save→reload.
+
+**Security Fixes — Tenth Review Pass (March 26, 2026):**
+- **Bug #252 (HIGH): Duplicate `/metrics` endpoint** — Checkpoint Prometheus metrics were dead code. Merged into single handler.
+- **Bug #253 (MEDIUM): `slashed_events` not persisted in redb** — Added to METADATA table.
+- **Bug #254 (LOW): `bridge_nonce` saturating_add** — Changed to `checked_add` with error.
+- **Bug #255 (LOW): Non-deterministic `bridge_release_votes` snapshot ordering** — Sorted outer keys.
+
 **Security Fixes — Ninth Review Pass (March 26, 2026):**
 - **Bug #256 (MEDIUM): BridgeDeposit double-debit on late failure** — `apply_bridge_lock_tx` could fail after debit+nonce (only via `bridge_nonce` overflow at u64::MAX). The outer error handler would debit fee + increment nonce again → double-debit + nonce +2. Fix: moved `checked_add` nonce validation BEFORE any state mutations. No error paths remain after debit.
 - **Bug #257 (LOW): `BlockDag::insert()` doc comment unclear** — Public method bypasses all safety checks. Updated doc comment to explicitly list what's bypassed and restrict usage to simulation/tests. Production code must use `try_insert()`.
