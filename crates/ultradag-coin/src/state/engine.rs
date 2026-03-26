@@ -272,6 +272,10 @@ pub struct StateEngine {
     /// Round when the first vote was cast for each in-progress bridge release.
     /// Used for age-based pruning of stale votes that never reach quorum.
     bridge_release_first_vote_round: HashMap<(u64, u64), u64>,
+    /// Disagreement count for in-progress bridge releases. Tracks how many validators
+    /// submitted mismatched (recipient, amount) vs the stored canonical params.
+    /// When disagree >= agree, params are reset and voting restarts.
+    bridge_release_disagree_count: HashMap<(u64, u64), u64>,
     /// Permanent record of (validator, round) pairs that have been slashed.
     /// Prevents double-slashing the same equivocation event if evidence is re-encountered
     /// after the applied_validators_per_round tracker is pruned.
@@ -311,6 +315,7 @@ impl StateEngine {
             bridge_release_votes: HashMap::new(),
             bridge_release_params: HashMap::new(),
             bridge_release_first_vote_round: HashMap::new(),
+            bridge_release_disagree_count: HashMap::new(),
             slashed_events: std::collections::HashSet::new(),
         }
     }
@@ -337,14 +342,14 @@ impl StateEngine {
 
     /// Compute the validator reward for a given proposer at a given round.
     ///
-    /// This is the single source of truth for reward calculation, used by both
-    /// the validator loop (to produce correct coinbases) and apply_vertex_with_validators
-    /// (to validate them). Keeping reward logic in one place prevents drift between
-    /// production and validation — the most fragile coupling in the codebase.
+    /// NOTE: This function is for RPC display and testing ONLY. It is NOT used
+    /// in any consensus-critical path. Actual reward distribution happens in
+    /// `distribute_round_rewards()` which is the single source of truth.
+    /// Coinbase is always 0 (deferred coinbase model); this function estimates
+    /// what the protocol would distribute, but may diverge from the actual
+    /// distribution due to remainder handling and supply cap scaling.
     ///
-    /// `active_validator_count` is the fallback divisor for pre-staking mode
-    /// (when no stake exists). It should come from the finality tracker's
-    /// configured_validators or the batch count.
+    /// `active_validator_count` is the fallback divisor for pre-staking mode.
     pub fn compute_validator_reward(
         &self,
         proposer: &Address,
@@ -1774,19 +1779,24 @@ impl StateEngine {
         let stored_params = self.bridge_release_params.get(&params_key).cloned();
         if let Some((stored_recipient, stored_amount)) = stored_params {
             if tx.recipient != stored_recipient || tx.amount != stored_amount {
-                // Disagreement — increment nonce but don't add to voter set
+                // Disagreement — increment nonce but don't add to agreeing voter set.
+                // Track disagreements separately to detect poisoned first-voter params.
                 self.increment_nonce(&tx.from);
+                let disagree_count = self.bridge_release_disagree_count
+                    .entry(nonce_key).or_insert(0);
+                *disagree_count = disagree_count.saturating_add(1);
                 let agree_count = self.bridge_release_votes.get(&nonce_key).map_or(0, |v| v.len());
-                // If the disagreeing voter would be a majority, reset params so voting
-                // can restart with correct values (fixes first-voter poisoning attack)
-                if agree_count == 0 || agree_count + 1 > agree_count * 2 {
+                // If disagreements >= agreements, the first voter's params are likely wrong.
+                // Reset everything so voting can restart with correct values.
+                if *disagree_count >= agree_count as u64 {
                     tracing::warn!(
-                        "Bridge release params reset for {:?}: {} disagreed. Clearing {} votes.",
-                        nonce_key, tx.from.to_hex(), agree_count
+                        "Bridge release params reset for {:?}: {} disagree vs {} agree. Clearing to allow re-vote.",
+                        nonce_key, *disagree_count, agree_count
                     );
                     self.bridge_release_votes.remove(&nonce_key);
                     self.bridge_release_params.remove(&params_key);
                     self.bridge_release_first_vote_round.remove(&params_key);
+                    self.bridge_release_disagree_count.remove(&nonce_key);
                 }
                 return Err(CoinError::ValidationError(format!(
                     "bridge release params mismatch (nonce consumed). Stored: ({}, {}), got: ({}, {})",
@@ -1823,6 +1833,7 @@ impl StateEngine {
             self.bridge_release_votes.remove(&nonce_key);
             self.bridge_release_params.remove(&params_key);
             self.bridge_release_first_vote_round.remove(&params_key);
+            self.bridge_release_disagree_count.remove(&nonce_key);
 
             tracing::info!(
                 "Bridge release executed: {} sats from chain {} nonce {} to {} ({}/{} votes)",
@@ -2352,11 +2363,9 @@ impl StateEngine {
     /// 
     /// SECURITY: Validates amount is non-zero to prevent no-op transactions.
     fn debit(&mut self, address: &Address, amount: u64) -> Result<(), CoinError> {
-        // Validate non-zero amount (defense-in-depth)
+        // Zero debit is a no-op (consistent with credit(0) behavior)
         if amount == 0 {
-            return Err(CoinError::ValidationError(
-                "Debit amount cannot be zero".into()
-            ));
+            return Ok(());
         }
         
         let account = self.accounts.entry(*address).or_default();
@@ -2968,6 +2977,7 @@ impl StateEngine {
             bridge_release_votes: HashMap::new(),
             bridge_release_params: HashMap::new(),
             bridge_release_first_vote_round: HashMap::new(),
+            bridge_release_disagree_count: HashMap::new(),
             slashed_events: std::collections::HashSet::new(),
             last_proposal_round: HashMap::new(),
 
@@ -3113,6 +3123,7 @@ impl StateEngine {
             bridge_release_params: snapshot.bridge_release_params.clone().unwrap_or_default()
                 .into_iter().collect(),
             bridge_release_first_vote_round: HashMap::new(), // Restored from redb after from_parts
+            bridge_release_disagree_count: HashMap::new(), // Transient — rebuilt as votes arrive
             slashed_events: std::collections::HashSet::new(), // Rebuilt from slash_history if needed
             last_proposal_round: snapshot.last_proposal_round.into_iter().collect(),
 
@@ -3162,6 +3173,7 @@ impl StateEngine {
         self.bridge_release_params = snapshot.bridge_release_params.unwrap_or_default()
             .into_iter().collect();
         self.bridge_release_first_vote_round = HashMap::new(); // Restored from redb after load_snapshot
+        self.bridge_release_disagree_count = HashMap::new();
         self.slashed_events = std::collections::HashSet::new();
         self.last_proposal_round = snapshot.last_proposal_round.into_iter().collect();
         self.configured_validator_count = saved_configured;
@@ -3468,6 +3480,7 @@ impl StateEngine {
             self.bridge_release_votes.remove(key);
             self.bridge_release_params.remove(key);
             self.bridge_release_first_vote_round.remove(key);
+            self.bridge_release_disagree_count.remove(key);
             tracing::debug!("Pruned stale bridge release votes/params for {:?} (pending > {} rounds)", key, retention);
         }
 

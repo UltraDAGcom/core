@@ -116,6 +116,12 @@ impl FinalityTracker {
         // Stuck parent threshold: parents >100 rounds behind last finalized round
         // are treated as finalized for liveness. See comment in parents_ok check.
         let stuck_threshold = self.last_finalized_round.saturating_sub(100);
+        // Byzantine parents get a longer timeout (200 rounds) before auto-finalization.
+        // This prevents a single equivocation from delaying finality for an entire
+        // subgraph until pruning (~500 rounds). The 200-round delay is long enough to
+        // ensure the equivocation is detected and slashed, but short enough to restore
+        // liveness without waiting for pruning.
+        let byzantine_stuck_threshold = self.last_finalized_round.saturating_sub(200);
 
         // Scan from pruning_floor (not last_finalized_round) so that late-arriving
         // vertices recovered via reconciliation are picked up. Most vertices between
@@ -151,8 +157,12 @@ impl FinalityTracker {
                                     // Stuck parent escape: treat as finalized if >100 rounds behind,
                                     // BUT only if the parent's validator is NOT known-Byzantine.
                                     // A Byzantine validator's stuck vertex should never be auto-finalized.
-                                    || dag.get(p).is_some_and(|pv|
-                                        pv.round < stuck_threshold && !dag.is_byzantine(&pv.validator))
+                                    || dag.get(p).is_some_and(|pv| {
+                                        let is_byz = dag.is_byzantine(&pv.validator);
+                                        // Non-Byzantine: 100-round escape. Byzantine: 200-round escape.
+                                        let threshold = if is_byz { byzantine_stuck_threshold } else { stuck_threshold };
+                                        pv.round < threshold
+                                    })
                             });
 
                     if !parents_ok {
@@ -199,8 +209,12 @@ impl FinalityTracker {
                                 *p == genesis
                                     || self.finalized.contains(p)
                                     || dag.get(p).is_none()
-                                    || dag.get(p).is_some_and(|pv|
-                                        pv.round < stuck_threshold && !dag.is_byzantine(&pv.validator))
+                                    || dag.get(p).is_some_and(|pv| {
+                                        let is_byz = dag.is_byzantine(&pv.validator);
+                                        // Non-Byzantine: 100-round escape. Byzantine: 200-round escape.
+                                        let threshold = if is_byz { byzantine_stuck_threshold } else { stuck_threshold };
+                                        pv.round < threshold
+                                    })
                             });
                         if parents_ok {
                             ready.insert(child);
