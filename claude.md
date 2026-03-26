@@ -8,6 +8,16 @@
 
 ## Recent Updates (March 2026)
 
+**Final Security Audit — Sixteenth Review Pass (March 26, 2026):**
+- **Verdict: Architecture is solid.** Reviewer verified deferred coinbase, checked arithmetic, deterministic ordering, cross-network replay prevention, multi-layer equivocation detection.
+- **Bug #275 (LOW): Stale bridge hash comment** — Overview comment still said `"claimWithdrawal"` (15 bytes) after the string was changed to `"UDAGBridge::claimWithdrawal"` (27 bytes). Fixed.
+- **Design tradeoffs documented (all previously known):**
+  - Stuck-parent 100-round escape weakens BFT safety for liveness — considered acceptable, documented. 200 rounds for Byzantine validators.
+  - `slashed_events` pruned after 1000 rounds — double-slash theoretically possible via old evidence + CheckpointSync suffix, but try_insert primary defense prevents this.
+  - Nonce increment on insufficient balance — design tradeoff preventing infinite retry. Griefing vector but no theft.
+  - `effective_stake_of` O(V×D) per round — consider reverse index at scale.
+  - Checkpoint snapshot timing race — `save_checkpoint_state` mitigates GetCheckpoint, but initial CheckpointProposal uses potentially-advanced snapshot.
+
 **Final Security Audit — Fifteenth Review Pass (March 26, 2026):**
 - **Verdict: DAG consensus design is correct.** Reviewer verified: finality model (2/3+ descendant validators via BitVec), equivocation handling (O(1) detection, both intra/cross-batch, idempotent slashing), supply invariant (checked arithmetic, fatal on violation), signature domain separation (NETWORK_ID, type discriminators, length prefixes), Merkle tree (odd-leaf promotion + count mixing), state root (canonical bytes, version-prefixed), deferred coinbase, checkpoint chain verification, epoch sentinel, peer_max_round monotonicity.
 - **Specifically verified correct:** `process_unstake_completions` credit-before-zero, `bridge_refund` credit-before-decrement, `tick_governance` sorted by ID, governance self-reference safety, bridge attestation pruning by age only.
