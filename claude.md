@@ -8,6 +8,39 @@
 
 ## Recent Updates (March 2026)
 
+**Security Fixes — Eighth Review Pass (March 26, 2026):**
+- **Bug #252 (HIGH): Duplicate `/metrics` endpoint — checkpoint metrics unreachable** — Two `(&Method::GET, ["metrics"])` match arms in rpc.rs. The second (checkpoint Prometheus metrics) was dead code. Fix: merged checkpoint metrics into the first handler, removed duplicate arm.
+- **Bug #253 (MEDIUM): `slashed_events` not persisted in redb** — Double-slash prevention lost on restart. Fix: persisted in METADATA table with `slashed_events_snapshot()`/`restore_slashed_events()`.
+- **Bug #254 (LOW): `bridge_nonce` saturating_add silent nonce collision** — At u64::MAX, two deposits would get the same nonce. Fix: `checked_add` with `ValidationError` on overflow.
+- **Bug #255 (LOW): Non-deterministic `bridge_release_votes` outer key ordering in snapshot** — HashMap iter order was non-deterministic. Fix: sort outer vec by key after collection.
+- **Known design tradeoffs documented:**
+  - Non-atomic transfer application (debit before credit) is protected by supply cap making credit overflow impossible. `_snapshot_before` exists for future rollback implementation.
+  - `verify_state_consistency` checks a subset of fields vs `compute_state_root` — acceptable since state root is the authoritative check.
+  - `bridge_release_first_vote_round` lost on CheckpointSync fast-sync — acceptable since redb restore handles normal restarts, and fast-sync is rare.
+
+**Dashboard UX Consistency Fixes (March 26, 2026):**
+- Default network changed from testnet to **mainnet** — consistent with explorer/network pages.
+- Testnet indicator in sidebar changed from muted gray to **amber/yellow** — clearly visible.
+- Faucet section on mainnet shows **"Fund Your Wallet"** message instead of disappearing.
+- Deleted dead `StakeForm.tsx` (never imported after delegation-first redesign).
+- Sidebar label reverted from "Earn" to "Staking" (clearer, standard DPoS terminology).
+
+**Staking Page Redesign — Delegation-First (March 26, 2026):**
+- Removed direct Stake/Unstake/SetCommission UI from dashboard — that's a node operator action via CLI (`--auto-stake`).
+- Page renamed "Earn Rewards" with delegation as the primary action.
+- "How Delegation Works" explainer card replaces old StakeForm.
+- "Your Validator Stake" section is read-only with CLI instructions.
+- "Want to run a validator?" info card links to setup guide.
+- Matches standard DPoS model (Cosmos, Solana, Polkadot): regular users delegate, operators stake via CLI.
+
+**Explorer & Live Network Page Rewrite (March 26, 2026):**
+- Both pages completely rewritten with index.html header/footer, vanilla HTML+JS, auto-refresh.
+- Default to **mainnet** nodes with Mainnet/Testnet toggle button.
+- **Explorer** (575 lines): Smart search (round/tx/address/vertex/bech32m detection), 8-card stats grid, recent rounds table, drill-down views (round → vertices → transactions → addresses).
+- **Live Network** (479 lines): Pulsing live banner, 9-card vitals with supply progress bar, per-node status cards (all 5 nodes fetched independently with latency/memory/uptime), validator table, mempool preview, component health with derived status from `/health/detailed` data.
+- Health status derived from actual data fields (not missing `.status` field that caused "unknown" display).
+- Empty validators/mempool show descriptive empty states.
+
 **Security Fixes — Seventh Review Pass (March 26, 2026):**
 - **Bug #248 (HIGH): Bridge release params reset was dead code** — The condition `agree_count + 1 > agree_count * 2` simplified to `1 > agree_count`, which never fires because the first voter is always in the voter set. A poisoned first vote blocked releases for ~5.8 days until stale pruning. Fix: added `bridge_release_disagree_count` map to track disagreements separately. When `disagree_count >= agree_count`, all params/votes are cleared and voting restarts from scratch.
 - **Bug #249 (MEDIUM): Byzantine stuck parents blocked finality for ~500 rounds** — The stuck-parent escape excluded Byzantine validators entirely, forcing honest vertices that referenced a Byzantine parent to wait for pruning (~42 min). Fix: two-tier threshold — non-Byzantine parents: 100-round escape, Byzantine parents: 200-round escape. Reduces worst-case from ~42 min to ~17 min.
