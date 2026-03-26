@@ -8,6 +8,15 @@
 
 ## Recent Updates (March 2026)
 
+**Security Fixes — Seventh Review Pass (March 26, 2026):**
+- **Bug #248 (HIGH): Bridge release params reset was dead code** — The condition `agree_count + 1 > agree_count * 2` simplified to `1 > agree_count`, which never fires because the first voter is always in the voter set. A poisoned first vote blocked releases for ~5.8 days until stale pruning. Fix: added `bridge_release_disagree_count` map to track disagreements separately. When `disagree_count >= agree_count`, all params/votes are cleared and voting restarts from scratch.
+- **Bug #249 (MEDIUM): Byzantine stuck parents blocked finality for ~500 rounds** — The stuck-parent escape excluded Byzantine validators entirely, forcing honest vertices that referenced a Byzantine parent to wait for pruning (~42 min). Fix: two-tier threshold — non-Byzantine parents: 100-round escape, Byzantine parents: 200-round escape. Reduces worst-case from ~42 min to ~17 min.
+- **Bug #250 (LOW): `compute_validator_reward` misleading doc comment** — Claimed to be "single source of truth used by validator loop and apply_vertex_with_validators". Actually only used for RPC display/testing. Fix: updated doc comment to state it's NOT consensus-critical and may diverge from `distribute_round_rewards`.
+- **Bug #251 (LOW): `debit(0)` was an error but `credit(0)` was a no-op** — Asymmetric behavior. Fix: `debit(0)` now returns `Ok(())` (no-op), matching `credit(0)`.
+- **Known design choices documented:**
+  - `TransferTx::hash()` and `VoteTx::hash()` exclude NETWORK_ID while Stake/Unstake/Delegate hashes include it. No collision risk (type discriminators differ) but cross-network tooling should be aware.
+  - `select_parents` can return the validator's own previous-round vertex. By design — maximizes DAG connectivity.
+
 **Security Fixes — Sixth Review Pass (March 25, 2026):**
 - **Bug #243 (MEDIUM): BridgeDeposit fee debit error ignored** — `let _ = self.debit()` in error handler added fee to `collected_fees` even if debit failed → supply inflation. Fix: only add to `collected_fees` if debit succeeds.
 - **Bug #244 (HIGH): Bridge release parameter poisoning** — First voter permanently set canonical `(recipient, amount)` with no override mechanism. Malicious validator could block a release for days until stale-vote pruning. Fix: when a disagreeing voter outnumbers agreeing voters, params + votes are cleared and voting restarts from scratch.
