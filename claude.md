@@ -8,6 +8,19 @@
 
 ## Recent Updates (March 2026)
 
+**Security Fixes — Thirteenth Review Pass (March 26, 2026):**
+- **Bug #269 (HIGH): `BlockDag::insert()` bypasses all safety checks and is `pub`** — Renamed internal implementation to `insert_internal()` (private). Public `insert()` gated behind `#[cfg(any(test, feature = "unsafe-dag-insert"))]`. Sim crate and test code use the feature flag. Production code can only use `try_insert()`.
+- **Bug #270 (MEDIUM): Failed BridgeDeposit charges fee — inconsistent with all other tx types** — A validator could craft vertices with known-invalid bridge deposits and collect fees. Removed fee debit from error handler, matching all other tx types (nonce increment only on failure).
+- **Bug #271 (MEDIUM): `slashed_events` grows unbounded forever** — Added pruning after `apply_finalized_vertices`: events older than `last_finalized_round - 1000` are removed, matching `applied_validators_per_round` pruning window.
+- **Bug #272 (MEDIUM): `GetDagVertices` response can exceed 4MB MAX_MESSAGE_SIZE** — 50 vertices × 1MB each = 50MB. Added accumulated byte size tracking; loop breaks at 3.5MB to stay under the wire limit.
+- **Known issues documented:**
+  - Bridge release first-voter-wins liveness attack: single Byzantine validator can delay releases by repeatedly poisoning params. Disagree-reset mechanism eventually clears, but cycles cost only one nonce. Future: commit-reveal or vote-weighted param selection.
+  - `effective_stake_of()` counts unstaking validators during cooldown — dilutes rewards for 2016 rounds. Arguable design choice (cooldown has economic cost: missing active rewards).
+  - `prune_dust_accounts` burns dust from total_supply — undocumented deflationary mechanism. Users with small balances and nonce=0 permanently lose funds.
+  - Mempool TTL uses `Instant` which resets on restart — stale txs get fresh TTL after reload.
+  - Orphan buffer per-peer cap uses TCP address string — reconnecting peer resets cap.
+  - Checkpoint co-signing trusts active set from checkpoint's own snapshot — mitigated by chain verification back to genesis hash.
+
 **Council Seat Category Redesign (March 26, 2026):**
 - Old: Technical(7), Business(4), Legal(3), Academic(3), Community(2), Foundation(2)
 - **New: Engineering(5), Growth(3), Legal(2), Research(2), Community(4), Operations(3), Security(2) = 21 seats**
