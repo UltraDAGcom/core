@@ -2081,6 +2081,10 @@ impl StateEngine {
         if let Some(stake) = self.stake_accounts.get_mut(addr) {
             let slash_amount = stake.staked.saturating_mul(slash_pct) / 100;
             stake.staked = stake.staked.saturating_sub(slash_amount);
+            if self.total_supply < slash_amount {
+                tracing::error!("SUPPLY ANOMALY: total_supply {} < slash_amount {} for {}",
+                    self.total_supply, slash_amount, addr.to_hex());
+            }
             self.total_supply = self.total_supply.saturating_sub(slash_amount);
             own_slash = slash_amount;
             if stake.staked < MIN_STAKE_SATS {
@@ -3476,25 +3480,18 @@ impl StateEngine {
         to_prune.sort_by_key(|(nonce, _, _)| *nonce);
 
         let pruned = to_prune.len();
-        for (nonce, sender, amount) in &to_prune {
-            // Auto-refund: return locked funds from bridge_reserve to the original sender.
-            // This prevents funds from being permanently stuck when attestations expire
-            // before the user claims on Arbitrum.
-            if self.bridge_reserve >= *amount {
-                match self.credit(sender, *amount) {
-                    Ok(()) => {
-                        self.bridge_reserve = self.bridge_reserve.saturating_sub(*amount);
-                    }
-                    Err(e) => {
-                        tracing::error!("Bridge auto-refund credit failed for nonce {}: {}", nonce, e);
-                        // Do NOT subtract from bridge_reserve if credit failed — preserves supply invariant
-                    }
-                }
-                tracing::warn!(
-                    "Bridge auto-refund: {} sats returned to {} (attestation #{} expired after {} rounds)",
-                    amount, sender.to_hex(), nonce, retention
-                );
-            }
+        for (nonce, _sender, _amount) in &to_prune {
+            // SECURITY: NO auto-refund. Expired attestations are cleaned up but funds
+            // remain in bridge_reserve. The user may have already claimed on Arbitrum —
+            // auto-refunding would create a cross-chain double-spend.
+            //
+            // Refunds for unclaimed deposits MUST go through a BridgeRefund governance
+            // proposal (bridge_refund()), which requires council vote to verify the
+            // Arbitrum claim was never made.
+            tracing::info!(
+                "Pruned expired bridge attestation #{} (after {} rounds). Funds remain in bridge_reserve — use governance BridgeRefund if unclaimed.",
+                nonce, retention
+            );
             self.bridge_attestations.remove(nonce);
             self.bridge_signatures.retain(|(n, _), _| n != nonce);
         }

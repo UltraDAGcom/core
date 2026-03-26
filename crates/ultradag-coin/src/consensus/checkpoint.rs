@@ -360,6 +360,37 @@ pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
         hasher.update(&round.to_le_bytes());
     }
 
+    // Bridge release first vote round (sorted, controls stale vote pruning timing)
+    if let Some(ref fvr) = snapshot.bridge_release_first_vote_round {
+        hasher.update(&(fvr.len() as u64).to_le_bytes());
+        for ((chain_id, deposit_nonce), round) in fvr {
+            hasher.update(&chain_id.to_le_bytes());
+            hasher.update(&deposit_nonce.to_le_bytes());
+            hasher.update(&round.to_le_bytes());
+        }
+    } else {
+        hasher.update(&0u64.to_le_bytes());
+    }
+
+    // Bridge release disagree count (sorted, controls param reset timing)
+    if let Some(ref dc) = snapshot.bridge_release_disagree_count {
+        hasher.update(&(dc.len() as u64).to_le_bytes());
+        for ((chain_id, deposit_nonce), count) in dc {
+            hasher.update(&chain_id.to_le_bytes());
+            hasher.update(&deposit_nonce.to_le_bytes());
+            hasher.update(&count.to_le_bytes());
+        }
+    } else {
+        hasher.update(&0u64.to_le_bytes());
+    }
+
+    // Slashed events (sorted, idempotency guard for slash_at_round)
+    hasher.update(&(snapshot.slashed_events.len() as u64).to_le_bytes());
+    for (addr, round) in &snapshot.slashed_events {
+        hasher.update(&addr.0);
+        hasher.update(&round.to_le_bytes());
+    }
+
     *hasher.finalize().as_bytes()
 }
 
