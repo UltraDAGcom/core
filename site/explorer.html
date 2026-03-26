@@ -3,115 +3,53 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-PDWW4HQM2K"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag("js", new Date());
-
-  gtag("config", "G-PDWW4HQM2K");
-</script>
-
-<meta name="description" content="UltraDAG Block Explorer - Search transactions, vertices, rounds, and addresses on the UltraDAG network">
-<meta property="og:title" content="Explorer — UltraDAG">
-<meta property="og:description" content="Advanced block explorer for UltraDAG network with real-time data">
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date());gtag("config","G-PDWW4HQM2K");</script>
+<meta name="description" content="UltraDAG Block Explorer — Search transactions, vertices, rounds, and addresses on the UltraDAG DAG-BFT network.">
+<meta property="og:title" content="UltraDAG Explorer">
+<meta property="og:description" content="Search transactions, vertices, rounds, and addresses on the UltraDAG DAG-BFT network.">
 <meta property="og:type" content="website">
-<meta name="twitter:card" content="summary_large_image">
+<meta property="og:url" content="https://ultradag.com/explorer.html">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='none' stroke='%233d9be9' stroke-width='2'/%3E%3Ccircle cx='50' cy='50' r='15' fill='%233d9be9'/%3E%3C/svg%3E">
 <title>Explorer — UltraDAG</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Cormorant:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root {
-  --bg: #080c16; --bg2: #0e1322; --bg3: #131a2b; --bg4: #1a2540;
-  --border: #1a2540; --border2: #223050;
-  --fg: #edf4fb; --fg2: #c8e0f4; --fg3: #94b8d8;
-  --accent: #3d9be9; --accent-glow: rgba(61,155,233,0.12); --accent-glow2: rgba(61,155,233,0.06); --accent-border: rgba(61,155,233,0.22);
-  --mono: 'DM Mono', monospace; --serif: 'Cormorant', serif;
+:root{
+  --bg:#0a0e1a;--bg2:#0e1322;--bg3:#131a2b;--bg4:#1a2540;
+  --border:#1a2540;--border2:#223050;
+  --dim:#2e4060;--muted:#4a6488;--subtle:#7090b8;
+  --body:#94b8d8;--bright:#c8e0f4;--white:#edf4fb;
+  --accent:#3d9be9;--accent2:#1a6fb5;
+  --glow:rgba(61,155,233,0.15);--glow2:rgba(61,155,233,0.06);
+  --success:#34d399;--warning:#fbbf24;--danger:#f87171;
 }
 html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--fg2);font-family:'Syne',sans-serif;font-size:16px;line-height:1.7;overflow-x:hidden;cursor:default}
-a{color:var(--accent);text-decoration:none;transition:color .2s}
-a:hover{color:var(--fg)}
-
+body{background:var(--bg);color:var(--body);font-family:'Syne',sans-serif;font-size:16px;line-height:1.7;overflow-x:hidden}
+a{color:var(--accent);text-decoration:none;transition:color .2s}a:hover{color:var(--white)}
 body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:.4}
-
 .grid-bg{position:fixed;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;opacity:.5625;pointer-events:none;z-index:0;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,black 30%,transparent 100%)}
 
 /* NAV */
-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; padding: 0 48px; height: 64px; display: flex; align-items: center; justify-content: space-between; background: rgba(8,12,22,0.95); backdrop-filter: blur(16px); border-bottom: 1px solid transparent; transition: border-color .3s, background .3s; }
-
-/* Static subtle border */
-nav::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 1px;
-  background: linear-gradient(90deg, 
-    transparent 0%, 
-    rgba(61, 155, 233, 0.06) 15%,
-    rgba(61, 155, 233, 0.16) 35%,
-    rgba(61, 155, 233, 0.25) 50%,
-    rgba(61, 155, 233, 0.16) 65%,
-    rgba(61, 155, 233, 0.06) 85%,
-    transparent 100%
-  );
-  z-index: -1;
-}
-
-/* Mobile adjustments for static border */
-@media(max-width:900px){
-  nav::after {
-    height: 1px;
-    background: linear-gradient(90deg, 
-      transparent 0%, 
-      rgba(61, 155, 233, 0.04) 15%,
-      rgba(61, 155, 233, 0.12) 35%,
-      rgba(61, 155, 233, 0.18) 50%,
-      rgba(61, 155, 233, 0.12) 65%,
-      rgba(61, 155, 233, 0.04) 85%,
-      transparent 100%
-    );
-  }
-}
-
-@media(max-width:600px){
-  nav::after {
-    height: 1px;
-    background: linear-gradient(90deg, 
-      transparent 0%, 
-      rgba(61, 155, 233, 0.03) 15%,
-      rgba(61, 155, 233, 0.08) 35%,
-      rgba(61, 155, 233, 0.12) 50%,
-      rgba(61, 155, 233, 0.08) 65%,
-      rgba(61, 155, 233, 0.03) 85%,
-      transparent 100%
-    );
-  }
-}
-nav.scrolled { border-color: var(--bg4); }
-.nav-logo { font-family: var(--serif); font-size: 22px; font-weight: 300; letter-spacing: 0.08em; color: var(--fg); text-decoration: none; display: flex; align-items: center; gap: 10px; }
-.nav-logo:hover { color: var(--accent); }
-.nav-logo-mark { width: 28px; height: 28px; border: 1px solid var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; position: relative; }
-.nav-logo-mark::after { content: ''; width: 8px; height: 8px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 8px var(--accent); }
-.nav-links { display: flex; align-items: center; gap: 32px; list-style: none; }
-.nav-links > li { position: relative; }
-.nav-links a { font-family: var(--mono); font-size: 12px; font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg3); text-decoration: none; transition: color 0.2s; position: relative; padding-bottom: 4px; display: block; }
-.nav-links > li > a { padding: 20px 0; }
-.nav-links > li > a::after { content: ''; position: absolute; bottom: 0; left: 0; width: 0; height: 1px; background: var(--accent); transition: width 0.3s ease; }
-.nav-links a:hover{color:var(--fg)}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid transparent;transition:border-color .3s,background .3s;background:rgba(10,14,26,.92);backdrop-filter:blur(16px)}
+nav.scrolled{border-color:var(--border)}
+.nav-logo{font-family:'Cormorant',serif;font-size:22px;font-weight:300;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px}
+.nav-logo:hover{color:var(--accent)}
+.nav-logo-mark{width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
+.nav-logo-mark::after{content:'';width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)}
+.nav-links{display:flex;align-items:center;gap:32px;list-style:none}
+.nav-links>li{position:relative}
+.nav-links a{font-family:'DM Mono',monospace;font-size:12px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;position:relative;padding-bottom:4px;display:block}
+.nav-links>li>a{padding:20px 0}
+.nav-links>li>a::after{content:'';position:absolute;bottom:0;left:0;width:0;height:1px;background:var(--accent);transition:width .3s ease}
+.nav-links a:hover{color:var(--white)}
 .nav-links>li>a:hover::after{width:100%}
 .nav-cta{color:var(--white)!important;background:rgba(61,155,233,0.08)!important;border:1px solid rgba(61,155,233,0.25)!important;padding:8px 16px!important;border-radius:3px!important;transition:all .2s ease!important;font-weight:500!important;box-shadow:0 0 0 0 rgba(61,155,233,0)}
 .nav-cta:hover{background:rgba(61,155,233,0.15)!important;border-color:rgba(61,155,233,0.4)!important;box-shadow:0 0 12px rgba(61,155,233,0.15);transform:translateY(-1px)}
 .nav-cta::after{display:none!important}
 .nav-links>li:has(.nav-cta){margin-left:-16px}
 .nav-links>li:has(.nav-cta)+li:has(.nav-cta){margin-left:-20px}
-
-/* MEGA MENU */
 .mega-menu{position:absolute;top:64px;left:50%;transform:translateX(-50%);background:rgba(10,14,26,.98);backdrop-filter:blur(24px);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;padding:32px;min-width:720px;max-width:920px;opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;box-shadow:0 12px 40px rgba(0,0,0,.4)}
 .nav-links>li:hover .mega-menu{opacity:1;visibility:visible}
 .mega-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:32px}
@@ -121,8 +59,6 @@ nav.scrolled { border-color: var(--bg4); }
 .mega-col a:hover{color:var(--white);padding-left:8px}
 .mega-col a::after{display:none!important}
 .mega-col p{font-size:12px;color:var(--muted);line-height:1.6;margin-top:8px}
-
-/* HAMBURGER MENU */
 .hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px;background:none;border:none;z-index:101}
 .hamburger span{width:24px;height:2px;background:var(--white);transition:all .3s;border-radius:2px}
 .hamburger.active span:nth-child(1){transform:rotate(45deg) translate(7px,7px)}
@@ -135,228 +71,149 @@ nav.scrolled { border-color: var(--bg4); }
 .mobile-menu a:hover{color:var(--white)}
 .mobile-menu .nav-cta{display:inline-block;margin-top:8px}
 @media(min-width:901px){.mobile-menu{display:none}}
+.nav-light-beam{position:absolute;bottom:0;left:50%;width:0;height:3px;background:linear-gradient(90deg,transparent 0%,rgba(61,155,233,0.3) 10%,rgba(61,155,233,0.8) 45%,rgba(255,255,255,0.9) 50%,rgba(61,155,233,0.8) 55%,rgba(61,155,233,0.3) 90%,transparent 100%);box-shadow:0 0 10px rgba(61,155,233,0.6),0 0 20px rgba(61,155,233,0.4),0 0 30px rgba(61,155,233,0.2);animation:expand-beam 6s ease-out forwards;z-index:1;transform:translateX(-50%)}
+@keyframes expand-beam{0%{left:50%;width:0;height:3px;opacity:0;transform:translateX(-50%)}15%{opacity:1}40%{left:50%;width:100%;height:3px;opacity:1;transform:translateX(-50%)}60%{left:0;width:100%;height:1px;opacity:.5;transform:translateX(0);background:linear-gradient(90deg,transparent 0%,rgba(61,155,233,0.08) 15%,rgba(61,155,233,0.2) 35%,rgba(61,155,233,0.3) 50%,rgba(61,155,233,0.2) 65%,rgba(61,155,233,0.08) 85%,transparent 100%);box-shadow:none}100%{left:0;width:100%;height:1px;opacity:.4;transform:translateX(0);background:linear-gradient(90deg,transparent 0%,rgba(61,155,233,0.06) 15%,rgba(61,155,233,0.16) 35%,rgba(61,155,233,0.25) 50%,rgba(61,155,233,0.16) 65%,rgba(61,155,233,0.06) 85%,transparent 100%);box-shadow:none}}
+.nav-light-beam:nth-child(2),.nav-light-beam:nth-child(3){display:none}
 
-/* CONTAINER */
-.container{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:120px 48px 120px}
+/* LAYOUT */
+.main{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:100px 48px 60px}
 
-/* HEADER */
-.header{text-align:center;margin-bottom:64px}
-.header h1{font-family:var(--serif);font-size:56px;font-weight:400;color:var(--white);margin-bottom:12px;letter-spacing:-0.02em}
-.header h1 em{font-style:italic;color:var(--accent)}
-.header p{font-size:18px;color:var(--subtle)}
-
-/* SEARCH */
-.search-section{margin-bottom:48px}
-.search-box{max-width:800px;margin:0 auto;position:relative}
-.search-input{width:100%;padding:16px 56px 16px 20px;background:var(--bg2);border:1px solid var(--bg4);border-radius:4px;color:var(--white);font-family:var(--mono);font-size:14px;transition:all .2s}
-.search-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--glow2)}
-.search-input::placeholder{color:var(--muted)}
-.search-btn{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:var(--accent);border:none;color:var(--bg);padding:8px 16px;border-radius:2px;cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;transition:background .2s}
-.search-btn:hover{background:var(--accent2)}
-.search-hint{text-align:center;margin-top:12px;font-family:var(--mono);font-size:11px;color:var(--subtle)}
+/* HERO SEARCH */
+.search-section{text-align:center;margin-bottom:48px}
+.search-title{font-family:'Cormorant',serif;font-size:40px;font-weight:300;color:var(--white);letter-spacing:.04em;margin-bottom:6px}
+.search-sub{font-size:14px;color:var(--muted);margin-bottom:28px}
+.search-box{position:relative;max-width:720px;margin:0 auto}
+.search-box input{width:100%;padding:16px 80px 16px 20px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--white);font-family:'DM Mono',monospace;font-size:14px;outline:none;transition:border-color .2s,box-shadow .2s}
+.search-box input::placeholder{color:var(--dim)}
+.search-box input:focus{border-color:var(--accent);box-shadow:0 0 24px var(--glow)}
+.search-box button{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:var(--accent);border:none;border-radius:6px;padding:10px 18px;cursor:pointer;color:var(--bg);font-family:'DM Mono',monospace;font-weight:500;font-size:12px;letter-spacing:.05em;text-transform:uppercase;transition:background .2s}
+.search-box button:hover{background:var(--white)}
+.search-error{color:var(--danger);font-size:13px;margin-top:10px;min-height:20px;font-family:'DM Mono',monospace}
 
 /* STATS */
-.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-bottom:48px}
-.stat-card{background:var(--bg2);border:1px solid var(--bg4);border-radius:4px;padding:24px;transition:border-color .2s}
-.stat-card:hover{border-color:var(--glow)}
-.stat-label{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--subtle);margin-bottom:8px}
-.stat-value{font-family:var(--serif);font-size:32px;font-weight:600;color:var(--white);margin-bottom:4px}
-.stat-sub{font-size:13px;color:var(--body)}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:48px}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px;transition:border-color .3s}
+.stat-card:hover{border-color:var(--border2)}
+.stat-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.stat-value{font-family:'DM Mono',monospace;font-size:22px;font-weight:500;color:var(--white)}
+.stat-extra{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);margin-top:4px}
+.lag-good{color:var(--success)}.lag-warn{color:var(--warning)}.lag-bad{color:var(--danger)}
 
-/* TABS */
-.tabs{display:flex;gap:8px;margin-bottom:32px;border-bottom:1px solid var(--bg4)}
-.tab{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);background:none;border:none;padding:12px 24px;cursor:pointer;border-bottom:2px solid transparent;transition:all .2s}
-.tab:hover{color:var(--white)}
-.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+/* DETAIL PANEL */
+.detail-panel{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:32px;margin-bottom:32px;display:none;animation:fadeUp .3s ease}
+.detail-panel.active{display:block}
+.detail-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
+.detail-title{font-family:'Cormorant',serif;font-size:24px;color:var(--white);font-weight:400}
+.detail-close{background:none;border:1px solid var(--border);border-radius:4px;color:var(--muted);cursor:pointer;padding:6px 14px;font-family:'DM Mono',monospace;font-size:12px;transition:all .2s}
+.detail-close:hover{color:var(--white);border-color:var(--subtle)}
+.detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.detail-field{padding:12px 14px;background:var(--bg3);border-radius:6px;border:1px solid var(--border)}
+.detail-field .label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.detail-field .value{font-family:'DM Mono',monospace;font-size:13px;color:var(--bright);word-break:break-all}
+.badge{display:inline-block;padding:2px 10px;border-radius:4px;font-family:'DM Mono',monospace;font-size:11px;font-weight:500}
+.badge-green{background:rgba(52,211,153,.12);color:var(--success);border:1px solid rgba(52,211,153,.2)}
+.badge-yellow{background:rgba(251,191,36,.12);color:var(--warning);border:1px solid rgba(251,191,36,.2)}
+.badge-blue{background:rgba(61,155,233,.12);color:var(--accent);border:1px solid rgba(61,155,233,.2)}
 
 /* TABLE */
-.table-container{background:var(--bg2);border:1px solid var(--bg4);border-radius:4px;overflow:hidden;margin-bottom:32px}
-.table{width:100%;border-collapse:collapse}
-.table thead{background:var(--bg3);border-bottom:1px solid var(--bg4)}
-.table th{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--subtle);text-align:left;padding:16px 20px;font-weight:600;cursor:pointer;user-select:none;position:relative;transition:color .2s}
-.table th:hover{color:var(--accent)}
-.table th.sortable::after{content:'⇅';margin-left:8px;opacity:0.3}
-.table th.sorted-asc::after{content:'↑';opacity:1;color:var(--accent)}
-.table th.sorted-desc::after{content:'↓';opacity:1;color:var(--accent)}
-.table td{padding:16px 20px;border-top:1px solid var(--bg4);font-size:14px;color:var(--body)}
-.table tr:hover{background:var(--bg3)}
-.table a{color:var(--accent);text-decoration:none;font-family:var(--mono)}
-.table a:hover{text-decoration:underline}
-.hash{font-family:var(--mono);font-size:13px}
-.badge{display:inline-block;padding:4px 8px;border-radius:2px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
-.badge-success{background:rgba(52,211,153,0.1);color:var(--success);border:1px solid rgba(52,211,153,0.2)}
-.badge-warning{background:rgba(251,191,36,0.1);color:var(--warning);border:1px solid rgba(251,191,36,0.2)}
-.badge-info{background:rgba(61,155,233,0.1);color:var(--accent);border:1px solid rgba(61,155,233,0.2)}
-
-/* PAGINATION */
-.pagination{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:32px}
-.page-btn{background:var(--bg2);border:1px solid var(--bg4);color:var(--subtle);padding:8px 16px;border-radius:2px;cursor:pointer;font-family:var(--mono);font-size:12px;transition:all .2s}
-.page-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
-.page-btn:disabled{opacity:.5;cursor:not-allowed}
-.page-btn.active{background:var(--accent);border-color:var(--accent);color:var(--bg)}
-
-/* DETAIL VIEW */
-.detail-card{background:var(--bg2);border:1px solid var(--bg4);border-radius:4px;padding:32px;margin-bottom:32px}
-.detail-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;padding-bottom:24px;border-bottom:1px solid var(--bg4)}
-.detail-title{font-family:var(--serif);font-size:32px;color:var(--white)}
-.detail-grid{display:grid;grid-template-columns:200px 1fr;gap:16px}
-.detail-label{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle)}
-.detail-value{font-family:var(--mono);font-size:14px;color:var(--white);word-break:break-all}
-
-/* LOADING */
-.loading{text-align:center;padding:64px;color:var(--subtle);font-family:var(--mono);font-size:14px}
-.loading::after{content:'...';animation:dots 1.5s infinite}
-@keyframes dots{0%,20%{content:''}40%{content:'.'}60%{content:'..'}80%,100%{content:'...'}}
-
-/* ERROR */
-.error{background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);border-radius:4px;padding:20px;color:var(--danger);font-family:var(--mono);font-size:13px;margin:32px 0}
-
-/* EMPTY STATE */
-.empty{text-align:center;padding:64px;color:var(--subtle);font-size:14px}
-
-/* RESPONSIVE */
-@media(max-width:1200px){
-  .stats-grid{grid-template-columns:repeat(2,1fr)}
-}
-@media(max-width:900px){
-  nav{padding:0 24px;height:56px}
-  .nav-logo{font-size:18px}
-  .nav-logo-mark{width:24px;height:24px}
-  .nav-logo-mark::after{width:6px;height:6px}
-  .nav-links{display:none}
-  .hamburger{display:flex}
-  .mobile-menu{display:block;top:56px}
-  .container{padding:32px 24px 80px}
-  .header h1{font-size:40px}
-  .stats-grid{grid-template-columns:1fr}
-  .table-container{overflow-x:auto}
-  .detail-grid{grid-template-columns:1fr;gap:8px}
-  footer{margin-top:80px}
-  .footer-inner{padding:48px 24px 24px}
-  .footer-top{grid-template-columns:1fr;gap:48px}
-  .footer-links-grid{grid-template-columns:repeat(3,1fr)}
-}
-@media(max-width:600px){
-  nav{padding:0 16px}
-  .container{padding:32px 16px 60px}
-  footer{margin-top:60px}
-  .footer-inner{padding:32px 16px 20px}
-  .footer-top{grid-template-columns:1fr;gap:32px}
-  .footer-links-grid{grid-template-columns:1fr 1fr;gap:24px}
-  .footer-bottom{flex-direction:column;gap:16px;align-items:flex-start}
-  .header h1{font-size:32px}
-  .search-input{font-size:13px;padding:14px 56px 14px 16px}
-  .stats-grid{grid-template-columns:repeat(2,1fr)}
-  table{font-size:12px}
-  table th,table td{padding:8px 6px}
-}
+.section-title{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+.table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:left;padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg3)}
+td{padding:12px 16px;border-bottom:1px solid var(--border);font-size:14px;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(61,155,233,.03)}
+.mono{font-family:'DM Mono',monospace;font-size:13px}
+.link{color:var(--accent);cursor:pointer;transition:color .2s}.link:hover{color:var(--white)}
+.vertex-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.vertex-item{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:12px 16px;display:grid;grid-template-columns:2fr 1.5fr 1fr 1fr;gap:12px;align-items:center;cursor:pointer;transition:border-color .2s}
+.vertex-item:hover{border-color:var(--accent)}
+.vertex-label{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.vertex-val{font-family:'DM Mono',monospace;font-size:13px;color:var(--bright)}
 
 /* FOOTER */
-footer{position:relative;z-index:1;border-top:1px solid var(--border);background:var(--bg);margin-top:120px}
+footer{position:relative;z-index:1;border-top:1px solid var(--border);background:var(--bg);margin-top:80px}
 .footer-inner{max-width:1200px;margin:0 auto;padding:64px 48px 32px}
 .footer-top{display:grid;grid-template-columns:1.2fr 2fr;gap:80px;margin-bottom:48px}
 .footer-brand{max-width:320px}
 .footer-logo{display:flex;align-items:center;gap:12px;margin-bottom:20px}
 .footer-logo span{font-family:'Cormorant',serif;font-size:24px;font-weight:300;color:var(--white);letter-spacing:.06em}
-.footer-tagline{font-family:'Syne',sans-serif;font-size:14px;line-height:1.7;color:var(--subtle);margin-bottom:24px}
+.footer-tagline{font-size:14px;line-height:1.7;color:var(--subtle);margin-bottom:24px}
 .footer-social{display:flex;gap:16px}
 .footer-social a{width:40px;height:40px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:50%;color:var(--muted);transition:all .2s}
 .footer-social a:hover{border-color:var(--accent);color:var(--accent);background:var(--glow2)}
 .footer-links-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:40px}
 .footer-col h4{font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
 .footer-col ul{list-style:none;display:flex;flex-direction:column;gap:12px}
-.footer-col a{font-family:'Syne',sans-serif;font-size:14px;color:var(--subtle);text-decoration:none;transition:color .2s}
+.footer-col a{font-size:14px;color:var(--subtle);text-decoration:none;transition:color .2s}
 .footer-col a:hover{color:var(--white)}
 .footer-bottom{display:flex;justify-content:space-between;align-items:center;padding-top:32px;border-top:1px solid var(--border)}
 .footer-legal{display:flex;align-items:center;gap:12px;font-family:'DM Mono',monospace;font-size:11px;color:var(--dim)}
 .footer-separator{color:var(--border2)}
 .footer-status{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--subtle)}
 .footer-status-dot{width:8px;height:8px;border-radius:50%;background:var(--success);box-shadow:0 0 8px var(--success);animation:pulse 2s infinite}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
-@keyframes slideIn{from{transform:translateX(400px);opacity:0}to{transform:translateX(0);opacity:1}}
-@keyframes slideOut{from{transform:translateX(0);opacity:1}to{transform:translateX(400px);opacity:0}}
+
+/* RESPONSIVE */
+@media(max-width:900px){
+  nav{padding:0 24px;height:56px}
+  .nav-logo{font-size:18px}.nav-logo-mark{width:24px;height:24px}.nav-logo-mark::after{width:6px;height:6px}
+  .nav-links{display:none}.hamburger{display:flex}.mobile-menu{display:block;top:56px}
+  .main{padding:80px 20px 40px}
+  .search-title{font-size:28px}
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:12px}
+  .stat-value{font-size:18px}
+  .vertex-item{grid-template-columns:1fr 1fr;gap:8px}
+  .detail-grid{grid-template-columns:1fr}
+  .footer-inner{padding:48px 24px 24px}
+  .footer-top{grid-template-columns:1fr;gap:48px}
+  .footer-brand{max-width:100%}
+  .footer-links-grid{grid-template-columns:repeat(2,1fr);gap:32px}
+  .footer-bottom{flex-direction:column;gap:20px;text-align:center}
+  .mega-cols{grid-template-columns:1fr!important}
+}
+@media(max-width:600px){
+  nav{padding:0 16px}
+  .main{padding:72px 16px 32px}
+  .search-title{font-size:24px}
+  .stats-grid{grid-template-columns:1fr 1fr;gap:10px}
+  .stat-card{padding:14px}
+  .stat-value{font-size:16px}
+  .vertex-item{grid-template-columns:1fr}
+  table{font-size:13px}
+  th,td{padding:10px 12px}
+}
+@media(max-width:900px){
+  .nav-light-beam{height:2px;box-shadow:0 0 6px rgba(61,155,233,0.5),0 0 12px rgba(61,155,233,0.3)}
+}
 </style>
 </head>
 <body>
-
 <div class="grid-bg"></div>
 
 <!-- NAV -->
 <nav id="nav">
-  <a href="/" class="nav-logo">
-    <div class="nav-logo-mark"></div>
-    UltraDAG
-  </a>
+  <a href="/" class="nav-logo"><div class="nav-logo-mark"></div>UltraDAG</a>
   <ul class="nav-links">
     <li><a href="index.html">Home</a></li>
-    
     <li>
       <a href="whitepaper.html">Whitepaper</a>
-      <div class="mega-menu">
-        <div class="mega-cols">
-          <div class="mega-col">
-            <h4>Core Concepts</h4>
-            <ul>
-              <li><a href="whitepaper.html#introduction">Introduction</a></li>
-              <li><a href="whitepaper.html#dag-bft">DAG-BFT Consensus</a></li>
-              <li><a href="whitepaper.html#finality">BFT Finality</a></li>
-              <li><a href="whitepaper.html#state-engine">State Engine</a></li>
-            </ul>
-          </div>
-          <div class="mega-col">
-            <h4>Advanced Topics</h4>
-            <ul>
-              <li><a href="whitepaper.html#staking">Staking & Validation</a></li>
-              <li><a href="whitepaper.html#governance">Governance</a></li>
-              <li><a href="whitepaper.html#checkpoints">Checkpoints</a></li>
-              <li><a href="whitepaper.html#security">Security Model</a></li>
-            </ul>
-          </div>
-          <div class="mega-col">
-            <h4>Technical Details</h4>
-            <ul>
-              <li><a href="whitepaper.html#tokenomics">Tokenomics</a></li>
-              <li><a href="whitepaper.html#pruning">Pruning</a></li>
-              <li><a href="whitepaper.html#formal">Formal Verification</a></li>
-            </ul>
-          </div>
-        </div>
-      </div>
+      <div class="mega-menu"><div class="mega-cols">
+        <div class="mega-col"><h4>Core Concepts</h4><ul><li><a href="whitepaper.html#introduction">Introduction</a></li><li><a href="whitepaper.html#dag-bft">DAG-BFT Consensus</a></li><li><a href="whitepaper.html#finality">BFT Finality</a></li><li><a href="whitepaper.html#state-engine">State Engine</a></li></ul></div>
+        <div class="mega-col"><h4>Advanced Topics</h4><ul><li><a href="whitepaper.html#staking">Staking & Validation</a></li><li><a href="whitepaper.html#governance">Governance</a></li><li><a href="whitepaper.html#checkpoints">Checkpoints</a></li><li><a href="whitepaper.html#security">Security Model</a></li></ul></div>
+        <div class="mega-col"><h4>Technical Details</h4><ul><li><a href="whitepaper.html#tokenomics">Tokenomics</a></li><li><a href="whitepaper.html#pruning">Pruning</a></li><li><a href="whitepaper.html#formal">Formal Verification</a></li></ul></div>
+      </div></div>
     </li>
-
     <li>
       <a href="docs.html">Docs</a>
-      <div class="mega-menu">
-        <div class="mega-cols">
-          <div class="mega-col">
-            <h4>Getting Started</h4>
-            <ul>
-              <li><a href="docs.html#api">HTTP RPC API</a></li>
-              <li><a href="docs.html#sdk">SDK Quickstart</a></li>
-              <li><a href="docs.html#node">Running a Node</a></li>
-            </ul>
-          </div>
-          <div class="mega-col">
-            <h4>Validators</h4>
-            <ul>
-              <li><a href="docs.html#staking">Staking & Validation</a></li>
-              <li><a href="docs.html#governance">Governance</a></li>
-              <li><a href="docs.html#monitoring">Metrics & Monitoring</a></li>
-            </ul>
-          </div>
-          <div class="mega-col">
-            <h4>Reference</h4>
-            <ul>
-              <li><a href="docs.html#arch">Architecture</a></li>
-              <li><a href="docs.html#transactions">Transaction Format</a></li>
-              <li><a href="docs.html#checkpoints">Checkpoints & Fast-Sync</a></li>
-              <li><a href="docs.html#troubleshooting">Troubleshooting</a></li>
-            </ul>
-          </div>
-        </div>
-      </div>
+      <div class="mega-menu"><div class="mega-cols">
+        <div class="mega-col"><h4>Getting Started</h4><ul><li><a href="docs.html#api">HTTP RPC API</a></li><li><a href="docs.html#sdk">SDK Quickstart</a></li><li><a href="docs.html#node">Running a Node</a></li></ul></div>
+        <div class="mega-col"><h4>Validators</h4><ul><li><a href="docs.html#staking">Staking & Validation</a></li><li><a href="docs.html#governance">Governance</a></li><li><a href="docs.html#monitoring">Metrics & Monitoring</a></li></ul></div>
+        <div class="mega-col"><h4>Reference</h4><ul><li><a href="docs.html#arch">Architecture</a></li><li><a href="docs.html#transactions">Transaction Format</a></li><li><a href="docs.html#checkpoints">Checkpoints & Fast-Sync</a></li><li><a href="docs.html#troubleshooting">Troubleshooting</a></li></ul></div>
+      </div></div>
     </li>
-
     <li><a href="explorer.html">Explorer</a></li>
     <li><a href="blog/index.html">Blog</a></li>
     <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
@@ -364,127 +221,65 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <li><a href="network.html" class="nav-cta">Live Network</a></li>
     <li><a href="/dashboard/" class="nav-cta">Dashboard</a></li>
   </ul>
-  <button class="hamburger" id="hamburger" aria-label="Menu">
-    <span></span>
-    <span></span>
-    <span></span>
-  </button>
+  <button class="hamburger" id="hamburger" aria-label="Menu"><span></span><span></span><span></span></button>
+  <div class="nav-light-beam"></div><div class="nav-light-beam"></div><div class="nav-light-beam"></div>
 </nav>
 
-<div class="mobile-menu" id="mobile-menu">
-  <ul>
-    <li><a href="index.html">Home</a></li>
-    <li><a href="whitepaper.html">Whitepaper</a></li>
-    <li><a href="docs.html">Docs</a></li>
-    <li><a href="explorer.html">Explorer</a></li>
-    <li><a href="blog/index.html">Blog</a></li>
-    <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
-    <li><a href="council.html" style="color:#c9a84c!important">Council</a></li>
-    <li><a href="network.html" class="nav-cta">Live Network</a></li>
-    <li><a href="/dashboard/" class="nav-cta">Dashboard</a></li>
-  </ul>
-</div>
+<!-- MOBILE MENU -->
+<div class="mobile-menu" id="mobile-menu"><ul>
+  <li><a href="index.html">Home</a></li>
+  <li><a href="whitepaper.html">Whitepaper</a></li>
+  <li><a href="docs.html">Docs</a></li>
+  <li><a href="explorer.html">Explorer</a></li>
+  <li><a href="blog/index.html">Blog</a></li>
+  <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
+  <li><a href="council.html" style="color:#c9a84c!important">Council</a></li>
+  <li><a href="network.html" class="nav-cta">Live Network</a></li>
+  <li><a href="/dashboard/" class="nav-cta">Dashboard</a></li>
+</ul></div>
 
 <!-- CONTENT -->
-<div class="container">
-  
-  <div class="header">
-    <p>Search transactions, vertices, rounds, and addresses</p>
-    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-top:24px">
-      <div id="network-health"></div>
-      <button id="auto-refresh-btn" onclick="toggleAutoRefresh()" style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.25);color:var(--white);padding:6px 14px;border-radius:3px;cursor:pointer;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.06em;transition:all .2s ease;font-weight:500" onmouseover="this.style.background='rgba(52,211,153,0.15)';this.style.borderColor='rgba(52,211,153,0.4)';this.style.boxShadow='0 0 12px rgba(52,211,153,0.15)';this.style.transform='translateY(-1px)'" onmouseout="this.style.background='rgba(52,211,153,0.08)';this.style.borderColor='rgba(52,211,153,0.25)';this.style.boxShadow='none';this.style.transform='translateY(0)'">🔄 Auto-refresh ON</button>
-      <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--dim)">Updated: <span id="last-update">—</span></span>
-    </div>
-  </div>
-
+<div class="main">
   <!-- SEARCH -->
   <div class="search-section">
+    <h1 class="search-title">Block Explorer</h1>
+    <p class="search-sub">Search by round, transaction hash, vertex hash, or address</p>
     <div class="search-box">
-      <input type="text" class="search-input" id="search-input" placeholder="Search by round, tx hash, vertex hash, or address (64 hex)...">
-      <button class="search-btn" id="search-btn">Search</button>
+      <input type="text" id="search-input" placeholder="Search by round, transaction, address, or vertex hash..." autocomplete="off" spellcheck="false">
+      <button id="search-btn">Search</button>
     </div>
-    <div class="search-hint">
-      <span>Try: Round number • Tx hash • Vertex hash • Address (64 hex) • <kbd style="background:var(--bg3);padding:2px 6px;border-radius:2px;font-size:10px;border:1px solid var(--border)">Ctrl+K</kbd> to focus</span>
-      <button onclick="showShortcuts()" style="background:rgba(61,155,233,0.08);border:1px solid rgba(61,155,233,0.25);color:var(--white);padding:4px 10px;border-radius:3px;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;margin-left:12px;transition:all .2s ease;font-weight:500" onmouseover="this.style.background='rgba(61,155,233,0.15)';this.style.borderColor='rgba(61,155,233,0.4)';this.style.boxShadow='0 0 12px rgba(61,155,233,0.15)';this.style.transform='translateY(-1px)'" onmouseout="this.style.background='rgba(61,155,233,0.08)';this.style.borderColor='rgba(61,155,233,0.25)';this.style.boxShadow='none';this.style.transform='translateY(0)'">⌨️ Shortcuts</button>
-    </div>
+    <div class="search-error" id="search-error"></div>
   </div>
 
   <!-- STATS -->
-  <div class="stats-grid">
-    <div class="stat-card">
-      <div class="stat-label">Latest Round</div>
-      <div class="stat-value" id="latest-round" style="transition:color 0.3s">—</div>
-      <div class="stat-sub">Current DAG round</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Finalized Round</div>
-      <div class="stat-value" id="dag-finalized" style="transition:color 0.3s">—</div>
-      <div class="stat-sub" id="finality-lag-sub">Finality lag: —</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Total Supply</div>
-      <div class="stat-value" id="total-supply">—</div>
-      <div class="stat-sub">UDAG circulating</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Active Accounts</div>
-      <div class="stat-value" id="active-accounts">—</div>
-      <div class="stat-sub">With balance > 0</div>
-    </div>
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card"><div class="stat-label">DAG Round</div><div class="stat-value" id="s-round">--</div></div>
+    <div class="stat-card"><div class="stat-label">Finalized Round</div><div class="stat-value" id="s-finalized">--</div><div class="stat-extra" id="s-lag"></div></div>
+    <div class="stat-card"><div class="stat-label">Total Supply</div><div class="stat-value" id="s-supply">--</div><div class="stat-extra" id="s-supply-pct"></div></div>
+    <div class="stat-card"><div class="stat-label">Active Validators</div><div class="stat-value" id="s-validators">--</div></div>
+    <div class="stat-card"><div class="stat-label">Peers</div><div class="stat-value" id="s-peers">--</div></div>
+    <div class="stat-card"><div class="stat-label">Mempool</div><div class="stat-value" id="s-mempool">--</div><div class="stat-extra">pending txs</div></div>
+    <div class="stat-card"><div class="stat-label">Accounts</div><div class="stat-value" id="s-accounts">--</div></div>
+    <div class="stat-card"><div class="stat-label">Total Staked</div><div class="stat-value" id="s-staked">--</div></div>
   </div>
 
-  <!-- TABS -->
-  <div class="tabs">
-    <button class="tab active" data-tab="rounds">Latest Rounds</button>
-    <button class="tab" data-tab="validators">Validators</button>
-  </div>
-
-  <!-- ROUNDS TAB -->
-  <div id="rounds-tab" class="tab-content">
-    <div class="table-container">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Round</th>
-            <th>Vertices</th>
-            <th>Transactions</th>
-            <th>Validators</th>
-            <th>Total Rewards</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody id="rounds-tbody">
-          <tr><td colspan="6" class="loading">Loading rounds</td></tr>
-        </tbody>
-      </table>
+  <!-- DETAIL PANEL -->
+  <div class="detail-panel" id="detail-panel">
+    <div class="detail-header">
+      <div class="detail-title" id="detail-title"></div>
+      <button class="detail-close" id="detail-close">Close</button>
     </div>
-    <div class="pagination" id="rounds-pagination"></div>
+    <div id="detail-body"></div>
   </div>
 
-  <!-- VALIDATORS TAB -->
-  <div id="validators-tab" class="tab-content" style="display:none">
-    <div class="table-container">
-      <table class="table">
-        <thead>
-          <tr>
-            <th class="sortable">Rank</th>
-            <th class="sortable">Validator</th>
-            <th class="sortable">Vertices Produced</th>
-            <th class="sortable">Rewards Earned</th>
-            <th class="sortable">Participation %</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody id="validators-tbody">
-          <tr><td colspan="6" class="loading">Loading validators</td></tr>
-        </tbody>
-      </table>
-    </div>
+  <!-- RECENT ROUNDS -->
+  <div class="section-title">Recent Finalized Rounds</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Round</th><th>Vertices</th><th>Validators</th><th>Status</th></tr></thead>
+      <tbody id="rounds-body"><tr><td colspan="4" style="text-align:center;color:var(--muted)">Loading...</td></tr></tbody>
+    </table>
   </div>
-
-  <!-- DETAIL VIEW (Hidden by default) -->
-  <div id="detail-view" style="display:none"></div>
-
 </div>
 
 <!-- FOOTER -->
@@ -492,83 +287,289 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <div class="footer-inner">
     <div class="footer-top">
       <div class="footer-brand">
-        <div class="footer-logo">
-          <div class="nav-logo-mark"></div>
-          <span>UltraDAG</span>
-        </div>
+        <div class="footer-logo"><div class="nav-logo-mark"></div><span>UltraDAG</span></div>
         <p class="footer-tagline">The simplest production-ready DAG chain.<br>Fast BFT finality for machine-to-machine micropayments.</p>
         <div class="footer-social">
-          <a href="https://github.com/UltraDAGcom/core" target="_blank" aria-label="GitHub">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
-          </a>
-          <a href="https://x.com/ultradagcom" target="_blank" aria-label="Twitter">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path></svg>
-          </a>
-          <a href="https://t.me/ultradagcom" target="_blank" aria-label="Telegram">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-          </a>
+          <a href="https://github.com/UltraDAGcom/core" target="_blank" aria-label="GitHub"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg></a>
+          <a href="https://x.com/ultradagcom" target="_blank" aria-label="Twitter"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path></svg></a>
+          <a href="https://t.me/ultradagcom" target="_blank" aria-label="Telegram"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></a>
         </div>
       </div>
-      
       <div class="footer-links-grid">
-        <div class="footer-col">
-          <h4>Product</h4>
-          <ul>
-            <li><a href="network.html">Live Network</a></li>
-            <li><a href="/dashboard/">Dashboard</a></li>
-            <li><a href="consensus-viz.html">Consensus Demo</a></li>
-            <li><a href="whitepaper.html">Whitepaper</a></li>
-          </ul>
-        </div>
-        <div class="footer-col">
-          <h4>Developers</h4>
-          <ul>
-            <li><a href="docs.html">Documentation</a></li>
-            <li><a href="docs.html#api">API Reference</a></li>
-            <li><a href="docs.html#sdk">SDK Quickstart</a></li>
-            <li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li>
-          </ul>
-        </div>
-        <div class="footer-col">
-          <h4>Resources</h4>
-          <ul>
-            <li><a href="blog/index.html">Blog</a></li>
-            <li><a href="docs.html#node">Run a Node</a></li>
-            <li><a href="docs.html#staking">Staking Guide</a></li>
-            <li><a href="docs.html#troubleshooting">Support</a></li>
-          </ul>
-        </div>
+        <div class="footer-col"><h4>Product</h4><ul><li><a href="network.html">Live Network</a></li><li><a href="/dashboard/">Dashboard</a></li><li><a href="consensus-viz.html">Consensus Demo</a></li><li><a href="whitepaper.html">Whitepaper</a></li></ul></div>
+        <div class="footer-col"><h4>Developers</h4><ul><li><a href="docs.html">Documentation</a></li><li><a href="docs.html#api">API Reference</a></li><li><a href="docs.html#sdk">SDK Quickstart</a></li><li><a href="https://github.com/UltraDAGcom/core" target="_blank">GitHub</a></li></ul></div>
+        <div class="footer-col"><h4>Resources</h4><ul><li><a href="blog/index.html">Blog</a></li><li><a href="docs.html#node">Run a Node</a></li><li><a href="docs.html#staking">Staking Guide</a></li><li><a href="docs.html#troubleshooting">Support</a></li></ul></div>
       </div>
     </div>
     <div class="footer-bottom">
-      <div class="footer-legal">
-        <span>&copy; 2026 UltraDAG</span>
-        <span class="footer-separator">&bull;</span>
-        <span>Licensed under BUSL-1.1</span>
-        <span class="footer-separator">&bull;</span>
-        <span>Converts to MIT March 2030</span>
-      </div>
-      <div class="footer-status">
-        <div class="footer-status-dot"></div>
-        <span>All systems operational</span>
-      </div>
+      <div class="footer-legal"><span>&copy; 2026 UltraDAG</span><span class="footer-separator">&bull;</span><span>Licensed under BUSL-1.1</span><span class="footer-separator">&bull;</span><span>Converts to MIT March 2030</span></div>
+      <div class="footer-status"><div class="footer-status-dot"></div><span>All systems operational</span></div>
     </div>
   </div>
 </footer>
 
 <script>
-// Nav scroll
+// ── NAV ──
 const nav = document.getElementById('nav');
-window.addEventListener('scroll', () => {
-  nav.classList.toggle('scrolled', window.scrollY > 40);
-});
+window.addEventListener('scroll', () => nav.classList.toggle('scrolled', window.scrollY > 40));
+const hamburger = document.getElementById('hamburger');
+const mobileMenu = document.getElementById('mobile-menu');
+hamburger.addEventListener('click', () => { hamburger.classList.toggle('active'); mobileMenu.classList.toggle('active'); });
+mobileMenu.querySelectorAll('a').forEach(a => a.addEventListener('click', () => { hamburger.classList.remove('active'); mobileMenu.classList.remove('active'); }));
 
-const hamburger=document.getElementById('hamburger');
-const mobileMenu=document.getElementById('mobile-menu');
-hamburger.addEventListener('click',()=>{hamburger.classList.toggle('active');mobileMenu.classList.toggle('active')});
-mobileMenu.querySelectorAll('a').forEach(link=>{link.addEventListener('click',()=>{hamburger.classList.remove('active');mobileMenu.classList.remove('active')})});
+// ── API ──
+const NODES = [
+  'https://ultradag-node-1.fly.dev','https://ultradag-node-2.fly.dev',
+  'https://ultradag-node-3.fly.dev','https://ultradag-node-4.fly.dev',
+  'https://ultradag-node-5.fly.dev'
+];
+const SATS = 100_000_000;
+const MAX_SUPPLY = 21_000_000;
+
+async function fetchApi(path) {
+  return Promise.any(NODES.map(n =>
+    fetch(n + path, { signal: AbortSignal.timeout(4000) }).then(r => {
+      if (!r.ok) throw new Error(r.status);
+      return r.json();
+    })
+  ));
+}
+
+function short(hex) {
+  if (!hex) return '--';
+  const s = typeof hex === 'string' ? hex : Array.from(hex).map(b => b.toString(16).padStart(2, '0')).join('');
+  return s.length > 16 ? s.slice(0, 8) + '\u2026' + s.slice(-6) : s;
+}
+function fmt(n) { return n == null ? '--' : Number(n).toLocaleString(); }
+function fmtUdag(sats) { return sats == null ? '--' : (Number(sats) / SATS).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+
+// ── STATS ──
+let lastStatus = null;
+async function refreshStats() {
+  try {
+    const s = await fetchApi('/status');
+    lastStatus = s;
+    document.getElementById('s-round').textContent = fmt(s.dag_round);
+    document.getElementById('s-finalized').textContent = fmt(s.last_finalized_round);
+    const lag = (s.dag_round || 0) - (s.last_finalized_round || 0);
+    const lagEl = document.getElementById('s-lag');
+    lagEl.textContent = 'lag: ' + lag;
+    lagEl.className = 'stat-extra ' + (lag <= 3 ? 'lag-good' : lag <= 10 ? 'lag-warn' : 'lag-bad');
+    const supplyUdag = s.total_supply_udag || (s.total_supply ? s.total_supply / SATS : 0);
+    document.getElementById('s-supply').textContent = Math.floor(supplyUdag).toLocaleString() + ' UDAG';
+    document.getElementById('s-supply-pct').textContent = (supplyUdag / MAX_SUPPLY * 100).toFixed(4) + '% of 21M';
+    document.getElementById('s-validators').textContent = fmt(s.active_stakers || s.validators);
+    document.getElementById('s-peers').textContent = fmt(s.connected_peers);
+    document.getElementById('s-mempool').textContent = fmt(s.mempool_size);
+    document.getElementById('s-accounts').textContent = fmt(s.total_accounts);
+    const stakedUdag = s.total_staked_udag || (s.total_staked ? s.total_staked / SATS : 0);
+    document.getElementById('s-staked').textContent = Math.floor(stakedUdag).toLocaleString() + ' UDAG';
+    refreshRounds(s.last_finalized_round || s.dag_round || 0);
+  } catch (e) { console.warn('Stats fetch failed:', e); }
+}
+
+// ── RECENT ROUNDS ──
+async function refreshRounds(latest) {
+  const tbody = document.getElementById('rounds-body');
+  if (!latest || latest < 1) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted)">No finalized rounds yet</td></tr>';
+    return;
+  }
+  const start = Math.max(1, latest - 9);
+  const promises = [];
+  for (let r = latest; r >= start; r--) {
+    const round = r;
+    promises.push(
+      fetchApi('/round/' + round)
+        .then(data => ({ round, data, ok: true }))
+        .catch(() => ({ round, ok: false }))
+    );
+  }
+  const results = await Promise.all(promises);
+  let html = '';
+  for (const res of results) {
+    if (!res.ok) {
+      html += '<tr><td class="mono">' + fmt(res.round) + '</td><td colspan="3" style="color:var(--muted)">unavailable</td></tr>';
+      continue;
+    }
+    const verts = Array.isArray(res.data) ? res.data : (res.data.vertices || []);
+    const validators = verts.map(v => short(v.validator || v.address)).join(', ');
+    const finalized = lastStatus && res.round <= (lastStatus.last_finalized_round || 0);
+    html += '<tr>'
+      + '<td><span class="mono link" onclick="showRound(' + res.round + ')">' + fmt(res.round) + '</span></td>'
+      + '<td class="mono">' + verts.length + '</td>'
+      + '<td class="mono" style="font-size:12px;color:var(--subtle)">' + (validators || '--') + '</td>'
+      + '<td>' + (finalized ? '<span class="badge badge-green">Finalized</span>' : '<span class="badge badge-yellow">Pending</span>') + '</td>'
+      + '</tr>';
+  }
+  tbody.innerHTML = html;
+}
+
+// ── DETAIL PANEL ──
+const detailPanel = document.getElementById('detail-panel');
+const detailTitle = document.getElementById('detail-title');
+const detailBody = document.getElementById('detail-body');
+document.getElementById('detail-close').onclick = () => detailPanel.classList.remove('active');
+
+function showDetail(title, html) {
+  detailTitle.textContent = title;
+  detailBody.innerHTML = html;
+  detailPanel.classList.add('active');
+  detailPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function field(label, value) {
+  return '<div class="detail-field"><div class="label">' + label + '</div><div class="value">' + value + '</div></div>';
+}
+
+// ── ROUND VIEW ──
+async function showRound(round) {
+  showDetail('Round ' + fmt(round), '<div style="color:var(--muted)">Loading...</div>');
+  try {
+    const data = await fetchApi('/round/' + round);
+    const verts = Array.isArray(data) ? data : (data.vertices || []);
+    if (!verts.length) { showDetail('Round ' + fmt(round), '<div style="color:var(--muted)">No vertices in this round</div>'); return; }
+    const finalized = lastStatus && round <= (lastStatus.last_finalized_round || 0);
+    let html = '<div class="detail-grid" style="margin-bottom:16px">'
+      + field('Round', fmt(round))
+      + field('Vertices', verts.length)
+      + field('Status', finalized ? '<span class="badge badge-green">Finalized</span>' : '<span class="badge badge-yellow">Pending</span>')
+      + '</div><div class="section-title" style="margin-top:16px">Vertices</div><div class="vertex-list">';
+    for (const v of verts) {
+      const hash = v.hash || v.vertex_hash || '';
+      html += '<div class="vertex-item" onclick="showVertex(\'' + hash + '\')">'
+        + '<div><div class="vertex-label">Hash</div><div class="vertex-val">' + short(hash) + '</div></div>'
+        + '<div><div class="vertex-label">Validator</div><div class="vertex-val">' + short(v.validator || v.address) + '</div></div>'
+        + '<div><div class="vertex-label">Txs</div><div class="vertex-val">' + (v.tx_count != null ? v.tx_count : (v.transactions ? v.transactions.length : 0)) + '</div></div>'
+        + '<div><div class="vertex-label">Parents</div><div class="vertex-val">' + (v.parent_count != null ? v.parent_count : (v.parents ? v.parents.length : 0)) + '</div></div>'
+        + '</div>';
+    }
+    html += '</div>';
+    showDetail('Round ' + fmt(round), html);
+  } catch (e) { showDetail('Round ' + fmt(round), '<div style="color:var(--danger)">Failed to load round data</div>'); }
+}
+
+// ── VERTEX VIEW ──
+async function showVertex(hash) {
+  showDetail('Vertex ' + short(hash), '<div style="color:var(--muted)">Loading...</div>');
+  try {
+    const v = await fetchApi('/vertex/' + hash);
+    let html = '<div class="detail-grid">'
+      + field('Hash', hash)
+      + field('Round', fmt(v.round))
+      + field('Validator', v.validator || '--')
+      + field('Parent Count', v.parent_count != null ? v.parent_count : (v.parents ? v.parents.length : '--'))
+      + field('Coinbase', v.coinbase_reward != null ? fmtUdag(v.coinbase_reward) + ' UDAG' : '--')
+      + '</div>';
+    const txs = v.transactions || [];
+    if (txs.length) {
+      html += '<div class="section-title" style="margin-top:20px">Transactions</div><div class="table-wrap"><table>'
+        + '<thead><tr><th>Type</th><th>Hash</th><th>From</th><th>Fee</th></tr></thead><tbody>';
+      for (const tx of txs) {
+        html += '<tr>'
+          + '<td><span class="badge badge-blue">' + (tx.type || tx.tx_type || '--') + '</span></td>'
+          + '<td class="mono link" onclick="showTx(\'' + (tx.hash || '') + '\')">' + short(tx.hash) + '</td>'
+          + '<td class="mono" style="font-size:12px">' + short(tx.from) + '</td>'
+          + '<td class="mono">' + (tx.fee != null ? fmtUdag(tx.fee) : '--') + '</td>'
+          + '</tr>';
+      }
+      html += '</tbody></table></div>';
+    }
+    showDetail('Vertex ' + short(hash), html);
+  } catch (e) { showDetail('Vertex ' + short(hash), '<div style="color:var(--danger)">Vertex not found</div>'); }
+}
+
+// ── TX VIEW ──
+async function showTx(hash) {
+  showDetail('Transaction ' + short(hash), '<div style="color:var(--muted)">Loading...</div>');
+  try {
+    const tx = await fetchApi('/tx/' + hash);
+    const status = tx.status === 'finalized'
+      ? '<span class="badge badge-green">Finalized</span>'
+      : '<span class="badge badge-yellow">Pending</span>';
+    let html = '<div class="detail-grid">'
+      + field('Hash', hash)
+      + field('Status', status)
+      + field('Type', tx.type || tx.tx_type || '--');
+    if (tx.from) html += field('From', '<span class="link" onclick="showAddress(\'' + tx.from + '\')">' + tx.from + '</span>');
+    if (tx.to) html += field('To', '<span class="link" onclick="showAddress(\'' + tx.to + '\')">' + tx.to + '</span>');
+    if (tx.amount != null) html += field('Amount', fmtUdag(tx.amount) + ' UDAG');
+    if (tx.fee != null) html += field('Fee', fmtUdag(tx.fee) + ' UDAG');
+    if (tx.round != null) html += field('Round', '<span class="link" onclick="showRound(' + tx.round + ')">' + fmt(tx.round) + '</span>');
+    if (tx.vertex_hash) html += field('Vertex', '<span class="link" onclick="showVertex(\'' + tx.vertex_hash + '\')">' + short(tx.vertex_hash) + '</span>');
+    if (tx.validator) html += field('Validator', short(tx.validator));
+    html += '</div>';
+    showDetail('Transaction ' + short(hash), html);
+  } catch (e) { showDetail('Transaction ' + short(hash), '<div style="color:var(--danger)">Transaction not found</div>'); }
+}
+
+// ── ADDRESS VIEW ──
+async function showAddress(addr) {
+  showDetail('Address ' + short(addr), '<div style="color:var(--muted)">Loading...</div>');
+  try {
+    const bal = await fetchApi('/balance/' + addr);
+    let html = '<div class="detail-grid">'
+      + field('Address', addr)
+      + field('Balance', (bal.balance_udag != null ? bal.balance_udag : fmtUdag(bal.balance)) + ' UDAG')
+      + field('Balance (sats)', fmt(bal.balance))
+      + field('Nonce', fmt(bal.nonce))
+      + '</div>';
+    try {
+      const st = await fetchApi('/stake/' + addr);
+      if (st && (st.staked > 0 || st.staked_udag)) {
+        html += '<div class="section-title" style="margin-top:20px">Stake</div><div class="detail-grid">'
+          + field('Staked', (st.staked_udag != null ? st.staked_udag : fmtUdag(st.staked)) + ' UDAG')
+          + field('Active Validator', st.is_active_validator ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-yellow">No</span>');
+        if (st.commission_percent != null) html += field('Commission', st.commission_percent + '%');
+        if (st.effective_stake) html += field('Effective Stake', fmtUdag(st.effective_stake) + ' UDAG');
+        html += '</div>';
+      }
+    } catch (e) {}
+    try {
+      const del = await fetchApi('/delegation/' + addr);
+      if (del && del.delegated_amount > 0) {
+        html += '<div class="section-title" style="margin-top:20px">Delegation</div><div class="detail-grid">'
+          + field('Delegated', fmtUdag(del.delegated_amount) + ' UDAG')
+          + field('To Validator', short(del.validator));
+        if (del.undelegating) html += field('Status', '<span class="badge badge-yellow">Undelegating</span>');
+        html += '</div>';
+      }
+    } catch (e) {}
+    showDetail('Address ' + short(addr), html);
+  } catch (e) { showDetail('Address ' + short(addr), '<div style="color:var(--danger)">Address not found or has no balance</div>'); }
+}
+
+// ── SEARCH ──
+const searchInput = document.getElementById('search-input');
+const searchError = document.getElementById('search-error');
+
+function doSearch() {
+  const q = searchInput.value.trim();
+  searchError.textContent = '';
+  if (!q) return;
+  if (/^\d+$/.test(q)) { showRound(parseInt(q)); return; }
+  const hex = q.startsWith('0x') ? q.slice(2) : q;
+  if (/^[0-9a-fA-F]{64}$/.test(hex)) {
+    showDetail('Looking up...', '<div style="color:var(--muted)">Searching...</div>');
+    fetchApi('/tx/' + hex).then(() => showTx(hex)).catch(() =>
+      fetchApi('/vertex/' + hex).then(() => showVertex(hex)).catch(() =>
+        fetchApi('/balance/' + hex).then(() => showAddress(hex)).catch(() => {
+          searchError.textContent = 'Nothing found for: ' + short(hex);
+          detailPanel.classList.remove('active');
+        })
+      )
+    );
+    return;
+  }
+  if (/^[0-9a-fA-F]+$/.test(hex) && hex.length >= 20) { showAddress(hex); return; }
+  searchError.textContent = 'Enter a round number, 64-char hex hash, or address.';
+}
+
+searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+document.getElementById('search-btn').onclick = doSearch;
+
+// ── INIT ──
+refreshStats();
+setInterval(refreshStats, 10000);
 </script>
-<script src="explorer.js"></script>
-
 </body>
 </html>
