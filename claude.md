@@ -8,6 +8,24 @@
 
 ## Recent Updates (March 2026)
 
+**Council Seat Category Redesign (March 26, 2026):**
+- Old: Technical(7), Business(4), Legal(3), Academic(3), Community(2), Foundation(2)
+- **New: Engineering(5), Growth(3), Legal(2), Research(2), Community(4), Operations(3), Security(2) = 21 seats**
+- Functional expertise areas matching successful DAO models (MakerDAO, Optimism, Polkadot). No corporate job titles.
+- Community has most non-technical seats (4). Security gets dedicated seats. Genesis bootstraps dev address as Operations.
+- Changed across 23 files: Rust enum + methods, state root byte mapping, all tests, dashboard UI, static pages.
+- **Breaking change**: state root and redb byte mappings changed. Clean restart required.
+
+**Security Fixes — Twelfth Review Pass (March 26, 2026):**
+- **Bug #266 (CRITICAL): Bridge auto-refund enables cross-chain double-spend** — `prune_old_bridge_attestations` auto-refunded expired deposits back to sender, but the user may have already claimed on Arbitrum → tokens on both chains. Fix: removed auto-refund entirely. Expired attestations are cleaned up (attestation + signatures removed) but funds remain in `bridge_reserve`. Refunds ONLY via governance `BridgeRefund` proposal requiring council vote to verify Arbitrum claim wasn't made.
+- **Bug #267 (HIGH): State root missing 3 consensus-critical fields** — `bridge_release_first_vote_round`, `bridge_release_disagree_count`, and `slashed_events` excluded from `compute_state_root()`. Divergence between nodes would produce identical state roots → undetectable consensus split. Fix: all 3 fields added to state root hash.
+- **Bug #268 (LOW): saturating_sub in slash masks potential corruption** — `total_supply.saturating_sub(slash_amount)` would silently produce 0 if supply < slash. Added error log for anomaly detection.
+- **Known issues documented:**
+  - Checkpoint co-signing window is narrow (requires exact round match) — liveness issue, not safety. Saved checkpoint_state mitigates GetCheckpoint but co-signing remains fragile.
+  - DAG-level Byzantine marking via P2P is non-deterministic (different evidence arrival order) — affects DAG shape and liveness timing, not finalized state. Actual slash in apply_finalized_vertices is deterministic.
+  - Noise handshake doesn't enforce allowlist at connection level — non-allowlisted nodes can connect and send non-vertex messages. Message-level checks are sufficient for security.
+  - Insufficient-balance nonce consumption is standard blockchain behavior but DAG-BFT increases probability of inclusion-despite-failure.
+
 **Security Fixes — Eleventh Review Pass (March 26, 2026):**
 - **Bug #258 (CRITICAL): BridgeRelease blocked from mempool — bridge broken** — `BridgeRelease` (fee=0) missing from fee-exempt list in pool.rs. Every BridgeRelease silently rejected → Arbitrum→Native bridge completely non-functional. Fix: added to fee-exempt matches.
 - **Bug #259 (HIGH): Double nonce on BridgeRelease param mismatch** — `apply_bridge_release_tx` incremented nonce in disagreement path, then outer handler incremented again → nonce +2. Fix: removed inner increment.
