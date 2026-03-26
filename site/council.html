@@ -428,8 +428,8 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
   <div class="seats-inner">
     <div class="seats-header reveal">
       <div class="seats-tag">Seat Allocation</div>
-      <h2 class="seats-title"><em>21</em> Seats. Six Categories.</h2>
-      <p class="seats-lead">Each seat category brings essential expertise. Technical, Business, Legal, Academic, Community, and Foundation — a balanced governing body designed for self-sufficiency.</p>
+      <h2 class="seats-title"><em>21</em> Seats. Seven Categories.</h2>
+      <p class="seats-lead">Each seat category brings essential expertise. Engineering, Growth, Legal, Research, Community, Operations, and Security — a balanced governing body designed for self-sufficiency.</p>
     </div>
     <div class="seats-grid reveal" id="seats-grid">
       <!-- 21 seats rendered by JS -->
@@ -497,8 +497,8 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
       <div class="requirement-cards reveal">
         <div class="requirement-card">
           <div class="req-label">Seat Categories</div>
-          <div class="req-value">6 Domains of Expertise</div>
-          <div class="req-detail">Technical (7 seats), Business (4), Legal (3), Academic (3), Community (2), Foundation (2). Each category has fixed capacity enforced at protocol level.</div>
+          <div class="req-value">7 Domains of Expertise</div>
+          <div class="req-detail">Engineering (5 seats), Growth (3), Legal (2), Research (2), Community (4), Operations (3), Security (2). Each category has fixed capacity enforced at protocol level.</div>
         </div>
         <div class="requirement-card">
           <div class="req-label">Selection Process</div>
@@ -554,7 +554,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
       <div class="cta-step">
         <div class="cta-step-num">1</div>
         <div class="cta-step-title">Apply</div>
-        <div class="cta-step-desc">Submit your application with your domain expertise and the seat category you qualify for. During formation, the Foundation reviews applications.</div>
+        <div class="cta-step-desc">Submit your application with your domain expertise and the seat category you qualify for. During formation, the Operations team reviews applications.</div>
       </div>
       <div class="cta-step">
         <div class="cta-step-num">2</div>
@@ -660,12 +660,13 @@ hamburger.addEventListener('click',()=>{
 (function(){
   const grid=document.getElementById('seats-grid');
   const categories=[
-    {name:'Technical',count:7,color:'#3d9be9'},
-    {name:'Business',count:4,color:'#34d399'},
-    {name:'Legal',count:3,color:'#fbbf24'},
-    {name:'Academic',count:3,color:'#a78bfa'},
-    {name:'Community',count:2,color:'#f87171'},
-    {name:'Foundation',count:2,color:'#c9a84c'}
+    {name:'Engineering',count:5,color:'#3d9be9'},
+    {name:'Growth',count:3,color:'#34d399'},
+    {name:'Legal',count:2,color:'#fbbf24'},
+    {name:'Research',count:2,color:'#a78bfa'},
+    {name:'Community',count:4,color:'#f87171'},
+    {name:'Operations',count:3,color:'#f97316'},
+    {name:'Security',count:2,color:'#ef4444'}
   ];
   let seatNum=1;
   categories.forEach(cat=>{

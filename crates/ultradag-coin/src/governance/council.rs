@@ -4,66 +4,72 @@ use serde::{Deserialize, Serialize};
 /// Each category has a fixed allocation ensuring diverse expertise.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CouncilSeatCategory {
-    /// Protocol developers, security researchers, infrastructure engineers (7 seats)
-    Technical,
-    /// IoT CEOs, crypto founders, enterprise users (4 seats)
-    Business,
-    /// Lawyers, regulatory specialists (3 seats)
+    /// Protocol developers, core engineers, infrastructure (5 seats)
+    Engineering,
+    /// Partnerships, adoption, ecosystem development (3 seats)
+    Growth,
+    /// Legal counsel, regulatory compliance (2 seats)
     Legal,
-    /// Cryptographers, distributed systems researchers (3 seats)
-    Academic,
-    /// SDK developers, node operators, integration builders (2 seats)
+    /// Cryptography, distributed systems, economics research (2 seats)
+    Research,
+    /// Community advocates, content creators, ambassadors (4 seats)
     Community,
-    /// Panama Foundation leadership (2 seats)
-    Foundation,
+    /// Treasury management, infrastructure, DevOps (3 seats)
+    Operations,
+    /// Security auditors, penetration testers, incident response (2 seats)
+    Security,
 }
 
 impl CouncilSeatCategory {
     /// Maximum seats allocated to this category.
     pub fn max_seats(&self) -> usize {
         match self {
-            CouncilSeatCategory::Technical => 7,
-            CouncilSeatCategory::Business => 4,
-            CouncilSeatCategory::Legal => 3,
-            CouncilSeatCategory::Academic => 3,
-            CouncilSeatCategory::Community => 2,
-            CouncilSeatCategory::Foundation => 2,
+            CouncilSeatCategory::Engineering => 5,
+            CouncilSeatCategory::Growth => 3,
+            CouncilSeatCategory::Legal => 2,
+            CouncilSeatCategory::Research => 2,
+            CouncilSeatCategory::Community => 4,
+            CouncilSeatCategory::Operations => 3,
+            CouncilSeatCategory::Security => 2,
         }
     }
 
     /// All category variants.
     pub fn all() -> &'static [CouncilSeatCategory] {
         &[
-            CouncilSeatCategory::Technical,
-            CouncilSeatCategory::Business,
+            CouncilSeatCategory::Engineering,
+            CouncilSeatCategory::Growth,
             CouncilSeatCategory::Legal,
-            CouncilSeatCategory::Academic,
+            CouncilSeatCategory::Research,
             CouncilSeatCategory::Community,
-            CouncilSeatCategory::Foundation,
+            CouncilSeatCategory::Operations,
+            CouncilSeatCategory::Security,
         ]
     }
 
     /// Display name for the category.
     pub fn name(&self) -> &'static str {
         match self {
-            CouncilSeatCategory::Technical => "Technical",
-            CouncilSeatCategory::Business => "Business",
+            CouncilSeatCategory::Engineering => "Engineering",
+            CouncilSeatCategory::Growth => "Growth",
             CouncilSeatCategory::Legal => "Legal",
-            CouncilSeatCategory::Academic => "Academic",
+            CouncilSeatCategory::Research => "Research",
             CouncilSeatCategory::Community => "Community",
-            CouncilSeatCategory::Foundation => "Foundation",
+            CouncilSeatCategory::Operations => "Operations",
+            CouncilSeatCategory::Security => "Security",
         }
     }
 
     /// Parse from string (for governance proposals).
     pub fn parse_name(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
-            "technical" => Some(CouncilSeatCategory::Technical),
-            "business" => Some(CouncilSeatCategory::Business),
+            "engineering" => Some(CouncilSeatCategory::Engineering),
+            "growth" => Some(CouncilSeatCategory::Growth),
             "legal" => Some(CouncilSeatCategory::Legal),
-            "academic" => Some(CouncilSeatCategory::Academic),
+            "research" => Some(CouncilSeatCategory::Research),
             "community" => Some(CouncilSeatCategory::Community),
-            "foundation" => Some(CouncilSeatCategory::Foundation),
+            "operations" => Some(CouncilSeatCategory::Operations),
+            "security" => Some(CouncilSeatCategory::Security),
             _ => None,
         }
     }

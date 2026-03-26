@@ -564,24 +564,26 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
 fn council_category_to_u8(cat: &crate::governance::CouncilSeatCategory) -> u8 {
     use crate::governance::CouncilSeatCategory::*;
     match cat {
-        Technical => 0,
-        Business => 1,
+        Engineering => 0,
+        Growth => 1,
         Legal => 2,
-        Academic => 3,
+        Research => 3,
         Community => 4,
-        Foundation => 5,
+        Operations => 5,
+        Security => 6,
     }
 }
 
 fn u8_to_council_category(val: u8) -> Option<crate::governance::CouncilSeatCategory> {
     use crate::governance::CouncilSeatCategory::*;
     match val {
-        0 => Some(Technical),
-        1 => Some(Business),
+        0 => Some(Engineering),
+        1 => Some(Growth),
         2 => Some(Legal),
-        3 => Some(Academic),
+        3 => Some(Research),
         4 => Some(Community),
-        5 => Some(Foundation),
+        5 => Some(Operations),
+        6 => Some(Security),
         _ => None,
     }
 }

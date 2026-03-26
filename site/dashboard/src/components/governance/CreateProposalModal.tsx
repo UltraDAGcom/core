@@ -18,12 +18,13 @@ const PARAM_OPTIONS = [
 ];
 
 const SEAT_CATEGORIES = [
-  'Technical',
-  'Business',
+  'Engineering',
+  'Growth',
   'Legal',
-  'Academic',
+  'Research',
   'Community',
-  'Foundation',
+  'Operations',
+  'Security',
 ];
 
 interface CreateProposalModalProps {

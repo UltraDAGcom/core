@@ -123,7 +123,7 @@ fn make_vertex_with_reward(
 }
 
 /// Compute the validator reward that `new_with_genesis()` engines expect.
-/// Genesis adds one Foundation council seat, so validators get
+/// Genesis adds one Operations council seat, so validators get
 /// (100 - council_emission_percent)% of block_reward.
 fn genesis_validator_reward(height: u64) -> u64 {
     use ultradag_coin::constants::{COUNCIL_EMISSION_PERCENT, block_reward};
@@ -349,7 +349,7 @@ fn b3_faucet_transaction_valid() {
     let tx = make_signed_tx(&faucet_sk, recipient, amount, fee, 0);
 
     // Create a vertex with this transaction.
-    // Engine has one council member (Foundation seat added in new_with_genesis), so
+    // Engine has one council member (Operations seat added in new_with_genesis), so
     // validator reward = block_reward * (100 - council_emission_percent)% = 90%.
     let proposer_sk = SecretKey::from_bytes([1u8; 32]);
     let reward = genesis_validator_reward(0);

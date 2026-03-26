@@ -266,8 +266,8 @@ fn build_fully_populated_engine() -> StateEngine {
     let _ = engine.apply_stake_tx(&stake_tx1);
 
     // --- Council members ---
-    engine.add_council_member(faucet_addr, CouncilSeatCategory::Technical).unwrap();
-    engine.add_council_member(addr2, CouncilSeatCategory::Business).unwrap();
+    engine.add_council_member(faucet_addr, CouncilSeatCategory::Engineering).unwrap();
+    engine.add_council_member(addr2, CouncilSeatCategory::Growth).unwrap();
 
     // --- Governance params (non-default) ---
     let gp = engine.governance_params_mut();

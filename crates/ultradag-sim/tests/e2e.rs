@@ -154,7 +154,7 @@ fn e2e_governance_lifecycle() {
     
     // Add all participants to council (technical seats) - council members can create proposals
     for addr in [proposer_addr, voter1_addr, voter2_addr, voter3_addr] {
-        state.add_council_member(addr, CouncilSeatCategory::Technical).unwrap();
+        state.add_council_member(addr, CouncilSeatCategory::Engineering).unwrap();
     }
     
     // Create proposal to change min_fee_sats

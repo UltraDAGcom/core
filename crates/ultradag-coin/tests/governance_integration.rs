@@ -74,7 +74,7 @@ fn fund_stake_council(state: &mut StateEngine, sk: &SecretKey, stake_amount: u64
     };
     stake_tx.signature = sk.sign(&stake_tx.signable_bytes());
     state.apply_stake_tx(&stake_tx).unwrap();
-    state.add_council_member(addr, CouncilSeatCategory::Technical).unwrap();
+    state.add_council_member(addr, CouncilSeatCategory::Engineering).unwrap();
 }
 
 #[test]
@@ -83,7 +83,7 @@ fn test_full_proposal_lifecycle() {
 
     // Create proposer as council member
     let proposer = SecretKey::generate();
-    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Engineering);
 
     // Create proposal
     let proposal_tx = make_proposal_tx(
@@ -116,8 +116,8 @@ fn test_full_proposal_lifecycle() {
     let voter2 = SecretKey::generate();
     let voter3 = SecretKey::generate();
 
-    fund_and_seat_council(&mut state, &voter1, CouncilSeatCategory::Technical);
-    fund_and_seat_council(&mut state, &voter2, CouncilSeatCategory::Business);
+    fund_and_seat_council(&mut state, &voter1, CouncilSeatCategory::Engineering);
+    fund_and_seat_council(&mut state, &voter2, CouncilSeatCategory::Growth);
     fund_and_seat_council(&mut state, &voter3, CouncilSeatCategory::Legal);
 
     // Vote YES from voter1 and voter2
@@ -148,7 +148,7 @@ fn test_proposal_quorum_and_approval() {
 
     // Create proposer as council member
     let proposer = SecretKey::generate();
-    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Engineering);
 
     // Create proposal
     let proposal_tx = make_proposal_tx(
@@ -196,7 +196,7 @@ fn test_proposal_rejection() {
 
     // Create proposer as council member
     let proposer = SecretKey::generate();
-    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Engineering);
 
     // Create proposal
     let proposal_tx = make_proposal_tx(
@@ -213,8 +213,8 @@ fn test_proposal_rejection() {
     // Create voters (council members)
     let voter1 = SecretKey::generate();
     let voter2 = SecretKey::generate();
-    fund_and_seat_council(&mut state, &voter1, CouncilSeatCategory::Technical);
-    fund_and_seat_council(&mut state, &voter2, CouncilSeatCategory::Business);
+    fund_and_seat_council(&mut state, &voter1, CouncilSeatCategory::Engineering);
+    fund_and_seat_council(&mut state, &voter2, CouncilSeatCategory::Growth);
 
     // Both vote NO
     let vote1 = make_vote_tx(&voter1, 0, false, 10_000, 0);
@@ -235,7 +235,7 @@ fn test_voting_period_expiration() {
 
     // Create proposer as council member
     let proposer = SecretKey::generate();
-    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Engineering);
 
     // Create proposal at round 100
     let proposal_tx = make_proposal_tx(
@@ -251,7 +251,7 @@ fn test_voting_period_expiration() {
 
     // Create voter (council member)
     let voter = SecretKey::generate();
-    fund_and_seat_council(&mut state, &voter, CouncilSeatCategory::Business);
+    fund_and_seat_council(&mut state, &voter, CouncilSeatCategory::Growth);
 
     // Try to vote within voting period (should succeed)
     let vote_early = make_vote_tx(&voter, 0, true, 10_000, 0);
@@ -273,7 +273,7 @@ fn test_double_voting_prevention() {
 
     // Create proposer as council member
     let proposer = SecretKey::generate();
-    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Engineering);
 
     // Create proposal
     let proposal_tx = make_proposal_tx(
@@ -289,7 +289,7 @@ fn test_double_voting_prevention() {
 
     // Create voter (council member)
     let voter = SecretKey::generate();
-    fund_and_seat_council(&mut state, &voter, CouncilSeatCategory::Business);
+    fund_and_seat_council(&mut state, &voter, CouncilSeatCategory::Growth);
 
     // First vote (should succeed)
     let vote1 = make_vote_tx(&voter, 0, true, 10_000, 0);
@@ -334,7 +334,7 @@ fn setup_passing_proposal(
 
     // Create proposer as council member
     let proposer = SecretKey::generate();
-    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Engineering);
 
     let proposal_tx = make_proposal_tx(
         &proposer, 0, "Change Param", "Test param change",
@@ -347,7 +347,7 @@ fn setup_passing_proposal(
     // 2 YES votes out of 3 members is well above 10% quorum and 66% approval
     let voter1 = SecretKey::generate();
     let voter2 = SecretKey::generate();
-    fund_and_seat_council(&mut state, &voter1, CouncilSeatCategory::Business);
+    fund_and_seat_council(&mut state, &voter1, CouncilSeatCategory::Growth);
     fund_and_seat_council(&mut state, &voter2, CouncilSeatCategory::Legal);
 
     // Both vote YES
@@ -404,7 +404,7 @@ fn test_text_proposal_execution_has_no_param_effect() {
 
     // Create proposer as council member
     let proposer = SecretKey::generate();
-    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Engineering);
 
     let proposal_tx = make_proposal_tx(
         &proposer, 0, "Text Only", "Informational proposal",
@@ -414,7 +414,7 @@ fn test_text_proposal_execution_has_no_param_effect() {
 
     // Vote to pass (council member)
     let voter = SecretKey::generate();
-    fund_and_seat_council(&mut state, &voter, CouncilSeatCategory::Business);
+    fund_and_seat_council(&mut state, &voter, CouncilSeatCategory::Growth);
     let v = make_vote_tx(&voter, 0, true, 10_000, 0);
     state.apply_vote(&v, 150).unwrap();
 
@@ -511,7 +511,7 @@ fn test_changed_voting_period_affects_new_proposals() {
 
     // Create a new proposal — it should use the NEW voting_period_rounds
     let proposer2 = SecretKey::generate();
-    fund_and_seat_council(&mut state, &proposer2, CouncilSeatCategory::Academic);
+    fund_and_seat_council(&mut state, &proposer2, CouncilSeatCategory::Research);
 
     let creation_round = execute_at + 10;
     let p2_tx = make_proposal_tx(
@@ -539,7 +539,7 @@ fn test_multiple_param_changes_via_sequential_proposals() {
 
     // Second proposal: change observer_reward_percent
     let proposer2 = SecretKey::generate();
-    fund_and_seat_council(&mut state, &proposer2, CouncilSeatCategory::Academic);
+    fund_and_seat_council(&mut state, &proposer2, CouncilSeatCategory::Research);
 
     let round2 = execute_at + 10;
     let p2_tx = make_proposal_tx(
@@ -576,7 +576,7 @@ fn test_dao_hibernation_blocks_parameter_change() {
 
     // Create proposer as council member
     let proposer = SecretKey::generate();
-    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Engineering);
 
     // Only 0 stakers — DAO is hibernating
     state.recalculate_active_set();
@@ -591,7 +591,7 @@ fn test_dao_hibernation_blocks_parameter_change() {
 
     // Create voter (council member)
     let voter = SecretKey::generate();
-    fund_and_seat_council(&mut state, &voter, CouncilSeatCategory::Business);
+    fund_and_seat_council(&mut state, &voter, CouncilSeatCategory::Growth);
 
     let v = make_vote_tx(&voter, 0, true, 10_000, 0);
     state.apply_vote(&v, 150).unwrap();
@@ -632,7 +632,7 @@ fn test_dao_hibernation_allows_text_proposals() {
 
     // Create proposer as council member
     let proposer = SecretKey::generate();
-    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Engineering);
 
     // Only 0 stakers — DAO is hibernating
     state.recalculate_active_set();
@@ -646,7 +646,7 @@ fn test_dao_hibernation_allows_text_proposals() {
 
     // Vote to pass (council member)
     let voter = SecretKey::generate();
-    fund_and_seat_council(&mut state, &voter, CouncilSeatCategory::Business);
+    fund_and_seat_council(&mut state, &voter, CouncilSeatCategory::Growth);
     let v = make_vote_tx(&voter, 0, true, 10_000, 0);
     state.apply_vote(&v, 150).unwrap();
 
@@ -701,7 +701,7 @@ fn setup_passing_council_membership_proposal(
 
     // Create proposer as council member
     let proposer = SecretKey::generate();
-    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Engineering);
 
     let proposal_tx = make_proposal_tx(
         &proposer, 0, "Council Membership", "Add or remove council member",
@@ -718,7 +718,7 @@ fn setup_passing_council_membership_proposal(
     // 2 YES votes out of 3 members is well above 10% quorum and 66% approval
     let voter1 = SecretKey::generate();
     let voter2 = SecretKey::generate();
-    fund_and_seat_council(&mut state, &voter1, CouncilSeatCategory::Business);
+    fund_and_seat_council(&mut state, &voter1, CouncilSeatCategory::Growth);
     fund_and_seat_council(&mut state, &voter2, CouncilSeatCategory::Legal);
 
     // Both vote YES
@@ -755,7 +755,7 @@ fn test_council_membership_add_via_proposal() {
     let (mut state, voting_ends) = setup_passing_council_membership_proposal(
         CouncilAction::Add,
         new_addr,
-        CouncilSeatCategory::Academic,
+        CouncilSeatCategory::Research,
     );
 
     // Before execution, new_addr should NOT be a council member
@@ -774,7 +774,7 @@ fn test_council_membership_add_via_proposal() {
     assert!(state.is_council_member(&new_addr), "Should be council member after execution");
     assert_eq!(
         state.council_seat_category(&new_addr),
-        Some(CouncilSeatCategory::Academic),
+        Some(CouncilSeatCategory::Research),
     );
 }
 
@@ -787,11 +787,11 @@ fn test_council_membership_remove_via_proposal() {
     let (mut state, voting_ends) = setup_passing_council_membership_proposal(
         CouncilAction::Remove,
         target_addr,
-        CouncilSeatCategory::Academic, // category in proposal (used for Add, ignored for Remove)
+        CouncilSeatCategory::Research, // category in proposal (used for Add, ignored for Remove)
     );
 
     // Manually add the target as a council member before execution
-    state.add_council_member(target_addr, CouncilSeatCategory::Academic).unwrap();
+    state.add_council_member(target_addr, CouncilSeatCategory::Research).unwrap();
     assert!(state.is_council_member(&target_addr), "Should be council member before removal");
 
     // Execute the proposal
@@ -809,28 +809,28 @@ fn test_council_membership_remove_via_proposal() {
 
 #[test]
 fn test_council_membership_add_category_full() {
-    // Fill all Technical(7) seats, then propose an 8th
-    let eighth_member = SecretKey::generate();
-    let eighth_addr = eighth_member.address();
+    // Fill all Engineering(5) seats, then propose a 6th
+    let sixth_member = SecretKey::generate();
+    let sixth_addr = sixth_member.address();
 
     let (mut state, voting_ends) = setup_passing_council_membership_proposal(
         CouncilAction::Add,
-        eighth_addr,
-        CouncilSeatCategory::Technical,
+        sixth_addr,
+        CouncilSeatCategory::Engineering,
     );
 
-    // The proposer already occupies 1 Technical seat (from setup_passing_council_membership_proposal).
-    // Fill the remaining 6 Technical seats (total = 7, which is max).
-    for _ in 0..6 {
+    // The proposer already occupies 1 Engineering seat (from setup_passing_council_membership_proposal).
+    // Fill the remaining 4 Engineering seats (total = 5, which is max).
+    for _ in 0..4 {
         let filler = SecretKey::generate();
-        state.add_council_member(filler.address(), CouncilSeatCategory::Technical).unwrap();
+        state.add_council_member(filler.address(), CouncilSeatCategory::Engineering).unwrap();
     }
 
-    // Verify Technical is full (7 seats)
-    let tech_count = state.council_members()
-        .filter(|(_, cat)| **cat == CouncilSeatCategory::Technical)
+    // Verify Engineering is full (5 seats)
+    let eng_count = state.council_members()
+        .filter(|(_, cat)| **cat == CouncilSeatCategory::Engineering)
         .count();
-    assert_eq!(tech_count, 7, "All 7 Technical seats should be filled");
+    assert_eq!(eng_count, 5, "All 5 Engineering seats should be filled");
 
     // Execute the proposal — should transition to Failed (category full)
     execute_proposal(&mut state, 0, voting_ends);
@@ -840,8 +840,8 @@ fn test_council_membership_add_category_full() {
         "Should be Failed, got {:?}", state.proposal(0).unwrap().status,
     );
 
-    // The 8th member should NOT have been added (category full)
-    assert!(!state.is_council_member(&eighth_addr), "8th Technical member should not be added (category full)");
+    // The 6th member should NOT have been added (category full)
+    assert!(!state.is_council_member(&sixth_addr), "6th Engineering member should not be added (category full)");
 }
 
 #[test]
@@ -857,38 +857,43 @@ fn test_council_membership_add_at_capacity() {
     );
 
     // setup_passing_council_membership_proposal already created 3 members:
-    // 1 Technical (proposer), 1 Business (voter1), 1 Legal (voter2)
-    // new_with_genesis() also added 1 Foundation member (dev address) = 4 total
+    // 1 Engineering (proposer), 1 Growth (voter1), 1 Legal (voter2)
+    // new_with_genesis() also added 1 Operations member (dev address) = 4 total
     // Fill remaining seats to reach 21
-    // Technical: 1 filled, max 7, add 6 more
-    for _ in 0..6 {
+    // Engineering: 1 filled, max 5, add 4 more
+    for _ in 0..4 {
         let sk = SecretKey::generate();
-        state.add_council_member(sk.address(), CouncilSeatCategory::Technical).unwrap();
+        state.add_council_member(sk.address(), CouncilSeatCategory::Engineering).unwrap();
     }
-    // Business: 1 filled, max 4, add 3 more
-    for _ in 0..3 {
-        let sk = SecretKey::generate();
-        state.add_council_member(sk.address(), CouncilSeatCategory::Business).unwrap();
-    }
-    // Legal: 1 filled, max 3, add 2 more
+    // Growth: 1 filled, max 3, add 2 more
     for _ in 0..2 {
+        let sk = SecretKey::generate();
+        state.add_council_member(sk.address(), CouncilSeatCategory::Growth).unwrap();
+    }
+    // Legal: 1 filled, max 2, add 1 more
+    for _ in 0..1 {
         let sk = SecretKey::generate();
         state.add_council_member(sk.address(), CouncilSeatCategory::Legal).unwrap();
     }
-    // Academic: 0 filled, max 3, add 3
-    for _ in 0..3 {
-        let sk = SecretKey::generate();
-        state.add_council_member(sk.address(), CouncilSeatCategory::Academic).unwrap();
-    }
-    // Community: 0 filled, max 2, add 2
+    // Research: 0 filled, max 2, add 2
     for _ in 0..2 {
+        let sk = SecretKey::generate();
+        state.add_council_member(sk.address(), CouncilSeatCategory::Research).unwrap();
+    }
+    // Community: 0 filled, max 4, add 4
+    for _ in 0..4 {
         let sk = SecretKey::generate();
         state.add_council_member(sk.address(), CouncilSeatCategory::Community).unwrap();
     }
-    // Foundation: 1 filled (genesis dev addr), max 2, add 1 more
-    for _ in 0..1 {
+    // Operations: 1 filled (genesis dev addr), max 3, add 2 more
+    for _ in 0..2 {
         let sk = SecretKey::generate();
-        state.add_council_member(sk.address(), CouncilSeatCategory::Foundation).unwrap();
+        state.add_council_member(sk.address(), CouncilSeatCategory::Operations).unwrap();
+    }
+    // Security: 0 filled, max 2, add 2
+    for _ in 0..2 {
+        let sk = SecretKey::generate();
+        state.add_council_member(sk.address(), CouncilSeatCategory::Security).unwrap();
     }
 
     assert_eq!(state.council_member_count(), 21, "Council should be at full capacity");
@@ -912,7 +917,7 @@ fn test_removed_member_loses_governance_rights() {
 
     // Create and seat a member
     let member = SecretKey::generate();
-    fund_and_seat_council(&mut state, &member, CouncilSeatCategory::Technical);
+    fund_and_seat_council(&mut state, &member, CouncilSeatCategory::Engineering);
     assert!(state.is_council_member(&member.address()));
 
     // Remove the member directly (simulating post-execution state)
@@ -929,7 +934,7 @@ fn test_removed_member_loses_governance_rights() {
 
     // Set up a proposal from another council member so the removed member can try to vote
     let active_member = SecretKey::generate();
-    fund_and_seat_council(&mut state, &active_member, CouncilSeatCategory::Business);
+    fund_and_seat_council(&mut state, &active_member, CouncilSeatCategory::Growth);
 
     let proposal_tx2 = make_proposal_tx(
         &active_member, 0, "Valid Proposal", "From active member",
@@ -947,12 +952,12 @@ fn test_removed_member_loses_governance_rights() {
 fn test_council_membership_new_member_gets_emission() {
     let mut state = StateEngine::new_with_genesis();
 
-    // Genesis already has 1 Foundation council member (dev address).
+    // Genesis already has 1 Operations council member (dev address).
     // Add 2 more council members = 3 total.
     let member1 = SecretKey::generate();
     let member2 = SecretKey::generate();
-    fund_and_seat_council(&mut state, &member1, CouncilSeatCategory::Technical);
-    fund_and_seat_council(&mut state, &member2, CouncilSeatCategory::Business);
+    fund_and_seat_council(&mut state, &member1, CouncilSeatCategory::Engineering);
+    fund_and_seat_council(&mut state, &member2, CouncilSeatCategory::Growth);
 
     // Emission with 3 members (1 genesis + 2 added)
     // Use validator_count=1 to see per-round totals
@@ -980,7 +985,7 @@ fn test_council_membership_executes_regardless_of_dao_hibernation() {
     let (mut state, voting_ends) = setup_passing_council_membership_proposal(
         CouncilAction::Add,
         new_addr,
-        CouncilSeatCategory::Academic,
+        CouncilSeatCategory::Research,
     );
 
     // Ensure DAO is NOT active (no stakers)
@@ -1029,19 +1034,19 @@ fn test_non_council_cannot_propose_membership() {
 fn test_council_membership_quorum_uses_snapshot() {
     let mut state = StateEngine::new_with_genesis();
 
-    // Genesis already has 1 Foundation council member (dev address).
+    // Genesis already has 1 Operations council member (dev address).
     // Create 5 more council members = 6 total.
     let proposer = SecretKey::generate();
-    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Technical);
+    fund_and_seat_council(&mut state, &proposer, CouncilSeatCategory::Engineering);
 
     let voter1 = SecretKey::generate();
     let voter2 = SecretKey::generate();
     let member4 = SecretKey::generate();
     let member5 = SecretKey::generate();
 
-    fund_and_seat_council(&mut state, &voter1, CouncilSeatCategory::Business);
+    fund_and_seat_council(&mut state, &voter1, CouncilSeatCategory::Growth);
     fund_and_seat_council(&mut state, &voter2, CouncilSeatCategory::Legal);
-    fund_and_seat_council(&mut state, &member4, CouncilSeatCategory::Academic);
+    fund_and_seat_council(&mut state, &member4, CouncilSeatCategory::Research);
     fund_and_seat_council(&mut state, &member5, CouncilSeatCategory::Community);
 
     assert_eq!(state.council_member_count(), 6);
@@ -1053,7 +1058,7 @@ fn test_council_membership_quorum_uses_snapshot() {
         ProposalType::CouncilMembership {
             action: CouncilAction::Add,
             address: new_member.address(),
-            category: CouncilSeatCategory::Foundation,
+            category: CouncilSeatCategory::Operations,
         },
         10_000, 0,
     );
@@ -1123,7 +1128,7 @@ fn test_self_nomination_allowed_for_non_council() {
         ProposalType::CouncilMembership {
             action: CouncilAction::Add,
             address: outsider.address(),
-            category: CouncilSeatCategory::Technical,
+            category: CouncilSeatCategory::Engineering,
         },
         100_000,
         0,
@@ -1155,7 +1160,7 @@ fn test_non_council_non_self_nomination_rejected() {
         ProposalType::CouncilMembership {
             action: CouncilAction::Add,
             address: other.address(),
-            category: CouncilSeatCategory::Technical,
+            category: CouncilSeatCategory::Engineering,
         },
         100_000,
         0,

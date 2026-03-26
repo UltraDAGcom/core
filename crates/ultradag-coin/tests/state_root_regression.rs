@@ -42,7 +42,7 @@ fn known_fixture() -> StateSnapshot {
         next_proposal_id: 0,
         governance_params: GovernanceParams::default(),
         council_members: vec![
-            (addr_c, ultradag_coin::governance::CouncilSeatCategory::Foundation),
+            (addr_c, ultradag_coin::governance::CouncilSeatCategory::Operations),
         ],
         bridge_reserve: 0,
         treasury_balance: 210_000_000_000_000,

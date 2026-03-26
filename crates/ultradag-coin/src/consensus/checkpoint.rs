@@ -367,12 +367,13 @@ pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
 fn council_category_byte(cat: &crate::governance::CouncilSeatCategory) -> u8 {
     use crate::governance::CouncilSeatCategory::*;
     match cat {
-        Technical => 0,
-        Business => 1,
+        Engineering => 0,
+        Growth => 1,
         Legal => 2,
-        Academic => 3,
+        Research => 3,
         Community => 4,
-        Foundation => 5,
+        Operations => 5,
+        Security => 6,
     }
 }
 

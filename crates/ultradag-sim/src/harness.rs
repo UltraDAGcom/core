@@ -120,7 +120,7 @@ impl SimHarness {
                 .collect();
             for v in &mut validators {
                 for addr in &council_addrs {
-                    v.add_council_member(*addr, CouncilSeatCategory::Technical);
+                    v.add_council_member(*addr, CouncilSeatCategory::Engineering);
                 }
                 v.override_governance_param_unchecked("voting_period_rounds", 20);
                 v.override_governance_param_unchecked("execution_delay_rounds", 10);
@@ -142,9 +142,9 @@ impl SimHarness {
                     let honest_addrs: Vec<Address> = validators.iter()
                         .filter(|v| v.honest).take(2).map(|v| v.address).collect();
                     for v in &mut validators {
-                        let _ = v.state.add_council_member(attacker_addr, CouncilSeatCategory::Technical);
+                        let _ = v.state.add_council_member(attacker_addr, CouncilSeatCategory::Engineering);
                         for addr in &honest_addrs {
-                            let _ = v.state.add_council_member(*addr, CouncilSeatCategory::Technical);
+                            let _ = v.state.add_council_member(*addr, CouncilSeatCategory::Engineering);
                         }
                         v.override_governance_param_unchecked("voting_period_rounds", 20);
                         v.override_governance_param_unchecked("execution_delay_rounds", 10);

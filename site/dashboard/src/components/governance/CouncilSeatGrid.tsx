@@ -1,10 +1,11 @@
 const SEAT_CONFIG: { category: string; key: string; max: number; color: string }[] = [
-  { category: 'Technical', key: 'technical', max: 7, color: 'bg-dag-blue' },
-  { category: 'Business', key: 'business', max: 4, color: 'bg-dag-green' },
-  { category: 'Legal', key: 'legal', max: 3, color: 'bg-dag-yellow' },
-  { category: 'Academic', key: 'academic', max: 3, color: 'bg-dag-purple' },
-  { category: 'Community', key: 'community', max: 2, color: 'bg-dag-red' },
-  { category: 'Foundation', key: 'foundation', max: 2, color: 'bg-[#f97316]' },
+  { category: 'Engineering', key: 'engineering', max: 5, color: 'bg-blue-500' },
+  { category: 'Growth', key: 'growth', max: 3, color: 'bg-emerald-500' },
+  { category: 'Legal', key: 'legal', max: 2, color: 'bg-yellow-500' },
+  { category: 'Research', key: 'research', max: 2, color: 'bg-purple-500' },
+  { category: 'Community', key: 'community', max: 4, color: 'bg-pink-500' },
+  { category: 'Operations', key: 'operations', max: 3, color: 'bg-orange-500' },
+  { category: 'Security', key: 'security', max: 2, color: 'bg-red-500' },
 ];
 
 interface CouncilMember {

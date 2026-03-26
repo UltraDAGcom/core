@@ -396,7 +396,7 @@ fn test_delegate_wrong_nonce_rejected() {
 fn test_vote_after_period_ends_rejected() {
     let mut state = StateEngine::new_with_genesis();
     let sk = SecretKey::from_bytes([0x20; 32]);
-    fund_and_seat(&mut state, &sk, CouncilSeatCategory::Technical);
+    fund_and_seat(&mut state, &sk, CouncilSeatCategory::Engineering);
 
     let ptx = make_proposal_tx(
         &sk, 0, "Test", "Desc", ProposalType::TextProposal, MIN_FEE_SATS, 0,
@@ -416,7 +416,7 @@ fn test_vote_after_period_ends_rejected() {
 fn test_proposal_title_too_long_rejected() {
     let mut state = StateEngine::new_with_genesis();
     let sk = SecretKey::from_bytes([0x21; 32]);
-    fund_and_seat(&mut state, &sk, CouncilSeatCategory::Technical);
+    fund_and_seat(&mut state, &sk, CouncilSeatCategory::Engineering);
 
     let long_title = "A".repeat(PROPOSAL_TITLE_MAX_BYTES + 1);
     let ptx = make_proposal_tx(
@@ -432,7 +432,7 @@ fn test_proposal_title_too_long_rejected() {
 fn test_proposal_description_too_long_rejected() {
     let mut state = StateEngine::new_with_genesis();
     let sk = SecretKey::from_bytes([0x22; 32]);
-    fund_and_seat(&mut state, &sk, CouncilSeatCategory::Technical);
+    fund_and_seat(&mut state, &sk, CouncilSeatCategory::Engineering);
 
     let long_desc = "B".repeat(PROPOSAL_DESCRIPTION_MAX_BYTES + 1);
     let ptx = make_proposal_tx(
@@ -448,7 +448,7 @@ fn test_proposal_description_too_long_rejected() {
 fn test_proposal_wrong_id_rejected() {
     let mut state = StateEngine::new_with_genesis();
     let sk = SecretKey::from_bytes([0x23; 32]);
-    fund_and_seat(&mut state, &sk, CouncilSeatCategory::Technical);
+    fund_and_seat(&mut state, &sk, CouncilSeatCategory::Engineering);
 
     // next_proposal_id is 0, try to create with id=5
     let ptx = make_proposal_tx(
@@ -465,13 +465,18 @@ fn test_proposals_at_max_active_count_rejected() {
     let mut state = StateEngine::new_with_genesis();
     // Use multiple council members to have enough balance for fees
     let sks: Vec<SecretKey> = (0..7u8).map(|i| SecretKey::from_bytes([0x30 + i; 32])).collect();
+    // Spread across categories: Engineering(5 max), Growth(3 max), etc.
+    let cats = [
+        CouncilSeatCategory::Engineering,
+        CouncilSeatCategory::Engineering,
+        CouncilSeatCategory::Engineering,
+        CouncilSeatCategory::Engineering,
+        CouncilSeatCategory::Engineering,
+        CouncilSeatCategory::Growth,
+        CouncilSeatCategory::Growth,
+    ];
     for (i, sk) in sks.iter().enumerate() {
-        let cat = if i < 7 {
-            CouncilSeatCategory::Technical
-        } else {
-            CouncilSeatCategory::Business
-        };
-        fund_and_seat(&mut state, sk, cat);
+        fund_and_seat(&mut state, sk, cats[i]);
     }
 
     // Create MAX_ACTIVE_PROPOSALS proposals using different council members
@@ -494,7 +499,7 @@ fn test_proposals_at_max_active_count_rejected() {
 
     // One more should fail - use a fresh address that hasn't proposed before
     let fresh_sk = SecretKey::from_bytes([0x99; 32]);
-    fund_and_seat(&mut state, &fresh_sk, CouncilSeatCategory::Business);
+    fund_and_seat(&mut state, &fresh_sk, CouncilSeatCategory::Growth);
     
     let ptx = make_proposal_tx(
         &fresh_sk, MAX_ACTIVE_PROPOSALS as u64, "One too many", "Desc",
@@ -510,7 +515,7 @@ fn test_proposals_at_max_active_count_rejected() {
 fn test_vote_on_nonexistent_proposal_rejected() {
     let mut state = StateEngine::new_with_genesis();
     let sk = SecretKey::from_bytes([0x24; 32]);
-    fund_and_seat(&mut state, &sk, CouncilSeatCategory::Technical);
+    fund_and_seat(&mut state, &sk, CouncilSeatCategory::Engineering);
 
     let vtx = make_vote_tx(&sk, 999, true, MIN_FEE_SATS, 0);
     let result = state.apply_vote(&vtx, 1000);
@@ -525,7 +530,7 @@ fn test_non_council_cannot_vote() {
     let council_sk = SecretKey::from_bytes([0x25; 32]);
     let outsider_sk = SecretKey::from_bytes([0x26; 32]);
 
-    fund_and_seat(&mut state, &council_sk, CouncilSeatCategory::Technical);
+    fund_and_seat(&mut state, &council_sk, CouncilSeatCategory::Engineering);
     state.faucet_credit(&outsider_sk.address(), 10_000_000_000).unwrap();
 
     // Council member creates proposal
@@ -545,7 +550,7 @@ fn test_non_council_cannot_vote() {
 fn test_proposal_fee_too_low_rejected() {
     let mut state = StateEngine::new_with_genesis();
     let sk = SecretKey::from_bytes([0x27; 32]);
-    fund_and_seat(&mut state, &sk, CouncilSeatCategory::Technical);
+    fund_and_seat(&mut state, &sk, CouncilSeatCategory::Engineering);
 
     let ptx = make_proposal_tx(
         &sk, 0, "Test", "Desc", ProposalType::TextProposal, MIN_FEE_SATS - 1, 0,
@@ -563,8 +568,8 @@ fn test_treasury_spend_proposal_executes() {
     let sk2 = SecretKey::from_bytes([0x41; 32]);
     let recipient_sk = SecretKey::from_bytes([0x42; 32]);
 
-    fund_and_seat(&mut state, &sk1, CouncilSeatCategory::Technical);
-    fund_and_seat(&mut state, &sk2, CouncilSeatCategory::Business);
+    fund_and_seat(&mut state, &sk1, CouncilSeatCategory::Engineering);
+    fund_and_seat(&mut state, &sk2, CouncilSeatCategory::Growth);
 
     // Build up treasury through emission (no genesis pre-fund in emission-only model)
     // Each round emits 10% of block_reward to treasury = 10,000,000 sats = 0.1 UDAG
@@ -643,8 +648,8 @@ fn test_treasury_spend_insufficient_funds_fails() {
     let sk2 = SecretKey::from_bytes([0x44; 32]);
     let recipient_sk = SecretKey::from_bytes([0x45; 32]);
 
-    fund_and_seat(&mut state, &sk1, CouncilSeatCategory::Technical);
-    fund_and_seat(&mut state, &sk2, CouncilSeatCategory::Business);
+    fund_and_seat(&mut state, &sk1, CouncilSeatCategory::Engineering);
+    fund_and_seat(&mut state, &sk2, CouncilSeatCategory::Growth);
 
     // Request more than treasury holds
     let excessive_amount = state.treasury_balance() + 1;
@@ -785,16 +790,17 @@ fn test_governance_param_max_proposals_bounds() {
 fn test_council_full_capacity_rejected() {
     let mut state = StateEngine::new_with_genesis();
 
-    // Genesis adds 1 Foundation member. Fill remaining slots.
-    // Technical: 7, Business: 4, Legal: 3, Academic: 3, Community: 2, Foundation: 2
-    // Genesis already has 1 Foundation. Need to fill 20 more.
+    // Genesis adds 1 Operations member. Fill remaining slots.
+    // Engineering: 5, Growth: 3, Legal: 2, Research: 2, Community: 4, Operations: 3, Security: 2
+    // Genesis already has 1 Operations. Need to fill 20 more.
     let categories = vec![
-        (CouncilSeatCategory::Technical, 7),
-        (CouncilSeatCategory::Business, 4),
-        (CouncilSeatCategory::Legal, 3),
-        (CouncilSeatCategory::Academic, 3),
-        (CouncilSeatCategory::Community, 2),
-        (CouncilSeatCategory::Foundation, 1), // 1 already from genesis
+        (CouncilSeatCategory::Engineering, 5),
+        (CouncilSeatCategory::Growth, 3),
+        (CouncilSeatCategory::Legal, 2),
+        (CouncilSeatCategory::Research, 2),
+        (CouncilSeatCategory::Community, 4),
+        (CouncilSeatCategory::Operations, 2), // 1 already from genesis
+        (CouncilSeatCategory::Security, 2),
     ];
 
     let mut seed = 0x70u8;
@@ -811,7 +817,7 @@ fn test_council_full_capacity_rejected() {
 
     // Adding one more should fail
     let extra_sk = SecretKey::from_bytes([0xFF; 32]);
-    let result = state.add_council_member(extra_sk.address(), CouncilSeatCategory::Technical);
+    let result = state.add_council_member(extra_sk.address(), CouncilSeatCategory::Engineering);
     assert!(result.is_err(), "Adding to full council must be rejected");
 }
 
@@ -820,9 +826,9 @@ fn test_council_full_capacity_rejected() {
 fn test_council_duplicate_member_rejected() {
     let mut state = StateEngine::new_with_genesis();
     let sk = SecretKey::from_bytes([0xA0; 32]);
-    state.add_council_member(sk.address(), CouncilSeatCategory::Technical).unwrap();
+    state.add_council_member(sk.address(), CouncilSeatCategory::Engineering).unwrap();
 
-    let result = state.add_council_member(sk.address(), CouncilSeatCategory::Technical);
+    let result = state.add_council_member(sk.address(), CouncilSeatCategory::Engineering);
     assert!(result.is_err(), "Adding duplicate member must be rejected");
     let err = format!("{}", result.unwrap_err());
     assert!(err.contains("already a council member"), "Got: {}", err);
@@ -833,16 +839,16 @@ fn test_council_duplicate_member_rejected() {
 fn test_council_category_seat_limit() {
     let mut state = StateEngine::new_with_genesis();
 
-    // Community has 2 seats max
+    // Security has 2 seats max
     let sk1 = SecretKey::from_bytes([0xB0; 32]);
     let sk2 = SecretKey::from_bytes([0xB1; 32]);
     let sk3 = SecretKey::from_bytes([0xB2; 32]);
 
-    state.add_council_member(sk1.address(), CouncilSeatCategory::Community).unwrap();
-    state.add_council_member(sk2.address(), CouncilSeatCategory::Community).unwrap();
+    state.add_council_member(sk1.address(), CouncilSeatCategory::Security).unwrap();
+    state.add_council_member(sk2.address(), CouncilSeatCategory::Security).unwrap();
 
-    let result = state.add_council_member(sk3.address(), CouncilSeatCategory::Community);
-    assert!(result.is_err(), "Should reject 3rd Community seat");
+    let result = state.add_council_member(sk3.address(), CouncilSeatCategory::Security);
+    assert!(result.is_err(), "Should reject 3rd Security seat");
     let err = format!("{}", result.unwrap_err());
     assert!(err.contains("No vacant"), "Got: {}", err);
 }
@@ -953,7 +959,7 @@ fn test_distribute_rewards_no_producers_no_stakers() {
     // Council member gets emission but no validator rewards distributed
     // since there are no producers
     let supply_after = state.total_supply();
-    // The council member (genesis Foundation member) gets their share
+    // The council member (genesis Operations member) gets their share
     // but no validator pool distribution happens with empty producers
     assert!(supply_after >= supply_before,
         "Supply should not decrease from reward distribution");

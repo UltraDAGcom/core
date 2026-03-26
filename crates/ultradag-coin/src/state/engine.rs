@@ -749,22 +749,22 @@ impl StateEngine {
             let _ = engine.credit(&faucet_addr, crate::constants::FAUCET_PREFUND_SATS);
         }
 
-        // Bootstrap council: dev address gets the first Foundation seat.
+        // Bootstrap council: dev address gets the first Operations seat.
         // Without this, no one can create proposals (catch-22).
-        // The dev/foundation member can then propose additional council members.
+        // The dev/operations member can then propose additional council members.
         // Note: dev address starts with 0 balance — earns through emission.
         //
         // WARNING — SINGLE-POINT-OF-FAILURE RISK:
         // At genesis, only the dev address is a council member. If this key is lost
         // or compromised, governance is permanently locked (no one can create proposals
         // to add new members). Operators MUST add additional council members immediately
-        // after genesis via CouncilMembership governance proposals. Use both Foundation
+        // after genesis via CouncilMembership governance proposals. Use multiple Operations
         // seats at minimum, and add members across multiple categories as soon as possible.
         // See the Mainnet Launch Checklist for key ceremony and council bootstrap procedures.
         let dev_addr = crate::constants::dev_address();
         let _ = engine.add_council_member(
             dev_addr,
-            crate::governance::CouncilSeatCategory::Foundation,
+            crate::governance::CouncilSeatCategory::Operations,
         );
 
         // total_supply tracks all credited amounts + treasury
@@ -1587,7 +1587,7 @@ impl StateEngine {
 
     /// Add a member to the Council of 21 with a seat category.
     /// Only council members can vote on governance proposals.
-    /// No stake requirement — seats are earned through Foundation membership and expertise.
+    /// No stake requirement — seats are earned through expertise and DAO governance.
     /// Council members earn a share of block emissions (COUNCIL_EMISSION_PERCENT).
     pub fn add_council_member(
         &mut self,
