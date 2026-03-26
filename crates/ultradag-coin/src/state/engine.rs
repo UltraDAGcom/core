@@ -1972,14 +1972,14 @@ impl StateEngine {
             }
         }
         for (addr, amount) in &delegations_to_return {
-            self.delegation_accounts.remove(addr);
+            // Credit FIRST, then remove — if credit fails, delegation remains intact
             self.credit(addr, *amount).map_err(|e| {
                 CoinError::SupplyInvariantBroken(format!(
-                    "process_unstake_completions: failed to credit {} sats to {} after undelegation: {}. \
-                     Delegation was already removed — funds are destroyed.",
+                    "process_unstake_completions: failed to credit {} sats to {} after undelegation: {}",
                     amount, addr.to_hex(), e
                 ))
             })?;
+            self.delegation_accounts.remove(addr);
         }
         Ok(())
     }
