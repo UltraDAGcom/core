@@ -122,7 +122,7 @@ impl BridgeAttestation {
         // Slot 5: amount (uint256)
         // Slot 6: nonce (uint256)
         // Then the string data:
-        // Slot 7: string length (15 = "claimWithdrawal".len())
+        // Slot 7: string length (27 = "UDAGBridge::claimWithdrawal".len())
         // Slot 8: string bytes, right-padded to 32 bytes
 
         let mut buf = Vec::with_capacity(9 * 32);
