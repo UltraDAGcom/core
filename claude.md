@@ -8,6 +8,12 @@
 
 ## Recent Updates (March 2026)
 
+**Final Security Audit — Fifteenth Review Pass (March 26, 2026):**
+- **Verdict: DAG consensus design is correct.** Reviewer verified: finality model (2/3+ descendant validators via BitVec), equivocation handling (O(1) detection, both intra/cross-batch, idempotent slashing), supply invariant (checked arithmetic, fatal on violation), signature domain separation (NETWORK_ID, type discriminators, length prefixes), Merkle tree (odd-leaf promotion + count mixing), state root (canonical bytes, version-prefixed), deferred coinbase, checkpoint chain verification, epoch sentinel, peer_max_round monotonicity.
+- **Specifically verified correct:** `process_unstake_completions` credit-before-zero, `bridge_refund` credit-before-decrement, `tick_governance` sorted by ID, governance self-reference safety, bridge attestation pruning by age only.
+- **Performance observations (not bugs):** Ancestor walk during bulk sync O(N×depth×branching) — mitigated by pruning horizon. `find_newly_finalized` scans from pruning_floor — bounded after first prune. Finalized vertex clone O(N×vertex_size) — consider batching for large sync. Canonical remainder to first sorted address — 1 extra sat/round.
+- **Design notes:** Vertex hash doesn't include NETWORK_ID (signatures do — separate DAGs prevent replay). Feature gate on `insert()` could unify via dep features — `#[cfg(test)]` only would be safer. Bridge first-voter griefing repeatable but mitigated by disagree-reset. Council single-member bootstrap risk documented.
+
 **Security Fixes — Fourteenth Review Pass (March 26, 2026):**
 - **Bug #273 (CRITICAL): Bridge hash domain tag mismatch — bridge non-functional** — Rust encoded `"claimWithdrawal"` (15 bytes) while Solidity contract uses `"UDAGBridge::claimWithdrawal"` (27 bytes). Validator signatures from native chain would NEVER verify on Arbitrum. Fix: changed string to `"UDAGBridge::claimWithdrawal"` with correct length byte (27). **Breaking change** — all bridge signatures invalidated.
 - **Bug #274 (MEDIUM): `from_parts`/`from_snapshot` supply check uses `saturating_add`** — Overflow would silently clamp instead of detecting corruption. Fix: changed to `checked_add` chain returning `SupplyInvariantBroken` on overflow.
