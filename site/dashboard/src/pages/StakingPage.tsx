@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Coins } from 'lucide-react';
+import { Coins, Server, Users, ArrowRight, Info, ExternalLink } from 'lucide-react';
 import { getValidators, getStake, getDelegation, formatUdag, shortAddr, postDelegate, postUndelegate } from '../lib/api';
 import { useKeystore } from '../hooks/useKeystore';
 import { Card } from '../components/shared/Card';
 import { Pagination } from '../components/shared/Pagination';
 import { ValidatorCard } from '../components/staking/ValidatorCard';
-import { StakeForm } from '../components/staking/StakeForm';
 
 const PER_PAGE = 10;
 
@@ -80,7 +79,9 @@ export function StakingPage() {
       for (const w of wallets) {
         try {
           const s = await getStake(w.address);
-          stakeResults.push({ address: w.address, name: w.name, ...s });
+          if (s.staked > 0 || s.unlock_at_round) {
+            stakeResults.push({ address: w.address, name: w.name, ...s });
+          }
         } catch {
           /* no stake */
         }
@@ -150,8 +151,8 @@ export function StakingPage() {
   return (
     <div className="space-y-6 animate-page-enter">
       <div>
-        <h1 className="text-2xl font-bold text-white">Staking & Delegation</h1>
-        <p className="text-sm text-dag-muted mt-1">Earn rewards by staking UDAG and securing the network</p>
+        <h1 className="text-2xl font-bold text-white">Earn Rewards</h1>
+        <p className="text-sm text-dag-muted mt-1">Delegate UDAG to validators and earn passive staking rewards</p>
       </div>
 
       {/* Stats row */}
@@ -171,14 +172,10 @@ export function StakingPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column: forms */}
-        <div className="space-y-6">
-          <Card title="Stake UDAG">
-            <StakeForm onSuccess={refresh} />
-          </Card>
-
-          {/* Delegate modal inline */}
-          {delegateTarget && (
+        {/* Left column: delegate + info */}
+        <div className="space-y-4">
+          {/* Delegate form — shown when a validator is selected */}
+          {delegateTarget ? (
             <Card title={`Delegate to ${shortAddr(delegateTarget)}`}>
               <div className="space-y-3">
                 <label className="block">
@@ -211,7 +208,7 @@ export function StakingPage() {
                   <button
                     onClick={handleDelegate}
                     disabled={delegateLoading}
-                    className="flex-1 py-2 rounded bg-dag-blue text-white font-medium text-sm hover:bg-dag-blue/90 disabled:opacity-50"
+                    className="flex-1 py-2 rounded bg-dag-accent text-white font-medium text-sm hover:bg-dag-accent/90 disabled:opacity-50"
                   >
                     {delegateLoading ? 'Submitting...' : 'Delegate'}
                   </button>
@@ -224,22 +221,75 @@ export function StakingPage() {
                 </div>
               </div>
             </Card>
+          ) : (
+            /* How it works — shown when no validator selected */
+            <Card title="How Delegation Works">
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-dag-accent/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Users className="w-4 h-4 text-dag-accent" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-white font-medium">Choose a validator</p>
+                    <p className="text-xs text-dag-muted mt-0.5">Select from the list and click "Delegate". Your UDAG backs their stake.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-dag-green/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Coins className="w-4 h-4 text-dag-green" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-white font-medium">Earn passive rewards</p>
+                    <p className="text-xs text-dag-muted mt-0.5">Rewards are proportional to your delegation, minus the validator's commission.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-dag-yellow/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Info className="w-4 h-4 text-dag-yellow" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-white font-medium">Minimum 100 UDAG</p>
+                    <p className="text-xs text-dag-muted mt-0.5">Undelegating has a ~2.8 hour cooldown before funds are returned.</p>
+                  </div>
+                </div>
+              </div>
+            </Card>
           )}
+
+          {/* Run a validator info */}
+          <div className="rounded-lg bg-dag-surface/50 border border-dag-border/50 p-4">
+            <div className="flex items-start gap-3">
+              <Server className="w-4 h-4 text-dag-muted mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-dag-muted">
+                  <span className="text-slate-300 font-medium">Want to run a validator?</span> Staking requires running a node with the CLI.
+                  Use <code className="text-dag-accent text-[10px]">--auto-stake</code> when starting your node.
+                </p>
+                <a href="/docs.html#staking" className="text-xs text-dag-accent hover:underline mt-1 inline-flex items-center gap-1">
+                  Validator setup guide <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Right columns: info */}
+        {/* Right columns: delegations + validators */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Your staking info */}
+          {/* Your validator stake (read-only) */}
           {unlocked && stakes.length > 0 && (
-            <Card title="Your Stakes">
+            <Card title="Your Validator Stake">
               <div className="space-y-3">
                 {stakes.map(s => (
                   <div key={s.address} className="rounded bg-dag-surface border border-dag-border p-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-white">{s.name}</span>
-                      {s.is_active_validator && (
+                      {s.is_active_validator ? (
                         <span className="text-xs px-2 py-0.5 rounded bg-dag-green/20 text-dag-green border border-dag-green/40">
                           Active Validator
+                        </span>
+                      ) : (
+                        <span className="text-xs px-2 py-0.5 rounded bg-slate-700 text-dag-muted">
+                          {s.unlock_at_round ? 'Unstaking' : 'Observer'}
                         </span>
                       )}
                     </div>
@@ -249,7 +299,7 @@ export function StakingPage() {
                         <span className="text-white">{formatUdag(s.staked)} UDAG</span>
                       </div>
                       <div>
-                        <span className="text-dag-muted block text-xs">Effective</span>
+                        <span className="text-dag-muted block text-xs">Effective Stake</span>
                         <span className="text-white">{formatUdag(s.effective_stake ?? 0)} UDAG</span>
                       </div>
                       <div>
@@ -259,10 +309,11 @@ export function StakingPage() {
                       <div>
                         <span className="text-dag-muted block text-xs">Status</span>
                         <span className={s.unlock_at_round ? 'text-dag-yellow' : 'text-dag-green'}>
-                          {s.unlock_at_round ? `Unstaking (round ${s.unlock_at_round})` : 'Staked'}
+                          {s.unlock_at_round ? `Cooldown (round ${s.unlock_at_round})` : 'Active'}
                         </span>
                       </div>
                     </div>
+                    <p className="text-[10px] text-dag-muted mt-2">Manage your validator stake via the CLI — <code className="text-dag-accent">ultradag-node --unstake</code></p>
                   </div>
                 ))}
               </div>
@@ -277,8 +328,8 @@ export function StakingPage() {
                   <div key={d.address} className="rounded bg-dag-surface border border-dag-border p-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-white">{d.name}</span>
-                      <span className={`text-xs ${d.is_undelegating ? 'text-dag-yellow' : 'text-dag-blue'}`}>
-                        {d.is_undelegating ? `Undelegating (round ${d.unlock_at_round})` : 'Active'}
+                      <span className={`text-xs ${d.is_undelegating ? 'text-dag-yellow' : 'text-dag-accent'}`}>
+                        {d.is_undelegating ? `Undelegating (round ${d.unlock_at_round})` : 'Earning rewards'}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-sm">
@@ -313,11 +364,11 @@ export function StakingPage() {
               <p className="text-dag-muted text-sm">Loading validators...</p>
             ) : validators.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-dag-purple/10 border border-dag-purple/20 flex items-center justify-center mb-4">
-                  <Coins className="w-7 h-7 text-dag-purple" />
+                <div className="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mb-4">
+                  <Coins className="w-7 h-7 text-purple-400" />
                 </div>
                 <h4 className="text-white font-medium mb-1">No validators yet</h4>
-                <p className="text-sm text-dag-muted max-w-xs">Stake UDAG to become a validator and earn rewards.</p>
+                <p className="text-sm text-dag-muted max-w-xs">Validators join by running a node and staking via the CLI. Once active, you can delegate to them here.</p>
               </div>
             ) : (
               <>

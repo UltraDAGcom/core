@@ -82,7 +82,7 @@ const sections: { label?: string; items: NavItem[] }[] = [
   {
     label: 'Network',
     items: [
-      { to: '/staking', icon: Coins, label: 'Staking' },
+      { to: '/staking', icon: Coins, label: 'Earn' },
       { to: '/governance', icon: Vote, label: 'Governance' },
       { to: '/council', icon: Users, label: 'Council' },
       { to: '/explorer', icon: Search, label: 'Explorer' },
