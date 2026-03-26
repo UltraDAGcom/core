@@ -226,6 +226,16 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
             }
         }
 
+        // Persist slashed_events (idempotency guard for slash_at_round)
+        {
+            let slashed = engine.slashed_events_snapshot();
+            if !slashed.is_empty() {
+                let slashed_bytes = postcard::to_allocvec(&slashed)
+                    .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+                table.insert("slashed_events", slashed_bytes.as_slice())?;
+            }
+        }
+
         // Compute and store state root for integrity verification on reload.
         // This catches silent corruption from disk errors, partial writes, or bugs.
         let snapshot = engine.snapshot();
@@ -484,6 +494,13 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         let lpr: Vec<(Address, u64)> = postcard::from_bytes(lpr_val.value())
             .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
         engine.restore_last_proposal_round(lpr);
+    }
+
+    // Restore slashed_events from METADATA (idempotency guard for slash_at_round)
+    if let Some(se_val) = meta.get("slashed_events")? {
+        let slashed: Vec<(Address, u64)> = postcard::from_bytes(se_val.value())
+            .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+        engine.restore_slashed_events(slashed);
     }
 
     // Verify state integrity: recompute state root and compare against stored value.

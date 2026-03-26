@@ -634,6 +634,7 @@ async fn handle_request(
             let ban_count = server.peers.ban_count().await;
 
             // Format as Prometheus metrics
+            let checkpoint_metrics = server.checkpoint_metrics.export_prometheus();
             let metrics = format!(
                 "# HELP ultradag_current_round Current DAG round number
 # TYPE ultradag_current_round gauge
@@ -682,7 +683,8 @@ ultradag_peer_count {peer_count}
 # HELP ultradag_banned_ips Banned IP addresses
 # TYPE ultradag_banned_ips gauge
 ultradag_banned_ips {ban_count}
-");
+
+{checkpoint_metrics}");
 
             Response::builder()
                 .status(StatusCode::OK)
@@ -3000,20 +3002,6 @@ ultradag_banned_ips {ban_count}
         }
 
         // ====== Metrics endpoints ======
-
-        (&Method::GET, ["metrics"]) => {
-            // Prometheus format
-            let metrics = server.checkpoint_metrics.export_prometheus();
-            Response::builder()
-                .status(StatusCode::OK)
-                .header("Content-Type", "text/plain; version=0.0.4")
-                .header("Access-Control-Allow-Origin", "*")
-                .body(Full::new(Bytes::from(metrics)))
-                .unwrap_or_else(|e| {
-                    tracing::error!("Failed to build metrics response: {}", e);
-                    Response::new(Full::new(Bytes::from("{\"error\": \"metrics build failed\"}")))
-                })
-        }
 
         (&Method::GET, ["metrics", "json"]) => {
             // JSON format for dashboards

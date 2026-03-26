@@ -1710,7 +1710,8 @@ impl StateEngine {
 
         // Store attestation
         self.bridge_attestations.insert(self.bridge_nonce, attestation.clone());
-        self.bridge_nonce = self.bridge_nonce.saturating_add(1);
+        self.bridge_nonce = self.bridge_nonce.checked_add(1)
+            .ok_or_else(|| CoinError::ValidationError("bridge nonce overflow".into()))?;
 
         // NOTE: validators sign attestations separately via sign_pending_bridge_attestations()
         // during the validator loop, not here. This prevents double-application.
@@ -3037,13 +3038,17 @@ impl StateEngine {
             bridge_nonce: self.bridge_nonce,
             bridge_contract_address: self.bridge_contract_address,
             used_release_nonces: self.used_release_nonces.iter().copied().collect(),
-            bridge_release_votes: self.bridge_release_votes.iter()
-                .map(|(k, v)| {
-                    let mut voters: Vec<Address> = v.iter().copied().collect();
-                    voters.sort_by_key(|a| a.0);
-                    (*k, voters)
-                })
-                .collect(),
+            bridge_release_votes: {
+                let mut votes: Vec<_> = self.bridge_release_votes.iter()
+                    .map(|(k, v)| {
+                        let mut voters: Vec<Address> = v.iter().copied().collect();
+                        voters.sort_by_key(|a| a.0);
+                        (*k, voters)
+                    })
+                    .collect();
+                votes.sort_by_key(|(k, _)| *k);
+                votes
+            },
             bridge_release_params: if self.bridge_release_params.is_empty() {
                 None
             } else {
@@ -3524,6 +3529,20 @@ impl StateEngine {
     /// Restore bridge_release_first_vote_round from persistence.
     pub fn restore_bridge_release_first_vote_round(&mut self, fvr: Vec<((u64, u64), u64)>) {
         self.bridge_release_first_vote_round = fvr.into_iter().collect();
+    }
+
+    /// Snapshot of slashed_events for persistence.
+    /// Returns sorted Vec of (Address, round) pairs for deterministic serialization.
+    pub fn slashed_events_snapshot(&self) -> Vec<(Address, u64)> {
+        let mut v: Vec<_> = self.slashed_events.iter().copied().collect();
+        v.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.cmp(&b.1)));
+        v
+    }
+
+    /// Restore slashed_events from persistence.
+    /// Called by load_from_redb after from_parts.
+    pub fn restore_slashed_events(&mut self, events: Vec<(Address, u64)>) {
+        self.slashed_events = events.into_iter().collect();
     }
 
     /// Snapshot of bridge_release_first_vote_round for persistence.
