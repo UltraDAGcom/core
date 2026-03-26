@@ -402,7 +402,7 @@ See **Mainnet Launch Checklist** below for the complete phased plan.
 
 **Council of 21 Governance Model — Full Overhaul (March 15, 2026):**
 - **No stake requirement** — Council members don't need UDAG stake to govern. Seats are earned through expertise and DAO proposal, not purchased with tokens. Council members earn emission rewards instead.
-- **Seat categories** — `CouncilSeatCategory` enum: Technical(7), Business(4), Legal(3), Academic(3), Community(2), Foundation(2) = 21 seats. Each category has a fixed maximum enforced by `add_council_member()`.
+- **Seat categories** — `CouncilSeatCategory` enum: Engineering(5), Growth(3), Legal(2), Research(2), Community(4), Operations(3), Security(2) = 21 seats. Functional expertise areas matching how successful DAOs operate. Each category has a fixed maximum enforced by `add_council_member()`.
 - **10% emission rewards** — `COUNCIL_EMISSION_PERCENT = 10` (governable 0-30% via ParameterChange). Each block reward splits 10% equally among seated council members.
 - **1-vote-per-seat equal governance** — Vote weight = 1 for all council members (not stake-weighted). Quorum denominator = `council_members.len()`. Prevents wealth concentration in governance.
 - **CouncilMembership proposals** — New `ProposalType::CouncilMembership { action, address, category }` for DAO-governed membership (Add/Remove). Only council members can propose and vote.
@@ -1078,7 +1078,7 @@ formal/
 - `UndelegateTx` — from, nonce, pub_key, signature — begins undelegation cooldown
 - `SetCommissionTx` — from, commission_percent (u8), nonce, pub_key, signature — validator sets commission rate
 - `GovernanceParams` — runtime-adjustable governance parameters: min_fee_sats, min_stake_to_propose, quorum_numerator, approval_numerator, voting_period_rounds, execution_delay_rounds, max_active_proposals, observer_reward_percent, council_emission_percent, slash_percent. Modified via ParameterChange proposal execution. Persisted in StateSnapshot.
-- `CouncilSeatCategory` — enum: Technical(7), Business(4), Legal(3), Academic(3), Community(2), Foundation(2). Fixed seat limits per category.
+- `CouncilSeatCategory` — enum: Engineering(5), Growth(3), Legal(2), Research(2), Community(4), Operations(3), Security(2) = 21 seats. Functional expertise areas, not corporate job titles.
 
 ## DAG-BFT Consensus (Pure DAG-Driven Ledger)
 
@@ -1246,7 +1246,7 @@ When a vertex fails insertion due to missing parents, the node:
 - `COUNCIL_MAX_MEMBERS` = 21 — Maximum Council of 21 members
 - `COUNCIL_EMISSION_PERCENT` = 10 — Percentage of block reward distributed to council members (governable 0-30%)
 - `COUNCIL_FOUNDATION_MEMBERSHIP_REQUIRED` = true — Panama Foundation membership flag (placeholder)
-- `CouncilSeatCategory` — Technical(7), Business(4), Legal(3), Academic(3), Community(2), Foundation(2) = 21 seats
+- `CouncilSeatCategory` — Engineering(5), Growth(3), Legal(2), Research(2), Community(4), Operations(3), Security(2) = 21 seats
 - `NETWORK_ID` = `b"ultradag-testnet-v1"` (testnet) / `b"ultradag-mainnet-v1"` (mainnet) — `#[cfg(feature = "mainnet")]` selects variant
 - `MIN_DELEGATION_SATS` = 100 UDAG (10,000,000,000 sats) — Minimum delegation amount. Keeps delegations meaningful and reduces state bloat.
 - `DEFAULT_COMMISSION_PERCENT` = 10 — Default validator commission on delegated rewards
