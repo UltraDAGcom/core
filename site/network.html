@@ -86,6 +86,8 @@ nav.scrolled{border-color:var(--border)}
 .live-dot.offline{background:var(--danger);box-shadow:0 0 12px var(--danger)}
 .live-label{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:var(--success);font-weight:500}
 .live-label.offline{color:var(--danger)}
+.net-btn.active{background:rgba(52,211,153,.15)!important;color:#34d399!important}
+.net-btn:not(.active){background:transparent!important;color:var(--muted)!important}
 .round-big{font-family:'DM Mono',monospace;font-size:clamp(28px,4vw,42px);font-weight:500;color:var(--white);letter-spacing:-.01em}
 .round-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}
 .status-right{display:flex;align-items:center;gap:24px}
@@ -300,6 +302,10 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
         <div class="live-dot" id="live-dot"></div>
         <span class="live-label" id="live-label">CONNECTING</span>
       </div>
+      <div style="display:flex;gap:4px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:2px">
+        <button class="net-btn active" data-net="mainnet" onclick="switchNet('mainnet')" style="padding:4px 10px;border:none;border-radius:4px;font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;background:rgba(52,211,153,.15);color:#34d399;font-weight:500">Mainnet</button>
+        <button class="net-btn" data-net="testnet" onclick="switchNet('testnet')" style="padding:4px 10px;border:none;border-radius:4px;font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;background:transparent;color:var(--muted)">Testnet</button>
+      </div>
       <div>
         <div class="round-big" id="dag-round">--</div>
         <div class="round-label">DAG Round</div>
@@ -409,9 +415,12 @@ const hamburger=document.getElementById('hamburger'),mobileMenu=document.getElem
 hamburger.addEventListener('click',()=>{hamburger.classList.toggle('active');mobileMenu.classList.toggle('active')});
 mobileMenu.querySelectorAll('a').forEach(l=>l.addEventListener('click',()=>{hamburger.classList.remove('active');mobileMenu.classList.remove('active')}));
 
-// Config
-const NODES=['https://ultradag-node-1.fly.dev','https://ultradag-node-2.fly.dev','https://ultradag-node-3.fly.dev','https://ultradag-node-4.fly.dev','https://ultradag-node-5.fly.dev'];
+// Config — Mainnet by default, with network toggle
+const MAINNET_NODES=['https://ultradag-mainnet-1.fly.dev','https://ultradag-mainnet-2.fly.dev','https://ultradag-mainnet-3.fly.dev','https://ultradag-mainnet-4.fly.dev','https://ultradag-mainnet-5.fly.dev'];
+const TESTNET_NODES=['https://ultradag-node-1.fly.dev','https://ultradag-node-2.fly.dev','https://ultradag-node-3.fly.dev','https://ultradag-node-4.fly.dev','https://ultradag-node-5.fly.dev'];
+let NODES=MAINNET_NODES, currentNetwork='mainnet';
 const SATS=1e8, MAX_SUPPLY=21e6, REFRESH=5000;
+function switchNet(net){currentNetwork=net;NODES=net==='mainnet'?MAINNET_NODES:TESTNET_NODES;document.querySelectorAll('.net-btn').forEach(b=>b.classList.toggle('active',b.dataset.net===net));refresh()}
 let rStart=Date.now();
 
 // Helpers
@@ -431,7 +440,8 @@ function renderNodes(res){
   document.getElementById('nodes').innerHTML=res.map((r,i)=>{
     const on=r.s!=null,s=r.s||{},ms=r.ms!=null?r.ms+'ms':'--',mc=r.ms!=null?(r.ms<300?'fast':r.ms<800?'':'slow'):'';
     const mem=fmtMem(s.memory_usage_bytes),up=fmtUptime(s.uptime_seconds),verts=s.dag_vertices!=null?fmtN(s.dag_vertices):'--',boot=s.bootstrap_connected;
-    return`<div class="node-card"><div class="node-head"><span class="node-name">node-${i+1}</span><div class="node-status ${on?'online':'offline'}"></div></div><div class="node-rows"><div class="node-row"><span class="node-row-label">Round</span><span class="node-row-value">${fmtN(s.dag_round)}</span></div><div class="node-row"><span class="node-row-label">Finalized</span><span class="node-row-value">${fmtN(s.last_finalized_round)}</span></div><div class="node-row"><span class="node-row-label">Peers</span><span class="node-row-value">${s.peer_count!=null?s.peer_count:'--'}</span></div><div class="node-row"><span class="node-row-label">Latency</span><span class="node-row-value ${mc}">${ms}</span></div><div class="node-row"><span class="node-row-label">Memory</span><span class="node-row-value">${mem}</span></div><div class="node-row"><span class="node-row-label">Uptime</span><span class="node-row-value">${up}</span></div><div class="node-row"><span class="node-row-label">Vertices</span><span class="node-row-value">${verts}</span></div></div></div>`}).join('')}
+    const prefix=currentNetwork==='mainnet'?'mainnet':'node';
+    return`<div class="node-card"><div class="node-head"><span class="node-name">${prefix}-${i+1}</span><div class="node-status ${on?'online':'offline'}"></div></div><div class="node-rows"><div class="node-row"><span class="node-row-label">Round</span><span class="node-row-value">${fmtN(s.dag_round)}</span></div><div class="node-row"><span class="node-row-label">Finalized</span><span class="node-row-value">${fmtN(s.last_finalized_round)}</span></div><div class="node-row"><span class="node-row-label">Peers</span><span class="node-row-value">${s.peer_count!=null?s.peer_count:'--'}</span></div><div class="node-row"><span class="node-row-label">Latency</span><span class="node-row-value ${mc}">${ms}</span></div><div class="node-row"><span class="node-row-label">Memory</span><span class="node-row-value">${mem}</span></div><div class="node-row"><span class="node-row-label">Uptime</span><span class="node-row-value">${up}</span></div><div class="node-row"><span class="node-row-label">Vertices</span><span class="node-row-value">${verts}</span></div></div></div>`}).join('')}
 
 // Render health
 function deriveHealthStatus(key, comp) {

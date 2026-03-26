@@ -80,6 +80,8 @@ nav.scrolled{border-color:var(--border)}
 
 /* HERO SEARCH */
 .search-section{text-align:center;margin-bottom:48px}
+.net-btn.active{background:rgba(52,211,153,.15)!important;color:#34d399!important}
+.net-btn:not(.active){background:transparent!important;color:var(--muted)!important}
 .search-title{font-family:'Cormorant',serif;font-size:40px;font-weight:300;color:var(--white);letter-spacing:.04em;margin-bottom:6px}
 .search-sub{font-size:14px;color:var(--muted);margin-bottom:28px}
 .search-box{position:relative;max-width:720px;margin:0 auto}
@@ -242,6 +244,10 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 <div class="main">
   <!-- SEARCH -->
   <div class="search-section">
+    <div style="display:flex;justify-content:center;gap:4px;margin-bottom:16px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:2px;display:inline-flex">
+      <button class="net-btn active" data-net="mainnet" onclick="switchNet('mainnet')" style="padding:5px 14px;border:none;border-radius:4px;font-family:'DM Mono',monospace;font-size:12px;cursor:pointer;font-weight:500;background:rgba(52,211,153,.15);color:#34d399">Mainnet</button>
+      <button class="net-btn" data-net="testnet" onclick="switchNet('testnet')" style="padding:5px 14px;border:none;border-radius:4px;font-family:'DM Mono',monospace;font-size:12px;cursor:pointer;background:transparent;color:var(--muted)">Testnet</button>
+    </div>
     <h1 class="search-title">Block Explorer</h1>
     <p class="search-sub">Search by round, transaction hash, vertex hash, or address</p>
     <div class="search-box">
@@ -318,13 +324,24 @@ hamburger.addEventListener('click', () => { hamburger.classList.toggle('active')
 mobileMenu.querySelectorAll('a').forEach(a => a.addEventListener('click', () => { hamburger.classList.remove('active'); mobileMenu.classList.remove('active'); }));
 
 // ── API ──
-const NODES = [
+const MAINNET_NODES = [
+  'https://ultradag-mainnet-1.fly.dev','https://ultradag-mainnet-2.fly.dev',
+  'https://ultradag-mainnet-3.fly.dev','https://ultradag-mainnet-4.fly.dev',
+  'https://ultradag-mainnet-5.fly.dev'
+];
+const TESTNET_NODES = [
   'https://ultradag-node-1.fly.dev','https://ultradag-node-2.fly.dev',
   'https://ultradag-node-3.fly.dev','https://ultradag-node-4.fly.dev',
   'https://ultradag-node-5.fly.dev'
 ];
+let NODES = MAINNET_NODES, currentNetwork = 'mainnet';
 const SATS = 100_000_000;
 const MAX_SUPPLY = 21_000_000;
+function switchNet(net) {
+  currentNetwork = net; NODES = net === 'mainnet' ? MAINNET_NODES : TESTNET_NODES;
+  document.querySelectorAll('.net-btn').forEach(b => b.classList.toggle('active', b.dataset.net === net));
+  loadStatus(); loadRounds();
+}
 
 async function fetchApi(path) {
   return Promise.any(NODES.map(n =>
