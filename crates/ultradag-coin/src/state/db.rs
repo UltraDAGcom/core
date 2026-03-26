@@ -216,6 +216,15 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
             }
         }
 
+        // Persist bridge_release_disagree_count (disagreement tracking for bridge releases)
+        {
+            if !engine.bridge_release_disagree_count_snapshot().is_empty() {
+                let dc_bytes = postcard::to_allocvec(&engine.bridge_release_disagree_count_snapshot())
+                    .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+                table.insert("bridge_release_disagree_count", dc_bytes.as_slice())?;
+            }
+        }
+
         // Persist last_proposal_round (spam prevention cooldown)
         {
             let snap = engine.snapshot();
@@ -487,6 +496,13 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         let fvr: Vec<((u64, u64), u64)> = postcard::from_bytes(fvr_val.value())
             .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
         engine.restore_bridge_release_first_vote_round(fvr);
+    }
+
+    // Restore bridge_release_disagree_count from METADATA
+    if let Some(dc_val) = meta.get("bridge_release_disagree_count")? {
+        let dc: Vec<((u64, u64), u64)> = postcard::from_bytes(dc_val.value())
+            .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+        engine.restore_bridge_release_disagree_count(dc);
     }
 
     // Restore last_proposal_round from METADATA (spam prevention cooldown)

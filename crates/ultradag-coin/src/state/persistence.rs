@@ -70,6 +70,18 @@ pub struct StateSnapshot {
     /// Last round each address created a proposal (spam prevention).
     #[serde(default)]
     pub last_proposal_round: Vec<(crate::address::Address, u64)>,
+    /// Bridge release first vote round: (chain_id, deposit_nonce) -> round of first vote.
+    /// Used for stale vote pruning — releases that haven't completed after N rounds are cleaned up.
+    #[serde(default)]
+    pub bridge_release_first_vote_round: Option<Vec<((u64, u64), u64)>>,
+    /// Bridge release disagree count: (chain_id, deposit_nonce) -> number of disagreeing votes.
+    /// Tracks how many validators voted with different (recipient, amount) than the canonical params.
+    #[serde(default)]
+    pub bridge_release_disagree_count: Option<Vec<((u64, u64), u64)>>,
+    /// Slashed events: (address, round) pairs of already-applied slashes.
+    /// Idempotency guard to prevent double-slashing the same (validator, round) pair.
+    #[serde(default)]
+    pub slashed_events: Vec<(crate::address::Address, u64)>,
 }
 
 impl StateSnapshot {

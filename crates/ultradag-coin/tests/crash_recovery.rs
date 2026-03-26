@@ -233,3 +233,383 @@ fn test_corrupted_redb_detected() {
     }
     // Success: didn't panic on corrupted file
 }
+
+/// Build a StateEngine with non-default values for EVERY persisted field.
+/// Returns the engine plus the addresses used, for assertion.
+fn build_fully_populated_engine() -> StateEngine {
+    use ultradag_coin::governance::{
+        CouncilSeatCategory, GovernanceParams, Proposal, ProposalStatus, ProposalType,
+    };
+    use ultradag_coin::bridge::BridgeAttestation;
+
+    // Start with genesis (sets faucet account with 1,000,000 UDAG and total_supply)
+    let mut engine = StateEngine::new_with_genesis();
+
+    // Use faucet keypair for staking/delegation (has genesis balance)
+    let faucet_sk = ultradag_coin::faucet_keypair();
+    let faucet_addr = faucet_sk.address();
+
+    // Create secondary addresses (will be used for council, bridge params, etc.)
+    let sk2 = SecretKey::from_bytes([2u8; 32]);
+    let sk3 = SecretKey::from_bytes([3u8; 32]);
+    let addr2 = sk2.address();
+    let addr3 = sk3.address();
+
+    // --- Stake accounts: stake from faucet ---
+    let stake_tx1 = ultradag_coin::tx::StakeTx {
+        from: faucet_addr,
+        amount: 100_000_000_000, // 1000 UDAG
+        nonce: 0,
+        pub_key: faucet_sk.verifying_key().to_bytes(),
+        signature: Signature([0u8; 64]),
+    };
+    let _ = engine.apply_stake_tx(&stake_tx1);
+
+    // --- Council members ---
+    engine.add_council_member(faucet_addr, CouncilSeatCategory::Technical).unwrap();
+    engine.add_council_member(addr2, CouncilSeatCategory::Business).unwrap();
+
+    // --- Governance params (non-default) ---
+    let gp = engine.governance_params_mut();
+    gp.min_fee_sats = 20_000;
+    gp.slash_percent = 75;
+    gp.council_emission_percent = 15;
+
+    // --- Configured validator count ---
+    engine.set_configured_validator_count(5);
+
+    // --- Bridge contract address ---
+    engine.set_bridge_contract_address([0xAB; 20]);
+
+    // --- Bridge attestations, signatures, nonce ---
+    let attestation = BridgeAttestation {
+        sender: faucet_addr,
+        recipient: [0xDE; 20],
+        amount: 1_000_000_000,
+        nonce: 1,
+        destination_chain_id: 42161,
+        bridge_contract_address: [0xAB; 20],
+        creation_round: 100,
+    };
+    let mut attestations = std::collections::HashMap::new();
+    attestations.insert(1u64, attestation);
+    let mut sigs = std::collections::HashMap::new();
+    let mut packed = [0u8; 85];
+    packed[..20].copy_from_slice(&[0xEE; 20]); // eth addr
+    packed[20..].copy_from_slice(&[0x11; 65]); // ecdsa sig
+    sigs.insert((1u64, faucet_addr), packed);
+    engine.restore_bridge_state(attestations, sigs, 2);
+
+    // --- Used release nonces ---
+    engine.restore_used_release_nonces(vec![(42161, 10), (42161, 20)]);
+
+    // --- Bridge release votes ---
+    engine.restore_bridge_release_votes(vec![
+        ((42161, 30), vec![faucet_addr, addr2]),
+    ]);
+
+    // --- Bridge release params ---
+    engine.restore_bridge_release_params(vec![
+        ((42161, 30), (addr3, 5_000_000_000)),
+    ]);
+
+    // --- Bridge release first vote round ---
+    engine.restore_bridge_release_first_vote_round(vec![
+        ((42161, 30), 50),
+        ((42161, 40), 60),
+    ]);
+
+    // --- Bridge release disagree count ---
+    engine.restore_bridge_release_disagree_count(vec![
+        ((42161, 30), 1),
+        ((42161, 40), 3),
+    ]);
+
+    // --- Slashed events ---
+    engine.restore_slashed_events(vec![
+        (faucet_addr, 100),
+        (addr2, 200),
+    ]);
+
+    // --- Last proposal round ---
+    engine.restore_last_proposal_round(vec![
+        (faucet_addr, 500),
+        (addr3, 600),
+    ]);
+
+    engine
+}
+
+#[test]
+fn test_every_field_survives_redb_roundtrip() {
+    let engine = build_fully_populated_engine();
+
+    let original_snapshot = engine.snapshot();
+    let original_root = compute_state_root(&original_snapshot);
+
+    // Save to redb
+    let tmp = tempfile::TempDir::new().unwrap();
+    let db_path = tmp.path().join("state.redb");
+    engine.save(&db_path).expect("save_to_redb should succeed");
+
+    // Load from redb
+    let restored = StateEngine::load(&db_path).expect("load_from_redb should succeed");
+    let restored_snapshot = restored.snapshot();
+    let restored_root = compute_state_root(&restored_snapshot);
+
+    // State root must match (covers all consensus-critical fields)
+    assert_eq!(original_root, restored_root,
+        "State root must survive redb roundtrip");
+
+    // --- Verify every individual snapshot field ---
+    assert_eq!(original_snapshot.total_supply, restored_snapshot.total_supply, "total_supply");
+    assert_eq!(original_snapshot.treasury_balance, restored_snapshot.treasury_balance, "treasury_balance");
+    assert_eq!(original_snapshot.bridge_reserve, restored_snapshot.bridge_reserve, "bridge_reserve");
+    assert_eq!(original_snapshot.current_epoch, restored_snapshot.current_epoch, "current_epoch");
+    assert_eq!(original_snapshot.next_proposal_id, restored_snapshot.next_proposal_id, "next_proposal_id");
+    assert_eq!(original_snapshot.last_finalized_round, restored_snapshot.last_finalized_round, "last_finalized_round");
+    assert_eq!(original_snapshot.configured_validator_count, restored_snapshot.configured_validator_count, "configured_validator_count");
+    assert_eq!(original_snapshot.bridge_nonce, restored_snapshot.bridge_nonce, "bridge_nonce");
+    assert_eq!(original_snapshot.bridge_contract_address, restored_snapshot.bridge_contract_address, "bridge_contract_address");
+
+    // Accounts (AccountState doesn't derive PartialEq, compare field by field)
+    assert_eq!(original_snapshot.accounts.len(), restored_snapshot.accounts.len(), "accounts count");
+    for (i, ((oa, oacct), (ra, racct))) in original_snapshot.accounts.iter()
+        .zip(restored_snapshot.accounts.iter()).enumerate()
+    {
+        assert_eq!(oa.0, ra.0, "account addr mismatch at {}", i);
+        assert_eq!(oacct.balance, racct.balance, "account balance mismatch at {}", i);
+        assert_eq!(oacct.nonce, racct.nonce, "account nonce mismatch at {}", i);
+    }
+
+    // Stake accounts
+    assert_eq!(original_snapshot.stake_accounts.len(), restored_snapshot.stake_accounts.len(), "stake_accounts count");
+    for (i, ((oa, os), (ra, rs))) in original_snapshot.stake_accounts.iter()
+        .zip(restored_snapshot.stake_accounts.iter()).enumerate()
+    {
+        assert_eq!(oa.0, ra.0, "stake addr mismatch at {}", i);
+        assert_eq!(os.staked, rs.staked, "stake amount mismatch at {}", i);
+        assert_eq!(os.commission_percent, rs.commission_percent, "commission mismatch at {}", i);
+    }
+
+    // Delegation accounts
+    assert_eq!(original_snapshot.delegation_accounts.len(), restored_snapshot.delegation_accounts.len(), "delegation_accounts count");
+    for (i, ((oa, od), (ra, rd))) in original_snapshot.delegation_accounts.iter()
+        .zip(restored_snapshot.delegation_accounts.iter()).enumerate()
+    {
+        assert_eq!(oa.0, ra.0, "delegation addr mismatch at {}", i);
+        assert_eq!(od.delegated, rd.delegated, "delegation amount mismatch at {}", i);
+        assert_eq!(od.validator.0, rd.validator.0, "delegation validator mismatch at {}", i);
+    }
+
+    // Active validator set
+    assert_eq!(original_snapshot.active_validator_set, restored_snapshot.active_validator_set, "active_validator_set");
+
+    // Council members
+    assert_eq!(original_snapshot.council_members.len(), restored_snapshot.council_members.len(), "council_members count");
+
+    // Governance params
+    assert_eq!(original_snapshot.governance_params.min_fee_sats, restored_snapshot.governance_params.min_fee_sats, "gov min_fee_sats");
+    assert_eq!(original_snapshot.governance_params.slash_percent, restored_snapshot.governance_params.slash_percent, "gov slash_percent");
+    assert_eq!(original_snapshot.governance_params.council_emission_percent, restored_snapshot.governance_params.council_emission_percent, "gov council_emission_percent");
+
+    // Proposals and votes
+    assert_eq!(original_snapshot.proposals.len(), restored_snapshot.proposals.len(), "proposals count");
+    assert_eq!(original_snapshot.votes, restored_snapshot.votes, "votes");
+
+    // Bridge attestations
+    assert_eq!(original_snapshot.bridge_attestations.len(), restored_snapshot.bridge_attestations.len(), "bridge_attestations count");
+
+    // Bridge signatures
+    assert_eq!(original_snapshot.bridge_signatures.len(), restored_snapshot.bridge_signatures.len(), "bridge_signatures count");
+
+    // Used release nonces
+    let mut orig_nonces = original_snapshot.used_release_nonces.clone();
+    let mut rest_nonces = restored_snapshot.used_release_nonces.clone();
+    orig_nonces.sort();
+    rest_nonces.sort();
+    assert_eq!(orig_nonces, rest_nonces, "used_release_nonces");
+
+    // Bridge release votes
+    assert_eq!(original_snapshot.bridge_release_votes.len(), restored_snapshot.bridge_release_votes.len(), "bridge_release_votes count");
+    assert_eq!(original_snapshot.bridge_release_votes, restored_snapshot.bridge_release_votes, "bridge_release_votes");
+
+    // Bridge release params
+    assert_eq!(original_snapshot.bridge_release_params, restored_snapshot.bridge_release_params, "bridge_release_params");
+
+    // Last proposal round
+    assert_eq!(original_snapshot.last_proposal_round, restored_snapshot.last_proposal_round, "last_proposal_round");
+
+    // --- Gap 1: bridge_release_first_vote_round ---
+    assert_eq!(
+        original_snapshot.bridge_release_first_vote_round,
+        restored_snapshot.bridge_release_first_vote_round,
+        "bridge_release_first_vote_round must survive redb roundtrip"
+    );
+    // Verify non-empty
+    assert!(original_snapshot.bridge_release_first_vote_round.is_some(),
+        "bridge_release_first_vote_round should be Some (non-empty)");
+    let fvr = original_snapshot.bridge_release_first_vote_round.as_ref().unwrap();
+    assert_eq!(fvr.len(), 2, "should have 2 first-vote-round entries");
+
+    // --- Gap 2: bridge_release_disagree_count ---
+    assert_eq!(
+        original_snapshot.bridge_release_disagree_count,
+        restored_snapshot.bridge_release_disagree_count,
+        "bridge_release_disagree_count must survive redb roundtrip"
+    );
+    assert!(original_snapshot.bridge_release_disagree_count.is_some(),
+        "bridge_release_disagree_count should be Some (non-empty)");
+    let dc = original_snapshot.bridge_release_disagree_count.as_ref().unwrap();
+    assert_eq!(dc.len(), 2, "should have 2 disagree count entries");
+
+    // --- Gap 3: slashed_events ---
+    assert_eq!(
+        original_snapshot.slashed_events,
+        restored_snapshot.slashed_events,
+        "slashed_events must survive redb roundtrip"
+    );
+    assert_eq!(original_snapshot.slashed_events.len(), 2,
+        "should have 2 slashed events");
+}
+
+#[test]
+fn test_every_field_survives_snapshot_roundtrip() {
+    let engine = build_fully_populated_engine();
+
+    let original_snapshot = engine.snapshot();
+    let original_root = compute_state_root(&original_snapshot);
+
+    // Roundtrip via from_snapshot
+    let restored = StateEngine::from_snapshot(original_snapshot.clone())
+        .expect("from_snapshot should succeed");
+    let restored_snapshot = restored.snapshot();
+    let restored_root = compute_state_root(&restored_snapshot);
+
+    // State root must match
+    assert_eq!(original_root, restored_root,
+        "State root must survive snapshot roundtrip");
+
+    // --- Verify every individual snapshot field ---
+    assert_eq!(original_snapshot.total_supply, restored_snapshot.total_supply, "total_supply");
+    assert_eq!(original_snapshot.treasury_balance, restored_snapshot.treasury_balance, "treasury_balance");
+    assert_eq!(original_snapshot.bridge_reserve, restored_snapshot.bridge_reserve, "bridge_reserve");
+    assert_eq!(original_snapshot.current_epoch, restored_snapshot.current_epoch, "current_epoch");
+    assert_eq!(original_snapshot.next_proposal_id, restored_snapshot.next_proposal_id, "next_proposal_id");
+    assert_eq!(original_snapshot.last_finalized_round, restored_snapshot.last_finalized_round, "last_finalized_round");
+    assert_eq!(original_snapshot.configured_validator_count, restored_snapshot.configured_validator_count, "configured_validator_count");
+    assert_eq!(original_snapshot.bridge_nonce, restored_snapshot.bridge_nonce, "bridge_nonce");
+    assert_eq!(original_snapshot.bridge_contract_address, restored_snapshot.bridge_contract_address, "bridge_contract_address");
+
+    // Accounts (compare field by field, AccountState lacks PartialEq)
+    assert_eq!(original_snapshot.accounts.len(), restored_snapshot.accounts.len(), "accounts count");
+    for (i, ((oa, oacct), (ra, racct))) in original_snapshot.accounts.iter()
+        .zip(restored_snapshot.accounts.iter()).enumerate()
+    {
+        assert_eq!(oa.0, ra.0, "snapshot account addr mismatch at {}", i);
+        assert_eq!(oacct.balance, racct.balance, "snapshot account balance mismatch at {}", i);
+        assert_eq!(oacct.nonce, racct.nonce, "snapshot account nonce mismatch at {}", i);
+    }
+
+    // Stake accounts (compare field by field)
+    assert_eq!(original_snapshot.stake_accounts.len(), restored_snapshot.stake_accounts.len(), "stake_accounts count");
+    for (i, ((oa, os), (ra, rs))) in original_snapshot.stake_accounts.iter()
+        .zip(restored_snapshot.stake_accounts.iter()).enumerate()
+    {
+        assert_eq!(oa.0, ra.0, "snapshot stake addr mismatch at {}", i);
+        assert_eq!(os.staked, rs.staked, "snapshot stake amount mismatch at {}", i);
+    }
+
+    // Delegation accounts (compare field by field)
+    assert_eq!(original_snapshot.delegation_accounts.len(), restored_snapshot.delegation_accounts.len(), "delegation_accounts count");
+    for (i, ((oa, od), (ra, rd))) in original_snapshot.delegation_accounts.iter()
+        .zip(restored_snapshot.delegation_accounts.iter()).enumerate()
+    {
+        assert_eq!(oa.0, ra.0, "snapshot delegation addr mismatch at {}", i);
+        assert_eq!(od.delegated, rd.delegated, "snapshot delegation amount mismatch at {}", i);
+    }
+
+    // Active validator set
+    assert_eq!(original_snapshot.active_validator_set, restored_snapshot.active_validator_set, "active_validator_set");
+
+    // Council members
+    assert_eq!(original_snapshot.council_members.len(), restored_snapshot.council_members.len(), "council_members count");
+
+    // Governance params
+    assert_eq!(original_snapshot.governance_params.min_fee_sats, restored_snapshot.governance_params.min_fee_sats, "gov min_fee_sats");
+    assert_eq!(original_snapshot.governance_params.slash_percent, restored_snapshot.governance_params.slash_percent, "gov slash_percent");
+
+    // Proposals and votes
+    assert_eq!(original_snapshot.proposals.len(), restored_snapshot.proposals.len(), "proposals count");
+    assert_eq!(original_snapshot.votes, restored_snapshot.votes, "votes");
+
+    // Bridge attestations
+    assert_eq!(original_snapshot.bridge_attestations.len(), restored_snapshot.bridge_attestations.len(), "bridge_attestations count");
+
+    // Bridge signatures
+    assert_eq!(original_snapshot.bridge_signatures.len(), restored_snapshot.bridge_signatures.len(), "bridge_signatures count");
+
+    // Used release nonces
+    let mut orig_nonces = original_snapshot.used_release_nonces.clone();
+    let mut rest_nonces = restored_snapshot.used_release_nonces.clone();
+    orig_nonces.sort();
+    rest_nonces.sort();
+    assert_eq!(orig_nonces, rest_nonces, "used_release_nonces");
+
+    // Bridge release votes
+    assert_eq!(original_snapshot.bridge_release_votes, restored_snapshot.bridge_release_votes, "bridge_release_votes");
+
+    // Bridge release params
+    assert_eq!(original_snapshot.bridge_release_params, restored_snapshot.bridge_release_params, "bridge_release_params");
+
+    // Last proposal round
+    assert_eq!(original_snapshot.last_proposal_round, restored_snapshot.last_proposal_round, "last_proposal_round");
+
+    // --- Gap 1: bridge_release_first_vote_round ---
+    assert_eq!(
+        original_snapshot.bridge_release_first_vote_round,
+        restored_snapshot.bridge_release_first_vote_round,
+        "bridge_release_first_vote_round must survive snapshot roundtrip"
+    );
+    assert!(restored_snapshot.bridge_release_first_vote_round.is_some(),
+        "bridge_release_first_vote_round should be Some after snapshot roundtrip");
+
+    // --- Gap 2: bridge_release_disagree_count ---
+    assert_eq!(
+        original_snapshot.bridge_release_disagree_count,
+        restored_snapshot.bridge_release_disagree_count,
+        "bridge_release_disagree_count must survive snapshot roundtrip"
+    );
+    assert!(restored_snapshot.bridge_release_disagree_count.is_some(),
+        "bridge_release_disagree_count should be Some after snapshot roundtrip");
+
+    // --- Gap 3: slashed_events ---
+    assert_eq!(
+        original_snapshot.slashed_events,
+        restored_snapshot.slashed_events,
+        "slashed_events must survive snapshot roundtrip"
+    );
+    assert_eq!(restored_snapshot.slashed_events.len(), 2,
+        "slashed_events should have 2 entries after snapshot roundtrip");
+
+    // --- Also test load_snapshot path ---
+    let mut fresh = StateEngine::new_with_genesis();
+    fresh.load_snapshot(original_snapshot.clone());
+    let loaded_snapshot = fresh.snapshot();
+
+    assert_eq!(
+        original_snapshot.bridge_release_first_vote_round,
+        loaded_snapshot.bridge_release_first_vote_round,
+        "bridge_release_first_vote_round must survive load_snapshot"
+    );
+    assert_eq!(
+        original_snapshot.bridge_release_disagree_count,
+        loaded_snapshot.bridge_release_disagree_count,
+        "bridge_release_disagree_count must survive load_snapshot"
+    );
+    assert_eq!(
+        original_snapshot.slashed_events,
+        loaded_snapshot.slashed_events,
+        "slashed_events must survive load_snapshot"
+    );
+}

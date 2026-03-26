@@ -3070,6 +3070,25 @@ impl StateEngine {
                 lpr.sort_by_key(|(addr, _)| addr.0);
                 lpr
             },
+            bridge_release_first_vote_round: if self.bridge_release_first_vote_round.is_empty() {
+                None
+            } else {
+                let mut fvr: Vec<_> = self.bridge_release_first_vote_round.iter().map(|(k, r)| (*k, *r)).collect();
+                fvr.sort_by_key(|(k, _)| *k);
+                Some(fvr)
+            },
+            bridge_release_disagree_count: if self.bridge_release_disagree_count.is_empty() {
+                None
+            } else {
+                let mut dc: Vec<_> = self.bridge_release_disagree_count.iter().map(|(k, c)| (*k, *c)).collect();
+                dc.sort_by_key(|(k, _)| *k);
+                Some(dc)
+            },
+            slashed_events: {
+                let mut se: Vec<_> = self.slashed_events.iter().copied().collect();
+                se.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.cmp(&b.1)));
+                se
+            },
         }
     }
 
@@ -3134,9 +3153,11 @@ impl StateEngine {
                 .collect(),
             bridge_release_params: snapshot.bridge_release_params.clone().unwrap_or_default()
                 .into_iter().collect(),
-            bridge_release_first_vote_round: HashMap::new(), // Restored from redb after from_parts
-            bridge_release_disagree_count: HashMap::new(), // Transient — rebuilt as votes arrive
-            slashed_events: std::collections::HashSet::new(), // Rebuilt from slash_history if needed
+            bridge_release_first_vote_round: snapshot.bridge_release_first_vote_round
+                .unwrap_or_default().into_iter().collect(),
+            bridge_release_disagree_count: snapshot.bridge_release_disagree_count
+                .unwrap_or_default().into_iter().collect(),
+            slashed_events: snapshot.slashed_events.into_iter().collect(),
             last_proposal_round: snapshot.last_proposal_round.into_iter().collect(),
 
         })
@@ -3184,9 +3205,11 @@ impl StateEngine {
             .collect();
         self.bridge_release_params = snapshot.bridge_release_params.unwrap_or_default()
             .into_iter().collect();
-        self.bridge_release_first_vote_round = HashMap::new(); // Restored from redb after load_snapshot
-        self.bridge_release_disagree_count = HashMap::new();
-        self.slashed_events = std::collections::HashSet::new();
+        self.bridge_release_first_vote_round = snapshot.bridge_release_first_vote_round
+            .unwrap_or_default().into_iter().collect();
+        self.bridge_release_disagree_count = snapshot.bridge_release_disagree_count
+            .unwrap_or_default().into_iter().collect();
+        self.slashed_events = snapshot.slashed_events.into_iter().collect();
         self.last_proposal_round = snapshot.last_proposal_round.into_iter().collect();
         self.configured_validator_count = saved_configured;
     }
@@ -3536,6 +3559,18 @@ impl StateEngine {
     /// Restore bridge_release_first_vote_round from persistence.
     pub fn restore_bridge_release_first_vote_round(&mut self, fvr: Vec<((u64, u64), u64)>) {
         self.bridge_release_first_vote_round = fvr.into_iter().collect();
+    }
+
+    /// Restore bridge_release_disagree_count from persistence.
+    pub fn restore_bridge_release_disagree_count(&mut self, dc: Vec<((u64, u64), u64)>) {
+        self.bridge_release_disagree_count = dc.into_iter().collect();
+    }
+
+    /// Snapshot of bridge_release_disagree_count for persistence.
+    pub fn bridge_release_disagree_count_snapshot(&self) -> Vec<((u64, u64), u64)> {
+        let mut v: Vec<_> = self.bridge_release_disagree_count.iter().map(|(k, c)| (*k, *c)).collect();
+        v.sort_by_key(|(k, _)| *k);
+        v
     }
 
     /// Snapshot of slashed_events for persistence.

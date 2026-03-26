@@ -60,7 +60,11 @@ fn known_fixture() -> StateSnapshot {
         bridge_contract_address: [0u8; 20],
         used_release_nonces: vec![],
         bridge_release_votes: vec![],
+        bridge_release_params: None,
         last_proposal_round: vec![],
+        bridge_release_first_vote_round: None,
+        bridge_release_disagree_count: None,
+        slashed_events: vec![],
     }
 }
 
@@ -75,12 +79,13 @@ fn state_root_regression_known_fixture() {
     // This is the canonical hash of the known fixture.
     // To update: run this test, copy the printed hash, and replace the assertion.
     // WARNING: Updating this value means every node must be restarted with the new code.
-    // Updated 2026-03-24 after emission-only tokenomics refactor + founder emission error handling
+    // Updated 2026-03-26 after adding bridge_release_first_vote_round, bridge_release_disagree_count,
+    // slashed_events, and bridge_release_params fields to StateSnapshot
     let expected: [u8; 32] = [
-        0x8f, 0xb1, 0xa2, 0xe7, 0xc7, 0xe4, 0x65, 0x5d,
-        0x95, 0xca, 0x36, 0x86, 0x96, 0x3a, 0x86, 0x62,
-        0x45, 0x5d, 0xda, 0xc6, 0xb6, 0x46, 0x86, 0x9d,
-        0x13, 0x05, 0x6d, 0x5f, 0xbb, 0xf2, 0x7b, 0x9c,
+        0xc5, 0xeb, 0xc4, 0x8c, 0xb8, 0xb1, 0xff, 0xc9,
+        0x90, 0x16, 0xef, 0xd3, 0x21, 0xbf, 0x6c, 0xaf,
+        0x89, 0xc8, 0x6b, 0x09, 0x31, 0x07, 0x9e, 0x97,
+        0x45, 0xfd, 0x84, 0xde, 0xd4, 0xa9, 0xd8, 0x49,
     ];
 
     if expected == [0x00; 32] {
@@ -167,7 +172,11 @@ fn state_root_empty_state() {
         bridge_contract_address: [0u8; 20],
         used_release_nonces: vec![],
         bridge_release_votes: vec![],
+        bridge_release_params: None,
         last_proposal_round: vec![],
+        bridge_release_first_vote_round: None,
+        bridge_release_disagree_count: None,
+        slashed_events: vec![],
     };
     let root = compute_state_root(&snapshot);
     assert_ne!(root, [0u8; 32], "Empty state root should not be all zeros");
