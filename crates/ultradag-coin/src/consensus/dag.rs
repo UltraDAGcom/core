@@ -230,7 +230,14 @@ impl BlockDag {
     /// - **Tests**: vertices are pre-validated by construction
     ///
     /// **Production code MUST use `try_insert()` instead.**
+    /// Public access to unchecked insert — only for simulation and tests.
+    /// Production code MUST use `try_insert()` instead.
+    #[cfg(any(test, feature = "unsafe-dag-insert"))]
     pub fn insert(&mut self, vertex: DagVertex) -> bool {
+        self.insert_internal(vertex)
+    }
+
+    fn insert_internal(&mut self, vertex: DagVertex) -> bool {
         let hash = vertex.hash();
 
         if self.vertices.contains_key(&hash) {
@@ -433,7 +440,7 @@ impl BlockDag {
         }
 
         // All checks passed — insert
-        Ok(self.insert(vertex))
+        Ok(self.insert_internal(vertex))
     }
 
     /// Get a vertex by hash.

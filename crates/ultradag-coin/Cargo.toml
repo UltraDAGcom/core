@@ -27,7 +27,9 @@ sha2 = { workspace = true }
 default = []
 mainnet = []  # Enable mainnet guards (rejects test faucet seed, etc.)
 simulator = []  # Disable timestamp validation for deterministic simulation
+unsafe-dag-insert = []  # Expose BlockDag::insert() publicly — only for sim/test crates
 
 [dev-dependencies]
 serde_json = "1"
 tempfile = "3"
+ultradag-coin = { path = ".", features = ["unsafe-dag-insert"] }

@@ -1368,8 +1368,14 @@ async fn handle_peer(
                 let capped_count = (max_count as usize).min(50);
                 let end_round = effective_from.saturating_add(capped_count as u64);
                 let mut vertices = Vec::new();
-                for round in effective_from..end_round {
+                let mut total_size: usize = 0;
+                'outer: for round in effective_from..end_round {
                     for v in dag_r.vertices_in_round(round) {
+                        let vsize = postcard::to_allocvec(v).map(|b| b.len()).unwrap_or(500);
+                        total_size += vsize;
+                        if total_size > 3_500_000 {
+                            break 'outer; // Stay under MAX_MESSAGE_SIZE (4MB)
+                        }
                         vertices.push(v.clone());
                     }
                     if vertices.len() >= capped_count {

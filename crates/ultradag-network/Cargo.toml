@@ -25,3 +25,4 @@ mainnet = ["ultradag-coin/mainnet"]  # Propagate mainnet feature to coin crate
 chrono = "0.4"
 futures = "0.3"
 ultradag-network = { path = ".", features = ["test-helpers"] }
+ultradag-coin = { path = "../ultradag-coin", features = ["unsafe-dag-insert"] }

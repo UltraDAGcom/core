@@ -1137,12 +1137,7 @@ impl StateEngine {
                 crate::tx::Transaction::BridgeDeposit(bridge_tx) => {
                     if let Err(e) = self.apply_bridge_lock_tx(bridge_tx, None, None) {
                         tracing::warn!("Skipping invalid BridgeDeposit tx in finalized vertex: {}", e);
-                        if bridge_tx.fee > 0 {
-                            if self.debit(&bridge_tx.from, bridge_tx.fee).is_ok() {
-                                collected_fees = collected_fees.saturating_add(bridge_tx.fee);
-                            }
-                            // If debit fails, fee is NOT added to collected_fees — preserves supply invariant
-                        }
+                        // No fee charged on failure — consistent with all other tx types
                         self.increment_nonce(&bridge_tx.from);
                         self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
                         continue;
@@ -1449,6 +1444,11 @@ impl StateEngine {
         if let Some(fin) = self.last_finalized_round {
             let floor = fin.saturating_sub(1000);
             self.applied_validators_per_round.retain(|round, _| *round >= floor);
+
+            // Prune slashed_events older than PRUNING_HORIZON rounds behind last_finalized_round.
+            // Events are kept long enough for any re-encountered evidence to be caught, then cleaned up.
+            let slash_floor = fin.saturating_sub(1000);
+            self.slashed_events.retain(|(_, round)| *round >= slash_floor);
 
             // Periodic state bloat pruning
             if fin % crate::constants::STATE_PRUNING_INTERVAL == 0 {
