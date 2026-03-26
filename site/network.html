@@ -138,9 +138,9 @@ nav.scrolled{border-color:var(--border)}
 .active-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--success);margin-right:6px;vertical-align:middle}
 
 /* HEALTH GRID */
-.health-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:48px}
-.health-card{background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:16px 18px;display:flex;align-items:center;gap:12px}
-.health-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.health-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:48px}
+.health-card{background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:16px 18px;display:flex;align-items:flex-start;gap:12px}
+.health-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px}
 .health-dot.healthy{background:var(--success);box-shadow:0 0 6px var(--success)}
 .health-dot.warning{background:var(--warning);box-shadow:0 0 6px var(--warning)}
 .health-dot.unhealthy,.health-dot.degraded{background:var(--danger);box-shadow:0 0 6px var(--danger)}
@@ -325,9 +325,12 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <div class="vital"><div class="vital-label">DAG Round</div><div class="vital-value" id="v-round">--</div><div class="vital-sub" id="v-round-sub">loading</div></div>
     <div class="vital"><div class="vital-label">Finalized Round</div><div class="vital-value" id="v-fin">--</div><div class="vital-sub" id="v-fin-sub">--</div></div>
     <div class="vital"><div class="vital-label">Total Supply</div><div class="vital-value" id="v-supply">--</div><div class="vital-sub" id="v-supply-sub">--</div><div class="supply-bar"><div class="supply-bar-fill" id="supply-fill" style="width:0%"></div></div></div>
+    <div class="vital"><div class="vital-label">Treasury</div><div class="vital-value" id="v-treasury">--</div><div class="vital-sub" id="v-treasury-sub">DAO treasury balance</div></div>
+    <div class="vital"><div class="vital-label">DAG Vertices</div><div class="vital-value" id="v-verts">--</div><div class="vital-sub" id="v-verts-sub">--</div></div>
     <div class="vital"><div class="vital-label">Active Validators</div><div class="vital-value" id="v-val">--</div><div class="vital-sub">of 21 max</div></div>
     <div class="vital"><div class="vital-label">Connected Peers</div><div class="vital-value" id="v-peers">--</div><div class="vital-sub" id="v-peers-sub">--</div></div>
     <div class="vital"><div class="vital-label">Mempool</div><div class="vital-value" id="v-mem">--</div><div class="vital-sub">pending txs</div></div>
+    <div class="vital"><div class="vital-label">Accounts</div><div class="vital-value" id="v-accts">--</div><div class="vital-sub" id="v-accts-sub">on-chain accounts</div></div>
   </div>
 
   <!-- NODES -->
@@ -422,27 +425,48 @@ async function fjson(url,t=4000){const c=new AbortController;const id=setTimeout
 function tickArc(){const el=document.getElementById('refresh-arc');const p=Math.min((Date.now()-rStart)/REFRESH,1);el.setAttribute('stroke-dashoffset',(75.4*(1-p)).toFixed(1));if(p<1)requestAnimationFrame(tickArc)}
 
 // Render nodes
+function fmtMem(b){if(b==null)return'--';const mb=b/(1024*1024);return mb>=1024?(mb/1024).toFixed(1)+' GB':mb.toFixed(1)+' MB'}
+function fmtUptime(s){if(s==null)return'--';if(s>=86400){const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600);return d+'d '+h+'h'}if(s>=3600){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h+'h '+m+'m'}return Math.floor(s/60)+'m'}
 function renderNodes(res){
   document.getElementById('nodes').innerHTML=res.map((r,i)=>{
     const on=r.s!=null,s=r.s||{},ms=r.ms!=null?r.ms+'ms':'--',mc=r.ms!=null?(r.ms<300?'fast':r.ms<800?'':'slow'):'';
-    return`<div class="node-card"><div class="node-head"><span class="node-name">node-${i+1}</span><div class="node-status ${on?'online':'offline'}"></div></div><div class="node-rows"><div class="node-row"><span class="node-row-label">Round</span><span class="node-row-value">${fmtN(s.dag_round)}</span></div><div class="node-row"><span class="node-row-label">Finalized</span><span class="node-row-value">${fmtN(s.last_finalized_round)}</span></div><div class="node-row"><span class="node-row-label">Peers</span><span class="node-row-value">${s.peer_count!=null?s.peer_count:'--'}</span></div><div class="node-row"><span class="node-row-label">Latency</span><span class="node-row-value ${mc}">${ms}</span></div></div></div>`}).join('')}
+    const mem=fmtMem(s.memory_usage_bytes),up=fmtUptime(s.uptime_seconds),verts=s.dag_vertices!=null?fmtN(s.dag_vertices):'--',boot=s.bootstrap_connected;
+    return`<div class="node-card"><div class="node-head"><span class="node-name">node-${i+1}</span><div class="node-status ${on?'online':'offline'}"></div></div><div class="node-rows"><div class="node-row"><span class="node-row-label">Round</span><span class="node-row-value">${fmtN(s.dag_round)}</span></div><div class="node-row"><span class="node-row-label">Finalized</span><span class="node-row-value">${fmtN(s.last_finalized_round)}</span></div><div class="node-row"><span class="node-row-label">Peers</span><span class="node-row-value">${s.peer_count!=null?s.peer_count:'--'}</span></div><div class="node-row"><span class="node-row-label">Latency</span><span class="node-row-value ${mc}">${ms}</span></div><div class="node-row"><span class="node-row-label">Memory</span><span class="node-row-value">${mem}</span></div><div class="node-row"><span class="node-row-label">Uptime</span><span class="node-row-value">${up}</span></div><div class="node-row"><span class="node-row-label">Vertices</span><span class="node-row-value">${verts}</span></div></div></div>`}).join('')}
 
 // Render health
+function deriveHealthStatus(key, comp) {
+  if (key === 'finality') return comp.available === false ? 'unhealthy' : (comp.finality_lag > 10 ? 'warning' : 'healthy');
+  if (key === 'network') return comp.sync_complete === false ? 'warning' : (comp.peer_count < 2 ? 'unhealthy' : 'healthy');
+  if (key === 'dag') return comp.available === false ? 'unhealthy' : 'healthy';
+  if (key === 'state') return comp.available === false ? 'unhealthy' : 'healthy';
+  if (key === 'mempool') return comp.available === false ? 'unhealthy' : 'healthy';
+  if (key === 'checkpoints') return comp.checkpoint_age_seconds > 600 ? 'warning' : 'healthy';
+  return comp.available === false ? 'unhealthy' : 'healthy';
+}
+function healthDetail(key, comp) {
+  if (key === 'dag') return `${fmtN(comp.vertex_count)} vertices, ${fmtN(comp.tips_count)} tips`;
+  if (key === 'finality') return `Lag: ${comp.finality_lag} round${comp.finality_lag !== 1 ? 's' : ''}, ${comp.validator_count} validators`;
+  if (key === 'mempool') return `${fmtN(comp.transaction_count)} pending tx`;
+  if (key === 'network') return `${comp.peer_count} peers${comp.sync_complete ? ', synced' : ', syncing'}`;
+  if (key === 'state') return `${fmtN(comp.account_count)} accounts, ${fmtU(comp.total_supply||0)} supply`;
+  if (key === 'checkpoints') return `Round ${fmtN(comp.last_checkpoint_round)} (${comp.checkpoint_age_seconds}s ago)`;
+  return '';
+}
 function renderHealth(d){
   const c=document.getElementById('health');
   if(!d||!d.components){c.innerHTML='<div class="empty-state">Health data unavailable</div>';return}
-  c.innerHTML=Object.keys(d.components).map(k=>{const st=d.components[k].status||'unknown';return`<div class="health-card"><div class="health-dot ${st}"></div><span class="health-label">${k}: ${st}</span></div>`}).join('')}
+  c.innerHTML=Object.keys(d.components).sort().map(k=>{const comp=d.components[k],st=deriveHealthStatus(k,comp),detail=healthDetail(k,comp);return`<div class="health-card"><div class="health-dot ${st}"></div><div><span class="health-label" style="display:block">${k}</span><span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--subtle);display:block;margin-top:2px">${detail}</span></div></div>`}).join('')}
 
 // Render validators
 function renderVal(list){
   const tb=document.getElementById('vbody');
-  if(!list||!list.length){tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted)">No validators found</td></tr>';return}
+  if(!list||!list.length){tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:32px 16px;line-height:1.8"><span style="display:block;font-size:13px;color:var(--subtle)">No staked validators yet</span><span style="font-size:11px">Validators earn rewards through emission. Stake at least 10,000 UDAG to become an active validator.</span></td></tr>';return}
   tb.innerHTML=list.map(v=>{const sk=fmtU(v.staked||v.stake||0),ef=fmtU(v.effective_stake||v.staked||v.stake||0),cm=(v.commission_percent!=null?v.commission_percent:'--')+'%',dl=v.delegator_count!=null?v.delegator_count:'--';return`<tr><td><span class="active-dot"></span></td><td class="addr" title="${v.address}">${short(v.address)}</td><td>${sk}</td><td>${ef}</td><td>${cm}</td><td>${dl}</td></tr>`}).join('')}
 
 // Render mempool
 function renderMem(txs){
   const c=document.getElementById('mempool');
-  if(!txs||!txs.length){c.innerHTML='<div class="empty-state">Mempool is empty</div>';return}
+  if(!txs||!txs.length){c.innerHTML='<div class="empty-state"><span style="display:block;color:var(--subtle);font-size:13px">No pending transactions</span><span style="font-size:11px">Transactions appear here before being included in DAG vertices.</span></div>';return}
   let h='<div class="mempool-list"><div class="mp-row hdr"><span>Hash</span><span>Type</span><span class="mp-from">From</span><span style="text-align:right">Fee</span></div>';
   txs.slice(0,20).forEach(tx=>{const hash=tx.hash||'--',type=tx.type||tx.tx_type||'unknown',from=tx.from||'--',fee=tx.fee!=null?(tx.fee/SATS).toFixed(4):'--';h+=`<div class="mp-row"><span class="mp-hash" title="${hash}">${short(hash)}</span><span class="mp-type">${type}</span><span class="mp-from" title="${from}">${short(from)}</span><span class="mp-fee">${fee}</span></div>`});
   c.innerHTML=h+'</div>'}
@@ -463,6 +487,9 @@ async function update(){
   document.getElementById('v-fin').textContent=fmtN(fr);
   document.getElementById('v-fin-sub').textContent=lag!=null?'lag: '+lag+' round'+(lag!==1?'s':''):'--';
   if(s&&s.total_supply!=null){const u=s.total_supply/SATS,p=u/MAX_SUPPLY*100;document.getElementById('v-supply').textContent=fmtU(s.total_supply)+' UDAG';document.getElementById('v-supply-sub').textContent=p.toFixed(4)+'% of 21M';document.getElementById('supply-fill').style.width=p.toFixed(2)+'%'}
+  if(s&&s.treasury_balance!=null){document.getElementById('v-treasury').textContent=fmtU(s.treasury_balance)+' UDAG';document.getElementById('v-treasury-sub').textContent='DAO treasury balance'}
+  if(s&&s.dag_vertices!=null){document.getElementById('v-verts').textContent=fmtN(s.dag_vertices);document.getElementById('v-verts-sub').textContent=(s.dag_tips!=null?s.dag_tips+' tips':'--')+', floor '+(s.dag_memory_stats?fmtN(s.dag_memory_stats.pruning_floor):'--')}
+  if(s){document.getElementById('v-accts').textContent=fmtN(s.account_count);document.getElementById('v-accts-sub').textContent=s.total_staked!=null?fmtU(s.total_staked)+' staked':'on-chain accounts'}
   const on=nr.filter(r=>r.s!=null).length;
   document.getElementById('v-val').textContent=s?(s.active_stakers||s.validator_count||on):'--';
   document.getElementById('v-peers').textContent=s?(s.peer_count!=null?s.peer_count:'--'):'--';
