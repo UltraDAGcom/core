@@ -280,6 +280,21 @@ pub struct StateEngine {
     /// Prevents double-slashing the same equivocation event if evidence is re-encountered
     /// after the applied_validators_per_round tracker is pruned.
     slashed_events: std::collections::HashSet<(Address, u64)>,
+    /// SmartAccount configurations: address → config (authorized keys, pending operations).
+    /// Created automatically on first outgoing transaction via ensure_smart_account().
+    /// Persisted in SMART_ACCOUNTS redb table.
+    smart_accounts: HashMap<Address, crate::tx::smart_account::SmartAccountConfig>,
+    // ── Name Registry ───────────────────────────────────────
+    /// Name → Address forward mapping.
+    name_to_address: HashMap<String, Address>,
+    /// Address → Name reverse lookup (one name per address).
+    address_to_name: HashMap<Address, String>,
+    /// Name → expiry round.
+    name_expiry: HashMap<String, u64>,
+    /// Name → creation round (for anti-gaming).
+    name_created_at: HashMap<String, u64>,
+    /// Name → optional cross-chain profile data.
+    name_profiles: HashMap<String, crate::tx::name_registry::NameProfile>,
 }
 
 impl StateEngine {
@@ -317,6 +332,12 @@ impl StateEngine {
             bridge_release_first_vote_round: HashMap::new(),
             bridge_release_disagree_count: HashMap::new(),
             slashed_events: std::collections::HashSet::new(),
+            smart_accounts: HashMap::new(),
+            name_to_address: HashMap::new(),
+            address_to_name: HashMap::new(),
+            name_expiry: HashMap::new(),
+            name_created_at: HashMap::new(),
+            name_profiles: HashMap::new(),
         }
     }
 
@@ -1005,8 +1026,13 @@ impl StateEngine {
         // will fail nonce validation. We must skip these gracefully — a finalized
         // vertex cannot be un-finalized, so aborting would permanently halt finality.
         for tx in &vertex.block.transactions {
-            // Verify signature
-            if !tx.verify_signature() {
+            // Verify signature — SmartTransfer uses state-based key lookup instead of
+            // the stateless blake3(pub_key)==from check used by legacy transaction types.
+            let sig_valid = match tx {
+                crate::tx::Transaction::SmartTransfer(st) => self.verify_smart_transfer(st),
+                _ => tx.verify_signature(),
+            };
+            if !sig_valid {
                 tracing::warn!("Skipping tx with invalid signature in finalized vertex");
                 self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, "invalid signature");
                 continue;
@@ -1147,6 +1173,110 @@ impl StateEngine {
                     if let Err(e) = self.apply_bridge_release_tx(release_tx) {
                         tracing::warn!("Skipping invalid BridgeRelease tx in finalized vertex: {}", e);
                         self.increment_nonce(&release_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::AddKey(add_key_tx) => {
+                    if let Err(e) = self.apply_add_key_tx(add_key_tx) {
+                        tracing::warn!("Skipping invalid AddKey tx in finalized vertex: {}", e);
+                        self.increment_nonce(&add_key_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::RemoveKey(remove_key_tx) => {
+                    if let Err(e) = self.apply_remove_key_tx(remove_key_tx, vertex.round) {
+                        tracing::warn!("Skipping invalid RemoveKey tx in finalized vertex: {}", e);
+                        self.increment_nonce(&remove_key_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::SmartTransfer(smart_tx) => {
+                    if let Err(e) = self.apply_smart_transfer_tx(smart_tx) {
+                        tracing::warn!("Skipping invalid SmartTransfer tx in finalized vertex: {}", e);
+                        self.increment_nonce(&smart_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::SetRecovery(recovery_tx) => {
+                    if let Err(e) = self.apply_set_recovery_tx(recovery_tx) {
+                        tracing::warn!("Skipping invalid SetRecovery tx in finalized vertex: {}", e);
+                        self.increment_nonce(&recovery_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::RecoverAccount(recover_tx) => {
+                    if let Err(e) = self.apply_recover_account_tx(recover_tx) {
+                        tracing::warn!("Skipping invalid RecoverAccount tx in finalized vertex: {}", e);
+                        self.increment_nonce(&recover_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::CancelRecovery(cancel_tx) => {
+                    if let Err(e) = self.apply_cancel_recovery_tx(cancel_tx) {
+                        tracing::warn!("Skipping invalid CancelRecovery tx in finalized vertex: {}", e);
+                        self.increment_nonce(&cancel_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::SetPolicy(policy_tx) => {
+                    if let Err(e) = self.apply_set_policy_tx(policy_tx, vertex.round) {
+                        tracing::warn!("Skipping invalid SetPolicy tx in finalized vertex: {}", e);
+                        self.increment_nonce(&policy_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::ExecuteVault(vault_tx) => {
+                    if let Err(e) = self.apply_execute_vault_tx(vault_tx, vertex.round) {
+                        tracing::warn!("Skipping invalid ExecuteVault tx in finalized vertex: {}", e);
+                        self.increment_nonce(&vault_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::CancelVault(cancel_vault_tx) => {
+                    if let Err(e) = self.apply_cancel_vault_tx(cancel_vault_tx) {
+                        tracing::warn!("Skipping invalid CancelVault tx in finalized vertex: {}", e);
+                        self.increment_nonce(&cancel_vault_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::RegisterName(name_tx) => {
+                    if let Err(e) = self.apply_register_name_tx(name_tx) {
+                        tracing::warn!("Skipping invalid RegisterName tx in finalized vertex: {}", e);
+                        self.increment_nonce(&name_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::RenewName(renew_tx) => {
+                    if let Err(e) = self.apply_renew_name_tx(renew_tx) {
+                        tracing::warn!("Skipping invalid RenewName tx in finalized vertex: {}", e);
+                        self.increment_nonce(&renew_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::TransferName(transfer_tx) => {
+                    if let Err(e) = self.apply_transfer_name_tx(transfer_tx) {
+                        tracing::warn!("Skipping invalid TransferName tx in finalized vertex: {}", e);
+                        self.increment_nonce(&transfer_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::UpdateProfile(profile_tx) => {
+                    if let Err(e) = self.apply_update_profile_tx(profile_tx) {
+                        tracing::warn!("Skipping invalid UpdateProfile tx in finalized vertex: {}", e);
+                        self.increment_nonce(&profile_tx.from);
                         self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
                         continue;
                     }
@@ -1358,9 +1488,20 @@ impl StateEngine {
                 round_producers.clear();
                 // Process unstake completions once at the start of each new round
                 self.process_unstake_completions(vertex.round)?;
+                // Process SmartAccount pending operations
+                self.process_pending_key_removals(vertex.round);
+                self.process_pending_recoveries(vertex.round);
+                self.process_pending_policy_changes(vertex.round);
+                // Name expiry check every 1000 rounds (same interval as dust pruning)
+                if vertex.round % crate::constants::STATE_PRUNING_INTERVAL == 0 {
+                    self.process_name_expiry(vertex.round);
+                }
             } else if prev_round.is_none() {
-                // First vertex in the batch: process unstake completions for its round
+                // First vertex in the batch: process completions for its round
                 self.process_unstake_completions(vertex.round)?;
+                self.process_pending_key_removals(vertex.round);
+                self.process_pending_recoveries(vertex.round);
+                self.process_pending_policy_changes(vertex.round);
             }
 
             // Skip vertices from validators that equivocated in this batch.
@@ -2074,6 +2215,1078 @@ impl StateEngine {
         to_remove.len()
     }
 
+    // ────────────────────────────────────────────────────────────
+    // SmartAccount operations
+    // ────────────────────────────────────────────────────────────
+
+    /// Get the SmartAccount config for an address, if it exists.
+    pub fn smart_account(&self, addr: &Address) -> Option<&crate::tx::smart_account::SmartAccountConfig> {
+        self.smart_accounts.get(addr)
+    }
+
+    /// Get the full smart_accounts map (for snapshot/persistence).
+    pub fn smart_accounts(&self) -> &HashMap<Address, crate::tx::smart_account::SmartAccountConfig> {
+        &self.smart_accounts
+    }
+
+    /// Ensure a SmartAccount exists for the given address.
+    /// Called on first outgoing transaction to auto-register the signing key.
+    fn ensure_smart_account(&mut self, addr: &Address, round: u64) {
+        if !self.smart_accounts.contains_key(addr) {
+            self.smart_accounts.insert(*addr, crate::tx::smart_account::SmartAccountConfig::new(round));
+        }
+    }
+
+    /// Auto-register an Ed25519 key as the first authorized key on a SmartAccount.
+    /// Called when a legacy account sends its first transaction after SmartAccount creation.
+    fn auto_register_key(&mut self, addr: &Address, pub_key: &[u8; 32], round: u64) {
+        use crate::tx::smart_account::{AuthorizedKey, KeyType};
+        self.ensure_smart_account(addr, round);
+        if let Some(config) = self.smart_accounts.get_mut(addr) {
+            if config.authorized_keys.is_empty() {
+                let key_id = AuthorizedKey::compute_key_id(KeyType::Ed25519, pub_key);
+                config.authorized_keys.push(AuthorizedKey {
+                    key_id,
+                    key_type: KeyType::Ed25519,
+                    pubkey: pub_key.to_vec(),
+                    label: "default".to_string(),
+                    daily_limit: None,
+                    daily_spent: (0, 0),
+                });
+            }
+        }
+    }
+
+    /// Verify that a pub_key is authorized to sign for a SmartAccount.
+    /// Returns true if:
+    /// 1. The address has no SmartAccount (legacy path: blake3(pub_key) == addr), OR
+    /// 2. The pub_key is in the SmartAccount's authorized_keys list, OR
+    /// 3. The SmartAccount has no keys yet AND blake3(pub_key) == addr (auto-register path)
+    pub fn is_key_authorized(&self, addr: &Address, pub_key: &[u8; 32]) -> bool {
+        let legacy_match = Address::from_pubkey(pub_key) == *addr;
+        match self.smart_accounts.get(addr) {
+            None => legacy_match,
+            Some(config) => {
+                if config.authorized_keys.is_empty() {
+                    // No keys registered yet — accept legacy key match (will auto-register)
+                    legacy_match
+                } else {
+                    // Check if pub_key is an authorized Ed25519 key
+                    let key_id = crate::tx::smart_account::AuthorizedKey::compute_key_id(
+                        crate::tx::smart_account::KeyType::Ed25519, pub_key);
+                    config.has_key(&key_id)
+                }
+            }
+        }
+    }
+
+    /// Apply an AddKey transaction: register a new authorized key on a SmartAccount.
+    pub fn apply_add_key_tx(&mut self, tx: &crate::tx::smart_account::AddKeyTx) -> Result<(), CoinError> {
+        use crate::tx::smart_account::MAX_AUTHORIZED_KEYS;
+
+        // Validate the new key
+        tx.new_key.validate().map_err(|e| CoinError::ValidationError(e.to_string()))?;
+
+        let round = self.last_finalized_round.unwrap_or(0);
+
+        // Ensure SmartAccount exists and auto-register signer if needed
+        self.ensure_smart_account(&tx.from, round);
+        self.auto_register_key(&tx.from, &tx.pub_key, round);
+
+        // Verify signer is authorized
+        if !self.is_key_authorized(&tx.from, &tx.pub_key) {
+            return Err(CoinError::ValidationError("signing key not authorized for this SmartAccount".into()));
+        }
+
+        // Validate with immutable borrow first
+        {
+            let config = self.smart_accounts.get(&tx.from)
+                .ok_or_else(|| CoinError::ValidationError("SmartAccount not found".into()))?;
+
+            if config.authorized_keys.len() >= MAX_AUTHORIZED_KEYS {
+                return Err(CoinError::ValidationError(format!(
+                    "SmartAccount already has {} authorized keys (max {})", config.authorized_keys.len(), MAX_AUTHORIZED_KEYS
+                )));
+            }
+
+            if config.has_key(&tx.new_key.key_id) {
+                return Err(CoinError::ValidationError("key already registered on this SmartAccount".into()));
+            }
+        }
+
+        // Debit fee and increment nonce (requires &mut self, no outstanding borrows)
+        if tx.fee > 0 {
+            self.debit(&tx.from, tx.fee)?;
+        }
+        self.increment_nonce(&tx.from);
+
+        // Register the new key
+        let config = self.smart_accounts.get_mut(&tx.from).unwrap();
+        config.authorized_keys.push(tx.new_key.clone());
+
+        tracing::info!(
+            "SmartAccount {}: added key {} (label: {})",
+            tx.from.to_hex(), tx.new_key.key_id.iter().map(|b| format!("{b:02x}")).collect::<String>(), tx.new_key.label
+        );
+
+        Ok(())
+    }
+
+    /// Apply a RemoveKey transaction: initiate time-locked removal of an authorized key.
+    pub fn apply_remove_key_tx(&mut self, tx: &crate::tx::smart_account::RemoveKeyTx, current_round: u64) -> Result<(), CoinError> {
+        use crate::tx::smart_account::KEY_REMOVAL_DELAY_ROUNDS;
+
+        let round = self.last_finalized_round.unwrap_or(0);
+
+        // Ensure SmartAccount exists and auto-register signer if needed
+        self.ensure_smart_account(&tx.from, round);
+        self.auto_register_key(&tx.from, &tx.pub_key, round);
+
+        // Verify signer is authorized
+        if !self.is_key_authorized(&tx.from, &tx.pub_key) {
+            return Err(CoinError::ValidationError("signing key not authorized for this SmartAccount".into()));
+        }
+
+        let config = self.smart_accounts.get(&tx.from)
+            .ok_or_else(|| CoinError::ValidationError("SmartAccount not found".into()))?;
+
+        // Cannot remove the last key
+        if config.authorized_keys.len() <= 1 {
+            return Err(CoinError::ValidationError("cannot remove the last authorized key".into()));
+        }
+
+        // Verify the key to remove actually exists
+        if !config.has_key(&tx.key_id_to_remove) {
+            return Err(CoinError::ValidationError("key to remove not found on this SmartAccount".into()));
+        }
+
+        // Cannot have two pending removals at once
+        if config.pending_key_removal.is_some() {
+            return Err(CoinError::ValidationError("a key removal is already pending".into()));
+        }
+
+        self.increment_nonce(&tx.from);
+
+        // Set up time-locked removal
+        let config = self.smart_accounts.get_mut(&tx.from).unwrap();
+        config.pending_key_removal = Some(crate::tx::smart_account::PendingKeyRemoval {
+            key_id: tx.key_id_to_remove,
+            initiated_at_round: current_round,
+            executes_at_round: current_round.saturating_add(KEY_REMOVAL_DELAY_ROUNDS),
+        });
+
+        tracing::info!(
+            "SmartAccount {}: key removal initiated for {} (executes at round {})",
+            tx.from.to_hex(), tx.key_id_to_remove.iter().map(|b| format!("{b:02x}")).collect::<String>(),
+            current_round.saturating_add(KEY_REMOVAL_DELAY_ROUNDS)
+        );
+
+        Ok(())
+    }
+
+    /// Process pending SmartAccount key removals that have reached their execution round.
+    /// Called once per round in apply_finalized_vertices, alongside other per-round processing.
+    pub fn process_pending_key_removals(&mut self, current_round: u64) {
+        let mut completed: Vec<Address> = Vec::new();
+        for (addr, config) in &self.smart_accounts {
+            if let Some(ref pending) = config.pending_key_removal {
+                if current_round >= pending.executes_at_round {
+                    completed.push(*addr);
+                }
+            }
+        }
+        for addr in completed {
+            if let Some(config) = self.smart_accounts.get_mut(&addr) {
+                if let Some(pending) = config.pending_key_removal.take() {
+                    // Safety: don't remove if it would leave zero keys
+                    if config.authorized_keys.len() > 1 {
+                        config.authorized_keys.retain(|k| k.key_id != pending.key_id);
+                        tracing::info!(
+                            "SmartAccount {}: key {} removed after time-lock",
+                            addr.to_hex(), pending.key_id.iter().map(|b| format!("{b:02x}")).collect::<String>()
+                        );
+                    } else {
+                        tracing::warn!(
+                            "SmartAccount {}: skipping key removal — would leave zero keys",
+                            addr.to_hex()
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // Name Registry operations
+    // ────────────────────────────────────────────────────────────
+
+    /// Resolve a name to an address. Returns None if name doesn't exist or is expired.
+    pub fn resolve_name(&self, name: &str) -> Option<Address> {
+        let current_round = self.last_finalized_round.unwrap_or(0);
+        let addr = self.name_to_address.get(name)?;
+        // Check if expired (but within grace period, only owner can renew)
+        if let Some(&expiry) = self.name_expiry.get(name) {
+            let grace_end = expiry.saturating_add(crate::tx::name_registry::NAME_GRACE_PERIOD_ROUNDS);
+            if current_round > grace_end {
+                return None; // Past grace period — name is released
+            }
+        }
+        Some(*addr)
+    }
+
+    /// Reverse lookup: address to name.
+    pub fn reverse_name(&self, addr: &Address) -> Option<&str> {
+        self.address_to_name.get(addr).map(|s| s.as_str())
+    }
+
+    /// Get name expiry round.
+    pub fn name_expiry(&self, name: &str) -> Option<u64> {
+        self.name_expiry.get(name).copied()
+    }
+
+    /// Get name profile.
+    pub fn name_profile(&self, name: &str) -> Option<&crate::tx::name_registry::NameProfile> {
+        self.name_profiles.get(name)
+    }
+
+    /// Register a name.
+    pub fn apply_register_name_tx(&mut self, tx: &crate::tx::name_registry::RegisterNameTx) -> Result<(), CoinError> {
+        use crate::tx::name_registry::*;
+
+        validate_name(&tx.name).map_err(|e| CoinError::ValidationError(e.to_string()))?;
+
+        if tx.duration_years == 0 || tx.duration_years > MAX_REGISTRATION_YEARS {
+            return Err(CoinError::ValidationError(format!(
+                "duration must be 1-{} years", MAX_REGISTRATION_YEARS
+            )));
+        }
+
+        let required_fee = name_annual_fee(&tx.name).saturating_mul(tx.duration_years as u64);
+        if tx.fee < required_fee {
+            return Err(CoinError::ValidationError(format!(
+                "fee {} too low for {}-year registration of '{}' (need {})",
+                tx.fee, tx.duration_years, tx.name, required_fee
+            )));
+        }
+
+        let current_round = self.last_finalized_round.unwrap_or(0);
+
+        // Check if name is available
+        if let Some(&existing_addr) = self.name_to_address.get(&tx.name) {
+            // Name exists — check if it's expired past grace period
+            if let Some(&expiry) = self.name_expiry.get(&tx.name) {
+                let grace_end = expiry.saturating_add(NAME_GRACE_PERIOD_ROUNDS);
+                if current_round <= grace_end {
+                    // Still within grace period — only owner can renew
+                    if existing_addr == tx.from {
+                        return Err(CoinError::ValidationError("use RenewName to extend your registration".into()));
+                    }
+                    return Err(CoinError::ValidationError("name is taken (in grace period)".into()));
+                }
+                // Past grace — release the old name
+                self.address_to_name.remove(&existing_addr);
+                self.name_profiles.remove(&tx.name);
+            } else {
+                return Err(CoinError::ValidationError("name is already registered".into()));
+            }
+        }
+
+        // Check if sender already has a name
+        if let Some(existing_name) = self.address_to_name.get(&tx.from) {
+            return Err(CoinError::ValidationError(format!(
+                "address already has name '{}' — release it first", existing_name
+            )));
+        }
+
+        // Debit fee — from fee_payer if sponsored, otherwise from sender
+        if let Some(ref fp) = tx.fee_payer {
+            // Sponsored registration: verify fee_payer signature and debit from their account
+            if !fp.verify(&tx.signable_bytes()) {
+                return Err(CoinError::ValidationError("fee_payer signature invalid".into()));
+            }
+            let expected_nonce = self.nonce(&fp.address);
+            if fp.nonce != expected_nonce {
+                return Err(CoinError::ValidationError(format!(
+                    "fee_payer nonce mismatch: expected {}, got {}", expected_nonce, fp.nonce
+                )));
+            }
+            self.debit(&fp.address, tx.fee)?;
+            self.increment_nonce(&fp.address);
+        } else {
+            self.debit(&tx.from, tx.fee)?;
+        }
+        self.treasury_balance = self.treasury_balance.saturating_add(tx.fee);
+        self.increment_nonce(&tx.from);
+
+        // Register
+        let expiry = current_round.saturating_add(ROUNDS_PER_YEAR.saturating_mul(tx.duration_years as u64));
+        self.name_to_address.insert(tx.name.clone(), tx.from);
+        self.address_to_name.insert(tx.from, tx.name.clone());
+        self.name_expiry.insert(tx.name.clone(), expiry);
+        self.name_created_at.insert(tx.name.clone(), current_round);
+
+        tracing::info!("Name '{}' registered to {} (expires round {})", tx.name, tx.from.to_hex(), expiry);
+
+        Ok(())
+    }
+
+    /// Renew a name registration.
+    pub fn apply_renew_name_tx(&mut self, tx: &crate::tx::name_registry::RenewNameTx) -> Result<(), CoinError> {
+        use crate::tx::name_registry::*;
+
+        if tx.additional_years == 0 || tx.additional_years > MAX_REGISTRATION_YEARS {
+            return Err(CoinError::ValidationError(format!(
+                "additional_years must be 1-{}", MAX_REGISTRATION_YEARS
+            )));
+        }
+
+        let owner = self.name_to_address.get(&tx.name)
+            .ok_or_else(|| CoinError::ValidationError("name not registered".into()))?;
+        if *owner != tx.from {
+            return Err(CoinError::ValidationError("only the name owner can renew".into()));
+        }
+
+        let required_fee = name_annual_fee(&tx.name).saturating_mul(tx.additional_years as u64);
+        if tx.fee < required_fee {
+            return Err(CoinError::ValidationError(format!(
+                "fee {} too low for {}-year renewal (need {})", tx.fee, tx.additional_years, required_fee
+            )));
+        }
+
+        self.debit(&tx.from, tx.fee)?;
+        self.treasury_balance = self.treasury_balance.saturating_add(tx.fee);
+        self.increment_nonce(&tx.from);
+
+        // Extend expiry from current expiry (not from now — prevents losing time)
+        let current_expiry = self.name_expiry.get(&tx.name).copied().unwrap_or(0);
+        let current_round = self.last_finalized_round.unwrap_or(0);
+        let base = current_expiry.max(current_round); // If expired, extend from now
+        let new_expiry = base.saturating_add(ROUNDS_PER_YEAR.saturating_mul(tx.additional_years as u64));
+
+        // Cap at 5 years from now
+        let max_expiry = current_round.saturating_add(ROUNDS_PER_YEAR.saturating_mul(MAX_REGISTRATION_YEARS as u64));
+        let capped_expiry = new_expiry.min(max_expiry);
+
+        self.name_expiry.insert(tx.name.clone(), capped_expiry);
+
+        tracing::info!("Name '{}' renewed (new expiry round {})", tx.name, capped_expiry);
+
+        Ok(())
+    }
+
+    /// Transfer a name to a different address.
+    pub fn apply_transfer_name_tx(&mut self, tx: &crate::tx::name_registry::TransferNameTx) -> Result<(), CoinError> {
+        let owner = self.name_to_address.get(&tx.name)
+            .ok_or_else(|| CoinError::ValidationError("name not registered".into()))?;
+        if *owner != tx.from {
+            return Err(CoinError::ValidationError("only the name owner can transfer".into()));
+        }
+
+        // New owner must not already have a name
+        if self.address_to_name.contains_key(&tx.new_owner) {
+            return Err(CoinError::ValidationError("new owner already has a name".into()));
+        }
+
+        self.debit(&tx.from, tx.fee)?;
+        self.treasury_balance = self.treasury_balance.saturating_add(tx.fee);
+        self.increment_nonce(&tx.from);
+
+        // Transfer ownership
+        self.name_to_address.insert(tx.name.clone(), tx.new_owner);
+        self.address_to_name.remove(&tx.from);
+        self.address_to_name.insert(tx.new_owner, tx.name.clone());
+
+        tracing::info!("Name '{}' transferred from {} to {}", tx.name, tx.from.to_hex(), tx.new_owner.to_hex());
+
+        Ok(())
+    }
+
+    /// Update cross-chain profile for a name.
+    pub fn apply_update_profile_tx(&mut self, tx: &crate::tx::name_registry::UpdateProfileTx) -> Result<(), CoinError> {
+        use crate::tx::name_registry::*;
+
+        let owner = self.name_to_address.get(&tx.name)
+            .ok_or_else(|| CoinError::ValidationError("name not registered".into()))?;
+        if *owner != tx.from {
+            return Err(CoinError::ValidationError("only the name owner can update profile".into()));
+        }
+
+        if tx.external_addresses.len() > MAX_PROFILE_EXTERNAL_ADDRESSES {
+            return Err(CoinError::ValidationError(format!(
+                "too many external addresses (max {})", MAX_PROFILE_EXTERNAL_ADDRESSES
+            )));
+        }
+        if tx.metadata.len() > MAX_PROFILE_METADATA {
+            return Err(CoinError::ValidationError(format!(
+                "too many metadata entries (max {})", MAX_PROFILE_METADATA
+            )));
+        }
+        for (key, val) in &tx.metadata {
+            if key.len() > MAX_PROFILE_KEY_BYTES {
+                return Err(CoinError::ValidationError(format!("metadata key '{}' too long", key)));
+            }
+            if val.len() > MAX_PROFILE_VALUE_BYTES {
+                return Err(CoinError::ValidationError("metadata value too long".into()));
+            }
+        }
+
+        self.debit(&tx.from, tx.fee)?;
+        self.treasury_balance = self.treasury_balance.saturating_add(tx.fee);
+        self.increment_nonce(&tx.from);
+
+        self.name_profiles.insert(tx.name.clone(), NameProfile {
+            external_addresses: tx.external_addresses.clone(),
+            metadata: tx.metadata.clone(),
+        });
+
+        Ok(())
+    }
+
+    /// Process expired names. Called periodically (every STATE_PRUNING_INTERVAL rounds).
+    /// Removes names past their grace period.
+    pub fn process_name_expiry(&mut self, current_round: u64) {
+        use crate::tx::name_registry::NAME_GRACE_PERIOD_ROUNDS;
+
+        let expired: Vec<String> = self.name_expiry.iter()
+            .filter(|(_, &expiry)| {
+                current_round > expiry.saturating_add(NAME_GRACE_PERIOD_ROUNDS)
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
+
+        for name in expired {
+            if let Some(addr) = self.name_to_address.remove(&name) {
+                self.address_to_name.remove(&addr);
+            }
+            self.name_expiry.remove(&name);
+            self.name_created_at.remove(&name);
+            self.name_profiles.remove(&name);
+            tracing::info!("Name '{}' expired and released", name);
+        }
+    }
+
+    /// Name registry snapshot for persistence (sorted for determinism).
+    pub fn name_registry_snapshot(&self) -> (
+        Vec<(String, Address)>,      // name_to_address
+        Vec<(String, u64)>,          // name_expiry
+        Vec<(String, u64)>,          // name_created_at
+        Vec<(String, crate::tx::name_registry::NameProfile)>, // name_profiles
+    ) {
+        let mut n2a: Vec<_> = self.name_to_address.iter().map(|(k, v)| (k.clone(), *v)).collect();
+        n2a.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut exp: Vec<_> = self.name_expiry.iter().map(|(k, v)| (k.clone(), *v)).collect();
+        exp.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut created: Vec<_> = self.name_created_at.iter().map(|(k, v)| (k.clone(), *v)).collect();
+        created.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut profiles: Vec<_> = self.name_profiles.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        profiles.sort_by(|a, b| a.0.cmp(&b.0));
+        (n2a, exp, created, profiles)
+    }
+
+    /// Restore name registry from persistence.
+    pub fn restore_name_registry(
+        &mut self,
+        names: Vec<(String, Address)>,
+        expiry: Vec<(String, u64)>,
+        created: Vec<(String, u64)>,
+        profiles: Vec<(String, crate::tx::name_registry::NameProfile)>,
+    ) {
+        self.name_to_address = names.iter().map(|(k, v)| (k.clone(), *v)).collect();
+        self.address_to_name = names.into_iter().map(|(k, v)| (v, k)).collect();
+        self.name_expiry = expiry.into_iter().collect();
+        self.name_created_at = created.into_iter().collect();
+        self.name_profiles = profiles.into_iter().collect();
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // Spending Policy & Vault operations
+    // ────────────────────────────────────────────────────────────
+
+    /// Initiate a time-locked spending policy change.
+    pub fn apply_set_policy_tx(&mut self, tx: &crate::tx::smart_account::SetPolicyTx, current_round: u64) -> Result<(), CoinError> {
+        use crate::tx::smart_account::*;
+
+        let round = self.last_finalized_round.unwrap_or(0);
+        self.ensure_smart_account(&tx.from, round);
+        self.auto_register_key(&tx.from, &tx.pub_key, round);
+
+        if !self.is_key_authorized(&tx.from, &tx.pub_key) {
+            return Err(CoinError::ValidationError("signing key not authorized".into()));
+        }
+
+        if tx.whitelisted_recipients.len() > MAX_WHITELISTED_RECIPIENTS {
+            return Err(CoinError::ValidationError(format!(
+                "too many whitelisted recipients: {} (max {})", tx.whitelisted_recipients.len(), MAX_WHITELISTED_RECIPIENTS
+            )));
+        }
+
+        if tx.vault_threshold > 0 && tx.instant_limit > tx.vault_threshold {
+            return Err(CoinError::ValidationError("instant_limit cannot exceed vault_threshold".into()));
+        }
+
+        if tx.fee > 0 {
+            self.debit(&tx.from, tx.fee)?;
+        }
+        self.increment_nonce(&tx.from);
+
+        let new_policy = SpendingPolicy {
+            instant_limit: tx.instant_limit,
+            vault_threshold: tx.vault_threshold,
+            vault_delay_rounds: tx.vault_delay_rounds,
+            whitelisted_recipients: tx.whitelisted_recipients.clone(),
+            daily_limit: tx.daily_limit,
+            daily_spent: (0, 0),
+        };
+
+        let config = self.smart_accounts.get_mut(&tx.from).unwrap();
+        config.pending_policy_change = Some(PendingPolicyChange {
+            new_policy,
+            initiated_at_round: current_round,
+            executes_at_round: current_round.saturating_add(POLICY_CHANGE_DELAY_ROUNDS),
+        });
+
+        tracing::info!("SmartAccount {}: policy change initiated, executes at round {}",
+            tx.from.to_hex(), current_round.saturating_add(POLICY_CHANGE_DELAY_ROUNDS));
+
+        Ok(())
+    }
+
+    /// Execute a time-locked vault transfer.
+    pub fn apply_execute_vault_tx(&mut self, tx: &crate::tx::smart_account::ExecuteVaultTx, current_round: u64) -> Result<(), CoinError> {
+        let round = self.last_finalized_round.unwrap_or(0);
+        self.ensure_smart_account(&tx.from, round);
+        self.auto_register_key(&tx.from, &tx.pub_key, round);
+
+        if !self.is_key_authorized(&tx.from, &tx.pub_key) {
+            return Err(CoinError::ValidationError("signing key not authorized".into()));
+        }
+
+        // Find and validate the pending vault transfer
+        let config = self.smart_accounts.get(&tx.from)
+            .ok_or_else(|| CoinError::ValidationError("SmartAccount not found".into()))?;
+
+        let vault_idx = config.pending_vault_transfers.iter()
+            .position(|v| v.transfer_id == tx.transfer_id)
+            .ok_or_else(|| CoinError::ValidationError("vault transfer not found".into()))?;
+
+        let vault = &config.pending_vault_transfers[vault_idx];
+        if current_round < vault.executes_at_round {
+            return Err(CoinError::ValidationError(format!(
+                "vault transfer not yet executable (current={}, executes_at={})",
+                current_round, vault.executes_at_round
+            )));
+        }
+
+        let to = vault.to;
+        let amount = vault.amount;
+
+        self.increment_nonce(&tx.from);
+
+        // Execute the transfer (amount was already debited when vault was created)
+        self.credit(&to, amount).map_err(|e| {
+            CoinError::ValidationError(format!("Failed to credit vault transfer recipient: {}", e))
+        })?;
+
+        // Remove from pending
+        let config = self.smart_accounts.get_mut(&tx.from).unwrap();
+        config.pending_vault_transfers.remove(vault_idx);
+
+        tracing::info!("SmartAccount {}: vault transfer executed ({} sats to {})",
+            tx.from.to_hex(), amount, to.to_hex());
+
+        Ok(())
+    }
+
+    /// Cancel a pending vault transfer and refund the sender.
+    pub fn apply_cancel_vault_tx(&mut self, tx: &crate::tx::smart_account::CancelVaultTx) -> Result<(), CoinError> {
+        let round = self.last_finalized_round.unwrap_or(0);
+        self.ensure_smart_account(&tx.from, round);
+        self.auto_register_key(&tx.from, &tx.pub_key, round);
+
+        if !self.is_key_authorized(&tx.from, &tx.pub_key) {
+            return Err(CoinError::ValidationError("signing key not authorized".into()));
+        }
+
+        let config = self.smart_accounts.get(&tx.from)
+            .ok_or_else(|| CoinError::ValidationError("SmartAccount not found".into()))?;
+
+        let vault_idx = config.pending_vault_transfers.iter()
+            .position(|v| v.transfer_id == tx.transfer_id)
+            .ok_or_else(|| CoinError::ValidationError("vault transfer not found".into()))?;
+
+        let vault = config.pending_vault_transfers[vault_idx].clone();
+
+        self.increment_nonce(&tx.from);
+
+        // Refund the amount (was debited when vault was created)
+        self.credit(&tx.from, vault.amount).map_err(|e| {
+            CoinError::ValidationError(format!("Failed to refund vault transfer: {}", e))
+        })?;
+
+        let config = self.smart_accounts.get_mut(&tx.from).unwrap();
+        config.pending_vault_transfers.remove(vault_idx);
+
+        tracing::info!("SmartAccount {}: vault transfer cancelled, {} sats refunded",
+            tx.from.to_hex(), vault.amount);
+
+        Ok(())
+    }
+
+    /// Check and enforce spending policy for a SmartTransfer.
+    /// Returns Ok(None) for instant transfer, Ok(Some(vault)) if vault needed,
+    /// or Err if daily limit exceeded.
+    pub fn check_spending_policy(
+        &mut self, from: &Address, to: &Address, amount: u64, nonce: u64, current_round: u64,
+    ) -> Result<Option<crate::tx::smart_account::PendingVaultTransfer>, CoinError> {
+        use crate::tx::smart_account::*;
+
+        let config = match self.smart_accounts.get_mut(from) {
+            Some(c) => c,
+            None => return Ok(None), // No SmartAccount = no policy
+        };
+
+        let policy = match &mut config.policy {
+            Some(p) => p,
+            None => return Ok(None), // No policy = instant transfer
+        };
+
+        // Whitelisted recipients bypass all limits
+        if policy.whitelisted_recipients.contains(to) {
+            return Ok(None);
+        }
+
+        // Check daily limit
+        if let Some(daily_limit) = policy.daily_limit {
+            let day_start = policy.daily_spent.0;
+            let spent = policy.daily_spent.1;
+            if current_round >= day_start.saturating_add(ROUNDS_PER_DAY) {
+                // New day — reset counter
+                policy.daily_spent = (current_round, amount);
+            } else {
+                let new_total = spent.saturating_add(amount);
+                if new_total > daily_limit {
+                    return Err(CoinError::ValidationError(format!(
+                        "daily spending limit exceeded: {} + {} > {} limit",
+                        spent, amount, daily_limit
+                    )));
+                }
+                policy.daily_spent.1 = new_total;
+            }
+        }
+
+        // Check vault threshold
+        if policy.vault_threshold > 0 && amount >= policy.vault_threshold {
+            if config.pending_vault_transfers.len() >= MAX_PENDING_VAULT_TRANSFERS {
+                return Err(CoinError::ValidationError(format!(
+                    "too many pending vault transfers ({}/{})",
+                    config.pending_vault_transfers.len(), MAX_PENDING_VAULT_TRANSFERS
+                )));
+            }
+            let transfer_id = compute_vault_transfer_id(from, to, amount, nonce);
+            let vault = PendingVaultTransfer {
+                to: *to,
+                amount,
+                fee: 0, // Fee already deducted by caller
+                created_at_round: current_round,
+                executes_at_round: current_round.saturating_add(policy.vault_delay_rounds),
+                transfer_id,
+            };
+            return Ok(Some(vault));
+        }
+
+        Ok(None)
+    }
+
+    /// Process pending policy changes and auto-expire/execute vault transfers.
+    /// Called once per round in apply_finalized_vertices.
+    pub fn process_pending_policy_changes(&mut self, current_round: u64) {
+        let mut policy_completed: Vec<Address> = Vec::new();
+        let mut vault_expired: Vec<(Address, Vec<usize>)> = Vec::new();
+
+        for (addr, config) in &self.smart_accounts {
+            // Check pending policy changes
+            if let Some(ref pending) = config.pending_policy_change {
+                if current_round >= pending.executes_at_round {
+                    policy_completed.push(*addr);
+                }
+            }
+            // Check expired vault transfers (2x delay auto-cancel)
+            if let Some(ref policy) = config.policy {
+                let expired_indices: Vec<usize> = config.pending_vault_transfers.iter()
+                    .enumerate()
+                    .filter(|(_, v)| {
+                        let expiry = v.created_at_round.saturating_add(policy.vault_delay_rounds.saturating_mul(2));
+                        current_round > expiry
+                    })
+                    .map(|(i, _)| i)
+                    .collect();
+                if !expired_indices.is_empty() {
+                    vault_expired.push((*addr, expired_indices));
+                }
+            }
+        }
+
+        // Execute policy changes
+        for addr in policy_completed {
+            if let Some(config) = self.smart_accounts.get_mut(&addr) {
+                if let Some(pending) = config.pending_policy_change.take() {
+                    config.policy = Some(pending.new_policy);
+                    tracing::info!("SmartAccount {}: spending policy updated", addr.to_hex());
+                }
+            }
+        }
+
+        // Refund expired vault transfers (iterate in reverse to preserve indices)
+        for (addr, indices) in vault_expired {
+            for &idx in indices.iter().rev() {
+                if let Some(config) = self.smart_accounts.get_mut(&addr) {
+                    if idx < config.pending_vault_transfers.len() {
+                        let vault = config.pending_vault_transfers.remove(idx);
+                        // Refund
+                        let _ = self.credit(&addr, vault.amount);
+                        tracing::info!("SmartAccount {}: vault transfer auto-expired, {} sats refunded",
+                            addr.to_hex(), vault.amount);
+                    }
+                }
+            }
+        }
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // Social Recovery operations
+    // ────────────────────────────────────────────────────────────
+
+    /// Configure social recovery guardians for a SmartAccount.
+    pub fn apply_set_recovery_tx(&mut self, tx: &crate::tx::smart_account::SetRecoveryTx) -> Result<(), CoinError> {
+        use crate::tx::smart_account::*;
+
+        let round = self.last_finalized_round.unwrap_or(0);
+        self.ensure_smart_account(&tx.from, round);
+        self.auto_register_key(&tx.from, &tx.pub_key, round);
+
+        if !self.is_key_authorized(&tx.from, &tx.pub_key) {
+            return Err(CoinError::ValidationError("signing key not authorized".into()));
+        }
+
+        // Validate guardian parameters
+        if tx.guardians.is_empty() {
+            return Err(CoinError::ValidationError("must specify at least one guardian".into()));
+        }
+        if tx.guardians.len() > MAX_GUARDIANS {
+            return Err(CoinError::ValidationError(format!(
+                "too many guardians: {} (max {})", tx.guardians.len(), MAX_GUARDIANS
+            )));
+        }
+        if tx.threshold == 0 || tx.threshold as usize > tx.guardians.len() {
+            return Err(CoinError::ValidationError(format!(
+                "threshold {} out of range for {} guardians", tx.threshold, tx.guardians.len()
+            )));
+        }
+        if tx.delay_rounds < MIN_RECOVERY_DELAY_ROUNDS || tx.delay_rounds > MAX_RECOVERY_DELAY_ROUNDS {
+            return Err(CoinError::ValidationError(format!(
+                "delay_rounds {} out of range [{}, {}]",
+                tx.delay_rounds, MIN_RECOVERY_DELAY_ROUNDS, MAX_RECOVERY_DELAY_ROUNDS
+            )));
+        }
+        // Cannot set self as guardian (circular recovery)
+        if tx.guardians.contains(&tx.from) {
+            return Err(CoinError::ValidationError("cannot set self as guardian".into()));
+        }
+        // Check for duplicate guardians
+        let mut seen = std::collections::HashSet::new();
+        for g in &tx.guardians {
+            if !seen.insert(*g) {
+                return Err(CoinError::ValidationError("duplicate guardian address".into()));
+            }
+        }
+
+        // Debit fee
+        if tx.fee > 0 {
+            self.debit(&tx.from, tx.fee)?;
+        }
+        self.increment_nonce(&tx.from);
+
+        let config = self.smart_accounts.get_mut(&tx.from).unwrap();
+        config.recovery = Some(RecoveryConfig {
+            guardians: tx.guardians.clone(),
+            threshold: tx.threshold,
+            delay_rounds: tx.delay_rounds,
+        });
+        // Setting new recovery config cancels any pending recovery
+        config.pending_recovery = None;
+
+        tracing::info!(
+            "SmartAccount {}: recovery configured with {}-of-{} guardians, {} round delay",
+            tx.from.to_hex(), tx.threshold, tx.guardians.len(), tx.delay_rounds
+        );
+
+        Ok(())
+    }
+
+    /// Guardian submits recovery approval. When threshold guardians agree on the
+    /// same (new_key, revoke_existing), the time-lock countdown begins.
+    pub fn apply_recover_account_tx(&mut self, tx: &crate::tx::smart_account::RecoverAccountTx) -> Result<(), CoinError> {
+        // Validate the new key
+        tx.new_key.validate().map_err(|e| CoinError::ValidationError(e.to_string()))?;
+
+        // Verify target account has recovery configured
+        let config = self.smart_accounts.get(&tx.target_account)
+            .ok_or_else(|| CoinError::ValidationError("target account has no SmartAccount".into()))?;
+        let recovery = config.recovery.as_ref()
+            .ok_or_else(|| CoinError::ValidationError("target account has no recovery configured".into()))?;
+
+        // Verify sender is a guardian
+        if !recovery.guardians.contains(&tx.from) {
+            return Err(CoinError::ValidationError("sender is not a guardian of target account".into()));
+        }
+
+        // Cannot recover your own account (circular)
+        if tx.from == tx.target_account {
+            return Err(CoinError::ValidationError("cannot recover your own account".into()));
+        }
+
+        // Rate limit: if a pending recovery exists and this guardian already approved, reject
+        // (prevents re-submission spam even if mempool dedup misses it)
+        if let Some(ref pending) = config.pending_recovery {
+            if pending.approvals.contains(&tx.from) {
+                return Err(CoinError::ValidationError("guardian already approved this recovery".into()));
+            }
+        }
+
+        let delay = recovery.delay_rounds;
+        let threshold = recovery.threshold;
+        let current_round = self.last_finalized_round.unwrap_or(0);
+
+        self.increment_nonce(&tx.from);
+
+        let config = self.smart_accounts.get_mut(&tx.target_account).unwrap();
+
+        // Check if there's already a pending recovery
+        if let Some(ref mut pending) = config.pending_recovery {
+            // Must match the existing recovery parameters
+            if pending.new_key.key_id != tx.new_key.key_id || pending.revoke_existing != tx.revoke_existing {
+                return Err(CoinError::ValidationError(
+                    "recovery parameters don't match existing pending recovery (key_id and revoke_existing must match)".into()
+                ));
+            }
+            // Don't double-count the same guardian
+            if pending.approvals.contains(&tx.from) {
+                return Err(CoinError::ValidationError("guardian already approved this recovery".into()));
+            }
+            pending.approvals.push(tx.from);
+
+            // Check if threshold reached — start the time-lock
+            if pending.approvals.len() >= threshold as usize && pending.executes_at_round == u64::MAX {
+                pending.executes_at_round = current_round.saturating_add(delay);
+                tracing::info!(
+                    "SmartAccount {}: recovery threshold reached ({}/{}), executes at round {}",
+                    tx.target_account.to_hex(), pending.approvals.len(), threshold,
+                    pending.executes_at_round
+                );
+            }
+        } else {
+            // First guardian approval — create pending recovery
+            let pending = crate::tx::smart_account::PendingRecovery {
+                new_key: tx.new_key.clone(),
+                approvals: vec![tx.from],
+                initiated_at_round: current_round,
+                // executes_at_round starts at MAX — set when threshold is reached
+                executes_at_round: if threshold <= 1 {
+                    current_round.saturating_add(delay)
+                } else {
+                    u64::MAX
+                },
+                revoke_existing: tx.revoke_existing,
+            };
+            if threshold <= 1 {
+                tracing::info!(
+                    "SmartAccount {}: recovery threshold reached (1/1), executes at round {}",
+                    tx.target_account.to_hex(), current_round.saturating_add(delay)
+                );
+            }
+            config.pending_recovery = Some(pending);
+        }
+
+        Ok(())
+    }
+
+    /// Cancel a pending recovery. Must be signed by an authorized key of the account.
+    pub fn apply_cancel_recovery_tx(&mut self, tx: &crate::tx::smart_account::CancelRecoveryTx) -> Result<(), CoinError> {
+        let round = self.last_finalized_round.unwrap_or(0);
+        self.ensure_smart_account(&tx.from, round);
+        self.auto_register_key(&tx.from, &tx.pub_key, round);
+
+        if !self.is_key_authorized(&tx.from, &tx.pub_key) {
+            return Err(CoinError::ValidationError("signing key not authorized".into()));
+        }
+
+        let config = self.smart_accounts.get_mut(&tx.from)
+            .ok_or_else(|| CoinError::ValidationError("SmartAccount not found".into()))?;
+
+        if config.pending_recovery.is_none() {
+            return Err(CoinError::ValidationError("no pending recovery to cancel".into()));
+        }
+
+        config.pending_recovery = None;
+        self.increment_nonce(&tx.from);
+
+        tracing::info!("SmartAccount {}: pending recovery cancelled by owner", tx.from.to_hex());
+
+        Ok(())
+    }
+
+    /// Process pending recoveries that have passed their time-lock.
+    /// Called once per round in apply_finalized_vertices.
+    pub fn process_pending_recoveries(&mut self, current_round: u64) {
+        use crate::tx::smart_account::RECOVERY_EXPIRY_ROUNDS;
+
+        let mut completed: Vec<(Address, bool)> = Vec::new(); // (addr, should_execute)
+        for (addr, config) in &self.smart_accounts {
+            if let Some(ref pending) = config.pending_recovery {
+                if pending.executes_at_round != u64::MAX && current_round >= pending.executes_at_round {
+                    completed.push((*addr, true));
+                } else if current_round > pending.initiated_at_round.saturating_add(RECOVERY_EXPIRY_ROUNDS) {
+                    // Auto-expire stale recovery attempts
+                    completed.push((*addr, false));
+                }
+            }
+        }
+
+        for (addr, should_execute) in completed {
+            if let Some(config) = self.smart_accounts.get_mut(&addr) {
+                if let Some(pending) = config.pending_recovery.take() {
+                    if should_execute {
+                        // Execute recovery: add new key, optionally revoke old ones
+                        if pending.revoke_existing {
+                            config.authorized_keys.clear();
+                        }
+                        // Add the recovery key (avoid duplicates)
+                        if !config.has_key(&pending.new_key.key_id) {
+                            config.authorized_keys.push(pending.new_key.clone());
+                        }
+                        tracing::info!(
+                            "SmartAccount {}: recovery executed — new key added{}",
+                            addr.to_hex(),
+                            if pending.revoke_existing { ", old keys revoked" } else { "" }
+                        );
+                    } else {
+                        tracing::info!(
+                            "SmartAccount {}: pending recovery expired (stale)",
+                            addr.to_hex()
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Verify a SmartTransfer signature using the authorized key from state.
+    /// Returns true if the signing_key_id exists on the sender's SmartAccount
+    /// and the signature verifies with the corresponding key.
+    pub fn verify_smart_transfer(&self, tx: &crate::tx::smart_account::SmartTransferTx) -> bool {
+        let config = match self.smart_accounts.get(&tx.from) {
+            Some(c) => c,
+            None => {
+                // No SmartAccount — SmartTransfer is only for SmartAccounts
+                return false;
+            }
+        };
+
+        let key = match config.find_key(&tx.signing_key_id) {
+            Some(k) => k,
+            None => return false,
+        };
+
+        tx.verify_with_key(key)
+    }
+
+    /// Apply a SmartTransfer transaction (P256 or Ed25519 signed transfer from a SmartAccount).
+    /// Enforces spending policy: daily limits and vault thresholds.
+    pub fn apply_smart_transfer_tx(&mut self, tx: &crate::tx::smart_account::SmartTransferTx) -> Result<(), CoinError> {
+        if tx.amount == 0 {
+            return Err(CoinError::ValidationError("transfer amount must be greater than 0".into()));
+        }
+
+        if let Some(ref memo) = tx.memo {
+            if memo.len() > crate::constants::MAX_MEMO_BYTES {
+                return Err(CoinError::ValidationError(format!(
+                    "memo exceeds max size: {} > {}", memo.len(), crate::constants::MAX_MEMO_BYTES
+                )));
+            }
+        }
+
+        let current_round = self.last_finalized_round.unwrap_or(0);
+
+        // Check per-key daily spending limit
+        if let Some(config) = self.smart_accounts.get_mut(&tx.from) {
+            if let Some(key) = config.authorized_keys.iter_mut().find(|k| k.key_id == tx.signing_key_id) {
+                if let Some(key_limit) = key.daily_limit {
+                    use crate::tx::smart_account::ROUNDS_PER_DAY;
+                    let (day_start, spent) = key.daily_spent;
+                    if current_round >= day_start.saturating_add(ROUNDS_PER_DAY) {
+                        // New day — reset counter
+                        key.daily_spent = (current_round, tx.amount);
+                    } else {
+                        let new_total = spent.saturating_add(tx.amount);
+                        if new_total > key_limit {
+                            return Err(CoinError::ValidationError(format!(
+                                "per-key daily spending limit exceeded: {} + {} > {} limit",
+                                spent, tx.amount, key_limit
+                            )));
+                        }
+                        key.daily_spent.1 = new_total;
+                    }
+                }
+            }
+        }
+
+        // Check account-level spending policy (daily limits, vault threshold)
+        let vault_result = self.check_spending_policy(&tx.from, &tx.to, tx.amount, tx.nonce, current_round)?;
+
+        // Debit sender (amount + fee)
+        self.debit(&tx.from, tx.total_cost())?;
+        self.increment_nonce(&tx.from);
+
+        if let Some(vault_transfer) = vault_result {
+            // Transfer exceeds vault threshold — hold in pending vault (amount already debited)
+            let config = self.smart_accounts.get_mut(&tx.from).unwrap();
+            config.pending_vault_transfers.push(vault_transfer);
+            tracing::info!("SmartAccount {}: transfer of {} sats to {} held in vault (executes after delay)",
+                tx.from.to_hex(), tx.amount, tx.to.to_hex());
+        } else {
+            // Instant transfer — credit recipient immediately
+            self.credit(&tx.to, tx.amount).map_err(|e| {
+                CoinError::ValidationError(format!("Failed to credit SmartTransfer recipient: {}", e))
+            })?;
+        }
+
+        Ok(())
+    }
+
+    /// Test helper: ensure a SmartAccount exists for an address.
+    #[cfg(any(test, feature = "unsafe-dag-insert"))]
+    pub fn ensure_smart_account_for_test(&mut self, addr: &Address, round: u64) {
+        self.ensure_smart_account(addr, round);
+    }
+
+    /// Test helper: get mutable access to a SmartAccount config.
+    #[cfg(any(test, feature = "unsafe-dag-insert"))]
+    pub fn smart_account_mut_for_test(&mut self, addr: &Address) -> Option<&mut crate::tx::smart_account::SmartAccountConfig> {
+        self.smart_accounts.get_mut(addr)
+    }
+
+    /// Restore smart_accounts from persistence.
+    pub fn restore_smart_accounts(&mut self, accounts: Vec<(Address, crate::tx::smart_account::SmartAccountConfig)>) {
+        self.smart_accounts = accounts.into_iter().collect();
+    }
+
+    /// Snapshot smart_accounts for persistence (sorted for determinism).
+    pub fn smart_accounts_snapshot(&self) -> Vec<(Address, crate::tx::smart_account::SmartAccountConfig)> {
+        let mut v: Vec<_> = self.smart_accounts.iter().map(|(k, v)| (*k, v.clone())).collect();
+        v.sort_by_key(|(addr, _)| addr.0);
+        v
+    }
+
     /// Slash a validator's stake (on equivocation).
     /// Burns 50% of their stake.
     ///
@@ -2374,7 +3587,15 @@ impl StateEngine {
         if amount == 0 {
             return Ok(());
         }
-        
+
+        // Auto-create SmartAccount for new addresses on first credit (Section 3.2).
+        // This ensures every address that receives funds gets SmartAccount capabilities
+        // from birth — recovery, spending policies, multi-device support available from day one.
+        if !self.accounts.contains_key(address) {
+            let round = self.last_finalized_round.unwrap_or(0);
+            self.ensure_smart_account(address, round);
+        }
+
         let account = self.accounts.entry(*address).or_default();
         
         // Use checked arithmetic to detect overflow (VULN-07 fix)
@@ -3014,7 +4235,12 @@ impl StateEngine {
             bridge_release_disagree_count: HashMap::new(),
             slashed_events: std::collections::HashSet::new(),
             last_proposal_round: HashMap::new(),
-
+            smart_accounts: HashMap::new(),
+            name_to_address: HashMap::new(),
+            address_to_name: HashMap::new(),
+            name_expiry: HashMap::new(),
+            name_created_at: HashMap::new(),
+            name_profiles: HashMap::new(),
         })
     }
 
@@ -3115,6 +4341,11 @@ impl StateEngine {
                 se.sort_by(|a, b| a.0.0.cmp(&b.0.0).then_with(|| a.1.cmp(&b.1)));
                 se
             },
+            smart_accounts: self.smart_accounts_snapshot(),
+            name_to_address: { let mut v: Vec<_> = self.name_to_address.iter().map(|(k, v)| (k.clone(), *v)).collect(); v.sort_by(|a, b| a.0.cmp(&b.0)); v },
+            name_expiry: { let mut v: Vec<_> = self.name_expiry.iter().map(|(k, v)| (k.clone(), *v)).collect(); v.sort_by(|a, b| a.0.cmp(&b.0)); v },
+            name_created_at: { let mut v: Vec<_> = self.name_created_at.iter().map(|(k, v)| (k.clone(), *v)).collect(); v.sort_by(|a, b| a.0.cmp(&b.0)); v },
+            name_profiles: { let mut v: Vec<_> = self.name_profiles.iter().map(|(k, v)| (k.clone(), v.clone())).collect(); v.sort_by(|a, b| a.0.cmp(&b.0)); v },
         }
     }
 
@@ -3188,7 +4419,12 @@ impl StateEngine {
                 .unwrap_or_default().into_iter().collect(),
             slashed_events: snapshot.slashed_events.into_iter().collect(),
             last_proposal_round: snapshot.last_proposal_round.into_iter().collect(),
-
+            smart_accounts: snapshot.smart_accounts.into_iter().collect(),
+            name_to_address: snapshot.name_to_address.iter().map(|(k, v)| (k.clone(), *v)).collect(),
+            address_to_name: snapshot.name_to_address.into_iter().map(|(k, v)| (v, k)).collect(),
+            name_expiry: snapshot.name_expiry.into_iter().collect(),
+            name_created_at: snapshot.name_created_at.into_iter().collect(),
+            name_profiles: snapshot.name_profiles.into_iter().collect(),
         })
     }
 
@@ -3240,6 +4476,12 @@ impl StateEngine {
             .unwrap_or_default().into_iter().collect();
         self.slashed_events = snapshot.slashed_events.into_iter().collect();
         self.last_proposal_round = snapshot.last_proposal_round.into_iter().collect();
+        self.smart_accounts = snapshot.smart_accounts.into_iter().collect();
+        self.name_to_address = snapshot.name_to_address.iter().map(|(k, v)| (k.clone(), *v)).collect();
+        self.address_to_name = snapshot.name_to_address.into_iter().map(|(k, v)| (v, k)).collect();
+        self.name_expiry = snapshot.name_expiry.into_iter().collect();
+        self.name_created_at = snapshot.name_created_at.into_iter().collect();
+        self.name_profiles = snapshot.name_profiles.into_iter().collect();
         self.configured_validator_count = saved_configured;
     }
 

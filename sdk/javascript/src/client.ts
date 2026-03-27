@@ -325,4 +325,53 @@ export class UltraDagClient {
   ): Promise<{ status: string; tx_hash: string }> {
     return this.post<{ status: string; tx_hash: string }>("/tx/submit", tx);
   }
+
+  // ---------------------------------------------------------------------------
+  // SmartAccount endpoints
+  // ---------------------------------------------------------------------------
+
+  /** Get SmartAccount configuration for an address (or name). */
+  async getSmartAccount(addressOrName: string): Promise<object | null> {
+    try {
+      return await this.get<object>(`/smart-account/${encodeURIComponent(addressOrName)}`);
+    } catch {
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Name Registry endpoints
+  // ---------------------------------------------------------------------------
+
+  /** Resolve a name to an address. Returns null if not found. */
+  async resolveName(name: string): Promise<{ name: string; address: string; expiry_round: number } | null> {
+    try {
+      return await this.get(`/name/resolve/${encodeURIComponent(name)}`);
+    } catch {
+      return null;
+    }
+  }
+
+  /** Reverse lookup: address to name. */
+  async reverseName(address: string): Promise<{ address: string; name: string } | null> {
+    try {
+      return await this.get(`/name/reverse/${encodeURIComponent(address)}`);
+    } catch {
+      return null;
+    }
+  }
+
+  /** Check if a name is available and its price. */
+  async checkNameAvailability(name: string): Promise<{ available: boolean; valid: boolean; annual_fee: number }> {
+    return this.get(`/name/available/${encodeURIComponent(name)}`);
+  }
+
+  /** Get full info for a registered name. */
+  async getNameInfo(name: string): Promise<object | null> {
+    try {
+      return await this.get(`/name/info/${encodeURIComponent(name)}`);
+    } catch {
+      return null;
+    }
+  }
 }

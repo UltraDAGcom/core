@@ -19,6 +19,10 @@ const BRIDGE_ATTESTATIONS: TableDefinition<u64, &[u8]> = TableDefinition::new("b
 // Bridge signatures key: 8 bytes nonce + 20 bytes validator address = 28 bytes
 // Value: 85 bytes = eth_address (20) + ecdsa_sig (65, r||s||v)
 const BRIDGE_SIGNATURES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("bridge_signatures");
+// SmartAccount configs: address (20 bytes) -> postcard-serialized SmartAccountConfig
+const SMART_ACCOUNTS: TableDefinition<&[u8; 20], &[u8]> = TableDefinition::new("smart_accounts");
+// Name Registry: name string -> postcard-serialized (address, expiry, created_at, profile)
+const NAME_REGISTRY: TableDefinition<&str, &[u8]> = TableDefinition::new("name_registry");
 
 impl From<redb::Error> for PersistenceError {
     fn from(e: redb::Error) -> Self {
@@ -156,6 +160,32 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
             key[8..].copy_from_slice(&validator.0);
             // combined_bytes is 85 bytes (20 eth_addr + 65 ecdsa_sig) from snapshot()
             table.insert(key.as_slice(), combined_bytes.as_slice())?;
+        }
+    }
+
+    // SmartAccounts
+    {
+        let mut table = txn.open_table(SMART_ACCOUNTS)?;
+        for (addr, config) in engine.smart_accounts() {
+            let bytes = postcard::to_allocvec(config)
+                .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+            table.insert(&addr.0, bytes.as_slice())?;
+        }
+    }
+
+    // Name Registry
+    {
+        let mut table = txn.open_table(NAME_REGISTRY)?;
+        let (names, expiry, created, profiles) = engine.name_registry_snapshot();
+        // Store each name as a combined entry: (address, expiry, created_at, optional profile)
+        for (name, addr) in &names {
+            let exp = expiry.iter().find(|(n, _)| n == name).map(|(_, e)| *e).unwrap_or(0);
+            let cre = created.iter().find(|(n, _)| n == name).map(|(_, c)| *c).unwrap_or(0);
+            let prof = profiles.iter().find(|(n, _)| n == name).map(|(_, p)| p.clone());
+            let entry = (addr, exp, cre, prof);
+            let bytes = postcard::to_allocvec(&entry)
+                .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+            table.insert(name.as_str(), bytes.as_slice())?;
         }
     }
 
@@ -432,6 +462,40 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         }
     }
 
+    // SmartAccounts (graceful fallback for databases without this table)
+    let mut smart_accounts_vec: Vec<(Address, crate::tx::smart_account::SmartAccountConfig)> = Vec::new();
+    if let Ok(sa_table) = txn.open_table(SMART_ACCOUNTS) {
+        for entry in sa_table.iter()? {
+            let (k, v) = entry?;
+            let addr = Address(*k.value());
+            let config: crate::tx::smart_account::SmartAccountConfig = postcard::from_bytes(v.value())
+                .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+            smart_accounts_vec.push((addr, config));
+        }
+    }
+
+    // Name Registry (graceful fallback for databases without this table)
+    let mut name_entries: Vec<(String, Address)> = Vec::new();
+    let mut name_expiry_entries: Vec<(String, u64)> = Vec::new();
+    let mut name_created_entries: Vec<(String, u64)> = Vec::new();
+    let mut name_profile_entries: Vec<(String, crate::tx::name_registry::NameProfile)> = Vec::new();
+    if let Ok(nr_table) = txn.open_table(NAME_REGISTRY) {
+        for entry in nr_table.iter()? {
+            let (k, v) = entry?;
+            let name = k.value().to_string();
+            let (addr, exp, cre, prof): (
+                Address, u64, u64, Option<crate::tx::name_registry::NameProfile>,
+            ) = postcard::from_bytes(v.value())
+                .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+            name_entries.push((name.clone(), addr));
+            name_expiry_entries.push((name.clone(), exp));
+            name_created_entries.push((name.clone(), cre));
+            if let Some(p) = prof {
+                name_profile_entries.push((name, p));
+            }
+        }
+    }
+
     let bridge_nonce = read_u64(&meta, "bridge_nonce")?;
 
     // Load bridge contract address (20 bytes, default [0u8; 20] for legacy databases)
@@ -469,6 +533,16 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
     // Restore bridge state that from_parts initializes to empty/0
     engine.restore_bridge_state(bridge_attestations, bridge_sigs, bridge_nonce);
     engine.set_bridge_contract_address(bridge_contract_address);
+
+    // Restore SmartAccounts
+    if !smart_accounts_vec.is_empty() {
+        engine.restore_smart_accounts(smart_accounts_vec);
+    }
+
+    // Restore Name Registry
+    if !name_entries.is_empty() {
+        engine.restore_name_registry(name_entries, name_expiry_entries, name_created_entries, name_profile_entries);
+    }
 
     // Restore used_release_nonces from METADATA
     if let Some(nonces_val) = meta.get("used_release_nonces")? {

@@ -8,6 +8,7 @@ export function useKeystore() {
   const [unlocked, setUnlocked] = useState(keystore.isUnlocked());
   const [hasStore, setHasStore] = useState(keystore.hasKeystore());
   const [wallets, setWallets] = useState<Wallet[]>(keystore.getWallets());
+  const [autoUnlockDone, setAutoUnlockDone] = useState(false);
   const [sessionSecondsLeft, setSessionSecondsLeft] = useState(AUTO_LOCK_TIMEOUT_MS / 1000);
   const lastActivityRef = useRef<number>(Date.now());
 
@@ -18,6 +19,21 @@ export function useKeystore() {
   useEffect(() => {
     const loaded = keystore.loadFromStorage();
     setHasStore(loaded || keystore.hasKeystore());
+
+    // Auto-unlock passkey wallets — they use biometrics for security,
+    // not the keystore password. The placeholder password 'passkey-wallet'
+    // is used during creation to satisfy the keystore API.
+    if (keystore.hasKeystore() && !keystore.isUnlocked() && localStorage.getItem('ultradag_passkey')) {
+      keystore.unlock('passkey-wallet').then((ok) => {
+        if (ok) {
+          setUnlocked(true);
+          setWallets([...keystore.getWallets()]);
+        }
+        setAutoUnlockDone(true);
+      }).catch(() => { setAutoUnlockDone(true); });
+    } else {
+      setAutoUnlockDone(true);
+    }
 
     const unsub = keystore.onKeystoreChange(() => {
       setUnlocked(keystore.isUnlocked());
@@ -41,7 +57,13 @@ export function useKeystore() {
         const remaining = Math.max(0, Math.ceil((AUTO_LOCK_TIMEOUT_MS - elapsed) / 1000));
         setSessionSecondsLeft(remaining);
         if (remaining <= 0) {
-          keystore.lock();
+          // Don't auto-lock passkey wallets — biometrics are the security
+          if (!localStorage.getItem('ultradag_passkey')) {
+            keystore.lock();
+          } else {
+            // Reset the timer for passkey wallets
+            lastActivityRef.current = Date.now();
+          }
         }
       } else {
         setSessionSecondsLeft(AUTO_LOCK_TIMEOUT_MS / 1000);
@@ -140,6 +162,7 @@ export function useKeystore() {
     removeWebAuthn: removeWebAuthnCred,
     sessionSecondsLeft,
     sessionTotalSeconds: AUTO_LOCK_TIMEOUT_MS / 1000,
+    autoUnlockDone,
   };
 }
 

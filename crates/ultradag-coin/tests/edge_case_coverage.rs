@@ -926,7 +926,8 @@ fn test_slash_default_50_percent() {
         "Supply should decrease by slashed amount");
 }
 
-/// Double slash on same validator reduces stake further.
+/// Double slash on same validator at same round is idempotent (slashed_events guard).
+/// Slashing at a DIFFERENT round reduces stake further.
 #[test]
 fn test_double_slash_reduces_further() {
     let mut state = StateEngine::new_with_genesis();
@@ -936,11 +937,13 @@ fn test_double_slash_reduces_further() {
     state.apply_stake_tx(&make_stake_tx(&sk, MIN_STAKE_SATS * 2, 0)).unwrap();
 
     let stake_initial = state.stake_of(&sk.address());
-    state.slash(&sk.address());
+    // First slash at round 1
+    state.slash_at_round(&sk.address(), 1);
     let stake_after_first = state.stake_of(&sk.address());
     assert_eq!(stake_after_first, stake_initial / 2);
 
-    state.slash(&sk.address());
+    // Second slash at DIFFERENT round (round 2) — reduces further
+    state.slash_at_round(&sk.address(), 2);
     let stake_after_second = state.stake_of(&sk.address());
     assert_eq!(stake_after_second, stake_after_first / 2);
     assert_eq!(stake_after_second, stake_initial / 4);
@@ -1108,7 +1111,7 @@ fn test_dag_too_many_parents_rejected() {
         })
         .collect();
 
-    let block = Block {
+    let mut block = Block {
         header: BlockHeader {
             version: 1, height: 0,
             timestamp: std::time::SystemTime::now()
@@ -1119,6 +1122,7 @@ fn test_dag_too_many_parents_rejected() {
         coinbase: CoinbaseTx { to: validator, amount: 0, height: 0 },
         transactions: vec![],
     };
+    block.header.merkle_root = block.compute_merkle_root();
     let mut vertex = DagVertex::new(
         block, too_many_parents, 1, validator,
         sk.verifying_key().to_bytes(), Signature([0u8; 64]),
@@ -1143,7 +1147,7 @@ fn test_dag_max_parents_accepted() {
     // Use genesis parent for all MAX_PARENTS entries
     let parents: Vec<[u8; 32]> = vec![[0u8; 32]; MAX_PARENTS];
 
-    let block = Block {
+    let mut block = Block {
         header: BlockHeader {
             version: 1, height: 0,
             timestamp: std::time::SystemTime::now()
@@ -1154,6 +1158,7 @@ fn test_dag_max_parents_accepted() {
         coinbase: CoinbaseTx { to: validator, amount: 0, height: 0 },
         transactions: vec![],
     };
+    block.header.merkle_root = block.compute_merkle_root();
     let mut vertex = DagVertex::new(
         block, parents, 1, validator,
         sk.verifying_key().to_bytes(), Signature([0u8; 64]),
@@ -1174,7 +1179,7 @@ fn test_dag_equivocation_detection() {
     let validator = sk.address();
 
     let make_v = |height: u64| {
-        let block = Block {
+        let mut block = Block {
             header: BlockHeader {
                 version: 1, height,
                 timestamp: std::time::SystemTime::now()
@@ -1185,6 +1190,7 @@ fn test_dag_equivocation_detection() {
             coinbase: CoinbaseTx { to: validator, amount: height, height },
             transactions: vec![],
         };
+        block.header.merkle_root = block.compute_merkle_root();
         let mut v = DagVertex::new(
             block, vec![[0u8; 32]], 1, validator,
             sk.verifying_key().to_bytes(), Signature([0u8; 64]),
@@ -1216,7 +1222,7 @@ fn test_dag_duplicate_insert_returns_false() {
     let sk = SecretKey::from_bytes([0xF3; 32]);
     let validator = sk.address();
 
-    let block = Block {
+    let mut block = Block {
         header: BlockHeader {
             version: 1, height: 0,
             timestamp: std::time::SystemTime::now()
@@ -1227,6 +1233,7 @@ fn test_dag_duplicate_insert_returns_false() {
         coinbase: CoinbaseTx { to: validator, amount: 0, height: 0 },
         transactions: vec![],
     };
+    block.header.merkle_root = block.compute_merkle_root();
     let mut vertex = DagVertex::new(
         block, vec![[0u8; 32]], 1, validator,
         sk.verifying_key().to_bytes(), Signature([0u8; 64]),
@@ -1250,7 +1257,7 @@ fn test_dag_missing_parents_error() {
 
     let fake_parent = [0xAA; 32]; // Not in DAG and not genesis
 
-    let block = Block {
+    let mut block = Block {
         header: BlockHeader {
             version: 1, height: 0,
             timestamp: std::time::SystemTime::now()
@@ -1261,6 +1268,7 @@ fn test_dag_missing_parents_error() {
         coinbase: CoinbaseTx { to: validator, amount: 0, height: 0 },
         transactions: vec![],
     };
+    block.header.merkle_root = block.compute_merkle_root();
     let mut vertex = DagVertex::new(
         block, vec![fake_parent], 1, validator,
         sk.verifying_key().to_bytes(), Signature([0u8; 64]),

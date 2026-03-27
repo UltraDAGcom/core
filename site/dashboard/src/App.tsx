@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
 import { WelcomeScreen } from './components/wallet/WelcomeScreen';
@@ -18,7 +18,9 @@ import { VertexDetailPage } from './pages/VertexDetailPage';
 import { AddressPage } from './pages/AddressPage';
 import { SearchResultPage } from './pages/SearchResultPage';
 import { BridgePage } from './pages/BridgePage';
+import { SmartAccountPage } from './pages/SmartAccountPage';
 import { useKeystore } from './hooks/useKeystore';
+import { usePasskeyWallet } from './hooks/usePasskeyWallet';
 import { useNode } from './hooks/useNode';
 import { useWalletBalances } from './hooks/useWalletBalances';
 import { useNotifications } from './hooks/useNotifications';
@@ -26,13 +28,25 @@ import { getNodeUrl, getNetwork, switchNetwork, type NetworkType } from './lib/a
 import { ToastProvider } from './hooks/useToast';
 
 function App() {
+  const pk = usePasskeyWallet();
   const ks = useKeystore();
   const node = useNode();
-  const wb = useWalletBalances(ks.wallets, node.connected);
+
+  // Unified wallet list: passkey wallet (if exists) + keystore wallets
+  // Memoized to prevent infinite re-render loops in useWalletBalances
+  const allWallets = useMemo(() => {
+    return pk.wallet
+      ? [{ name: pk.wallet.name || 'Passkey Wallet', address: pk.wallet.address, secret_key: '' }, ...ks.wallets]
+      : ks.wallets;
+  }, [pk.wallet?.address, pk.wallet?.name, ks.wallets]);
+  const isUnlocked = pk.unlocked || ks.unlocked;
+  const primaryAddress = pk.wallet?.address || ks.wallets[0]?.address;
+
+  const wb = useWalletBalances(allWallets, node.connected);
   const notifications = useNotifications({
-    addresses: ks.wallets.map(w => w.address),
+    addresses: allWallets.map(w => w.address),
     balances: wb.balances,
-    unlocked: ks.unlocked,
+    unlocked: isUnlocked,
   });
   const [showLockModal, setShowLockModal] = useState(false);
   const [network, setNetwork] = useState<NetworkType>(getNetwork());
@@ -46,12 +60,14 @@ function App() {
   }, [node]);
 
   const handleToggleLock = useCallback(() => {
-    if (ks.unlocked) {
+    if (pk.unlocked) {
+      pk.lock();
+    } else if (ks.unlocked) {
       ks.lock();
     } else {
       setShowLockModal(true);
     }
-  }, [ks]);
+  }, [pk, ks]);
 
   const handleGenerateKeypair = useCallback(async () => {
     try {
@@ -72,8 +88,52 @@ function App() {
     }
   }, []);
 
-  // Show welcome/onboarding when wallet is not unlocked, or during post-create onboarding
-  if (!ks.unlocked || showOnboarding) {
+  // Passkey wallet: if it exists but is locked, show biometric unlock (not WelcomeScreen)
+  if (pk.hasWallet && !pk.unlocked && !showOnboarding) {
+    return (
+      <ToastProvider>
+        <div className="min-h-screen bg-dag-bg">
+          <header className="h-14 bg-dag-sidebar/80 backdrop-blur border-b border-dag-border flex items-center px-4 lg:px-6">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-dag-accent to-purple-500 flex items-center justify-center">
+                <span className="text-white font-bold text-xs">U</span>
+              </div>
+              <span className="font-semibold text-white text-sm">UltraDAG</span>
+            </div>
+          </header>
+          <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
+            <div className="max-w-md w-full space-y-6 text-center">
+              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-dag-accent to-purple-500 flex items-center justify-center mx-auto shadow-lg shadow-dag-accent/20">
+                <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 11c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm-6 0c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm0 0V8a4 4 0 118 0v3" /></svg>
+              </div>
+              <h1 className="text-2xl font-bold text-white">Welcome Back{pk.wallet?.name ? `, ${pk.wallet.name}` : ''}</h1>
+              <p className="text-dag-muted text-sm">Verify your identity to unlock</p>
+
+              <button
+                onClick={async () => {
+                  const ok = await pk.unlock();
+                  if (!ok) {
+                    // Could show error, but for now just let user retry
+                  }
+                }}
+                className="w-full py-4 rounded-xl bg-gradient-to-r from-dag-accent to-purple-500 text-white font-semibold text-lg hover:opacity-90 transition-all flex items-center justify-center gap-2"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 11c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm-6 0c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm0 0V8a4 4 0 118 0v3" /></svg>
+                Unlock with Biometrics
+              </button>
+
+              <button onClick={() => pk.destroy()} className="text-xs text-slate-500 hover:text-red-400 transition-colors">
+                Start Fresh
+              </button>
+            </div>
+          </div>
+        </div>
+      </ToastProvider>
+    );
+  }
+
+  // Show welcome/onboarding when no wallet exists or keystore is locked
+  if ((!pk.hasWallet && !ks.unlocked) || showOnboarding) {
     return (
       <ToastProvider>
         <div className="min-h-screen bg-dag-bg">
@@ -120,12 +180,12 @@ function App() {
             <Layout
               connected={node.connected}
               nodeUrl={node.nodeUrl}
-              keystoreUnlocked={ks.unlocked}
+              keystoreUnlocked={isUnlocked}
               network={network}
-              walletAddress={ks.wallets[0]?.address}
+              walletAddress={primaryAddress}
               walletBalance={wb.totalBalance}
-              sessionSecondsLeft={ks.sessionSecondsLeft}
-              sessionTotalSeconds={ks.sessionTotalSeconds}
+              sessionSecondsLeft={pk.unlocked ? 9999 : ks.sessionSecondsLeft}
+              sessionTotalSeconds={pk.unlocked ? 9999 : ks.sessionTotalSeconds}
               onToggleLock={handleToggleLock}
               onSwitchNetwork={handleSwitchNetwork}
             />
@@ -133,15 +193,15 @@ function App() {
         >
           <Route
             index
-            element={<DashboardPage status={node.status} loading={node.loading} network={network} wallets={ks.wallets} totalBalance={wb.totalBalance} totalStaked={wb.totalStaked} totalDelegated={wb.totalDelegated} />}
+            element={<DashboardPage status={node.status} loading={node.loading} network={network} wallets={allWallets} totalBalance={wb.totalBalance} totalStaked={wb.totalStaked} totalDelegated={wb.totalDelegated} />}
           />
           <Route
             path="wallet"
             element={
               <WalletPage
-                unlocked={ks.unlocked}
+                unlocked={isUnlocked}
                 hasStore={ks.hasStore}
-                wallets={ks.wallets}
+                wallets={allWallets}
                 balances={wb.balances}
                 onCreate={ks.create}
                 onUnlock={ks.unlock}
@@ -164,8 +224,8 @@ function App() {
             path="wallet/portfolio"
             element={
               <PortfolioPage
-                unlocked={ks.unlocked}
-                wallets={ks.wallets}
+                unlocked={isUnlocked}
+                wallets={allWallets}
                 balances={wb.balances}
                 totalBalance={wb.totalBalance}
                 totalStaked={wb.totalStaked}
@@ -177,14 +237,15 @@ function App() {
             path="wallet/send"
             element={
               <SendPage
-                wallets={ks.wallets}
+                wallets={allWallets}
                 balances={wb.balances}
-                unlocked={ks.unlocked}
+                unlocked={isUnlocked}
                 network={network}
               />
             }
           />
           <Route path="bridge" element={<BridgePage />} />
+          <Route path="smart-account" element={<SmartAccountPage walletAddress={primaryAddress} nodeUrl={getNodeUrl()} />} />
           <Route path="staking" element={<StakingPage />} />
           <Route path="governance" element={<GovernancePage />} />
           <Route path="council" element={<CouncilPage />} />

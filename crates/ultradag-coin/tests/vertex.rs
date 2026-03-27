@@ -15,7 +15,7 @@ fn make_vertex(uid: u64, round: u64, parents: Vec<[u8; 32]>, sk: &SecretKey) -> 
         .as_secs() as i64;
     
     let validator = sk.address();
-    let block = Block {
+    let mut block = Block {
         header: BlockHeader {
             version: 1,
             height: uid,
@@ -26,6 +26,7 @@ fn make_vertex(uid: u64, round: u64, parents: Vec<[u8; 32]>, sk: &SecretKey) -> 
         coinbase: CoinbaseTx { to: validator, amount: 0, height: uid },
         transactions: vec![],
     };
+    block.header.merkle_root = block.compute_merkle_root();
     let mut v = DagVertex::new(
         block, parents, round, validator,
         sk.verifying_key().to_bytes(), Signature([0u8; 64]),

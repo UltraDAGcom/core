@@ -391,6 +391,51 @@ pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
         hasher.update(&round.to_le_bytes());
     }
 
+    // SmartAccounts (sorted by address in snapshot())
+    hasher.update(&(snapshot.smart_accounts.len() as u64).to_le_bytes());
+    for (addr, config) in &snapshot.smart_accounts {
+        hasher.update(&addr.0);
+        hasher.update(&config.created_at_round.to_le_bytes());
+        hasher.update(&(config.authorized_keys.len() as u64).to_le_bytes());
+        for key in &config.authorized_keys {
+            hasher.update(&key.key_id);
+            hasher.update(&[key.key_type as u8]);
+            hasher.update(&(key.pubkey.len() as u32).to_le_bytes());
+            hasher.update(&key.pubkey);
+            hasher.update(&(key.label.len() as u32).to_le_bytes());
+            hasher.update(key.label.as_bytes());
+            match key.daily_limit {
+                Some(limit) => { hasher.update(&[1u8]); hasher.update(&limit.to_le_bytes()); }
+                None => { hasher.update(&[0u8]); }
+            }
+            // daily_spent is transient (resets per day), not included in state root
+        }
+        // Pending key removal
+        match &config.pending_key_removal {
+            Some(pending) => {
+                hasher.update(&[1u8]);
+                hasher.update(&pending.key_id);
+                hasher.update(&pending.initiated_at_round.to_le_bytes());
+                hasher.update(&pending.executes_at_round.to_le_bytes());
+            }
+            None => { hasher.update(&[0u8]); }
+        }
+    }
+
+    // Name Registry (sorted by name string in snapshot())
+    hasher.update(&(snapshot.name_to_address.len() as u64).to_le_bytes());
+    for (name, addr) in &snapshot.name_to_address {
+        hasher.update(&(name.len() as u32).to_le_bytes());
+        hasher.update(name.as_bytes());
+        hasher.update(&addr.0);
+    }
+    hasher.update(&(snapshot.name_expiry.len() as u64).to_le_bytes());
+    for (name, expiry) in &snapshot.name_expiry {
+        hasher.update(&(name.len() as u32).to_le_bytes());
+        hasher.update(name.as_bytes());
+        hasher.update(&expiry.to_le_bytes());
+    }
+
     *hasher.finalize().as_bytes()
 }
 

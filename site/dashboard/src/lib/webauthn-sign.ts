@@ -1,0 +1,213 @@
+/**
+ * WebAuthn transaction signing for SmartAccount passkey wallets.
+ *
+ * Uses navigator.credentials.get() to sign a transaction challenge
+ * with the device's secure enclave (Face ID, fingerprint, etc.).
+ */
+
+import { getNodeUrl } from './api';
+import { getPasskeyWallet, hasPasskeyWallet } from './passkey-wallet';
+import type { PasskeyWallet } from './passkey-wallet';
+
+/** @deprecated Use getPasskeyWallet() from passkey-wallet.ts instead. */
+export function getPasskeyInfo(): PasskeyWallet | null {
+  return getPasskeyWallet();
+}
+
+/** @deprecated Use hasPasskeyWallet() from passkey-wallet.ts instead. */
+export function isPasskeyWallet(): boolean {
+  return hasPasskeyWallet();
+}
+
+/**
+ * Sign and submit a SmartTransfer using WebAuthn (passkey).
+ *
+ * Flow:
+ * 1. Build signable_bytes for SmartTransferTx
+ * 2. Compute challenge = SHA-256(signable_bytes)
+ * 3. Call navigator.credentials.get() with challenge
+ * 4. Extract authenticatorData, clientDataJSON, P256 signature
+ * 5. Submit SmartTransferTx with WebAuthn envelope to /tx/submit
+ */
+export async function signAndSubmitWithPasskey(
+  to: string,
+  amountSats: number,
+  feeSats: number,
+  nonce: number,
+  memo?: string,
+): Promise<{ tx_hash: string }> {
+  const passkey = getPasskeyWallet();
+  if (!passkey) throw new Error('No passkey wallet found');
+
+  // Build signable_bytes matching Rust SmartTransferTx::signable_bytes()
+  const NETWORK_ID = new TextEncoder().encode('ultradag-testnet-v1');
+  const TYPE_TAG = new TextEncoder().encode('smart_transfer');
+
+  const fromBytes = hexToBytes(passkey.address);
+  const toBytes = hexToBytes(to);
+  const keyIdBytes = hexToBytes(passkey.keyId);
+
+  const parts: Uint8Array[] = [
+    NETWORK_ID,
+    TYPE_TAG,
+    fromBytes,
+    toBytes,
+    u64ToLE(BigInt(amountSats)),
+    u64ToLE(BigInt(feeSats)),
+    u64ToLE(BigInt(nonce)),
+    keyIdBytes,
+  ];
+
+  if (memo) {
+    const memoBytes = new TextEncoder().encode(memo);
+    parts.push(u32ToLE(memoBytes.length), memoBytes);
+  }
+
+  const signableBytes = concat(parts);
+
+  // Compute challenge = SHA-256(signable_bytes)
+  const challengeBuffer = await crypto.subtle.digest('SHA-256', signableBytes);
+  const challenge = new Uint8Array(challengeBuffer);
+
+  // Call WebAuthn to sign
+  const credential = await navigator.credentials.get({
+    publicKey: {
+      challenge,
+      rpId: window.location.hostname,
+      allowCredentials: [{
+        id: base64urlToBytes(passkey.credentialId),
+        type: 'public-key',
+      }],
+      userVerification: 'required',
+      timeout: 60000,
+    },
+  }) as PublicKeyCredential | null;
+
+  if (!credential) throw new Error('WebAuthn signing cancelled');
+
+  const assertion = credential.response as AuthenticatorAssertionResponse;
+  const authenticatorData = new Uint8Array(assertion.authenticatorData);
+  const clientDataJSON = new Uint8Array(assertion.clientDataJSON);
+  const signature = new Uint8Array(assertion.signature);
+
+  // Convert DER signature to raw r||s (64 bytes) if needed
+  const rawSig = derToRaw(signature);
+
+  // Build the SmartTransferTx with WebAuthn envelope
+  const tx = {
+    SmartTransfer: {
+      from: Array.from(fromBytes),
+      to: Array.from(toBytes),
+      amount: amountSats,
+      fee: feeSats,
+      nonce,
+      signing_key_id: Array.from(keyIdBytes),
+      signature: [],
+      memo: memo ? Array.from(new TextEncoder().encode(memo)) : null,
+      webauthn: {
+        authenticator_data: Array.from(authenticatorData),
+        client_data_json: Array.from(clientDataJSON),
+        signature: Array.from(rawSig),
+      },
+    },
+  };
+
+  // Submit
+  const res = await fetch(`${getNodeUrl()}/tx/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(tx),
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || `Server error: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
+}
+
+function u64ToLE(value: bigint): Uint8Array {
+  const buf = new Uint8Array(8);
+  let v = BigInt.asUintN(64, value);
+  for (let i = 0; i < 8; i++) {
+    buf[i] = Number(v & 0xffn);
+    v >>= 8n;
+  }
+  return buf;
+}
+
+function u32ToLE(value: number): Uint8Array {
+  const buf = new Uint8Array(4);
+  buf[0] = value & 0xff;
+  buf[1] = (value >> 8) & 0xff;
+  buf[2] = (value >> 16) & 0xff;
+  buf[3] = (value >> 24) & 0xff;
+  return buf;
+}
+
+function concat(arrays: Uint8Array[]): Uint8Array {
+  const total = arrays.reduce((acc, a) => acc + a.length, 0);
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const a of arrays) {
+    result.set(a, offset);
+    offset += a.length;
+  }
+  return result;
+}
+
+function base64urlToBytes(b64url: string): Uint8Array {
+  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+/** Convert ECDSA DER signature to raw r||s (64 bytes). */
+function derToRaw(der: Uint8Array): Uint8Array {
+  // If already 64 bytes, assume raw
+  if (der.length === 64) return der;
+
+  // DER format: 0x30 [len] 0x02 [r-len] [r] 0x02 [s-len] [s]
+  if (der[0] !== 0x30) return der;
+
+  let offset = 2; // skip 0x30 + length byte
+  if (der[1] & 0x80) offset++; // long form length
+
+  // Read r
+  if (der[offset] !== 0x02) return der;
+  offset++;
+  const rLen = der[offset++];
+  let r = der.slice(offset, offset + rLen);
+  offset += rLen;
+
+  // Read s
+  if (der[offset] !== 0x02) return der;
+  offset++;
+  const sLen = der[offset++];
+  let s = der.slice(offset, offset + sLen);
+
+  // Remove leading zero padding (DER uses signed integers)
+  if (r.length === 33 && r[0] === 0) r = r.slice(1);
+  if (s.length === 33 && s[0] === 0) s = s.slice(1);
+
+  // Pad to 32 bytes each
+  const raw = new Uint8Array(64);
+  raw.set(r, 32 - r.length);
+  raw.set(s, 64 - s.length);
+  return raw;
+}

@@ -643,6 +643,167 @@ export function buildSignedVoteTx(
 }
 
 // ---------------------------------------------------------------------------
+// SmartAccount Transaction Types
+// ---------------------------------------------------------------------------
+
+/** Compute a key_id from key type (0=Ed25519, 1=P256) and public key bytes. */
+export function computeKeyId(keyType: number, pubkey: Uint8Array): Uint8Array {
+  const hasher = createHash();
+  hasher.update(new Uint8Array([keyType]));
+  hasher.update(pubkey);
+  const hash = hasher.digest();
+  return new Uint8Array(hash.slice(0, 8));
+}
+
+/** Build signable bytes for AddKeyTx. */
+function addKeySignableBytes(
+  from: Uint8Array, keyId: Uint8Array, keyType: number,
+  pubkey: Uint8Array, label: string, fee: bigint, nonce: bigint,
+): Uint8Array {
+  const labelBytes = new TextEncoder().encode(label);
+  const parts: Uint8Array[] = [
+    NETWORK_ID, new TextEncoder().encode("smart_add_key"),
+    from, keyId, new Uint8Array([keyType]),
+    u32ToLeBytes(pubkey.length), pubkey,
+    u32ToLeBytes(labelBytes.length), labelBytes,
+    u64ToLeBytes(fee), u64ToLeBytes(nonce),
+  ];
+  return concatBytes(parts);
+}
+
+/** Build and sign an AddKey transaction (Ed25519 signer). */
+export function buildAddKeyTx(
+  secretKeyHex: string, keyType: number, newPubkey: Uint8Array,
+  label: string, fee: bigint, nonce: bigint,
+): object {
+  const secretKey = hexToBytes(secretKeyHex);
+  const publicKey = ed.getPublicKey(secretKey);
+  const fromBytes = deriveAddressBytes(publicKey);
+  const keyId = computeKeyId(keyType, newPubkey);
+
+  const signable = addKeySignableBytes(fromBytes, keyId, keyType, newPubkey, label, fee, nonce);
+  const signature = signTransaction(signable, secretKey);
+
+  return {
+    AddKey: {
+      from: Array.from(fromBytes),
+      new_key: {
+        key_id: Array.from(keyId),
+        key_type: keyType === 0 ? "Ed25519" : "P256",
+        pubkey: Array.from(newPubkey),
+        label,
+        daily_limit: null,
+        daily_spent: [0, 0],
+      },
+      fee: Number(fee),
+      nonce: Number(nonce),
+      pub_key: Array.from(publicKey),
+      signature: bytesToHex(signature),
+    },
+  };
+}
+
+/** Build signable bytes for SmartTransferTx. */
+function smartTransferSignableBytes(
+  from: Uint8Array, to: Uint8Array, amount: bigint,
+  fee: bigint, nonce: bigint, signingKeyId: Uint8Array,
+  memo: Uint8Array | null,
+): Uint8Array {
+  const parts: Uint8Array[] = [
+    NETWORK_ID, new TextEncoder().encode("smart_transfer"),
+    from, to, u64ToLeBytes(amount), u64ToLeBytes(fee),
+    u64ToLeBytes(nonce), signingKeyId,
+  ];
+  if (memo && memo.length > 0) {
+    parts.push(u32ToLeBytes(memo.length), memo);
+  }
+  return concatBytes(parts);
+}
+
+/** Build and sign a SmartTransfer transaction (Ed25519 signer). */
+export function buildSmartTransferTx(
+  secretKeyHex: string, toHex: string, amount: bigint,
+  fee: bigint, nonce: bigint, memo?: Uint8Array,
+): object {
+  const secretKey = hexToBytes(secretKeyHex);
+  const publicKey = ed.getPublicKey(secretKey);
+  const fromBytes = deriveAddressBytes(publicKey);
+  const toBytes = hexToBytes(toHex);
+  const keyId = computeKeyId(0, publicKey); // Ed25519
+
+  const signable = smartTransferSignableBytes(
+    fromBytes, toBytes, amount, fee, nonce, keyId, memo ?? null,
+  );
+  const signature = signTransaction(signable, secretKey);
+
+  return {
+    SmartTransfer: {
+      from: Array.from(fromBytes),
+      to: Array.from(toBytes),
+      amount: Number(amount),
+      fee: Number(fee),
+      nonce: Number(nonce),
+      signing_key_id: Array.from(keyId),
+      signature: Array.from(signature),
+      memo: memo ? Array.from(memo) : null,
+      webauthn: null,
+    },
+  };
+}
+
+/** Build signable bytes for RegisterNameTx. */
+function registerNameSignableBytes(
+  from: Uint8Array, name: string, durationYears: number,
+  fee: bigint, nonce: bigint,
+): Uint8Array {
+  const nameBytes = new TextEncoder().encode(name);
+  const parts: Uint8Array[] = [
+    NETWORK_ID, new TextEncoder().encode("name_register"),
+    from, u32ToLeBytes(nameBytes.length), nameBytes,
+    new Uint8Array([durationYears]),
+    u64ToLeBytes(fee), u64ToLeBytes(nonce),
+  ];
+  return concatBytes(parts);
+}
+
+/** Build and sign a RegisterName transaction. */
+export function buildRegisterNameTx(
+  secretKeyHex: string, name: string, durationYears: number,
+  fee: bigint, nonce: bigint,
+): object {
+  const secretKey = hexToBytes(secretKeyHex);
+  const publicKey = ed.getPublicKey(secretKey);
+  const fromBytes = deriveAddressBytes(publicKey);
+
+  const signable = registerNameSignableBytes(fromBytes, name, durationYears, fee, nonce);
+  const signature = signTransaction(signable, secretKey);
+
+  return {
+    RegisterName: {
+      from: Array.from(fromBytes),
+      name,
+      duration_years: durationYears,
+      fee: Number(fee),
+      nonce: Number(nonce),
+      pub_key: Array.from(publicKey),
+      signature: bytesToHex(signature),
+    },
+  };
+}
+
+/** Helper to concatenate multiple Uint8Arrays. */
+function concatBytes(arrays: Uint8Array[]): Uint8Array {
+  const totalLen = arrays.reduce((acc, a) => acc + a.length, 0);
+  const result = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const a of arrays) {
+    result.set(a, offset);
+    offset += a.length;
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Re-exports for convenience
 // ---------------------------------------------------------------------------
 

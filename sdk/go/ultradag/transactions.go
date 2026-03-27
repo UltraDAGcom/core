@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+
+	"lukechampine.com/blake3"
 )
 
 // NetworkID is the network identifier prepended to all signable bytes.
@@ -419,6 +421,86 @@ func (c *Client) SubmitSignedTransactionRaw(tx interface{}) (map[string]interfac
 	_ = jsonBytes // used by doPost internally via the tx parameter
 	var resp map[string]interface{}
 	if err := c.doPost("/tx/submit", tx, &resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+// ---------------------------------------------------------------------------
+// SmartAccount Transaction Types
+// ---------------------------------------------------------------------------
+
+// ComputeKeyID computes blake3(keyType || pubkey)[..8].
+func ComputeKeyID(keyType byte, pubkey []byte) [8]byte {
+	data := append([]byte{keyType}, pubkey...)
+	hash := blake3.Sum256(data)
+	var id [8]byte
+	copy(id[:], hash[:8])
+	return id
+}
+
+// BuildSmartTransferSignableBytes constructs signable_bytes for SmartTransferTx.
+func BuildSmartTransferSignableBytes(from, to [20]byte, amount, fee, nonce uint64, keyID [8]byte, memo []byte) []byte {
+	buf := make([]byte, 0, 128)
+	buf = append(buf, NetworkID...)
+	buf = append(buf, []byte("smart_transfer")...)
+	buf = append(buf, from[:]...)
+	buf = append(buf, to[:]...)
+	buf = appendU64LE(buf, amount)
+	buf = appendU64LE(buf, fee)
+	buf = appendU64LE(buf, nonce)
+	buf = append(buf, keyID[:]...)
+	if len(memo) > 0 {
+		buf = appendU32LE(buf, uint32(len(memo)))
+		buf = append(buf, memo...)
+	}
+	return buf
+}
+
+// BuildRegisterNameSignableBytes constructs signable_bytes for RegisterNameTx.
+func BuildRegisterNameSignableBytes(from [20]byte, name string, durationYears uint8, fee, nonce uint64) []byte {
+	nameBytes := []byte(name)
+	buf := make([]byte, 0, 80+len(nameBytes))
+	buf = append(buf, NetworkID...)
+	buf = append(buf, []byte("name_register")...)
+	buf = append(buf, from[:]...)
+	buf = appendU32LE(buf, uint32(len(nameBytes)))
+	buf = append(buf, nameBytes...)
+	buf = append(buf, durationYears)
+	buf = appendU64LE(buf, fee)
+	buf = appendU64LE(buf, nonce)
+	return buf
+}
+
+// ---------------------------------------------------------------------------
+// Name Registry & SmartAccount client methods
+// ---------------------------------------------------------------------------
+
+// ResolveName looks up a name and returns the address (or empty string).
+func (c *Client) ResolveName(name string) (string, error) {
+	var resp map[string]interface{}
+	if err := c.doGet("/name/resolve/"+name, &resp); err != nil {
+		return "", err
+	}
+	addr, _ := resp["address"].(string)
+	return addr, nil
+}
+
+// CheckNameAvailability checks if a name is available.
+func (c *Client) CheckNameAvailability(name string) (bool, uint64, error) {
+	var resp map[string]interface{}
+	if err := c.doGet("/name/available/"+name, &resp); err != nil {
+		return false, 0, err
+	}
+	available, _ := resp["available"].(bool)
+	fee, _ := resp["annual_fee"].(float64)
+	return available, uint64(fee), nil
+}
+
+// GetSmartAccount returns SmartAccount info for an address or name.
+func (c *Client) GetSmartAccount(addressOrName string) (map[string]interface{}, error) {
+	var resp map[string]interface{}
+	if err := c.doGet("/smart-account/"+addressOrName, &resp); err != nil {
 		return nil, err
 	}
 	return resp, nil

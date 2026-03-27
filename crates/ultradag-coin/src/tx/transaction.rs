@@ -4,11 +4,17 @@ use crate::address::{Address, Signature};
 use crate::tx::stake::{StakeTx, UnstakeTx};
 use crate::tx::delegate::{DelegateTx, UndelegateTx, SetCommissionTx};
 use crate::tx::bridge::{BridgeDepositTx, BridgeReleaseTx};
+use crate::tx::smart_account::{AddKeyTx, RemoveKeyTx, SmartTransferTx, SetRecoveryTx, RecoverAccountTx, CancelRecoveryTx, SetPolicyTx, ExecuteVaultTx, CancelVaultTx};
+use crate::tx::name_registry::{RegisterNameTx, RenewNameTx, TransferNameTx, UpdateProfileTx};
 use crate::governance::{CreateProposalTx, VoteTx};
 
 /// Unified transaction type supporting transfers, staking, unstaking, delegation,
-/// governance, and bridge operations.
+/// governance, bridge, and smart account operations.
 /// All variants go through consensus and are included in DAG vertices.
+///
+/// IMPORTANT: New variants MUST be appended at the end to preserve postcard
+/// serialization compatibility. Inserting in the middle changes variant indices
+/// and breaks deserialization of existing data.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Transaction {
     Transfer(TransferTx),
@@ -21,6 +27,21 @@ pub enum Transaction {
     SetCommission(SetCommissionTx),
     BridgeDeposit(BridgeDepositTx),
     BridgeRelease(BridgeReleaseTx),
+    // SmartAccount transaction types
+    AddKey(AddKeyTx),
+    RemoveKey(RemoveKeyTx),
+    SmartTransfer(SmartTransferTx),
+    SetRecovery(SetRecoveryTx),
+    RecoverAccount(RecoverAccountTx),
+    CancelRecovery(CancelRecoveryTx),
+    SetPolicy(SetPolicyTx),
+    ExecuteVault(ExecuteVaultTx),
+    CancelVault(CancelVaultTx),
+    // Name Registry transaction types
+    RegisterName(RegisterNameTx),
+    RenewName(RenewNameTx),
+    TransferName(TransferNameTx),
+    UpdateProfile(UpdateProfileTx),
 }
 
 /// A transaction transferring UDAG from one address to another.
@@ -55,10 +76,25 @@ impl Transaction {
             Transaction::SetCommission(tx) => tx.hash(),
             Transaction::BridgeDeposit(tx) => tx.hash(),
             Transaction::BridgeRelease(tx) => tx.hash(),
+            Transaction::AddKey(tx) => tx.hash(),
+            Transaction::RemoveKey(tx) => tx.hash(),
+            Transaction::SmartTransfer(tx) => tx.hash(),
+            Transaction::SetRecovery(tx) => tx.hash(),
+            Transaction::RecoverAccount(tx) => tx.hash(),
+            Transaction::CancelRecovery(tx) => tx.hash(),
+            Transaction::SetPolicy(tx) => tx.hash(),
+            Transaction::ExecuteVault(tx) => tx.hash(),
+            Transaction::CancelVault(tx) => tx.hash(),
+            Transaction::RegisterName(tx) => tx.hash(),
+            Transaction::RenewName(tx) => tx.hash(),
+            Transaction::TransferName(tx) => tx.hash(),
+            Transaction::UpdateProfile(tx) => tx.hash(),
         }
     }
 
     /// Verify the transaction signature.
+    /// NOTE: SmartTransfer returns false here — it requires state access for key lookup.
+    /// The real verification for SmartTransfer happens in StateEngine.
     pub fn verify_signature(&self) -> bool {
         match self {
             Transaction::Transfer(tx) => tx.verify_signature(),
@@ -71,6 +107,19 @@ impl Transaction {
             Transaction::SetCommission(tx) => tx.verify_signature(),
             Transaction::BridgeDeposit(tx) => tx.verify_signature(),
             Transaction::BridgeRelease(tx) => tx.verify_signature(),
+            Transaction::AddKey(tx) => tx.verify_signature(),
+            Transaction::RemoveKey(tx) => tx.verify_signature(),
+            Transaction::SmartTransfer(tx) => tx.verify_signature(),
+            Transaction::SetRecovery(tx) => tx.verify_signature(),
+            Transaction::RecoverAccount(tx) => tx.verify_signature(),
+            Transaction::CancelRecovery(tx) => tx.verify_signature(),
+            Transaction::SetPolicy(tx) => tx.verify_signature(),
+            Transaction::ExecuteVault(tx) => tx.verify_signature(),
+            Transaction::CancelVault(tx) => tx.verify_signature(),
+            Transaction::RegisterName(tx) => tx.verify_signature(),
+            Transaction::RenewName(tx) => tx.verify_signature(),
+            Transaction::TransferName(tx) => tx.verify_signature(),
+            Transaction::UpdateProfile(tx) => tx.verify_signature(),
         }
     }
 
@@ -87,6 +136,19 @@ impl Transaction {
             Transaction::SetCommission(tx) => tx.from,
             Transaction::BridgeDeposit(tx) => tx.from,
             Transaction::BridgeRelease(tx) => tx.from,
+            Transaction::AddKey(tx) => tx.from,
+            Transaction::RemoveKey(tx) => tx.from,
+            Transaction::SmartTransfer(tx) => tx.from,
+            Transaction::SetRecovery(tx) => tx.from,
+            Transaction::RecoverAccount(tx) => tx.from,
+            Transaction::CancelRecovery(tx) => tx.from,
+            Transaction::SetPolicy(tx) => tx.from,
+            Transaction::ExecuteVault(tx) => tx.from,
+            Transaction::CancelVault(tx) => tx.from,
+            Transaction::RegisterName(tx) => tx.from,
+            Transaction::RenewName(tx) => tx.from,
+            Transaction::TransferName(tx) => tx.from,
+            Transaction::UpdateProfile(tx) => tx.from,
         }
     }
 
@@ -103,26 +165,52 @@ impl Transaction {
             Transaction::SetCommission(tx) => tx.nonce,
             Transaction::BridgeDeposit(tx) => tx.nonce,
             Transaction::BridgeRelease(tx) => tx.nonce,
+            Transaction::AddKey(tx) => tx.nonce,
+            Transaction::RemoveKey(tx) => tx.nonce,
+            Transaction::SmartTransfer(tx) => tx.nonce,
+            Transaction::SetRecovery(tx) => tx.nonce,
+            Transaction::RecoverAccount(tx) => tx.nonce,
+            Transaction::CancelRecovery(tx) => tx.nonce,
+            Transaction::SetPolicy(tx) => tx.nonce,
+            Transaction::ExecuteVault(tx) => tx.nonce,
+            Transaction::CancelVault(tx) => tx.nonce,
+            Transaction::RegisterName(tx) => tx.nonce,
+            Transaction::RenewName(tx) => tx.nonce,
+            Transaction::TransferName(tx) => tx.nonce,
+            Transaction::UpdateProfile(tx) => tx.nonce,
         }
     }
 
-    /// Get the fee (0 for stake/unstake/delegate/undelegate/set_commission).
+    /// Get the fee.
     pub fn fee(&self) -> u64 {
         match self {
             Transaction::Transfer(tx) => tx.fee,
             Transaction::CreateProposal(tx) => tx.fee,
             Transaction::Vote(tx) => tx.fee,
             Transaction::BridgeDeposit(tx) => tx.fee,
+            Transaction::AddKey(tx) => tx.fee,
+            Transaction::SmartTransfer(tx) => tx.fee,
+            Transaction::SetRecovery(tx) => tx.fee,
+            Transaction::SetPolicy(tx) => tx.fee,
+            Transaction::RegisterName(tx) => tx.fee,
+            Transaction::RenewName(tx) => tx.fee,
+            Transaction::TransferName(tx) => tx.fee,
+            Transaction::UpdateProfile(tx) => tx.fee,
             Transaction::Stake(_)
             | Transaction::Unstake(_)
             | Transaction::Delegate(_)
             | Transaction::Undelegate(_)
             | Transaction::SetCommission(_)
-            | Transaction::BridgeRelease(_) => 0,
+            | Transaction::BridgeRelease(_)
+            | Transaction::RemoveKey(_)
+            | Transaction::RecoverAccount(_)
+            | Transaction::CancelRecovery(_)
+            | Transaction::ExecuteVault(_)
+            | Transaction::CancelVault(_) => 0,
         }
     }
 
-    /// Get the amount (0 for unstake/undelegate/set_commission).
+    /// Get the amount.
     pub fn amount(&self) -> u64 {
         match self {
             Transaction::Transfer(tx) => tx.amount,
@@ -130,27 +218,34 @@ impl Transaction {
             Transaction::Delegate(tx) => tx.amount,
             Transaction::BridgeDeposit(tx) => tx.amount,
             Transaction::BridgeRelease(tx) => tx.amount,
+            Transaction::SmartTransfer(tx) => tx.amount,
             Transaction::Unstake(_)
             | Transaction::Undelegate(_)
             | Transaction::SetCommission(_)
             | Transaction::CreateProposal(_)
-            | Transaction::Vote(_) => 0,
+            | Transaction::Vote(_)
+            | Transaction::AddKey(_)
+            | Transaction::RemoveKey(_)
+            | Transaction::SetRecovery(_)
+            | Transaction::RecoverAccount(_)
+            | Transaction::CancelRecovery(_)
+            | Transaction::SetPolicy(_)
+            | Transaction::ExecuteVault(_)
+            | Transaction::CancelVault(_)
+            | Transaction::RegisterName(_)
+            | Transaction::RenewName(_)
+            | Transaction::TransferName(_)
+            | Transaction::UpdateProfile(_) => 0,
         }
     }
 
-    /// Get the recipient address (None for stake/unstake, Some(validator) for delegate).
+    /// Get the recipient address.
     pub fn to(&self) -> Option<Address> {
         match self {
             Transaction::Transfer(tx) => Some(tx.to),
+            Transaction::SmartTransfer(tx) => Some(tx.to),
             Transaction::Delegate(tx) => Some(tx.validator),
-            Transaction::Stake(_)
-            | Transaction::Unstake(_)
-            | Transaction::Undelegate(_)
-            | Transaction::SetCommission(_)
-            | Transaction::CreateProposal(_)
-            | Transaction::Vote(_)
-            | Transaction::BridgeDeposit(_)
-            | Transaction::BridgeRelease(_) => None,
+            _ => None,
         }
     }
 
@@ -167,6 +262,20 @@ impl Transaction {
             Transaction::SetCommission(tx) => tx.pub_key,
             Transaction::BridgeDeposit(tx) => tx.pub_key,
             Transaction::BridgeRelease(tx) => tx.pub_key,
+            Transaction::AddKey(tx) => tx.pub_key,
+            Transaction::RemoveKey(tx) => tx.pub_key,
+            Transaction::SetRecovery(tx) => tx.pub_key,
+            Transaction::RecoverAccount(tx) => tx.pub_key,
+            Transaction::CancelRecovery(tx) => tx.pub_key,
+            Transaction::SetPolicy(tx) => tx.pub_key,
+            Transaction::ExecuteVault(tx) => tx.pub_key,
+            Transaction::CancelVault(tx) => tx.pub_key,
+            Transaction::RegisterName(tx) => tx.pub_key,
+            Transaction::RenewName(tx) => tx.pub_key,
+            Transaction::TransferName(tx) => tx.pub_key,
+            Transaction::UpdateProfile(tx) => tx.pub_key,
+            // SmartTransfer uses signing_key_id, not a raw pub_key.
+            Transaction::SmartTransfer(_) => [0u8; 32],
         }
     }
 
@@ -183,10 +292,23 @@ impl Transaction {
             Transaction::SetCommission(tx) => tx.signable_bytes(),
             Transaction::BridgeDeposit(tx) => tx.signable_bytes(),
             Transaction::BridgeRelease(tx) => tx.signable_bytes(),
+            Transaction::AddKey(tx) => tx.signable_bytes(),
+            Transaction::RemoveKey(tx) => tx.signable_bytes(),
+            Transaction::SmartTransfer(tx) => tx.signable_bytes(),
+            Transaction::SetRecovery(tx) => tx.signable_bytes(),
+            Transaction::RecoverAccount(tx) => tx.signable_bytes(),
+            Transaction::CancelRecovery(tx) => tx.signable_bytes(),
+            Transaction::SetPolicy(tx) => tx.signable_bytes(),
+            Transaction::ExecuteVault(tx) => tx.signable_bytes(),
+            Transaction::CancelVault(tx) => tx.signable_bytes(),
+            Transaction::RegisterName(tx) => tx.signable_bytes(),
+            Transaction::RenewName(tx) => tx.signable_bytes(),
+            Transaction::TransferName(tx) => tx.signable_bytes(),
+            Transaction::UpdateProfile(tx) => tx.signable_bytes(),
         }
     }
 
-    /// Get the total cost (amount + fee for transfers, amount for stake/delegate, 0 for others).
+    /// Get the total cost.
     pub fn total_cost(&self) -> u64 {
         match self {
             Transaction::Transfer(tx) => tx.total_cost(),
@@ -195,10 +317,23 @@ impl Transaction {
             Transaction::BridgeDeposit(tx) => tx.total_cost(),
             Transaction::CreateProposal(tx) => tx.fee,
             Transaction::Vote(tx) => tx.fee,
+            Transaction::AddKey(tx) => tx.total_cost(),
+            Transaction::SmartTransfer(tx) => tx.total_cost(),
+            Transaction::SetRecovery(tx) => tx.total_cost(),
+            Transaction::SetPolicy(tx) => tx.total_cost(),
+            Transaction::RegisterName(tx) => tx.total_cost(),
+            Transaction::RenewName(tx) => tx.total_cost(),
+            Transaction::TransferName(tx) => tx.total_cost(),
+            Transaction::UpdateProfile(tx) => tx.total_cost(),
             Transaction::Unstake(_)
             | Transaction::Undelegate(_)
             | Transaction::SetCommission(_)
-            | Transaction::BridgeRelease(_) => 0,
+            | Transaction::BridgeRelease(_)
+            | Transaction::RemoveKey(_)
+            | Transaction::RecoverAccount(_)
+            | Transaction::CancelRecovery(_)
+            | Transaction::ExecuteVault(_)
+            | Transaction::CancelVault(_) => 0,
         }
     }
 }

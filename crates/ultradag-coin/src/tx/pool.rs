@@ -43,7 +43,7 @@ impl Mempool {
         }
 
         // Reject transactions with fee below minimum (spam prevention).
-        // Stake/Unstake/Delegate/Undelegate/SetCommission/BridgeRelease are fee-exempt (they have fee=0 by design).
+        // Fee-exempt transactions (fee=0 by design or allowed for free names).
         let fee_exempt = matches!(
             tx,
             Transaction::Stake(_)
@@ -52,6 +52,12 @@ impl Mempool {
             | Transaction::Undelegate(_)
             | Transaction::SetCommission(_)
             | Transaction::BridgeRelease(_)
+            | Transaction::RemoveKey(_)
+            | Transaction::RecoverAccount(_)
+            | Transaction::CancelRecovery(_)
+            | Transaction::ExecuteVault(_)
+            | Transaction::CancelVault(_)
+            | Transaction::RegisterName(_) // Standard names (6+ chars) are free
         );
         if !fee_exempt && tx.fee() < crate::constants::MIN_FEE_SATS {
             return Err("fee below minimum");

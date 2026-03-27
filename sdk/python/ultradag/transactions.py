@@ -527,3 +527,140 @@ def build_signed_vote_tx(
             "signature": signature.hex(),
         }
     }
+
+
+# ---------------------------------------------------------------------------
+# SmartAccount Transaction Types
+# ---------------------------------------------------------------------------
+
+def compute_key_id(key_type: int, pubkey: bytes) -> bytes:
+    """Compute key_id = blake3(key_type_byte || pubkey)[..8]."""
+    data = bytes([key_type]) + pubkey
+    return _blake3_hash(data)[:8]
+
+
+def build_add_key_tx(
+    kp: Keypair,
+    new_key_type: int,
+    new_pubkey: bytes,
+    label: str,
+    fee: int,
+    nonce: int,
+) -> Dict[str, Any]:
+    """Build a signed AddKey transaction."""
+    from_bytes = bytes.fromhex(kp.address)
+    key_id = compute_key_id(new_key_type, new_pubkey)
+    label_bytes = label.encode("utf-8")
+
+    buf = bytearray()
+    buf += NETWORK_ID
+    buf += b"smart_add_key"
+    buf += from_bytes
+    buf += key_id
+    buf += bytes([new_key_type])
+    buf += struct.pack("<I", len(new_pubkey))
+    buf += new_pubkey
+    buf += struct.pack("<I", len(label_bytes))
+    buf += label_bytes
+    buf += struct.pack("<Q", fee)
+    buf += struct.pack("<Q", nonce)
+
+    signature = kp.sign(bytes(buf))
+
+    return {
+        "AddKey": {
+            "from": list(from_bytes),
+            "new_key": {
+                "key_id": list(key_id),
+                "key_type": "Ed25519" if new_key_type == 0 else "P256",
+                "pubkey": list(new_pubkey),
+                "label": label,
+                "daily_limit": None,
+                "daily_spent": [0, 0],
+            },
+            "fee": fee,
+            "nonce": nonce,
+            "pub_key": list(bytes.fromhex(kp.public_key)),
+            "signature": signature.hex(),
+        }
+    }
+
+
+def build_smart_transfer_tx(
+    kp: Keypair,
+    to_hex: str,
+    amount: int,
+    fee: int,
+    nonce: int,
+    memo: Optional[bytes] = None,
+) -> Dict[str, Any]:
+    """Build a signed SmartTransfer transaction (Ed25519)."""
+    from_bytes = bytes.fromhex(kp.address)
+    to_bytes = bytes.fromhex(to_hex)
+    pubkey = bytes.fromhex(kp.public_key)
+    key_id = compute_key_id(0, pubkey)  # Ed25519
+
+    buf = bytearray()
+    buf += NETWORK_ID
+    buf += b"smart_transfer"
+    buf += from_bytes
+    buf += to_bytes
+    buf += struct.pack("<Q", amount)
+    buf += struct.pack("<Q", fee)
+    buf += struct.pack("<Q", nonce)
+    buf += key_id
+    if memo:
+        buf += struct.pack("<I", len(memo))
+        buf += memo
+
+    signature = kp.sign(bytes(buf))
+
+    return {
+        "SmartTransfer": {
+            "from": list(from_bytes),
+            "to": list(to_bytes),
+            "amount": amount,
+            "fee": fee,
+            "nonce": nonce,
+            "signing_key_id": list(key_id),
+            "signature": list(signature),
+            "memo": list(memo) if memo else None,
+            "webauthn": None,
+        }
+    }
+
+
+def build_register_name_tx(
+    kp: Keypair,
+    name: str,
+    duration_years: int,
+    fee: int,
+    nonce: int,
+) -> Dict[str, Any]:
+    """Build a signed RegisterName transaction."""
+    from_bytes = bytes.fromhex(kp.address)
+    name_bytes = name.encode("utf-8")
+
+    buf = bytearray()
+    buf += NETWORK_ID
+    buf += b"name_register"
+    buf += from_bytes
+    buf += struct.pack("<I", len(name_bytes))
+    buf += name_bytes
+    buf += bytes([duration_years])
+    buf += struct.pack("<Q", fee)
+    buf += struct.pack("<Q", nonce)
+
+    signature = kp.sign(bytes(buf))
+
+    return {
+        "RegisterName": {
+            "from": list(from_bytes),
+            "name": name,
+            "duration_years": duration_years,
+            "fee": fee,
+            "nonce": nonce,
+            "pub_key": list(bytes.fromhex(kp.public_key)),
+            "signature": signature.hex(),
+        }
+    }

@@ -207,6 +207,12 @@ fn test_byzantine_equivocator_detected_and_rejected() {
             ultradag_coin::consensus::dag::DagInsertError::InvalidSignature => {
                 panic!("Unexpected InvalidSignature error");
             }
+            ultradag_coin::consensus::dag::DagInsertError::InvalidCoinbase => {
+                panic!("Unexpected InvalidCoinbase error");
+            }
+            ultradag_coin::consensus::dag::DagInsertError::InvalidMerkleRoot => {
+                panic!("Unexpected InvalidMerkleRoot error");
+            }
         }
     }
     

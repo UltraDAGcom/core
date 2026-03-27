@@ -55,6 +55,8 @@ export function AddressPage() {
   const balanceSats = Number(balance?.balance ?? 0);
   const balanceDelegated = Number(balance?.delegated ?? 0);
   const nonce = Number(balance?.nonce ?? 0);
+  const registeredName = balance?.name ? String(balance.name) : null;
+  const isSmartAccount = balance?.is_smart_account === true;
   const stakedSats = Number(stake?.staked ?? 0);
   const isActiveValidator = stake?.is_active_validator === true;
   const effectiveStake = Number(stake?.effective_stake ?? 0);
@@ -72,6 +74,12 @@ export function AddressPage() {
       </div>
 
       <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 space-y-1">
+        {registeredName && (
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-dag-accent font-bold text-lg">{registeredName}</span>
+            {isSmartAccount && <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">SmartAccount</span>}
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <span className="font-mono text-sm text-slate-200 break-all">{address ? fullAddr(address) : ''}</span>
           {address && <CopyButton text={address} />}

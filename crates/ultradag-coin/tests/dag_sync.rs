@@ -21,7 +21,7 @@ fn make_vertex(
         .as_secs() as i64;
     
     let validator = sk.address();
-    let block = Block {
+    let mut block = Block {
         header: BlockHeader {
             version: 1,
             height: 0,
@@ -36,6 +36,7 @@ fn make_vertex(
         },
         transactions: vec![],
     };
+    block.header.merkle_root = block.compute_merkle_root();
     let mut v = DagVertex::new(
         block,
         parents,

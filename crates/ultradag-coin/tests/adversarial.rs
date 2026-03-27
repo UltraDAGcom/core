@@ -59,7 +59,7 @@ fn make_vertex(
         amount: 0,
         height,
     };
-    let block = Block {
+    let mut block = Block {
         header: BlockHeader {
             version: 1,
             height,
@@ -70,6 +70,7 @@ fn make_vertex(
         coinbase,
         transactions: txs,
     };
+    block.header.merkle_root = block.compute_merkle_root();
     let mut vertex = DagVertex::new(
         block,
         parents,
@@ -99,7 +100,7 @@ fn make_vertex_with_reward(
         amount: 0,
         height,
     };
-    let block = Block {
+    let mut block = Block {
         header: BlockHeader {
             version: 1,
             height,
@@ -110,6 +111,7 @@ fn make_vertex_with_reward(
         coinbase,
         transactions: txs,
     };
+    block.header.merkle_root = block.compute_merkle_root();
     let mut vertex = DagVertex::new(
         block,
         parents,

@@ -58,6 +58,7 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
 
 export async function connectToNode(): Promise<boolean> {
   const nodes = currentNetwork === 'mainnet' ? MAINNET_NODES : TESTNET_NODES;
+
   // Race all nodes in parallel — first healthy response wins
   try {
     const winner = await Promise.any(

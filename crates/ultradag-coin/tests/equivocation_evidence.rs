@@ -30,6 +30,7 @@ fn make_vertex(nonce: u64, round: u64, parents: Vec<[u8; 32]>, sk: &SecretKey) -
     };
     // Add nonce to make vertices unique (small offset to keep within validation window)
     block.header.timestamp += (nonce % 10) as i64;
+    block.header.merkle_root = block.compute_merkle_root();
 
     let validator = sk.address();
     let pub_key = sk.verifying_key().to_bytes();

@@ -9,6 +9,7 @@ import {
   Search,
   Activity,
   ArrowRightLeft,
+  KeyRound,
   X,
 } from 'lucide-react';
 
@@ -77,6 +78,7 @@ const sections: { label?: string; items: NavItem[] }[] = [
     items: [
       { to: '/wallet', icon: Wallet, label: 'Wallets' },
       { to: '/wallet/send', icon: SendIcon, label: 'Send & Receive' },
+      { to: '/smart-account', icon: KeyRound, label: 'SmartAccount' },
     ],
   },
   {

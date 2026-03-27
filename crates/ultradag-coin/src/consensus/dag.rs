@@ -73,6 +73,8 @@ pub enum DagInsertError {
     InvalidSignature,
     /// Vertex has a non-zero coinbase amount (must be 0 — rewards are protocol-distributed).
     InvalidCoinbase,
+    /// Vertex's merkle_root does not match the computed merkle root of its transactions.
+    InvalidMerkleRoot,
 }
 
 /// Maximum number of parent references allowed per DagVertex.
@@ -252,12 +254,26 @@ impl BlockDag {
 
         // CRITICAL: Verify all parents exist before inserting.
         // The zero hash [0u8; 32] is the sentinel genesis parent for round-1 vertices.
+        // Parents below pruning_floor are accepted — they were pruned because they are
+        // deeply finalized. This is important for CheckpointSync suffix replay where
+        // suffix vertices may reference parents from pruned rounds.
         let genesis_parent: [u8; 32] = [0u8; 32];
         for parent in &vertex.parent_hashes {
-            if *parent != genesis_parent && !self.vertices.contains_key(parent) {
-                // Reject vertex with non-existent parent to prevent DAG corruption
-                return false;
+            if *parent == genesis_parent {
+                continue;
             }
+            if self.vertices.contains_key(parent) {
+                continue;
+            }
+            // Accept parent if vertex claims a round at or near the pruning floor —
+            // the parent was likely pruned. We can't verify the exact parent round
+            // (it's been pruned), but vertices with round <= pruning_floor + 1 can
+            // legitimately reference pruned parents.
+            if self.pruning_floor > 0 && vertex.round <= self.pruning_floor + MAX_FUTURE_ROUNDS as u64 {
+                continue;
+            }
+            // Parent truly missing (not pruned) — reject to prevent DAG corruption
+            return false;
         }
 
         // CRITICAL: Reject vertices claiming rounds too far in the future
@@ -425,6 +441,16 @@ impl BlockDag {
         // but fails at apply_vertex_with_validators, permanently halting finality.
         if vertex.block.coinbase.amount != 0 {
             return Err(DagInsertError::InvalidCoinbase);
+        }
+
+        // Verify merkle root matches computed merkle root of transactions.
+        // Without this check, a Byzantine validator could publish a vertex where the
+        // transactions don't match the claimed merkle_root, making future SPV/light-client
+        // proofs unsound. Full nodes process transactions directly so consensus isn't broken,
+        // but any bridge or light client relying on merkle proofs would be exploitable.
+        let computed_root = vertex.block.compute_merkle_root();
+        if computed_root != vertex.block.header.merkle_root {
+            return Err(DagInsertError::InvalidMerkleRoot);
         }
 
         // Check for missing parents before inserting
@@ -1104,7 +1130,7 @@ mod tests {
         sk: &SecretKey,
     ) -> DagVertex {
         let validator = sk.address();
-        let block = Block {
+        let mut block = Block {
             header: BlockHeader {
                 version: 1,
                 height: 0,
@@ -1114,11 +1140,12 @@ mod tests {
             },
             coinbase: CoinbaseTx {
                 to: validator,
-                amount: 5_000_000_000,
+                amount: 0,
                 height: 0,
             },
             transactions: vec![],
         };
+        block.header.merkle_root = block.compute_merkle_root();
         let mut v = DagVertex::new(block, parents, round, validator, sk.verifying_key().to_bytes(), Signature([0u8; 64]));
         v.signature = sk.sign(&v.signable_bytes());
         v

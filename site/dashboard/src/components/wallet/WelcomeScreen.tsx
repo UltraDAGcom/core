@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, memo } from 'react';
 import { Plus, Key, ChevronRight, Shield, Zap, Globe, ArrowRight, Eye, EyeOff, Copy, Check, Fingerprint, Lock, Sparkles, Wallet, ArrowDown, Download, TestTube, Rocket, AlertTriangle, Trash2, RefreshCw, Timer } from 'lucide-react';
 import { deriveAddress } from '../../lib/keygen';
 import { generateWithMnemonic, mnemonicToKeypair, isValidMnemonic } from '../../lib/mnemonic';
+import { PasskeyOnboarding } from './PasskeyOnboarding';
 import type { NetworkType } from '../../lib/api';
 
 // ─── Props & Types ───────────────────────────────────────────────────────────
@@ -126,6 +127,7 @@ export function WelcomeScreen({
     : (hasExisting ? 'unlock' : 'landing');
 
   const [step, setStep] = useState<Step>(initialStep);
+  const [showAdvancedCreate, setShowAdvancedCreate] = useState(false);
 
   // Form state
   const [password, setPassword] = useState('');
@@ -377,16 +379,33 @@ export function WelcomeScreen({
   // LANDING
   // ═══════════════════════════════════════════════════════════════════════════
   if (step === 'landing') {
+    // Primary flow: Passkey-first onboarding (fingerprint → username → done)
+    if (!showAdvancedCreate) {
+      return (
+        <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
+          <PasskeyOnboarding
+            onComplete={(_address, _name) => {
+              // PasskeyOnboarding already saved to passkey-wallet.ts via savePasskeyWallet().
+              // Just close the onboarding overlay — App.tsx will detect pk.unlocked and show dashboard.
+              onFinishOnboarding?.();
+            }}
+            onFallbackToAdvanced={() => setShowAdvancedCreate(true)}
+          />
+        </div>
+      );
+    }
+
+    // Advanced flow: traditional Ed25519 seed phrase / import
     return (
       <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
         <div className="max-w-lg w-full space-y-8">
           <div className="text-center space-y-3">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-dag-accent to-purple-500 flex items-center justify-center mx-auto shadow-lg shadow-dag-accent/20">
-              <Zap className="w-8 h-8 text-white" />
+              <Key className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-white">Welcome to UltraDAG</h1>
+            <h1 className="text-3xl font-bold text-white">Advanced Setup</h1>
             <p className="text-dag-muted text-sm max-w-sm mx-auto">
-              The fast, lightweight network for instant payments.
+              Create or import a wallet using a traditional private key.
             </p>
           </div>
 
@@ -424,18 +443,11 @@ export function WelcomeScreen({
             </button>
           </div>
 
-          <div className="grid grid-cols-3 gap-3 pt-2">
-            {[
-              { icon: Shield, color: 'text-dag-green', label: 'Encrypted locally' },
-              { icon: Globe, color: 'text-dag-accent', label: 'You hold the keys' },
-              { icon: Zap, color: 'text-dag-yellow', label: 'No account needed' },
-            ].map(({ icon: Icon, color, label }) => (
-              <div key={label} className="text-center p-3 rounded-lg bg-slate-800/30 border border-slate-800">
-                <Icon className={`w-4 h-4 ${color} mx-auto mb-1.5`} />
-                <p className="text-[10px] text-dag-muted">{label}</p>
-              </div>
-            ))}
-          </div>
+          <button onClick={() => setShowAdvancedCreate(false)}
+            className="w-full text-center text-sm text-dag-accent hover:text-dag-accent/80 transition-colors py-2">
+            <Fingerprint className="w-4 h-4 inline mr-1" />
+            Back to passkey setup
+          </button>
 
           <button onClick={() => goTo('restore')} className="w-full text-center text-xs text-slate-500 hover:text-slate-300 transition-colors py-2">
             Restore from backup file
@@ -450,6 +462,76 @@ export function WelcomeScreen({
   // ═══════════════════════════════════════════════════════════════════════════
   if (step === 'unlock') {
     const isLocked = lockCountdown > 0;
+    const isPasskeyWallet = !!localStorage.getItem('ultradag_passkey');
+
+    // Passkey wallet: show biometric unlock instead of password
+    if (isPasskeyWallet) {
+      return (
+        <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
+          <div className="max-w-md w-full space-y-6 text-center">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-dag-accent to-purple-500 flex items-center justify-center mx-auto shadow-lg shadow-dag-accent/20">
+              <Fingerprint className="w-10 h-10 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold text-white">Welcome Back</h1>
+            <p className="text-dag-muted text-sm">Verify your identity to unlock</p>
+
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-red-400 text-sm">
+                {error}
+              </div>
+            )}
+
+            <button
+              onClick={async () => {
+                setError(''); setLoading(true);
+                try {
+                  const passkeyRaw = localStorage.getItem('ultradag_passkey');
+                  const passkey = passkeyRaw ? JSON.parse(passkeyRaw) : null;
+                  if (!passkey?.credentialId) throw new Error('No passkey found');
+
+                  // Trigger biometric verification via WebAuthn
+                  // Use discoverable credential (no allowCredentials) so the browser
+                  // shows the passkey picker — works regardless of credential ID encoding
+                  const challenge = crypto.getRandomValues(new Uint8Array(32));
+                  const credential = await navigator.credentials.get({
+                    publicKey: {
+                      challenge,
+                      rpId: window.location.hostname,
+                      userVerification: 'required',
+                      timeout: 60000,
+                    },
+                  });
+
+                  if (!credential) {
+                    setError('Biometric verification cancelled.');
+                    return;
+                  }
+
+                  // Biometric verified — unlock the keystore with placeholder password
+                  const ok = await onUnlock('passkey-wallet');
+                  if (!ok) setError('Failed to unlock wallet.');
+                } catch (e: unknown) {
+                  const msg = e instanceof Error ? e.message : 'Verification failed';
+                  setError(msg);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              disabled={loading}
+              className="w-full py-4 rounded-xl bg-gradient-to-r from-dag-accent to-purple-500 text-white font-semibold text-lg hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+            >
+              <Fingerprint className="w-6 h-6" />
+              {loading ? 'Verifying...' : 'Unlock with Biometrics'}
+            </button>
+
+            <button onClick={() => { if (onResetWallet) onResetWallet(); }} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
+              Start Fresh
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
         <div className="max-w-md w-full space-y-6">

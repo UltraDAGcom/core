@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Camera } from 'lucide-react';
-import { postTx, postFaucet, formatUdag, shortAddr, fullAddr, prettyAddr, isValidAddress, normalizeAddress } from '../lib/api.ts';
+import { Camera, Fingerprint } from 'lucide-react';
+import { postTx, postFaucet, formatUdag, shortAddr, fullAddr, prettyAddr, isValidAddress, normalizeAddress, getNodeUrl } from '../lib/api.ts';
+import { isPasskeyWallet, getPasskeyInfo, signAndSubmitWithPasskey } from '../lib/webauthn-sign.ts';
 import { Card } from '../components/shared/Card.tsx';
 import { WalletSelector } from '../components/shared/WalletSelector.tsx';
 import { CopyButton } from '../components/shared/CopyButton.tsx';
@@ -70,16 +71,34 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
 
     setLoading(true);
     try {
-      const body: Record<string, unknown> = {
-        secret_key: wallet.secret_key,
-        to: normalizeAddress(to.trim()),
-        amount: sats,
-        fee: feeSats,
-      };
-      if (memo.trim()) {
-        body.memo = memo.trim();
+      // Check if this is a passkey wallet — use WebAuthn signing
+      const passkey = getPasskeyInfo();
+      if (passkey && wallet.address === passkey.address) {
+        // Fetch current nonce
+        const balRes = await fetch(`${getNodeUrl()}/balance/${wallet.address}`, { signal: AbortSignal.timeout(5000) });
+        const balData = await balRes.json();
+        const nonce = balData.nonce ?? 0;
+
+        await signAndSubmitWithPasskey(
+          normalizeAddress(to.trim()),
+          sats,
+          feeSats,
+          nonce,
+          memo.trim() || undefined,
+        );
+      } else {
+        // Traditional Ed25519 signing via testnet endpoint
+        const body: Record<string, unknown> = {
+          secret_key: wallet.secret_key,
+          to: normalizeAddress(to.trim()),
+          amount: sats,
+          fee: feeSats,
+        };
+        if (memo.trim()) {
+          body.memo = memo.trim();
+        }
+        await postTx(body);
       }
-      await postTx(body);
       const msg = `Sent ${formatUdag(sats)} UDAG to ${shortAddr(to)}`;
       setSuccess(msg);
       toast(msg, 'success');

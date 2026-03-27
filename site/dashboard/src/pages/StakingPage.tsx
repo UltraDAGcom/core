@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Coins, TrendingUp, Shield, ChevronDown, ChevronUp, Server, ExternalLink } from 'lucide-react';
 import { getValidators, getStake, getDelegation, formatUdag, shortAddr, postDelegate, postUndelegate } from '../lib/api';
 import { useKeystore } from '../hooks/useKeystore';
+import { hasPasskeyWallet } from '../lib/passkey-wallet';
 import { Card } from '../components/shared/Card';
 import { ValidatorCard } from '../components/staking/ValidatorCard';
 import { Pagination } from '../components/shared/Pagination';
@@ -118,6 +119,9 @@ export function StakingPage() {
     setStakeError('');
     setStakeSuccess('');
     try {
+      if (hasPasskeyWallet() && !wallet.secret_key) {
+        throw new Error('Staking with passkey wallet requires an Ed25519 key. Add an Ed25519 key via SmartAccount settings, or use the Advanced wallet setup.');
+      }
       await postDelegate({ secret_key: wallet.secret_key, validator: targetValidator, amount: sats });
       setStakeSuccess(`${amount} UDAG staked successfully!`);
       setAmount('');
@@ -136,6 +140,9 @@ export function StakingPage() {
     setUndelegateLoading(walletAddr);
     setUndelegateError('');
     try {
+      if (hasPasskeyWallet() && !wallet.secret_key) {
+        throw new Error('Undelegation with passkey wallet requires an Ed25519 key.');
+      }
       await postUndelegate({ secret_key: wallet.secret_key });
       refresh();
     } catch (e: unknown) {

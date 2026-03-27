@@ -82,6 +82,21 @@ pub struct StateSnapshot {
     /// Idempotency guard to prevent double-slashing the same (validator, round) pair.
     #[serde(default)]
     pub slashed_events: Vec<(crate::address::Address, u64)>,
+    /// SmartAccount configurations: (address, config) pairs.
+    #[serde(default)]
+    pub smart_accounts: Vec<(crate::address::Address, crate::tx::smart_account::SmartAccountConfig)>,
+    /// Name registry: name → address.
+    #[serde(default)]
+    pub name_to_address: Vec<(String, crate::address::Address)>,
+    /// Name expiry: name → expiry round.
+    #[serde(default)]
+    pub name_expiry: Vec<(String, u64)>,
+    /// Name creation: name → creation round.
+    #[serde(default)]
+    pub name_created_at: Vec<(String, u64)>,
+    /// Name profiles: name → profile data.
+    #[serde(default)]
+    pub name_profiles: Vec<(String, crate::tx::name_registry::NameProfile)>,
 }
 
 impl StateSnapshot {

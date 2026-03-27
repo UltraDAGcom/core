@@ -1,0 +1,349 @@
+use serde::{Deserialize, Serialize};
+
+use crate::address::{Address, Signature};
+use crate::constants::COIN;
+
+// ────────────────────────────────────────────────────────────
+// Constants
+// ────────────────────────────────────────────────────────────
+
+/// Minimum name length (inclusive).
+pub const MIN_NAME_LENGTH: usize = 3;
+
+/// Maximum name length (inclusive).
+pub const MAX_NAME_LENGTH: usize = 20;
+
+/// Rounds per year (~365.25 days at 5s rounds).
+pub const ROUNDS_PER_YEAR: u64 = 6_307_200;
+
+/// Grace period after expiration (30 days in rounds).
+pub const NAME_GRACE_PERIOD_ROUNDS: u64 = 518_400;
+
+/// Maximum years for a single registration or renewal.
+pub const MAX_REGISTRATION_YEARS: u8 = 5;
+
+/// Maximum number of external addresses in a profile.
+pub const MAX_PROFILE_EXTERNAL_ADDRESSES: usize = 10;
+
+/// Maximum number of metadata entries in a profile.
+pub const MAX_PROFILE_METADATA: usize = 10;
+
+/// Maximum length for profile metadata keys.
+pub const MAX_PROFILE_KEY_BYTES: usize = 32;
+
+/// Maximum length for profile metadata values.
+pub const MAX_PROFILE_VALUE_BYTES: usize = 256;
+
+/// Reserved names that cannot be registered.
+const RESERVED_NAMES: &[&str] = &[
+    "admin", "system", "null", "bridge", "treasury", "ultradag",
+    "validator", "council", "governance", "faucet", "genesis",
+    "root", "mod", "moderator", "support", "help", "info",
+];
+
+// ────────────────────────────────────────────────────────────
+// Pricing
+// ────────────────────────────────────────────────────────────
+
+/// Compute the annual registration/renewal fee for a name based on length.
+/// Standard names (6+ chars) are FREE — no barrier to onboarding.
+/// Premium short names (3-5 chars) have fees to prevent squatting.
+/// All fees go to the DAO treasury.
+pub fn name_annual_fee(name: &str) -> u64 {
+    match name.len() {
+        3 => 1_000 * COIN,        // 1,000 UDAG — premium 3-char
+        4 => 500 * COIN,          // 500 UDAG — premium 4-char
+        5 => 100 * COIN,          // 100 UDAG — premium 5-char
+        6..=20 => 0,              // FREE — standard names, no barrier to onboarding
+        _ => u64::MAX,            // Invalid length — will be rejected by validation
+    }
+}
+
+// ────────────────────────────────────────────────────────────
+// Validation
+// ────────────────────────────────────────────────────────────
+
+/// Validate a name string. Returns Ok(()) or Err with reason.
+pub fn validate_name(name: &str) -> Result<(), &'static str> {
+    if name.len() < MIN_NAME_LENGTH {
+        return Err("name too short (minimum 3 characters)");
+    }
+    if name.len() > MAX_NAME_LENGTH {
+        return Err("name too long (maximum 20 characters)");
+    }
+    if name.starts_with('-') || name.ends_with('-') {
+        return Err("name cannot start or end with a hyphen");
+    }
+    if name.contains("--") {
+        return Err("name cannot contain consecutive hyphens");
+    }
+    if !name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+        return Err("name can only contain lowercase letters, numbers, and hyphens");
+    }
+    if RESERVED_NAMES.contains(&name) {
+        return Err("name is reserved");
+    }
+    Ok(())
+}
+
+// ────────────────────────────────────────────────────────────
+// Data structures
+// ────────────────────────────────────────────────────────────
+
+/// Optional profile data associated with a name.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NameProfile {
+    /// Cross-chain addresses: ("eth", "0xabc..."), ("btc", "bc1..."), etc.
+    pub external_addresses: Vec<(String, String)>,
+    /// Public metadata: ("website", "https://..."), ("avatar", "https://..."), etc.
+    pub metadata: Vec<(String, String)>,
+}
+
+impl Default for NameProfile {
+    fn default() -> Self {
+        Self {
+            external_addresses: Vec::new(),
+            metadata: Vec::new(),
+        }
+    }
+}
+
+// ────────────────────────────────────────────────────────────
+// Transaction types
+// ────────────────────────────────────────────────────────────
+
+/// Register a name for your address. Fee: tiered by name length (paid to treasury).
+/// When `fee_payer` is present, the fee is paid by the fee_payer (sponsored registration).
+/// The sender (`from`) still owns the name — the fee_payer just pays.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterNameTx {
+    pub from: Address,
+    pub name: String,
+    pub duration_years: u8,
+    /// Fee must be >= name_annual_fee(name) * duration_years.
+    pub fee: u64,
+    pub nonce: u64,
+    pub pub_key: [u8; 32],
+    pub signature: Signature,
+    /// Optional: third-party fee payer. When present, fee is debited from fee_payer
+    /// instead of from. Enables relay-sponsored name registration for new users.
+    #[serde(default)]
+    pub fee_payer: Option<crate::tx::smart_account::FeePayer>,
+}
+
+impl RegisterNameTx {
+    pub fn signable_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(crate::constants::NETWORK_ID);
+        buf.extend_from_slice(b"name_register");
+        buf.extend_from_slice(&self.from.0);
+        buf.extend_from_slice(&(self.name.len() as u32).to_le_bytes());
+        buf.extend_from_slice(self.name.as_bytes());
+        buf.extend_from_slice(&[self.duration_years]);
+        buf.extend_from_slice(&self.fee.to_le_bytes());
+        buf.extend_from_slice(&self.nonce.to_le_bytes());
+        buf
+    }
+
+    pub fn hash(&self) -> [u8; 32] { *blake3::hash(&self.signable_bytes()).as_bytes() }
+    pub fn total_cost(&self) -> u64 { self.fee }
+
+    pub fn verify_signature(&self) -> bool {
+        // Sponsored registration: fee_payer's signature is the authorization.
+        // The sender (name owner) doesn't need to sign — they authorized via the relay.
+        // Fee payer signature is verified in StateEngine::apply_register_name_tx.
+        if self.fee_payer.is_some() {
+            return true;
+        }
+        let expected_addr = Address::from_pubkey(&self.pub_key);
+        if expected_addr != self.from { return false; }
+        let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(&self.pub_key) else { return false; };
+        let sig = ed25519_dalek::Signature::from_bytes(&self.signature.0);
+        vk.verify_strict(&self.signable_bytes(), &sig).is_ok()
+    }
+}
+
+/// Renew an existing name registration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RenewNameTx {
+    pub from: Address,
+    pub name: String,
+    pub additional_years: u8,
+    pub fee: u64,
+    pub nonce: u64,
+    pub pub_key: [u8; 32],
+    pub signature: Signature,
+}
+
+impl RenewNameTx {
+    pub fn signable_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(crate::constants::NETWORK_ID);
+        buf.extend_from_slice(b"name_renew");
+        buf.extend_from_slice(&self.from.0);
+        buf.extend_from_slice(&(self.name.len() as u32).to_le_bytes());
+        buf.extend_from_slice(self.name.as_bytes());
+        buf.extend_from_slice(&[self.additional_years]);
+        buf.extend_from_slice(&self.fee.to_le_bytes());
+        buf.extend_from_slice(&self.nonce.to_le_bytes());
+        buf
+    }
+
+    pub fn hash(&self) -> [u8; 32] { *blake3::hash(&self.signable_bytes()).as_bytes() }
+    pub fn total_cost(&self) -> u64 { self.fee }
+
+    pub fn verify_signature(&self) -> bool {
+        let expected_addr = Address::from_pubkey(&self.pub_key);
+        if expected_addr != self.from { return false; }
+        let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(&self.pub_key) else { return false; };
+        let sig = ed25519_dalek::Signature::from_bytes(&self.signature.0);
+        vk.verify_strict(&self.signable_bytes(), &sig).is_ok()
+    }
+}
+
+/// Transfer a name to a different address.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransferNameTx {
+    pub from: Address,
+    pub name: String,
+    pub new_owner: Address,
+    pub fee: u64,
+    pub nonce: u64,
+    pub pub_key: [u8; 32],
+    pub signature: Signature,
+}
+
+impl TransferNameTx {
+    pub fn signable_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(crate::constants::NETWORK_ID);
+        buf.extend_from_slice(b"name_transfer");
+        buf.extend_from_slice(&self.from.0);
+        buf.extend_from_slice(&(self.name.len() as u32).to_le_bytes());
+        buf.extend_from_slice(self.name.as_bytes());
+        buf.extend_from_slice(&self.new_owner.0);
+        buf.extend_from_slice(&self.fee.to_le_bytes());
+        buf.extend_from_slice(&self.nonce.to_le_bytes());
+        buf
+    }
+
+    pub fn hash(&self) -> [u8; 32] { *blake3::hash(&self.signable_bytes()).as_bytes() }
+    pub fn total_cost(&self) -> u64 { self.fee }
+
+    pub fn verify_signature(&self) -> bool {
+        let expected_addr = Address::from_pubkey(&self.pub_key);
+        if expected_addr != self.from { return false; }
+        let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(&self.pub_key) else { return false; };
+        let sig = ed25519_dalek::Signature::from_bytes(&self.signature.0);
+        vk.verify_strict(&self.signable_bytes(), &sig).is_ok()
+    }
+}
+
+/// Update cross-chain profile data for a name.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateProfileTx {
+    pub from: Address,
+    pub name: String,
+    pub external_addresses: Vec<(String, String)>,
+    pub metadata: Vec<(String, String)>,
+    pub fee: u64,
+    pub nonce: u64,
+    pub pub_key: [u8; 32],
+    pub signature: Signature,
+}
+
+impl UpdateProfileTx {
+    pub fn signable_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(crate::constants::NETWORK_ID);
+        buf.extend_from_slice(b"name_update_profile");
+        buf.extend_from_slice(&self.from.0);
+        buf.extend_from_slice(&(self.name.len() as u32).to_le_bytes());
+        buf.extend_from_slice(self.name.as_bytes());
+        buf.extend_from_slice(&(self.external_addresses.len() as u32).to_le_bytes());
+        for (chain, addr) in &self.external_addresses {
+            buf.extend_from_slice(&(chain.len() as u32).to_le_bytes());
+            buf.extend_from_slice(chain.as_bytes());
+            buf.extend_from_slice(&(addr.len() as u32).to_le_bytes());
+            buf.extend_from_slice(addr.as_bytes());
+        }
+        buf.extend_from_slice(&(self.metadata.len() as u32).to_le_bytes());
+        for (key, val) in &self.metadata {
+            buf.extend_from_slice(&(key.len() as u32).to_le_bytes());
+            buf.extend_from_slice(key.as_bytes());
+            buf.extend_from_slice(&(val.len() as u32).to_le_bytes());
+            buf.extend_from_slice(val.as_bytes());
+        }
+        buf.extend_from_slice(&self.fee.to_le_bytes());
+        buf.extend_from_slice(&self.nonce.to_le_bytes());
+        buf
+    }
+
+    pub fn hash(&self) -> [u8; 32] { *blake3::hash(&self.signable_bytes()).as_bytes() }
+    pub fn total_cost(&self) -> u64 { self.fee }
+
+    pub fn verify_signature(&self) -> bool {
+        let expected_addr = Address::from_pubkey(&self.pub_key);
+        if expected_addr != self.from { return false; }
+        let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(&self.pub_key) else { return false; };
+        let sig = ed25519_dalek::Signature::from_bytes(&self.signature.0);
+        vk.verify_strict(&self.signable_bytes(), &sig).is_ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_name_valid() {
+        assert!(validate_name("alice").is_ok());
+        assert!(validate_name("john29").is_ok());
+        assert!(validate_name("coffee-shop").is_ok());
+        assert!(validate_name("abc").is_ok());
+        assert!(validate_name("a1b2c3d4e5f6g7h8i9j0").is_ok()); // 20 chars
+    }
+
+    #[test]
+    fn test_validate_name_invalid() {
+        assert_eq!(validate_name("ab"), Err("name too short (minimum 3 characters)"));
+        assert_eq!(validate_name("A"), Err("name too short (minimum 3 characters)"));
+        assert!(validate_name("ABC").is_err()); // uppercase
+        assert!(validate_name("-test").is_err()); // starts with hyphen
+        assert!(validate_name("test-").is_err()); // ends with hyphen
+        assert!(validate_name("te--st").is_err()); // consecutive hyphens
+        assert!(validate_name("te st").is_err()); // space
+        assert!(validate_name("admin").is_err()); // reserved
+        assert!(validate_name("treasury").is_err()); // reserved
+        let long = "a".repeat(21);
+        assert!(validate_name(&long).is_err()); // too long
+    }
+
+    #[test]
+    fn test_name_annual_fee_tiers() {
+        assert_eq!(name_annual_fee("abc"), 1_000 * COIN);      // 3 chars — premium
+        assert_eq!(name_annual_fee("john"), 500 * COIN);        // 4 chars — premium
+        assert_eq!(name_annual_fee("alice"), 100 * COIN);       // 5 chars — premium
+        assert_eq!(name_annual_fee("john29"), 0);                // 6 chars — FREE
+        assert_eq!(name_annual_fee("coffeeshop"), 0);            // 10 chars — FREE
+        assert_eq!(name_annual_fee("coffeeshopnyc"), 0);         // 13 chars — FREE
+    }
+
+    #[test]
+    fn test_register_name_tx_sign_verify() {
+        use crate::address::SecretKey;
+        let sk = SecretKey::from_bytes([0x42; 32]);
+        let mut tx = RegisterNameTx {
+            from: sk.address(),
+            name: "alice".to_string(),
+            duration_years: 1,
+            fee: 100 * COIN,
+            nonce: 0,
+            pub_key: sk.verifying_key().to_bytes(),
+            signature: Signature([0u8; 64]),
+            fee_payer: None,
+        };
+        tx.signature = sk.sign(&tx.signable_bytes());
+        assert!(tx.verify_signature());
+    }
+}

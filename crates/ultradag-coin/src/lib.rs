@@ -49,6 +49,13 @@
 //! - **Supply Invariant**: `liquid + staked + delegated + treasury + bridge == total_supply`
 //! - **No Double Spend**: Equivocation detected in O(1) via validator_round_vertex index
 
+// Prevent accidental mainnet builds with simulator feature enabled.
+// The simulator feature disables timestamp validation entirely, which would
+// allow timestamp manipulation attacks on a production network.
+#[cfg(all(feature = "simulator", feature = "mainnet"))]
+compile_error!("The `simulator` and `mainnet` features are mutually exclusive. \
+    The simulator feature disables timestamp validation, which is unsafe for mainnet.");
+
 pub mod address;
 pub mod block;
 pub mod bridge;
@@ -71,4 +78,4 @@ pub use constants::{FAUCET_PREFUND_SATS, FAUCET_SEED, faucet_keypair};
 pub use error::CoinError;
 pub use block_producer::create_block;
 pub use state::{StateEngine, TxLocation};
-pub use tx::{CoinbaseTx, Mempool, Transaction, TransferTx, StakeTx, UnstakeTx, DelegateTx, UndelegateTx, SetCommissionTx, BridgeDepositTx, MIN_STAKE_SATS, UNSTAKE_COOLDOWN_ROUNDS};
+pub use tx::{CoinbaseTx, Mempool, Transaction, TransferTx, StakeTx, UnstakeTx, DelegateTx, UndelegateTx, SetCommissionTx, BridgeDepositTx, AddKeyTx, RemoveKeyTx, SmartTransferTx, SmartAccountConfig, AuthorizedKey, KeyType, MIN_STAKE_SATS, UNSTAKE_COOLDOWN_ROUNDS};

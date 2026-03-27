@@ -12,6 +12,18 @@ use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tracing::{error, info, warn};
 
+/// Resolve an address string: tries hex, bech32, then name registry lookup.
+/// This enables all RPC endpoints to accept human-readable names like "john29"
+/// in addition to hex/bech32 addresses.
+fn resolve_address(s: &str, state: &ultradag_coin::StateEngine) -> Option<ultradag_coin::Address> {
+    // Fast path: hex (40 chars) or bech32
+    if let Some(addr) = ultradag_coin::Address::parse(s) {
+        return Some(addr);
+    }
+    // Name registry lookup
+    state.resolve_name(s)
+}
+
 /// Timeout for RPC lock acquisition — prevents blocking when P2P sync holds write locks.
 /// Set to 60 seconds to handle slow sync operations without spurious 503 errors.
 const RPC_LOCK_TIMEOUT: Duration = Duration::from_secs(60);
@@ -337,6 +349,18 @@ struct BalanceResponse {
     delegated_to_bech32: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     delegation_unlock_at_round: Option<u64>,
+    // SmartAccount fields
+    is_smart_account: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    authorized_key_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    has_recovery: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    has_policy: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pending_vault_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -580,8 +604,10 @@ async fn handle_request(
         client_ip
     };
 
-    // Check global rate limit
-    if !rate_limiter.check_rate_limit(client_ip, limits::GLOBAL) {
+    // Check global rate limit — exempt read-only health/status/balance endpoints
+    // that the dashboard polls frequently during development
+    let is_read_only = method == Method::GET;
+    if !is_read_only && !rate_limiter.check_rate_limit(client_ip, limits::GLOBAL) {
         return Ok(error_response(
             StatusCode::TOO_MANY_REQUESTS,
             "rate limit exceeded: too many requests",
@@ -909,17 +935,19 @@ ultradag_banned_ips {ban_count}
             json_response(StatusCode::OK, &status)
         }
 
-        (&Method::GET, ["balance", addr_hex]) => {
-            let Some(addr) = Address::parse(addr_hex) else {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address: expected 40-char hex or bech32m (udag1.../tudg1...)"));
-            };
+        (&Method::GET, ["balance", addr_str]) => {
             let state = read_lock_or_503!(server.state);
+            let Some(addr) = resolve_address(addr_str, &state) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address or name: expected hex, bech32m, or registered name"));
+            };
             let balance = state.balance(&addr);
             let nonce = state.nonce(&addr);
             let staked = state.stake_of(&addr);
             let unlock_at = state.stake_account(&addr).and_then(|s| s.unlock_at_round);
             let is_council = state.is_council_member(&addr);
             let delegation = state.delegation_account(&addr);
+            let smart = state.smart_account(&addr);
+            let name = state.reverse_name(&addr).map(|s| s.to_string());
             json_response(
                 StatusCode::OK,
                 &BalanceResponse {
@@ -937,6 +965,12 @@ ultradag_banned_ips {ban_count}
                     delegated_to: delegation.map(|d| d.validator.to_hex()),
                     delegated_to_bech32: delegation.map(|d| d.validator.to_bech32()),
                     delegation_unlock_at_round: delegation.and_then(|d| d.unlock_at_round),
+                    is_smart_account: smart.is_some(),
+                    authorized_key_count: smart.map(|s| s.authorized_keys.len()),
+                    has_recovery: smart.map(|s| s.recovery.is_some()),
+                    has_policy: smart.map(|s| s.policy.is_some()),
+                    pending_vault_count: smart.map(|s| s.pending_vault_transfers.len()),
+                    name,
                 },
             )
         }
@@ -1231,6 +1265,89 @@ ultradag_banned_ips {ban_count}
                         "deposit_nonce": t.deposit_nonce,
                         "nonce": t.nonce,
                     }),
+                    Transaction::AddKey(t) => serde_json::json!({
+                        "type": "add_key",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "fee": t.fee,
+                        "nonce": t.nonce,
+                        "new_key_label": t.new_key.label,
+                    }),
+                    Transaction::RemoveKey(t) => serde_json::json!({
+                        "type": "remove_key",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "nonce": t.nonce,
+                    }),
+                    Transaction::SmartTransfer(t) => serde_json::json!({
+                        "type": "smart_transfer",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "to": t.to.to_hex(),
+                        "amount": t.amount,
+                        "fee": t.fee,
+                        "nonce": t.nonce,
+                    }),
+                    Transaction::SetRecovery(t) => serde_json::json!({
+                        "type": "set_recovery",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "guardian_count": t.guardians.len(),
+                        "threshold": t.threshold,
+                    }),
+                    Transaction::RecoverAccount(t) => serde_json::json!({
+                        "type": "recover_account",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "target": t.target_account.to_hex(),
+                    }),
+                    Transaction::CancelRecovery(t) => serde_json::json!({
+                        "type": "cancel_recovery",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                    }),
+                    Transaction::SetPolicy(t) => serde_json::json!({
+                        "type": "set_policy",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "fee": t.fee,
+                    }),
+                    Transaction::ExecuteVault(t) => serde_json::json!({
+                        "type": "execute_vault",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                    }),
+                    Transaction::CancelVault(t) => serde_json::json!({
+                        "type": "cancel_vault",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                    }),
+                    Transaction::RegisterName(t) => serde_json::json!({
+                        "type": "register_name",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "name": t.name,
+                        "fee": t.fee,
+                    }),
+                    Transaction::RenewName(t) => serde_json::json!({
+                        "type": "renew_name",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "name": t.name,
+                    }),
+                    Transaction::TransferName(t) => serde_json::json!({
+                        "type": "transfer_name",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "name": t.name,
+                        "new_owner": t.new_owner.to_hex(),
+                    }),
+                    Transaction::UpdateProfile(t) => serde_json::json!({
+                        "type": "update_profile",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "name": t.name,
+                    }),
                 }
             }).collect();
             json_response(StatusCode::OK, &txs)
@@ -1345,6 +1462,172 @@ ultradag_banned_ips {ban_count}
                     "nonce": nonce,
                 }),
             )
+            } // end #[cfg(not(feature = "mainnet"))]
+        }
+
+        // ====== Sponsored Account Creation Relay ======
+        // TESTNET ONLY: creates a SmartAccount on behalf of a new passkey user.
+        // Sends a small initial balance from the faucet and registers the P256 key + optional name.
+        (&Method::POST, ["relay", "create-account"]) => {
+            #[cfg(feature = "mainnet")]
+            {
+                return Ok(error_response(StatusCode::GONE, "relay disabled on mainnet"));
+            }
+            #[cfg(not(feature = "mainnet"))]
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE, "relay disabled on mainnet"));
+            }
+            #[cfg(not(feature = "mainnet"))] {
+            // Relay has its own generous rate limit (5/min) — separate from faucet
+            if !rate_limiter.check_rate_limit(client_ip, limits::STAKE) {
+                return Ok(error_response(StatusCode::TOO_MANY_REQUESTS, "rate limit exceeded"));
+            }
+
+            let body = req.collect().await?.to_bytes();
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large"));
+            }
+
+            #[derive(Deserialize)]
+            struct RelayCreateRequest {
+                /// P256 public key (hex-encoded compressed SEC1, 33 bytes = 66 hex chars)
+                p256_pubkey: String,
+                /// Optional: human-readable name to register
+                name: Option<String>,
+            }
+
+            let Ok(relay_req) = serde_json::from_slice::<RelayCreateRequest>(&body) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON: need {p256_pubkey, name?}"));
+            };
+
+            // Parse and validate P256 public key
+            let p256_bytes = match hex_decode(&relay_req.p256_pubkey) {
+                Some(b) if b.len() == 33 || b.len() == 65 => b,
+                _ => return Ok(error_response(StatusCode::BAD_REQUEST,
+                    "invalid p256_pubkey: expected 66 or 130 hex chars (compressed or uncompressed SEC1)")),
+            };
+
+            // Validate name if provided
+            if let Some(ref name) = relay_req.name {
+                if let Err(e) = ultradag_coin::tx::name_registry::validate_name(name) {
+                    return Ok(error_response(StatusCode::BAD_REQUEST, &format!("invalid name: {}", e)));
+                }
+            }
+
+            // Use faucet keypair as the relay sponsor
+            let faucet_sk = ultradag_coin::faucet_keypair();
+            let faucet_addr = faucet_sk.address();
+
+            // Create a new address for the user: derive from P256 pubkey
+            // Address = blake3("smart_account_p256" || p256_pubkey)[..20]
+            let user_addr = {
+                let mut hasher = blake3::Hasher::new();
+                hasher.update(b"smart_account_p256");
+                hasher.update(&p256_bytes);
+                let hash = hasher.finalize();
+                let mut addr = [0u8; 20];
+                addr.copy_from_slice(&hash.as_bytes()[..20]);
+                Address(addr)
+            };
+
+            // Fund the new account with 10 UDAG (enough for name registration + some transfers)
+            let fund_amount: u64 = 10 * ultradag_coin::COIN;
+            let fee = ultradag_coin::constants::MIN_FEE_SATS;
+
+            let mut txs_to_broadcast: Vec<Transaction> = Vec::new();
+
+            {
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
+
+                // Check faucet balance
+                let faucet_balance = state.balance(&faucet_addr);
+                let pending = pending_cost(&mp, &faucet_addr);
+                let total_needed = pending.saturating_add(fund_amount).saturating_add(fee);
+                if faucet_balance < total_needed {
+                    return Ok(error_response(StatusCode::BAD_REQUEST, "relay fund insufficient"));
+                }
+
+                // Check if name is available
+                if let Some(ref name) = relay_req.name {
+                    if state.resolve_name(name).is_some() {
+                        return Ok(error_response(StatusCode::CONFLICT,
+                            &format!("name '{}' is already taken", name)));
+                    }
+                }
+
+                // 1. Fund transfer: faucet → user_addr
+                let mut nonce = next_nonce(&state, &mp, &faucet_addr);
+                let mut transfer = TransferTx {
+                    from: faucet_addr,
+                    to: user_addr,
+                    amount: fund_amount,
+                    fee,
+                    nonce,
+                    pub_key: faucet_sk.verifying_key().to_bytes(),
+                    signature: ultradag_coin::Signature([0u8; 64]),
+                    memo: None,
+                };
+                transfer.signature = faucet_sk.sign(&transfer.signable_bytes());
+                let tx = Transaction::Transfer(transfer);
+                let _ = mp.insert(tx.clone());
+                txs_to_broadcast.push(tx);
+                nonce += 1;
+
+                // 2. Sponsored name registration: name owned by user, fee paid by relay
+                if let Some(ref name) = relay_req.name {
+                    let name_fee = ultradag_coin::tx::name_registry::name_annual_fee(name);
+
+                    // Build RegisterNameTx with fee_payer (sponsored)
+                    // from = user_addr (name owner), fee_payer = faucet (pays the fee)
+                    let user_nonce = 0u64; // New account, nonce starts at 0
+                    let mut reg_tx = ultradag_coin::tx::name_registry::RegisterNameTx {
+                        from: user_addr,
+                        name: name.clone(),
+                        duration_years: 1,
+                        fee: name_fee,
+                        nonce: user_nonce,
+                        pub_key: [0u8; 32], // User has no Ed25519 key (passkey wallet)
+                        signature: ultradag_coin::Signature([0u8; 64]), // No user signature needed for sponsored tx
+                        fee_payer: None, // Set below
+                    };
+
+                    // Fee payer signs the registration's signable_bytes
+                    let signable = reg_tx.signable_bytes();
+                    let fp_signature = faucet_sk.sign(&signable);
+                    reg_tx.fee_payer = Some(ultradag_coin::tx::smart_account::FeePayer {
+                        address: faucet_addr,
+                        pub_key: faucet_sk.verifying_key().to_bytes(),
+                        signature: fp_signature,
+                        nonce,
+                    });
+
+                    let tx = Transaction::RegisterName(reg_tx);
+                    let _ = mp.insert(tx.clone());
+                    txs_to_broadcast.push(tx);
+                }
+            }
+
+            // Broadcast funded transactions
+            for tx in &txs_to_broadcast {
+                server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+                let _ = server.tx_tx.send(tx.clone());
+            }
+
+            // Compute the key_id for the P256 key
+            let key_id = ultradag_coin::tx::smart_account::AuthorizedKey::compute_key_id(
+                ultradag_coin::KeyType::P256, &p256_bytes,
+            );
+
+            json_response(StatusCode::OK, &serde_json::json!({
+                "address": user_addr.to_hex(),
+                "address_bech32": user_addr.to_bech32(),
+                "funded_amount": fund_amount,
+                "funded_udag": fund_amount as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                "p256_key_id": hex_encode(&key_id),
+                "name": relay_req.name,
+                "note": "Account funded. Submit AddKeyTx to register your P256 key, then RegisterNameTx to claim your name.",
+            }))
             } // end #[cfg(not(feature = "mainnet"))]
         }
 
@@ -1538,10 +1821,10 @@ ultradag_banned_ips {ban_count}
         }
 
         (&Method::GET, ["stake", addr_hex]) => {
-            let Some(addr) = Address::parse(addr_hex) else {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address: expected 40-char hex or bech32m (udag1.../tudg1...)"));
-            };
             let state = read_lock_or_503!(server.state);
+            let Some(addr) = resolve_address(addr_hex, &state) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address or name"));
+            };
             let staked = state.stake_of(&addr);
             let stake_acct = state.stake_account(&addr);
             let unlock_at = stake_acct.and_then(|s| s.unlock_at_round);
@@ -2399,11 +2682,10 @@ ultradag_banned_ips {ban_count}
             let Ok(id) = id_str.parse::<u64>() else {
                 return Ok(error_response(StatusCode::BAD_REQUEST, "invalid proposal ID"));
             };
-            let Some(addr) = Address::parse(addr_hex) else {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address: expected 40-char hex or bech32m (udag1.../tudg1...)"));
-            };
-            
             let state = read_lock_or_503!(server.state);
+            let Some(addr) = resolve_address(addr_hex, &state) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address or name"));
+            };
             let vote = state.get_vote(id, &addr);
             
             json_response(StatusCode::OK, &serde_json::json!({
@@ -2468,6 +2750,19 @@ ultradag_banned_ips {ban_count}
                         Transaction::SetCommission(_) => "set_commission",
                         Transaction::BridgeDeposit(_) => "bridge_lock",
                         Transaction::BridgeRelease(_) => "bridge_release",
+                        Transaction::AddKey(_) => "add_key",
+                        Transaction::RemoveKey(_) => "remove_key",
+                        Transaction::SmartTransfer(_) => "smart_transfer",
+                        Transaction::SetRecovery(_) => "set_recovery",
+                        Transaction::RecoverAccount(_) => "recover_account",
+                        Transaction::CancelRecovery(_) => "cancel_recovery",
+                        Transaction::SetPolicy(_) => "set_policy",
+                        Transaction::ExecuteVault(_) => "execute_vault",
+                        Transaction::CancelVault(_) => "cancel_vault",
+                        Transaction::RegisterName(_) => "register_name",
+                        Transaction::RenewName(_) => "renew_name",
+                        Transaction::TransferName(_) => "transfer_name",
+                        Transaction::UpdateProfile(_) => "update_profile",
                     },
                     "from": tx.from().to_hex(),
                     "fee": tx.fee(),
@@ -2613,8 +2908,61 @@ ultradag_banned_ips {ban_count}
                             &format!("bridge release exceeds maximum: {} sats", ultradag_coin::constants::MAX_BRIDGE_AMOUNT_SATS)));
                     }
                 }
-                // Unstake, Undelegate — no amount/fee fields to validate
-                Transaction::Unstake(_) | Transaction::Undelegate(_) => {}
+                // Fee-exempt tx types — no amount/fee fields to validate
+                Transaction::Unstake(_) | Transaction::Undelegate(_) | Transaction::RemoveKey(_)
+                | Transaction::RecoverAccount(_) | Transaction::CancelRecovery(_)
+                | Transaction::ExecuteVault(_) | Transaction::CancelVault(_) => {}
+                Transaction::RegisterName(t) => {
+                    if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+                    }
+                }
+                Transaction::RenewName(t) => {
+                    if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+                    }
+                }
+                Transaction::TransferName(t) => {
+                    if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+                    }
+                }
+                Transaction::UpdateProfile(t) => {
+                    if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+                    }
+                }
+                Transaction::AddKey(t) => {
+                    if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+                    }
+                }
+                Transaction::SmartTransfer(t) => {
+                    if t.amount == 0 {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "transfer amount must be greater than 0"));
+                    }
+                    if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+                    }
+                }
+                Transaction::SetRecovery(t) => {
+                    if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+                    }
+                }
+                Transaction::SetPolicy(t) => {
+                    if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+                    }
+                }
             }
 
             let tx_hash = tx.hash();
@@ -2920,10 +3268,10 @@ ultradag_banned_ips {ban_count}
         }
 
         (&Method::GET, ["delegation", addr_hex]) => {
-            let Some(addr) = Address::parse(addr_hex) else {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address: expected 40-char hex or bech32m (udag1.../tudg1...)"));
-            };
             let state = read_lock_or_503!(server.state);
+            let Some(addr) = resolve_address(addr_hex, &state) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address or name"));
+            };
             match state.delegation_account(&addr) {
                 Some(d) => {
                     json_response(StatusCode::OK, &serde_json::json!({
@@ -2942,10 +3290,10 @@ ultradag_banned_ips {ban_count}
         }
 
         (&Method::GET, ["validator", addr_hex, "delegators"]) => {
-            let Some(addr) = Address::parse(addr_hex) else {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address: expected 40-char hex or bech32m (udag1.../tudg1...)"));
-            };
             let state = read_lock_or_503!(server.state);
+            let Some(addr) = resolve_address(addr_hex, &state) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address or name"));
+            };
             let delegators = state.delegators_of(&addr);
             let total: u64 = delegators.iter().map(|(_, amt)| *amt).fold(0u64, |acc, x| acc.saturating_add(x));
             // Cap delegator list to prevent unbounded response size
@@ -3007,6 +3355,183 @@ ultradag_banned_ips {ban_count}
             // JSON format for dashboards
             let metrics = server.checkpoint_metrics.export_json();
             json_response(StatusCode::OK, &metrics)
+        }
+
+        // ====== WebAuthn endpoints ======
+
+        (&Method::POST, ["webauthn", "challenge"]) => {
+            let body = req.collect().await?.to_bytes();
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large"));
+            }
+
+            #[derive(Deserialize)]
+            struct ChallengeRequest {
+                /// Hex-encoded signable_bytes (the transaction data to sign)
+                signable_bytes_hex: String,
+            }
+
+            let Ok(challenge_req) = serde_json::from_slice::<ChallengeRequest>(&body) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid JSON: need {signable_bytes_hex}"));
+            };
+
+            let Some(signable_bytes) = hex_decode(&challenge_req.signable_bytes_hex) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid hex in signable_bytes_hex"));
+            };
+
+            // Challenge = SHA-256(signable_bytes) — same as what the browser uses for WebAuthn
+            use sha2::{Sha256, Digest};
+            let challenge = Sha256::digest(&signable_bytes);
+            // Base64url encode (no padding)
+            let challenge_b64 = base64url_encode(&challenge);
+
+            json_response(StatusCode::OK, &serde_json::json!({
+                "challenge": challenge_b64,
+                "challenge_hex": hex_encode(&challenge),
+                "signable_bytes_length": signable_bytes.len(),
+            }))
+        }
+
+        // ====== SmartAccount query endpoints ======
+
+        (&Method::GET, ["smart-account", addr_str]) => {
+            let state = read_lock_or_503!(server.state);
+            let Some(addr) = resolve_address(addr_str, &state) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address or name"));
+            };
+            match state.smart_account(&addr) {
+                Some(config) => {
+                    let keys: Vec<serde_json::Value> = config.authorized_keys.iter().map(|k| {
+                        serde_json::json!({
+                            "key_id": hex_encode(&k.key_id),
+                            "key_type": match k.key_type {
+                                ultradag_coin::KeyType::Ed25519 => "ed25519",
+                                ultradag_coin::KeyType::P256 => "p256",
+                            },
+                            "label": k.label,
+                            "daily_limit": k.daily_limit,
+                        })
+                    }).collect();
+                    json_response(StatusCode::OK, &serde_json::json!({
+                        "address": addr.to_hex(),
+                        "created_at_round": config.created_at_round,
+                        "authorized_keys": keys,
+                        "has_recovery": config.recovery.is_some(),
+                        "guardian_count": config.recovery.as_ref().map(|r| r.guardians.len()),
+                        "recovery_threshold": config.recovery.as_ref().map(|r| r.threshold),
+                        "has_pending_recovery": config.pending_recovery.is_some(),
+                        "has_policy": config.policy.is_some(),
+                        "instant_limit": config.policy.as_ref().map(|p| p.instant_limit),
+                        "vault_threshold": config.policy.as_ref().map(|p| p.vault_threshold),
+                        "daily_limit": config.policy.as_ref().and_then(|p| p.daily_limit),
+                        "pending_vault_count": config.pending_vault_transfers.len(),
+                        "pending_key_removal": config.pending_key_removal.as_ref().map(|p| {
+                            serde_json::json!({
+                                "key_id": hex_encode(&p.key_id),
+                                "executes_at_round": p.executes_at_round,
+                            })
+                        }),
+                    }))
+                }
+                None => {
+                    error_response(StatusCode::NOT_FOUND, "no SmartAccount found for this address")
+                }
+            }
+        }
+
+        // ====== Name Registry query endpoints ======
+
+        (&Method::GET, ["name", "resolve", name]) => {
+            let state = read_lock_or_503!(server.state);
+            match state.resolve_name(name) {
+                Some(addr) => {
+                    let profile = state.name_profile(name);
+                    json_response(StatusCode::OK, &serde_json::json!({
+                        "name": name,
+                        "address": addr.to_hex(),
+                        "address_bech32": addr.to_bech32(),
+                        "expiry_round": state.name_expiry(name),
+                        "profile": profile.map(|p| serde_json::json!({
+                            "external_addresses": p.external_addresses,
+                            "metadata": p.metadata,
+                        })),
+                    }))
+                }
+                None => {
+                    error_response(StatusCode::NOT_FOUND, "name not found or expired")
+                }
+            }
+        }
+
+        (&Method::GET, ["name", "reverse", addr_str]) => {
+            let state = read_lock_or_503!(server.state);
+            let Some(addr) = resolve_address(addr_str, &state) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address"));
+            };
+            match state.reverse_name(&addr) {
+                Some(name) => {
+                    json_response(StatusCode::OK, &serde_json::json!({
+                        "address": addr.to_hex(),
+                        "name": name,
+                    }))
+                }
+                None => {
+                    error_response(StatusCode::NOT_FOUND, "no name registered for this address")
+                }
+            }
+        }
+
+        (&Method::GET, ["name", "available", name]) => {
+            let state = read_lock_or_503!(server.state);
+            let available = state.resolve_name(name).is_none();
+            let valid = ultradag_coin::tx::name_registry::validate_name(name).is_ok();
+            let fee = if valid { ultradag_coin::tx::name_registry::name_annual_fee(name) } else { 0 };
+
+            // Name phishing check: warn if name is similar to an existing name
+            // (e.g., "paypa1" vs "paypal", "a1ice" vs "alice")
+            let mut similar_warning: Option<String> = None;
+            if valid && available {
+                let normalized = name.replace('0', "o").replace('1', "l").replace('3', "e").replace('5', "s");
+                // Check a sample of registered names for similarity
+                // (full scan would be expensive — check the normalized form)
+                if state.resolve_name(&normalized).is_some() && normalized != *name {
+                    similar_warning = Some(format!("Warning: '{}' looks similar to existing name '{}'", name, normalized));
+                }
+            }
+
+            json_response(StatusCode::OK, &serde_json::json!({
+                "name": name,
+                "available": available && valid,
+                "valid": valid,
+                "annual_fee": fee,
+                "annual_fee_udag": fee as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                "similar_warning": similar_warning,
+            }))
+        }
+
+        (&Method::GET, ["name", "info", name]) => {
+            let state = read_lock_or_503!(server.state);
+            match state.resolve_name(name) {
+                Some(addr) => {
+                    let profile = state.name_profile(name);
+                    let reverse_name = state.reverse_name(&addr);
+                    json_response(StatusCode::OK, &serde_json::json!({
+                        "name": name,
+                        "owner": addr.to_hex(),
+                        "owner_bech32": addr.to_bech32(),
+                        "expiry_round": state.name_expiry(name),
+                        "reverse_name": reverse_name,
+                        "has_profile": profile.is_some(),
+                        "profile": profile.map(|p| serde_json::json!({
+                            "external_addresses": p.external_addresses,
+                            "metadata": p.metadata,
+                        })),
+                    }))
+                }
+                None => {
+                    error_response(StatusCode::NOT_FOUND, "name not found or expired")
+                }
+            }
         }
 
         _ => error_response(StatusCode::NOT_FOUND, "not found"),
@@ -3099,6 +3624,37 @@ pub async fn start_rpc(server: Arc<NodeServer>, rpc_port: u16) {
 
 fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Decode a hex string into bytes. Returns None on invalid hex.
+fn hex_decode(hex: &str) -> Option<Vec<u8>> {
+    if hex.len() % 2 != 0 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let mut bytes = Vec::with_capacity(hex.len() / 2);
+    for chunk in hex.as_bytes().chunks(2) {
+        let s = std::str::from_utf8(chunk).ok()?;
+        bytes.push(u8::from_str_radix(s, 16).ok()?);
+    }
+    Some(bytes)
+}
+
+/// Base64url encode (no padding) for WebAuthn challenges.
+fn base64url_encode(data: &[u8]) -> String {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut result = String::new();
+    let mut i = 0;
+    while i < data.len() {
+        let b0 = data[i] as usize;
+        let b1 = if i + 1 < data.len() { data[i + 1] as usize } else { 0 };
+        let b2 = if i + 2 < data.len() { data[i + 2] as usize } else { 0 };
+        result.push(ALPHABET[b0 >> 2] as char);
+        result.push(ALPHABET[((b0 & 0x03) << 4) | (b1 >> 4)] as char);
+        if i + 1 < data.len() { result.push(ALPHABET[((b1 & 0x0f) << 2) | (b2 >> 6)] as char); }
+        if i + 2 < data.len() { result.push(ALPHABET[b2 & 0x3f] as char); }
+        i += 3;
+    }
+    result
 }
 
 /// Parse a 64-hex-char hash string into a [u8; 32].

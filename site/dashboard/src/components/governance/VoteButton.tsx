@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { postVote } from '../../lib/api';
+import { hasPasskeyWallet } from '../../lib/passkey-wallet';
 
 interface VoteButtonProps {
   proposalId: number;
@@ -14,6 +15,10 @@ export function VoteButton({ proposalId, secretKey, approve, fee, onSuccess }: V
   const [error, setError] = useState('');
 
   const handleVote = async () => {
+    if (hasPasskeyWallet() && !secretKey) {
+      setError('Governance voting with passkey wallet requires an Ed25519 key. Add one via SmartAccount settings.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {

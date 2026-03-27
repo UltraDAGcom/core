@@ -31,6 +31,10 @@ export {
   hexToBytes,
   bytesToHex,
   deriveAddressBytes,
+  computeKeyId,
+  buildAddKeyTx,
+  buildSmartTransferTx,
+  buildRegisterNameTx,
 } from "./transactions.js";
 
 export type {

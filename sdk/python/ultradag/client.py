@@ -561,3 +561,37 @@ class UltraDagClient:
                     f"(current: {status.last_finalized_round}, waited {elapsed:.1f}s)"
                 )
             time.sleep(poll_interval)
+
+    # ── SmartAccount & Name Registry ──────────────────────────────
+
+    def get_smart_account(self, address_or_name: str):
+        """Get SmartAccount configuration for an address or name."""
+        try:
+            return self._get(f"/smart-account/{address_or_name}")
+        except UltraDagError:
+            return None
+
+    def resolve_name(self, name: str):
+        """Resolve a name to an address."""
+        try:
+            return self._get(f"/name/resolve/{name}")
+        except UltraDagError:
+            return None
+
+    def reverse_name(self, address: str):
+        """Reverse lookup: address to name."""
+        try:
+            return self._get(f"/name/reverse/{address}")
+        except UltraDagError:
+            return None
+
+    def check_name_availability(self, name: str):
+        """Check if a name is available and its price."""
+        return self._get(f"/name/available/{name}")
+
+    def get_name_info(self, name: str):
+        """Get full info for a registered name."""
+        try:
+            return self._get(f"/name/info/{name}")
+        except UltraDagError:
+            return None

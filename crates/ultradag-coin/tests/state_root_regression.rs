@@ -65,6 +65,11 @@ fn known_fixture() -> StateSnapshot {
         bridge_release_first_vote_round: None,
         bridge_release_disagree_count: None,
         slashed_events: vec![],
+        smart_accounts: vec![],
+        name_to_address: vec![],
+        name_expiry: vec![],
+        name_created_at: vec![],
+        name_profiles: vec![],
     }
 }
 
@@ -79,13 +84,12 @@ fn state_root_regression_known_fixture() {
     // This is the canonical hash of the known fixture.
     // To update: run this test, copy the printed hash, and replace the assertion.
     // WARNING: Updating this value means every node must be restarted with the new code.
-    // Updated 2026-03-26 after adding bridge_release_first_vote_round, bridge_release_disagree_count,
-    // slashed_events, and bridge_release_params fields to StateSnapshot
+    // Updated 2026-03-27 after adding name_registry to compute_state_root
     let expected: [u8; 32] = [
-        0xc5, 0xeb, 0xc4, 0x8c, 0xb8, 0xb1, 0xff, 0xc9,
-        0x90, 0x16, 0xef, 0xd3, 0x21, 0xbf, 0x6c, 0xaf,
-        0x89, 0xc8, 0x6b, 0x09, 0x31, 0x07, 0x9e, 0x97,
-        0x45, 0xfd, 0x84, 0xde, 0xd4, 0xa9, 0xd8, 0x49,
+        0x78, 0x68, 0x86, 0x1b, 0x8c, 0xcb, 0x76, 0x4e,
+        0x6a, 0x27, 0x87, 0x7d, 0x18, 0x6f, 0xc5, 0x1d,
+        0x68, 0xde, 0xcf, 0xe8, 0x7c, 0x1f, 0xd3, 0x1f,
+        0x05, 0xb0, 0x31, 0x15, 0x62, 0x16, 0xe0, 0x03,
     ];
 
     if expected == [0x00; 32] {
@@ -177,6 +181,11 @@ fn state_root_empty_state() {
         bridge_release_first_vote_round: None,
         bridge_release_disagree_count: None,
         slashed_events: vec![],
+        smart_accounts: vec![],
+        name_to_address: vec![],
+        name_expiry: vec![],
+        name_created_at: vec![],
+        name_profiles: vec![],
     };
     let root = compute_state_root(&snapshot);
     assert_ne!(root, [0u8; 32], "Empty state root should not be all zeros");

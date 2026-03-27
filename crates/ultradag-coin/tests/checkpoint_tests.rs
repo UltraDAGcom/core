@@ -194,6 +194,11 @@ fn test_compute_state_root_deterministic() {
         bridge_release_first_vote_round: None,
         bridge_release_disagree_count: None,
         slashed_events: vec![],
+        smart_accounts: vec![],
+        name_to_address: vec![],
+        name_expiry: vec![],
+        name_created_at: vec![],
+        name_profiles: vec![],
     };
 
     let root1 = compute_state_root(&snapshot);
@@ -231,6 +236,11 @@ fn test_compute_state_root_different_for_different_state() {
         bridge_release_first_vote_round: None,
         bridge_release_disagree_count: None,
         slashed_events: vec![],
+        smart_accounts: vec![],
+        name_to_address: vec![],
+        name_expiry: vec![],
+        name_created_at: vec![],
+        name_profiles: vec![],
     };
 
     let snapshot2 = StateSnapshot {
@@ -260,6 +270,11 @@ fn test_compute_state_root_different_for_different_state() {
         bridge_release_first_vote_round: None,
         bridge_release_disagree_count: None,
         slashed_events: vec![],
+        smart_accounts: vec![],
+        name_to_address: vec![],
+        name_expiry: vec![],
+        name_created_at: vec![],
+        name_profiles: vec![],
     };
 
     let root1 = compute_state_root(&snapshot1);
