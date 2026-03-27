@@ -199,6 +199,7 @@ fn test_compute_state_root_deterministic() {
         name_expiry: vec![],
         name_created_at: vec![],
         name_profiles: vec![],
+        streams: vec![],
     };
 
     let root1 = compute_state_root(&snapshot);
@@ -241,6 +242,7 @@ fn test_compute_state_root_different_for_different_state() {
         name_expiry: vec![],
         name_created_at: vec![],
         name_profiles: vec![],
+        streams: vec![],
     };
 
     let snapshot2 = StateSnapshot {
@@ -275,6 +277,7 @@ fn test_compute_state_root_different_for_different_state() {
         name_expiry: vec![],
         name_created_at: vec![],
         name_profiles: vec![],
+        streams: vec![],
     };
 
     let root1 = compute_state_root(&snapshot1);

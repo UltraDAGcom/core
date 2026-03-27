@@ -436,6 +436,26 @@ pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
         hasher.update(&expiry.to_le_bytes());
     }
 
+    // Streams (sorted by stream_id in snapshot())
+    hasher.update(&(snapshot.streams.len() as u64).to_le_bytes());
+    for (id, stream) in &snapshot.streams {
+        hasher.update(id);
+        hasher.update(&stream.sender.0);
+        hasher.update(&stream.recipient.0);
+        hasher.update(&stream.rate_sats_per_round.to_le_bytes());
+        hasher.update(&stream.start_round.to_le_bytes());
+        hasher.update(&stream.deposited.to_le_bytes());
+        hasher.update(&stream.withdrawn.to_le_bytes());
+        match stream.cancelled_at_round {
+            Some(r) => {
+                hasher.update(&[1u8]);
+                hasher.update(&r.to_le_bytes());
+            }
+            None => { hasher.update(&[0u8]); }
+        }
+        hasher.update(&[stream.cancel_recipient_credited as u8]);
+    }
+
     *hasher.finalize().as_bytes()
 }
 

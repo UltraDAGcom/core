@@ -410,6 +410,7 @@ fn test_checkpoint_sync_message() {
         name_expiry: vec![],
         name_created_at: vec![],
         name_profiles: vec![],
+        streams: vec![],
     };
 
     let msg = Message::CheckpointSync {

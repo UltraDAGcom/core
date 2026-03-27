@@ -97,6 +97,9 @@ pub struct StateSnapshot {
     /// Name profiles: name → profile data.
     #[serde(default)]
     pub name_profiles: Vec<(String, crate::tx::name_registry::NameProfile)>,
+    /// Streaming payments: stream_id → Stream.
+    #[serde(default)]
+    pub streams: Vec<([u8; 32], crate::tx::stream::Stream)>,
 }
 
 impl StateSnapshot {

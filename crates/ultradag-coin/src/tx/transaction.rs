@@ -6,6 +6,7 @@ use crate::tx::delegate::{DelegateTx, UndelegateTx, SetCommissionTx};
 use crate::tx::bridge::{BridgeDepositTx, BridgeReleaseTx};
 use crate::tx::smart_account::{AddKeyTx, RemoveKeyTx, SmartTransferTx, SmartOpTx, SetRecoveryTx, RecoverAccountTx, CancelRecoveryTx, SetPolicyTx, ExecuteVaultTx, CancelVaultTx};
 use crate::tx::name_registry::{RegisterNameTx, RenewNameTx, TransferNameTx, UpdateProfileTx};
+use crate::tx::stream::{CreateStreamTx, WithdrawStreamTx, CancelStreamTx};
 use crate::governance::{CreateProposalTx, VoteTx};
 
 /// Unified transaction type supporting transfers, staking, unstaking, delegation,
@@ -44,6 +45,10 @@ pub enum Transaction {
     UpdateProfile(UpdateProfileTx),
     // Generic P256-signed operation (staking, governance, names — all via passkey)
     SmartOp(SmartOpTx),
+    // Streaming payment transaction types
+    CreateStream(CreateStreamTx),
+    WithdrawStream(WithdrawStreamTx),
+    CancelStream(CancelStreamTx),
 }
 
 /// A transaction transferring UDAG from one address to another.
@@ -92,6 +97,9 @@ impl Transaction {
             Transaction::TransferName(tx) => tx.hash(),
             Transaction::UpdateProfile(tx) => tx.hash(),
             Transaction::SmartOp(tx) => tx.hash(),
+            Transaction::CreateStream(tx) => tx.hash(),
+            Transaction::WithdrawStream(tx) => tx.hash(),
+            Transaction::CancelStream(tx) => tx.hash(),
         }
     }
 
@@ -124,6 +132,9 @@ impl Transaction {
             Transaction::TransferName(tx) => tx.verify_signature(),
             Transaction::UpdateProfile(tx) => tx.verify_signature(),
             Transaction::SmartOp(tx) => tx.verify_signature(),
+            Transaction::CreateStream(tx) => tx.verify_signature(),
+            Transaction::WithdrawStream(tx) => tx.verify_signature(),
+            Transaction::CancelStream(tx) => tx.verify_signature(),
         }
     }
 
@@ -154,6 +165,9 @@ impl Transaction {
             Transaction::TransferName(tx) => tx.from,
             Transaction::UpdateProfile(tx) => tx.from,
             Transaction::SmartOp(tx) => tx.from,
+            Transaction::CreateStream(tx) => tx.from,
+            Transaction::WithdrawStream(tx) => tx.from,
+            Transaction::CancelStream(tx) => tx.from,
         }
     }
 
@@ -184,6 +198,9 @@ impl Transaction {
             Transaction::TransferName(tx) => tx.nonce,
             Transaction::UpdateProfile(tx) => tx.nonce,
             Transaction::SmartOp(tx) => tx.nonce,
+            Transaction::CreateStream(tx) => tx.nonce,
+            Transaction::WithdrawStream(tx) => tx.nonce,
+            Transaction::CancelStream(tx) => tx.nonce,
         }
     }
 
@@ -203,6 +220,9 @@ impl Transaction {
             Transaction::TransferName(tx) => tx.fee,
             Transaction::UpdateProfile(tx) => tx.fee,
             Transaction::SmartOp(tx) => tx.fee,
+            Transaction::CreateStream(tx) => tx.fee,
+            Transaction::WithdrawStream(tx) => tx.fee,
+            Transaction::CancelStream(tx) => tx.fee,
             Transaction::Stake(_)
             | Transaction::Unstake(_)
             | Transaction::Delegate(_)
@@ -226,6 +246,7 @@ impl Transaction {
             Transaction::BridgeDeposit(tx) => tx.amount,
             Transaction::BridgeRelease(tx) => tx.amount,
             Transaction::SmartTransfer(tx) => tx.amount,
+            Transaction::CreateStream(tx) => tx.deposit,
             Transaction::Unstake(_)
             | Transaction::Undelegate(_)
             | Transaction::SetCommission(_)
@@ -243,7 +264,9 @@ impl Transaction {
             | Transaction::RenewName(_)
             | Transaction::TransferName(_)
             | Transaction::UpdateProfile(_)
-            | Transaction::SmartOp(_) => 0,
+            | Transaction::SmartOp(_)
+            | Transaction::WithdrawStream(_)
+            | Transaction::CancelStream(_) => 0,
         }
     }
 
@@ -253,6 +276,7 @@ impl Transaction {
             Transaction::Transfer(tx) => Some(tx.to),
             Transaction::SmartTransfer(tx) => Some(tx.to),
             Transaction::Delegate(tx) => Some(tx.validator),
+            Transaction::CreateStream(tx) => Some(tx.recipient),
             _ => None,
         }
     }
@@ -282,6 +306,9 @@ impl Transaction {
             Transaction::RenewName(tx) => tx.pub_key,
             Transaction::TransferName(tx) => tx.pub_key,
             Transaction::UpdateProfile(tx) => tx.pub_key,
+            Transaction::CreateStream(tx) => tx.pub_key,
+            Transaction::WithdrawStream(tx) => tx.pub_key,
+            Transaction::CancelStream(tx) => tx.pub_key,
             // SmartTransfer and SmartOp use signing_key_id, not a raw pub_key., not a raw pub_key.
             Transaction::SmartTransfer(_) | Transaction::SmartOp(_) => [0u8; 32],
         }
@@ -314,6 +341,9 @@ impl Transaction {
             Transaction::TransferName(tx) => tx.signable_bytes(),
             Transaction::UpdateProfile(tx) => tx.signable_bytes(),
             Transaction::SmartOp(tx) => tx.signable_bytes(),
+            Transaction::CreateStream(tx) => tx.signable_bytes(),
+            Transaction::WithdrawStream(tx) => tx.signable_bytes(),
+            Transaction::CancelStream(tx) => tx.signable_bytes(),
         }
     }
 
@@ -335,6 +365,9 @@ impl Transaction {
             Transaction::TransferName(tx) => tx.total_cost(),
             Transaction::UpdateProfile(tx) => tx.total_cost(),
             Transaction::SmartOp(tx) => tx.total_cost(),
+            Transaction::CreateStream(tx) => tx.total_cost(),
+            Transaction::WithdrawStream(tx) => tx.total_cost(),
+            Transaction::CancelStream(tx) => tx.total_cost(),
             Transaction::Unstake(_)
             | Transaction::Undelegate(_)
             | Transaction::SetCommission(_)

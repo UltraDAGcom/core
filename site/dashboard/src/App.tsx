@@ -19,6 +19,7 @@ import { AddressPage } from './pages/AddressPage';
 import { SearchResultPage } from './pages/SearchResultPage';
 import { BridgePage } from './pages/BridgePage';
 import { SmartAccountPage } from './pages/SmartAccountPage';
+import { StreamsPage } from './pages/StreamsPage';
 import { useKeystore } from './hooks/useKeystore';
 import { usePasskeyWallet } from './hooks/usePasskeyWallet';
 import { useNode } from './hooks/useNode';
@@ -265,6 +266,7 @@ function App() {
             }
           />
           <Route path="bridge" element={<BridgePage />} />
+          <Route path="streams" element={<StreamsPage wallets={allWallets} network={network} />} />
           <Route path="smart-account" element={<SmartAccountPage walletAddress={primaryAddress} nodeUrl={getNodeUrl()} />} />
           <Route path="staking" element={<StakingPage />} />
           <Route path="governance" element={<GovernancePage />} />

@@ -23,6 +23,8 @@ const BRIDGE_SIGNATURES: TableDefinition<&[u8], &[u8]> = TableDefinition::new("b
 const SMART_ACCOUNTS: TableDefinition<&[u8; 20], &[u8]> = TableDefinition::new("smart_accounts");
 // Name Registry: name string -> postcard-serialized (address, expiry, created_at, profile)
 const NAME_REGISTRY: TableDefinition<&str, &[u8]> = TableDefinition::new("name_registry");
+// Streams: stream_id (32 bytes) -> postcard-serialized Stream
+const STREAMS: TableDefinition<&[u8; 32], &[u8]> = TableDefinition::new("streams");
 
 impl From<redb::Error> for PersistenceError {
     fn from(e: redb::Error) -> Self {
@@ -186,6 +188,16 @@ pub fn save_to_redb(engine: &StateEngine, path: &Path) -> Result<(), Persistence
             let bytes = postcard::to_allocvec(&entry)
                 .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
             table.insert(name.as_str(), bytes.as_slice())?;
+        }
+    }
+
+    // Streams
+    {
+        let mut table = txn.open_table(STREAMS)?;
+        for (id, stream) in engine.all_streams() {
+            let bytes = postcard::to_allocvec(stream)
+                .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+            table.insert(id, bytes.as_slice())?;
         }
     }
 
@@ -496,6 +508,18 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         }
     }
 
+    // Streams (graceful fallback for databases without this table)
+    let mut streams_vec: Vec<([u8; 32], crate::tx::stream::Stream)> = Vec::new();
+    if let Ok(st_table) = txn.open_table(STREAMS) {
+        for entry in st_table.iter()? {
+            let (k, v) = entry?;
+            let id = *k.value();
+            let stream: crate::tx::stream::Stream = postcard::from_bytes(v.value())
+                .map_err(|e| PersistenceError::Serialization(e.to_string()))?;
+            streams_vec.push((id, stream));
+        }
+    }
+
     let bridge_nonce = read_u64(&meta, "bridge_nonce")?;
 
     // Load bridge contract address (20 bytes, default [0u8; 20] for legacy databases)
@@ -542,6 +566,11 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
     // Restore Name Registry
     if !name_entries.is_empty() {
         engine.restore_name_registry(name_entries, name_expiry_entries, name_created_entries, name_profile_entries);
+    }
+
+    // Restore Streams
+    if !streams_vec.is_empty() {
+        engine.restore_streams(streams_vec);
     }
 
     // Restore used_release_nonces from METADATA

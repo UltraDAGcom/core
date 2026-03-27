@@ -192,6 +192,7 @@ fn test_07_state_root_is_deterministic() {
         name_expiry: vec![],
         name_created_at: vec![],
         name_profiles: vec![],
+        streams: vec![],
     };
 
     let snapshot2 = StateSnapshot {
@@ -226,6 +227,7 @@ fn test_07_state_root_is_deterministic() {
         name_expiry: vec![],
         name_created_at: vec![],
         name_profiles: vec![],
+        streams: vec![],
     };
 
     let root1 = compute_state_root(&snapshot1);

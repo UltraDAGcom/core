@@ -70,6 +70,7 @@ fn known_fixture() -> StateSnapshot {
         name_expiry: vec![],
         name_created_at: vec![],
         name_profiles: vec![],
+        streams: vec![],
     }
 }
 
@@ -84,12 +85,12 @@ fn state_root_regression_known_fixture() {
     // This is the canonical hash of the known fixture.
     // To update: run this test, copy the printed hash, and replace the assertion.
     // WARNING: Updating this value means every node must be restarted with the new code.
-    // Updated 2026-03-27 after adding name_registry to compute_state_root
+    // Updated 2026-03-28 after adding streams to compute_state_root
     let expected: [u8; 32] = [
-        0x78, 0x68, 0x86, 0x1b, 0x8c, 0xcb, 0x76, 0x4e,
-        0x6a, 0x27, 0x87, 0x7d, 0x18, 0x6f, 0xc5, 0x1d,
-        0x68, 0xde, 0xcf, 0xe8, 0x7c, 0x1f, 0xd3, 0x1f,
-        0x05, 0xb0, 0x31, 0x15, 0x62, 0x16, 0xe0, 0x03,
+        0xb8, 0x8f, 0xeb, 0xb7, 0xda, 0xad, 0x06, 0x67,
+        0xfd, 0xa1, 0xa1, 0xca, 0x75, 0x03, 0x1c, 0xf1,
+        0xa9, 0x70, 0x56, 0x0d, 0x6d, 0x78, 0xf4, 0x7f,
+        0x64, 0x78, 0x2c, 0x55, 0xe5, 0x5d, 0x25, 0x6c,
     ];
 
     if expected == [0x00; 32] {
@@ -186,6 +187,7 @@ fn state_root_empty_state() {
         name_expiry: vec![],
         name_created_at: vec![],
         name_profiles: vec![],
+        streams: vec![],
     };
     let root = compute_state_root(&snapshot);
     assert_ne!(root, [0u8; 32], "Empty state root should not be all zeros");

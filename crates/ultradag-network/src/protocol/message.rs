@@ -468,6 +468,7 @@ mod tests {
             name_expiry: vec![],
             name_created_at: vec![],
             name_profiles: vec![],
+            streams: vec![],
         };
 
         let msg = Message::CheckpointSync {

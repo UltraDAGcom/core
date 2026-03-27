@@ -9,6 +9,7 @@ const sections: { label?: string; items: NavItem[] }[] = [
   { label: 'WALLET', items: [
     { to: '/wallet', icon: '◇', label: 'Wallets' },
     { to: '/wallet/send', icon: '⇄', label: 'Send & Receive' },
+    { to: '/streams', icon: '≋', label: 'Streams' },
     { to: '/smart-account', icon: '◎', label: 'SmartAccount' },
   ]},
   { label: 'NETWORK', items: [

@@ -929,6 +929,12 @@ pub enum SmartOpType {
     RenewName { name: String, additional_years: u8 },
     /// Transfer a name to a new owner.
     TransferName { name: String, new_owner: Address },
+    /// Create a streaming payment.
+    StreamCreate { recipient: Address, rate_sats_per_round: u64, deposit: u64 },
+    /// Withdraw accrued funds from a stream.
+    StreamWithdraw { stream_id: [u8; 32] },
+    /// Cancel a stream.
+    StreamCancel { stream_id: [u8; 32] },
 }
 
 /// A generic SmartAccount operation signed with any authorized key (Ed25519 or P256).
@@ -1010,6 +1016,20 @@ impl SmartOpTx {
                 buf.extend_from_slice(name.as_bytes());
                 buf.extend_from_slice(&new_owner.0);
             }
+            SmartOpType::StreamCreate { recipient, rate_sats_per_round, deposit } => {
+                buf.push(10);
+                buf.extend_from_slice(&recipient.0);
+                buf.extend_from_slice(&rate_sats_per_round.to_le_bytes());
+                buf.extend_from_slice(&deposit.to_le_bytes());
+            }
+            SmartOpType::StreamWithdraw { stream_id } => {
+                buf.push(11);
+                buf.extend_from_slice(stream_id);
+            }
+            SmartOpType::StreamCancel { stream_id } => {
+                buf.push(12);
+                buf.extend_from_slice(stream_id);
+            }
         }
         buf.extend_from_slice(&self.fee.to_le_bytes());
         buf.extend_from_slice(&self.nonce.to_le_bytes());
@@ -1025,6 +1045,7 @@ impl SmartOpTx {
         match &self.operation {
             SmartOpType::Stake { amount } => *amount,
             SmartOpType::Delegate { amount, .. } => *amount,
+            SmartOpType::StreamCreate { deposit, .. } => deposit.saturating_add(self.fee),
             _ => self.fee,
         }
     }

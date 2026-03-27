@@ -17,6 +17,7 @@ pub struct StateSnapshot {
     bridge_reserve: u64,
     last_finalized_round: Option<u64>,
     applied_validators_per_round: HashMap<u64, std::collections::HashSet<Address>>,
+    streams: HashMap<[u8; 32], crate::tx::stream::Stream>,
 }
 
 impl StateSnapshot {
@@ -31,6 +32,7 @@ impl StateSnapshot {
             bridge_reserve: engine.bridge_reserve,
             last_finalized_round: engine.last_finalized_round,
             applied_validators_per_round: engine.applied_validators_per_round.clone(),
+            streams: engine.streams.clone(),
         }
     }
 
@@ -50,17 +52,22 @@ impl StateSnapshot {
             .try_fold(0u64, |acc, d| acc.checked_add(d.delegated))
             .ok_or_else(|| CoinError::SupplyInvariantBroken("delegated balance overflow".into()))?;
         
+        let streamed: u64 = self.streams.values()
+            .try_fold(0u64, |acc, s| acc.checked_add(s.deposited.saturating_sub(s.withdrawn)))
+            .ok_or_else(|| CoinError::SupplyInvariantBroken("streamed balance overflow".into()))?;
+
         let total = liquid
             .checked_add(staked)
             .and_then(|s| s.checked_add(delegated))
             .and_then(|s| s.checked_add(self.treasury_balance))
             .and_then(|s| s.checked_add(self.bridge_reserve))
+            .and_then(|s| s.checked_add(streamed))
             .ok_or_else(|| CoinError::SupplyInvariantBroken("total supply calculation overflow".into()))?;
-        
+
         if total != self.total_supply {
             return Err(CoinError::SupplyInvariantBroken(format!(
-                "liquid={} staked={} delegated={} treasury={} bridge={} sum={} != total_supply={}",
-                liquid, staked, delegated, self.treasury_balance, self.bridge_reserve, total, self.total_supply
+                "liquid={} staked={} delegated={} treasury={} bridge={} streamed={} sum={} != total_supply={}",
+                liquid, staked, delegated, self.treasury_balance, self.bridge_reserve, streamed, total, self.total_supply
             )));
         }
 
@@ -295,6 +302,10 @@ pub struct StateEngine {
     name_created_at: HashMap<String, u64>,
     /// Name → optional cross-chain profile data.
     name_profiles: HashMap<String, crate::tx::name_registry::NameProfile>,
+    // ── Streaming Payments ─────────────────────────────────
+    /// Active and completed streams: stream_id → Stream.
+    /// Included in the supply invariant: deposited - withdrawn funds are locked.
+    streams: HashMap<[u8; 32], crate::tx::stream::Stream>,
 }
 
 impl StateEngine {
@@ -338,6 +349,7 @@ impl StateEngine {
             name_expiry: HashMap::new(),
             name_created_at: HashMap::new(),
             name_profiles: HashMap::new(),
+            streams: HashMap::new(),
         }
     }
 
@@ -845,17 +857,22 @@ impl StateEngine {
             .try_fold(0u64, |acc, d| acc.checked_add(d.delegated))
             .ok_or_else(|| CoinError::SupplyInvariantBroken("delegated balance overflow".into()))?;
         
+        let streamed: u64 = self.streams.values()
+            .try_fold(0u64, |acc, s| acc.checked_add(s.deposited.saturating_sub(s.withdrawn)))
+            .ok_or_else(|| CoinError::SupplyInvariantBroken("streamed balance overflow".into()))?;
+
         let total = liquid
             .checked_add(staked)
             .and_then(|s| s.checked_add(delegated))
             .and_then(|s| s.checked_add(self.treasury_balance))
             .and_then(|s| s.checked_add(self.bridge_reserve))
+            .and_then(|s| s.checked_add(streamed))
             .ok_or_else(|| CoinError::SupplyInvariantBroken("total supply calculation overflow".into()))?;
-        
+
         if total != self.total_supply {
             return Err(CoinError::SupplyInvariantBroken(format!(
-                "verify_state_consistency: liquid={} staked={} delegated={} treasury={} bridge={} sum={} != total_supply={}",
-                liquid, staked, delegated, self.treasury_balance, self.bridge_reserve, total, self.total_supply
+                "verify_state_consistency: liquid={} staked={} delegated={} treasury={} bridge={} streamed={} sum={} != total_supply={}",
+                liquid, staked, delegated, self.treasury_balance, self.bridge_reserve, streamed, total, self.total_supply
             )));
         }
 
@@ -1290,6 +1307,30 @@ impl StateEngine {
                         continue;
                     }
                 }
+                crate::tx::Transaction::CreateStream(stream_tx) => {
+                    if let Err(e) = self.apply_create_stream_tx(stream_tx, vertex.round) {
+                        tracing::warn!("Skipping invalid CreateStream tx in finalized vertex: {}", e);
+                        self.increment_nonce(&stream_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::WithdrawStream(stream_tx) => {
+                    if let Err(e) = self.apply_withdraw_stream_tx(stream_tx, vertex.round) {
+                        tracing::warn!("Skipping invalid WithdrawStream tx in finalized vertex: {}", e);
+                        self.increment_nonce(&stream_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::CancelStream(stream_tx) => {
+                    if let Err(e) = self.apply_cancel_stream_tx(stream_tx, vertex.round) {
+                        tracing::warn!("Skipping invalid CancelStream tx in finalized vertex: {}", e);
+                        self.increment_nonce(&stream_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
             }
 
             // Track fee from this successfully-applied transaction
@@ -1375,23 +1416,31 @@ impl StateEngine {
                     CoinError::SupplyInvariantBroken("delegated balance overflow detected".into())
                 })?;
             
+            let streamed: u64 = self.streams.values()
+                .try_fold(0u64, |acc, s| acc.checked_add(s.deposited.saturating_sub(s.withdrawn)))
+                .ok_or_else(|| {
+                    tracing::error!("Supply invariant: streamed balance overflow detected");
+                    CoinError::SupplyInvariantBroken("streamed balance overflow detected".into())
+                })?;
+
             let total = liquid
                 .checked_add(staked)
                 .and_then(|s| s.checked_add(delegated))
                 .and_then(|s| s.checked_add(self.treasury_balance))
                 .and_then(|s| s.checked_add(self.bridge_reserve))
+                .and_then(|s| s.checked_add(streamed))
                 .ok_or_else(|| {
                     tracing::error!(
-                        "Supply invariant: total calculation overflow: liquid={} staked={} delegated={} treasury={} bridge={}",
-                        liquid, staked, delegated, self.treasury_balance, self.bridge_reserve
+                        "Supply invariant: total calculation overflow: liquid={} staked={} delegated={} treasury={} bridge={} streamed={}",
+                        liquid, staked, delegated, self.treasury_balance, self.bridge_reserve, streamed
                     );
                     CoinError::SupplyInvariantBroken("total supply calculation overflow".into())
                 })?;
-            
+
             if total != self.total_supply {
                 return Err(CoinError::SupplyInvariantBroken(format!(
-                    "liquid={} staked={} delegated={} treasury={} bridge={} sum={} != total_supply={}",
-                    liquid, staked, delegated, self.treasury_balance, self.bridge_reserve, total, self.total_supply
+                    "liquid={} staked={} delegated={} treasury={} bridge={} streamed={} sum={} != total_supply={}",
+                    liquid, staked, delegated, self.treasury_balance, self.bridge_reserve, streamed, total, self.total_supply
                 )));
             }
         }
@@ -2708,6 +2757,177 @@ impl StateEngine {
     }
 
     // ────────────────────────────────────────────────────────────
+    // Streaming Payments
+    // ────────────────────────────────────────────────────────────
+
+    /// Restore streams from persistence (redb or snapshot).
+    pub fn restore_streams(&mut self, streams: Vec<([u8; 32], crate::tx::stream::Stream)>) {
+        self.streams = streams.into_iter().collect();
+    }
+
+    /// Get a stream by ID.
+    pub fn stream(&self, id: &[u8; 32]) -> Option<&crate::tx::stream::Stream> {
+        self.streams.get(id)
+    }
+
+    /// Get all streams where the given address is the sender.
+    pub fn streams_by_sender(&self, addr: &Address) -> Vec<([u8; 32], &crate::tx::stream::Stream)> {
+        self.streams.iter()
+            .filter(|(_, s)| s.sender == *addr)
+            .map(|(id, s)| (*id, s))
+            .collect()
+    }
+
+    /// Get all streams where the given address is the recipient.
+    pub fn streams_by_recipient(&self, addr: &Address) -> Vec<([u8; 32], &crate::tx::stream::Stream)> {
+        self.streams.iter()
+            .filter(|(_, s)| s.recipient == *addr)
+            .map(|(id, s)| (*id, s))
+            .collect()
+    }
+
+    /// Get all streams (for snapshot/persistence).
+    pub fn all_streams(&self) -> &HashMap<[u8; 32], crate::tx::stream::Stream> {
+        &self.streams
+    }
+
+    /// Total locked amount across all streams (deposited - withdrawn).
+    pub fn total_streamed(&self) -> u64 {
+        self.streams.values()
+            .fold(0u64, |acc, s| acc.saturating_add(s.deposited.saturating_sub(s.withdrawn)))
+    }
+
+    /// Create a new streaming payment. Locks deposit from sender's balance.
+    pub fn apply_create_stream_tx(
+        &mut self,
+        tx: &crate::tx::stream::CreateStreamTx,
+        current_round: u64,
+    ) -> Result<(), CoinError> {
+        // Validate inputs
+        if tx.deposit == 0 {
+            return Err(CoinError::ValidationError("stream deposit must be greater than 0".into()));
+        }
+        if tx.rate_sats_per_round == 0 {
+            return Err(CoinError::ValidationError("stream rate must be greater than 0".into()));
+        }
+        if tx.deposit < tx.rate_sats_per_round {
+            return Err(CoinError::ValidationError("stream deposit must be at least one round of rate".into()));
+        }
+        if tx.from == tx.recipient {
+            return Err(CoinError::ValidationError("cannot stream to self".into()));
+        }
+
+        // Compute stream_id deterministically
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&tx.from.0);
+        hasher.update(&tx.recipient.0);
+        hasher.update(&tx.nonce.to_le_bytes());
+        let stream_id = *hasher.finalize().as_bytes();
+
+        if self.streams.contains_key(&stream_id) {
+            return Err(CoinError::ValidationError("stream ID already exists".into()));
+        }
+
+        // Debit deposit + fee from sender
+        self.debit(&tx.from, tx.total_cost())?;
+        self.increment_nonce(&tx.from);
+
+        // Create the stream (deposit is locked — not in any balance)
+        let stream = crate::tx::stream::Stream {
+            id: stream_id,
+            sender: tx.from,
+            recipient: tx.recipient,
+            rate_sats_per_round: tx.rate_sats_per_round,
+            start_round: current_round,
+            deposited: tx.deposit,
+            withdrawn: 0,
+            cancelled_at_round: None,
+            cancel_recipient_credited: false,
+        };
+        self.streams.insert(stream_id, stream);
+
+        Ok(())
+    }
+
+    /// Withdraw accrued funds from a stream (must be called by recipient).
+    pub fn apply_withdraw_stream_tx(
+        &mut self,
+        tx: &crate::tx::stream::WithdrawStreamTx,
+        current_round: u64,
+    ) -> Result<(), CoinError> {
+        let stream = self.streams.get(&tx.stream_id)
+            .ok_or_else(|| CoinError::ValidationError("stream not found".into()))?;
+
+        if tx.from != stream.recipient {
+            return Err(CoinError::ValidationError("only recipient can withdraw from stream".into()));
+        }
+
+        let withdrawable = stream.withdrawable_at(current_round);
+        if withdrawable == 0 {
+            return Err(CoinError::ValidationError("no funds available to withdraw".into()));
+        }
+
+        // Debit fee from recipient
+        self.debit(&tx.from, tx.fee)?;
+        self.increment_nonce(&tx.from);
+
+        // Credit withdrawable to recipient (from the locked stream deposit)
+        self.credit(&tx.from, withdrawable)?;
+
+        // Update stream state
+        let stream = self.streams.get_mut(&tx.stream_id).unwrap();
+        stream.withdrawn = stream.withdrawn.saturating_add(withdrawable);
+
+        Ok(())
+    }
+
+    /// Cancel a stream (must be called by sender). Credits remaining accrued to recipient,
+    /// refunds unaccrued deposit to sender.
+    pub fn apply_cancel_stream_tx(
+        &mut self,
+        tx: &crate::tx::stream::CancelStreamTx,
+        current_round: u64,
+    ) -> Result<(), CoinError> {
+        let stream = self.streams.get(&tx.stream_id)
+            .ok_or_else(|| CoinError::ValidationError("stream not found".into()))?;
+
+        if tx.from != stream.sender {
+            return Err(CoinError::ValidationError("only sender can cancel stream".into()));
+        }
+
+        if stream.cancelled_at_round.is_some() {
+            return Err(CoinError::ValidationError("stream already cancelled".into()));
+        }
+
+        let accrued = stream.accrued_at(current_round);
+        let recipient_owed = accrued.saturating_sub(stream.withdrawn);
+        let sender_refund = stream.deposited.saturating_sub(accrued);
+        let recipient = stream.recipient;
+
+        // Debit fee from sender
+        self.debit(&tx.from, tx.fee)?;
+        self.increment_nonce(&tx.from);
+
+        // Credit remaining accrued to recipient
+        if recipient_owed > 0 {
+            self.credit(&recipient, recipient_owed)?;
+        }
+
+        // Refund unaccrued deposit to sender
+        if sender_refund > 0 {
+            self.credit(&tx.from, sender_refund)?;
+        }
+
+        // Update stream state
+        let stream = self.streams.get_mut(&tx.stream_id).unwrap();
+        stream.cancelled_at_round = Some(current_round);
+        stream.withdrawn = accrued;
+        stream.cancel_recipient_credited = true;
+
+        Ok(())
+    }
+
+    // ────────────────────────────────────────────────────────────
     // Spending Policy & Vault operations
     // ────────────────────────────────────────────────────────────
 
@@ -3335,6 +3555,95 @@ impl StateEngine {
                 self.name_to_address.insert(name.clone(), *new_owner);
                 self.address_to_name.remove(&tx.from);
                 self.address_to_name.insert(*new_owner, name.clone());
+            }
+            SmartOpType::StreamCreate { recipient, rate_sats_per_round, deposit } => {
+                // Build a synthetic CreateStreamTx to reuse validation logic
+                let synthetic = crate::tx::stream::CreateStreamTx {
+                    from: tx.from,
+                    recipient: *recipient,
+                    rate_sats_per_round: *rate_sats_per_round,
+                    deposit: *deposit,
+                    fee: 0, // fee already debited above
+                    nonce: tx.nonce,
+                    pub_key: [0u8; 32],
+                    signature: crate::address::Signature([0u8; 64]),
+                };
+                // apply_create_stream_tx debits deposit+fee and increments nonce.
+                // Since we already debited fee and incremented nonce above, we need to
+                // credit back the fee and decrement nonce first, or call the inner logic directly.
+                // Simpler: inline the core logic.
+                if synthetic.deposit == 0 {
+                    return Err(CoinError::ValidationError("stream deposit must be greater than 0".into()));
+                }
+                if synthetic.rate_sats_per_round == 0 {
+                    return Err(CoinError::ValidationError("stream rate must be greater than 0".into()));
+                }
+                if synthetic.deposit < synthetic.rate_sats_per_round {
+                    return Err(CoinError::ValidationError("stream deposit must be at least one round of rate".into()));
+                }
+                if tx.from == synthetic.recipient {
+                    return Err(CoinError::ValidationError("cannot stream to self".into()));
+                }
+                let mut hasher = blake3::Hasher::new();
+                hasher.update(&tx.from.0);
+                hasher.update(&synthetic.recipient.0);
+                hasher.update(&tx.nonce.to_le_bytes());
+                let stream_id = *hasher.finalize().as_bytes();
+                if self.streams.contains_key(&stream_id) {
+                    return Err(CoinError::ValidationError("stream ID already exists".into()));
+                }
+                // Debit the deposit (fee already debited by SmartOp handler above)
+                self.debit(&tx.from, synthetic.deposit)?;
+                let stream = crate::tx::stream::Stream {
+                    id: stream_id,
+                    sender: tx.from,
+                    recipient: synthetic.recipient,
+                    rate_sats_per_round: synthetic.rate_sats_per_round,
+                    start_round: current_round,
+                    deposited: synthetic.deposit,
+                    withdrawn: 0,
+                    cancelled_at_round: None,
+                    cancel_recipient_credited: false,
+                };
+                self.streams.insert(stream_id, stream);
+            }
+            SmartOpType::StreamWithdraw { stream_id } => {
+                let stream = self.streams.get(stream_id)
+                    .ok_or_else(|| CoinError::ValidationError("stream not found".into()))?;
+                if tx.from != stream.recipient {
+                    return Err(CoinError::ValidationError("only recipient can withdraw from stream".into()));
+                }
+                let withdrawable = stream.withdrawable_at(current_round);
+                if withdrawable == 0 {
+                    return Err(CoinError::ValidationError("no funds available to withdraw".into()));
+                }
+                self.credit(&tx.from, withdrawable)?;
+                let stream = self.streams.get_mut(stream_id).unwrap();
+                stream.withdrawn = stream.withdrawn.saturating_add(withdrawable);
+            }
+            SmartOpType::StreamCancel { stream_id } => {
+                let stream = self.streams.get(stream_id)
+                    .ok_or_else(|| CoinError::ValidationError("stream not found".into()))?;
+                if tx.from != stream.sender {
+                    return Err(CoinError::ValidationError("only sender can cancel stream".into()));
+                }
+                if stream.cancelled_at_round.is_some() {
+                    return Err(CoinError::ValidationError("stream already cancelled".into()));
+                }
+                let accrued = stream.accrued_at(current_round);
+                let recipient_owed = accrued.saturating_sub(stream.withdrawn);
+                let sender_refund = stream.deposited.saturating_sub(accrued);
+                let recipient = stream.recipient;
+                if recipient_owed > 0 {
+                    self.credit(&recipient, recipient_owed)?;
+                }
+                if sender_refund > 0 {
+                    self.credit(&tx.from, sender_refund)?;
+                }
+                let stream = self.streams.get_mut(stream_id).unwrap();
+                stream.cancelled_at_round = Some(current_round);
+                stream.withdrawn = accrued;
+                stream.cancel_recipient_credited = true;
             }
         }
 
@@ -4349,6 +4658,7 @@ impl StateEngine {
         bridge_reserve: u64,
     ) -> Result<Self, CoinError> {
         // Verify supply invariant before constructing (catch corrupted redb data)
+        // Note: from_parts has no streams — they are restored separately via restore_streams().
         let liquid: u64 = accounts.values().map(|a| a.balance).fold(0, |a, b| a.saturating_add(b));
         let staked: u64 = stake_accounts.values().map(|s| s.staked).fold(0, |a, b| a.saturating_add(b));
         let delegated: u64 = delegation_accounts.values().map(|d| d.delegated).fold(0, |a, b| a.saturating_add(b));
@@ -4357,9 +4667,11 @@ impl StateEngine {
             .ok_or_else(|| CoinError::SupplyInvariantBroken(
                 "from_parts: supply components overflow u64".into()
             ))?;
-        if total != total_supply {
+        // Note: total may be less than total_supply when streams hold locked funds.
+        // The full invariant (including streams) is checked after restore_streams().
+        if total > total_supply {
             return Err(CoinError::SupplyInvariantBroken(format!(
-                "from_parts: liquid={} staked={} delegated={} treasury={} bridge={} sum={} != total_supply={}",
+                "from_parts: liquid={} staked={} delegated={} treasury={} bridge={} sum={} > total_supply={}",
                 liquid, staked, delegated, treasury_balance, bridge_reserve, total, total_supply
             )));
         }
@@ -4402,6 +4714,7 @@ impl StateEngine {
             name_expiry: HashMap::new(),
             name_created_at: HashMap::new(),
             name_profiles: HashMap::new(),
+            streams: HashMap::new(),
         })
     }
 
@@ -4507,6 +4820,7 @@ impl StateEngine {
             name_expiry: { let mut v: Vec<_> = self.name_expiry.iter().map(|(k, v)| (k.clone(), *v)).collect(); v.sort_by(|a, b| a.0.cmp(&b.0)); v },
             name_created_at: { let mut v: Vec<_> = self.name_created_at.iter().map(|(k, v)| (k.clone(), *v)).collect(); v.sort_by(|a, b| a.0.cmp(&b.0)); v },
             name_profiles: { let mut v: Vec<_> = self.name_profiles.iter().map(|(k, v)| (k.clone(), v.clone())).collect(); v.sort_by(|a, b| a.0.cmp(&b.0)); v },
+            streams: { let mut v: Vec<_> = self.streams.iter().map(|(k, v)| (*k, v.clone())).collect(); v.sort_by_key(|(id, _)| *id); v },
         }
     }
 
@@ -4516,15 +4830,17 @@ impl StateEngine {
         let liquid: u64 = snapshot.accounts.iter().map(|(_, a)| a.balance).fold(0, |a, b| a.saturating_add(b));
         let staked: u64 = snapshot.stake_accounts.iter().map(|(_, s)| s.staked).fold(0, |a, b| a.saturating_add(b));
         let delegated: u64 = snapshot.delegation_accounts.iter().map(|(_, d)| d.delegated).fold(0, |a, b| a.saturating_add(b));
+        let streamed: u64 = snapshot.streams.iter().map(|(_, s)| s.deposited.saturating_sub(s.withdrawn)).fold(0, |a, b| a.saturating_add(b));
         let total = liquid.checked_add(staked).and_then(|t| t.checked_add(delegated))
             .and_then(|t| t.checked_add(snapshot.treasury_balance)).and_then(|t| t.checked_add(snapshot.bridge_reserve))
+            .and_then(|t| t.checked_add(streamed))
             .ok_or_else(|| CoinError::SupplyInvariantBroken(
                 "from_snapshot: supply components overflow u64".into()
             ))?;
         if total != snapshot.total_supply {
             return Err(CoinError::SupplyInvariantBroken(format!(
-                "from_snapshot: liquid={} staked={} delegated={} treasury={} bridge={} sum={} != total_supply={}",
-                liquid, staked, delegated, snapshot.treasury_balance, snapshot.bridge_reserve, total, snapshot.total_supply
+                "from_snapshot: liquid={} staked={} delegated={} treasury={} bridge={} streamed={} sum={} != total_supply={}",
+                liquid, staked, delegated, snapshot.treasury_balance, snapshot.bridge_reserve, streamed, total, snapshot.total_supply
             )));
         }
 
@@ -4586,6 +4902,7 @@ impl StateEngine {
             name_expiry: snapshot.name_expiry.into_iter().collect(),
             name_created_at: snapshot.name_created_at.into_iter().collect(),
             name_profiles: snapshot.name_profiles.into_iter().collect(),
+            streams: snapshot.streams.into_iter().collect(),
         })
     }
 
@@ -4643,6 +4960,7 @@ impl StateEngine {
         self.name_expiry = snapshot.name_expiry.into_iter().collect();
         self.name_created_at = snapshot.name_created_at.into_iter().collect();
         self.name_profiles = snapshot.name_profiles.into_iter().collect();
+        self.streams = snapshot.streams.into_iter().collect();
         self.configured_validator_count = saved_configured;
     }
 

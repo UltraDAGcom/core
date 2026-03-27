@@ -139,6 +139,40 @@ fn pending_cost(mp: &Mempool, sender: &Address) -> u64 {
     mp.pending_cost_for(sender)
 }
 
+/// Build a JSON value for a streaming payment, including computed fields.
+fn stream_to_json(id_hex: &str, s: &ultradag_coin::tx::stream::Stream, current_round: u64) -> serde_json::Value {
+    let accrued = s.accrued_at(current_round);
+    let withdrawable = s.withdrawable_at(current_round);
+    let end_round = s.end_round();
+    let is_active = s.is_active_at(current_round);
+    let effective_end = s.cancelled_at_round.unwrap_or(end_round);
+    let elapsed = current_round.saturating_sub(s.start_round).min(effective_end.saturating_sub(s.start_round));
+    let remaining = if is_active { end_round.saturating_sub(current_round) } else { 0 };
+    // 720 rounds per hour at 5s rounds
+    let rate_udag_per_hour = s.rate_sats_per_round as f64 * 720.0 / ultradag_coin::SATS_PER_UDAG as f64;
+    serde_json::json!({
+        "id": id_hex,
+        "sender": s.sender.to_hex(),
+        "recipient": s.recipient.to_hex(),
+        "rate_sats_per_round": s.rate_sats_per_round,
+        "rate_udag_per_hour": rate_udag_per_hour,
+        "start_round": s.start_round,
+        "deposited": s.deposited,
+        "deposited_udag": s.deposited as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+        "withdrawn": s.withdrawn,
+        "withdrawn_udag": s.withdrawn as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+        "accrued": accrued,
+        "accrued_udag": accrued as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+        "withdrawable": withdrawable,
+        "withdrawable_udag": withdrawable as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+        "cancelled_at_round": s.cancelled_at_round,
+        "is_active": is_active,
+        "end_round": end_round,
+        "elapsed_rounds": elapsed,
+        "remaining_rounds": remaining,
+    })
+}
+
 #[derive(Serialize, Clone)]
 struct StatusResponse {
     last_finalized_round: Option<u64>,
@@ -1352,6 +1386,29 @@ ultradag_banned_ips {ban_count}
                         "type": "smart_op",
                         "hash": hex_encode(&tx.hash()),
                         "from": t.from.to_hex(),
+                        "fee": t.fee,
+                    }),
+                    Transaction::CreateStream(t) => serde_json::json!({
+                        "type": "create_stream",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "recipient": t.recipient.to_hex(),
+                        "rate_sats_per_round": t.rate_sats_per_round,
+                        "deposit": t.deposit,
+                        "fee": t.fee,
+                    }),
+                    Transaction::WithdrawStream(t) => serde_json::json!({
+                        "type": "withdraw_stream",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "stream_id": hex_encode(&t.stream_id),
+                        "fee": t.fee,
+                    }),
+                    Transaction::CancelStream(t) => serde_json::json!({
+                        "type": "cancel_stream",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "stream_id": hex_encode(&t.stream_id),
                         "fee": t.fee,
                     }),
                 }
@@ -2742,6 +2799,9 @@ ultradag_banned_ips {ban_count}
                         Transaction::TransferName(_) => "transfer_name",
                         Transaction::UpdateProfile(_) => "update_profile",
                         Transaction::SmartOp(_) => "smart_op",
+                        Transaction::CreateStream(_) => "create_stream",
+                        Transaction::WithdrawStream(_) => "withdraw_stream",
+                        Transaction::CancelStream(_) => "cancel_stream",
                     },
                     "from": tx.from().to_hex(),
                     "fee": tx.fee(),
@@ -2939,6 +2999,36 @@ ultradag_banned_ips {ban_count}
                     }
                 }
                 Transaction::SetPolicy(t) => {
+                    if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+                    }
+                }
+                Transaction::CreateStream(t) => {
+                    if t.deposit == 0 {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "stream deposit must be greater than 0"));
+                    }
+                    if t.rate_sats_per_round == 0 {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "stream rate must be greater than 0"));
+                    }
+                    if t.deposit < t.rate_sats_per_round {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "stream deposit must be at least one round of rate"));
+                    }
+                    if t.from == t.recipient {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "cannot stream to self"));
+                    }
+                    if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+                    }
+                }
+                Transaction::WithdrawStream(t) => {
+                    if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                        return Ok(error_response(StatusCode::BAD_REQUEST,
+                            &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+                    }
+                }
+                Transaction::CancelStream(t) => {
                     if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
                         return Ok(error_response(StatusCode::BAD_REQUEST,
                             &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
@@ -3294,6 +3384,62 @@ ultradag_banned_ips {ban_count}
                 "total_delegated": total,
                 "total_delegated_udag": total as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                 "delegators": delegator_list,
+            }))
+        }
+
+        // ====== Streaming Payment Endpoints ======
+
+        (&Method::GET, ["stream", id_hex]) => {
+            let state = read_lock_or_503!(server.state);
+            // Parse 64-char hex stream ID to [u8; 32]
+            if id_hex.len() != 64 || !id_hex.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "stream ID must be 64 hex characters"));
+            }
+            let mut id = [0u8; 32];
+            for (i, chunk) in id_hex.as_bytes().chunks(2).enumerate() {
+                let s = std::str::from_utf8(chunk).unwrap_or("00");
+                id[i] = u8::from_str_radix(s, 16).unwrap_or(0);
+            }
+            let Some(stream) = state.stream(&id) else {
+                return Ok(error_response(StatusCode::NOT_FOUND, "stream not found"));
+            };
+            let current_round = state.last_finalized_round().unwrap_or(0);
+            json_response(StatusCode::OK, &stream_to_json(id_hex, stream, current_round))
+        }
+
+        (&Method::GET, ["streams", "sender", addr_str]) => {
+            let state = read_lock_or_503!(server.state);
+            let Some(addr) = resolve_address(addr_str, &state) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address or name"));
+            };
+            let current_round = state.last_finalized_round().unwrap_or(0);
+            let streams: Vec<serde_json::Value> = state.streams_by_sender(&addr)
+                .into_iter()
+                .take(200)
+                .map(|(id, s)| stream_to_json(&hex::encode(id), s, current_round))
+                .collect();
+            json_response(StatusCode::OK, &serde_json::json!({
+                "address": addr.to_hex(),
+                "count": streams.len(),
+                "streams": streams,
+            }))
+        }
+
+        (&Method::GET, ["streams", "recipient", addr_str]) => {
+            let state = read_lock_or_503!(server.state);
+            let Some(addr) = resolve_address(addr_str, &state) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid address or name"));
+            };
+            let current_round = state.last_finalized_round().unwrap_or(0);
+            let streams: Vec<serde_json::Value> = state.streams_by_recipient(&addr)
+                .into_iter()
+                .take(200)
+                .map(|(id, s)| stream_to_json(&hex::encode(id), s, current_round))
+                .collect();
+            json_response(StatusCode::OK, &serde_json::json!({
+                "address": addr.to_hex(),
+                "count": streams.len(),
+                "streams": streams,
             }))
         }
 
