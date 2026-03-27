@@ -1,242 +1,184 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Vote } from 'lucide-react';
-import { getProposals, getProposal, shortAddr, formatProposalType } from '../lib/api.ts';
-import { useKeystore } from '../hooks/useKeystore.ts';
-import { Card } from '../components/shared/Card.tsx';
-import { ProposalCard } from '../components/governance/ProposalCard.tsx';
-import { CreateProposalModal } from '../components/governance/CreateProposalModal.tsx';
-import { VoteButton } from '../components/governance/VoteButton.tsx';
-import { Pagination } from '../components/shared/Pagination.tsx';
-import { StatusBadge } from '../components/shared/StatusBadge.tsx';
+import { getProposals, getProposal, shortAddr, formatProposalType } from '../lib/api';
+import { useKeystore } from '../hooks/useKeystore';
+import { VoteButton } from '../components/governance/VoteButton';
+import { CreateProposalModal } from '../components/governance/CreateProposalModal';
 
-const PER_PAGE = 10;
+const S = {
+  card: { background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '18px 20px' } as React.CSSProperties,
+  mono: { fontFamily: "'DM Mono',monospace" },
+};
 
-// Rust serde serializes enum variants with data as {"VariantName": {fields...}}
-// Unit variants serialize as plain strings. Normalize both cases.
 function normalizeStatus(raw: unknown): { label: string; execute_at_round?: number } {
   if (typeof raw === 'string') return { label: raw };
-  if (raw && typeof raw === 'object') {
-    const key = Object.keys(raw)[0];
-    const val = (raw as Record<string, Record<string, unknown>>)[key];
-    if (key === 'PassedPending') return { label: 'PassedPending', execute_at_round: val?.execute_at_round as number };
-    if (key === 'Failed') return { label: 'Failed' };
-    return { label: key };
-  }
+  if (raw && typeof raw === 'object') { const k = Object.keys(raw)[0]; const v = (raw as Record<string, Record<string, unknown>>)[k]; if (k === 'PassedPending') return { label: 'PassedPending', execute_at_round: v?.execute_at_round as number }; return { label: k }; }
   return { label: String(raw) };
 }
 
 interface Proposal {
-  id: number;
-  title: string;
-  description: string;
-  status: string;
-  proposal_type: unknown;
-  proposer: string;
-  votes_for: number;
-  votes_against: number;
-  snapshot_council_size?: number;
-  snapshot_total_stake?: number;
-  voting_ends: number;
-  voting_starts?: number;
-  execute_at_round?: number | null;
+  id: number; title: string; description: string; status: string; proposal_type: unknown;
+  proposer: string; votes_for: number; votes_against: number;
+  snapshot_council_size?: number; snapshot_total_stake?: number;
+  voting_ends: number; execute_at_round?: number | null;
   voters?: Array<{ address: string; vote: string; vote_weight: number; category?: string }>;
 }
+
+const statusColor = (s: string) => s === 'Active' ? '#00E0C4' : s === 'Executed' ? '#0066FF' : s === 'PassedPending' ? '#FFB800' : s === 'Rejected' || s === 'Failed' ? '#EF4444' : 'rgba(255,255,255,0.3)';
 
 export function GovernancePage() {
   const { wallets, unlocked } = useKeystore();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [selected, setSelected] = useState<Proposal | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
       const data = await getProposals();
       const rawList = Array.isArray(data) ? data : (data?.proposals ?? []);
-      const list: Proposal[] = rawList.map((p: Record<string, unknown>) => {
+      setProposals(rawList.map((p: Record<string, unknown>) => {
         const s = normalizeStatus(p.status);
-        return { ...p, status: s.label, execute_at_round: s.execute_at_round ?? (p.execute_at_round as number | null) } as Proposal;
-      });
-      setProposals(list.sort((a, b) => b.id - a.id));
-    } catch {
-      // ignore
-    }
+        return { ...p, status: s.label, execute_at_round: s.execute_at_round ?? p.execute_at_round } as Proposal;
+      }).sort((a: Proposal, b: Proposal) => b.id - a.id));
+    } catch {}
     setLoading(false);
   }, []);
 
+  useEffect(() => { refresh(); const iv = setInterval(refresh, 30000); return () => clearInterval(iv); }, [refresh]);
+
   useEffect(() => {
-    refresh();
-    const interval = setInterval(refresh, 30000);
-    return () => clearInterval(interval);
+    const handler = () => { setProposals([]); setSelected(null); setLoading(true); refresh(); };
+    window.addEventListener('ultradag-network-switch', handler);
+    return () => window.removeEventListener('ultradag-network-switch', handler);
   }, [refresh]);
 
-  const handleSelectProposal = async (id: number) => {
-    try {
-      const detail = await getProposal(id);
-      const s = normalizeStatus(detail.status);
-      setSelected({ ...detail, status: s.label, execute_at_round: s.execute_at_round ?? detail.execute_at_round });
-    } catch {
-      const p = proposals.find(x => x.id === id);
-      if (p) setSelected(p);
-    }
+  const selectProposal = async (id: number) => {
+    try { const d = await getProposal(id); const s = normalizeStatus(d.status); setSelected({ ...d, status: s.label, execute_at_round: s.execute_at_round ?? d.execute_at_round }); }
+    catch { setSelected(proposals.find(p => p.id === id) || null); }
   };
 
-  const totalPages = Math.max(1, Math.ceil(proposals.length / PER_PAGE));
-  const pageProposals = proposals.slice((page - 1) * PER_PAGE, page * PER_PAGE);
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+      <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
         <div>
-          <h1 className="text-2xl font-bold text-white">Governance</h1>
-          <p className="text-sm text-dag-muted mt-1">Vote on proposals that shape the network</p>
+          <h1 style={{ fontSize: 21, fontWeight: 700, color: '#fff' }}>Governance</h1>
+          <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>Vote on proposals that shape the network</p>
         </div>
         {unlocked && wallets.length > 0 && (
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-dag-blue text-white text-sm font-medium hover:bg-dag-blue/90 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            New Proposal
-          </button>
+          <button onClick={() => setShowCreate(true)} style={{ padding: '8px 16px', borderRadius: 10, background: '#0066FF', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none' }}>+ New Proposal</button>
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-3">
-          <Card title={`Proposals (${proposals.length})`}>
-            {loading ? (
-              <p className="text-dag-muted text-sm">Loading proposals...</p>
-            ) : proposals.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="w-14 h-14 rounded-2xl bg-dag-blue/10 border border-dag-blue/20 flex items-center justify-center mb-4">
-                  <Vote className="w-7 h-7 text-dag-blue" />
-                </div>
-                <h4 className="text-white font-medium mb-1">No proposals yet</h4>
-                <p className="text-sm text-dag-muted max-w-xs mb-4">Create the first governance proposal.</p>
-                {unlocked && wallets.length > 0 && (
-                  <button
-                    onClick={() => setShowCreate(true)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-dag-blue text-white text-sm font-medium hover:bg-dag-blue/90 transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    New Proposal
-                  </button>
-                )}
-              </div>
-            ) : (
-              <>
-                <div className="space-y-3">
-                  {pageProposals.map(p => (
-                    <ProposalCard
-                      key={p.id}
-                      id={p.id}
-                      title={p.title}
-                      status={p.status}
-                      proposal_type={formatProposalType(p.proposal_type)}
-                      votes_for={p.votes_for}
-                      votes_against={p.votes_against}
-                      council_size={p.snapshot_council_size ?? p.snapshot_total_stake ?? 0}
-                      onClick={() => handleSelectProposal(p.id)}
-                    />
-                  ))}
-                </div>
-                <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
-              </>
-            )}
-          </Card>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr', gap: 16, animation: 'slideUp 0.4s ease' }}>
+        {/* Proposal List */}
+        <div style={S.card}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
+            <span style={{ color: '#0066FF', fontSize: 14 }}>⚙</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Proposals ({proposals.length})</span>
+          </div>
+          {loading ? (
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', textAlign: 'center', padding: '30px 0' }}>Loading proposals...</p>
+          ) : proposals.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <div style={{ fontSize: 30, opacity: 0.1, marginBottom: 10 }}>⚙</div>
+              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>No proposals yet</p>
+              <p style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.15)', marginTop: 4 }}>Create the first governance proposal to shape the network.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {proposals.map(p => {
+                const sc = statusColor(p.status);
+                const active = selected?.id === p.id;
+                return (
+                  <div key={p.id} onClick={() => selectProposal(p.id)} style={{
+                    padding: '12px 14px', borderRadius: 10, cursor: 'pointer', transition: 'all 0.2s',
+                    background: active ? 'rgba(0,102,255,0.04)' : 'rgba(255,255,255,0.02)',
+                    border: active ? '1px solid rgba(0,102,255,0.2)' : '1px solid rgba(255,255,255,0.03)',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                          <span style={{ fontSize: 10, ...S.mono, color: 'rgba(255,255,255,0.2)' }}>#{p.id}</span>
+                          <span style={{ fontSize: 8.5, padding: '1px 6px', borderRadius: 4, background: sc + '12', color: sc, fontWeight: 600 }}>{p.status}</span>
+                          <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.18)', padding: '1px 5px', borderRadius: 3, background: 'rgba(255,255,255,0.03)' }}>{formatProposalType(p.proposal_type)}</span>
+                        </div>
+                        <div style={{ fontSize: 12.5, fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
+                        <span style={{ fontSize: 11, color: '#00E0C4', fontWeight: 600 }}>{p.votes_for}</span>
+                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.15)' }}> / </span>
+                        <span style={{ fontSize: 11, color: '#EF4444', fontWeight: 600 }}>{p.votes_against}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        <div>
+        {/* Detail Panel */}
+        <div style={S.card}>
           {selected ? (
-            <Card title={`Proposal #${selected.id}`}>
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <StatusBadge status={selected.status} />
-                  <span className="text-xs text-dag-muted px-1.5 py-0.5 rounded bg-dag-card border border-dag-border">
-                    {formatProposalType(selected.proposal_type)}
-                  </span>
-                </div>
-                <h3 className="text-white font-medium">{selected.title}</h3>
-                <p className="text-sm text-dag-muted whitespace-pre-wrap">{selected.description}</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span className="text-dag-muted block text-xs">Proposer</span>
-                    <span className="text-white font-mono text-xs">{shortAddr(selected.proposer)}</span>
-                  </div>
-                  <div>
-                    <span className="text-dag-muted block text-xs">Voting Ends</span>
-                    <span className="text-white">Round {selected.voting_ends?.toLocaleString()}</span>
-                  </div>
-                  <div>
-                    <span className="text-dag-muted block text-xs">Votes For</span>
-                    <span className="text-dag-green">{selected.votes_for} vote{selected.votes_for !== 1 ? 's' : ''}</span>
-                  </div>
-                  <div>
-                    <span className="text-dag-muted block text-xs">Votes Against</span>
-                    <span className="text-dag-red">{selected.votes_against} vote{selected.votes_against !== 1 ? 's' : ''}</span>
-                  </div>
-                  {selected.snapshot_council_size != null && (
-                    <div>
-                      <span className="text-dag-muted block text-xs">Council Size</span>
-                      <span className="text-white">{selected.snapshot_council_size} seats</span>
-                    </div>
-                  )}
-                  {selected.execute_at_round != null && (
-                    <div>
-                      <span className="text-dag-muted block text-xs">Executes At</span>
-                      <span className="text-white">Round {selected.execute_at_round.toLocaleString()}</span>
-                    </div>
-                  )}
-                </div>
-
-                {unlocked && wallets.length > 0 && selected.status === 'Active' && (
-                  <div className="pt-3 border-t border-dag-border flex gap-2">
-                    <VoteButton proposalId={selected.id} secretKey={wallets[0].secret_key} approve={true} fee={10000} onSuccess={refresh} />
-                    <VoteButton proposalId={selected.id} secretKey={wallets[0].secret_key} approve={false} fee={10000} onSuccess={refresh} />
-                  </div>
-                )}
-
-                {selected.voters && selected.voters.length > 0 && (
-                  <div className="pt-3 border-t border-dag-border">
-                    <h4 className="text-sm font-medium text-white mb-2">Voters ({selected.voters.length})</h4>
-                    <div className="space-y-1">
-                      {selected.voters.map(v => (
-                        <div key={v.address} className="flex items-center justify-between text-xs">
-                          <span className="font-mono text-dag-muted">{shortAddr(v.address)}</span>
-                          <div className="flex items-center gap-2">
-                            {v.category && (
-                              <span className="text-dag-muted">{v.category}</span>
-                            )}
-                            <span className={v.vote === 'yes' ? 'text-dag-green' : 'text-dag-red'}>
-                              {v.vote === 'yes' ? 'YES' : 'NO'}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                <span style={{ fontSize: 8.5, padding: '2px 7px', borderRadius: 4, background: statusColor(selected.status) + '12', color: statusColor(selected.status), fontWeight: 600 }}>{selected.status}</span>
+                <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.18)' }}>{formatProposalType(selected.proposal_type)}</span>
               </div>
-            </Card>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 8 }}>{selected.title}</h3>
+              <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.3)', lineHeight: 1.6, marginBottom: 14, whiteSpace: 'pre-wrap' }}>{selected.description}</p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
+                {[
+                  { l: 'PROPOSER', v: shortAddr(selected.proposer) },
+                  { l: 'VOTING ENDS', v: `Round ${selected.voting_ends?.toLocaleString()}` },
+                  { l: 'VOTES FOR', v: String(selected.votes_for), c: '#00E0C4' },
+                  { l: 'VOTES AGAINST', v: String(selected.votes_against), c: '#EF4444' },
+                  ...(selected.execute_at_round != null ? [{ l: 'EXECUTES AT', v: `Round ${selected.execute_at_round.toLocaleString()}` }] : []),
+                ].map((x, i) => (
+                  <div key={i} style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 8, padding: '8px 10px' }}>
+                    <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.22)', letterSpacing: 1, marginBottom: 2 }}>{x.l}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: x.c || '#fff', ...S.mono }}>{x.v}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Vote buttons */}
+              {unlocked && wallets.length > 0 && selected.status === 'Active' && (
+                <div style={{ display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+                  <VoteButton proposalId={selected.id} secretKey={wallets[0].secret_key} approve={true} fee={10000} onSuccess={refresh} />
+                  <VoteButton proposalId={selected.id} secretKey={wallets[0].secret_key} approve={false} fee={10000} onSuccess={refresh} />
+                </div>
+              )}
+
+              {/* Voter list */}
+              {selected.voters && selected.voters.length > 0 && (
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', letterSpacing: 1, marginBottom: 8 }}>VOTERS ({selected.voters.length})</div>
+                  {selected.voters.map(v => (
+                    <div key={v.address} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.015)' }}>
+                      <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.3)', ...S.mono }}>{shortAddr(v.address)}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {v.category && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.18)' }}>{v.category}</span>}
+                        <span style={{ fontSize: 10, fontWeight: 600, color: v.vote === 'yes' ? '#00E0C4' : '#EF4444' }}>{v.vote === 'yes' ? 'YES' : 'NO'}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
-            <Card>
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <p className="text-sm text-dag-muted">Select a proposal to view details</p>
-              </div>
-            </Card>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 200, gap: 8 }}>
+              <span style={{ fontSize: 28, opacity: 0.1 }}>⚙</span>
+              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>Select a proposal to view details</p>
+            </div>
           )}
         </div>
       </div>
 
-      {showCreate && (
-        <CreateProposalModal
-          wallets={wallets}
-          onClose={() => setShowCreate(false)}
-          onSuccess={refresh}
-        />
-      )}
+      {showCreate && <CreateProposalModal wallets={wallets} onClose={() => setShowCreate(false)} onSuccess={refresh} />}
     </div>
   );
 }

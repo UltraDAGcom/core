@@ -1,397 +1,281 @@
 import { useState } from 'react';
-import { Plus, Download, KeyRound, Wallet as WalletIcon, ShieldAlert, X, Fingerprint, Bell, BellOff } from 'lucide-react';
-import { WalletCard, WalletDetail } from '../components/wallet/WalletCard';
+import { Link } from 'react-router-dom';
+import { formatUdag, shortAddr, fullAddr } from '../lib/api';
+import { getPasskeyWallet } from '../lib/passkey-wallet';
 import { CreateKeystoreModal } from '../components/wallet/CreateKeystoreModal';
 import { AddWalletModal } from '../components/wallet/AddWalletModal';
-import { Pagination } from '../components/shared/Pagination';
 import { changePassword } from '../lib/keystore';
+import { CopyButton } from '../components/shared/CopyButton';
 import type { Wallet } from '../lib/keystore';
 import type { WalletBalance } from '../hooks/useWalletBalances';
 
-function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [currentPw, setCurrentPw] = useState('');
-  const [newPw, setNewPw] = useState('');
-  const [confirmPw, setConfirmPw] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
+const SATS = 100_000_000;
+const fmt = (v: number) => (v / SATS).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 
+const S = {
+  card: { background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '18px 20px' } as React.CSSProperties,
+  stat: { background: 'rgba(255,255,255,0.025)', borderRadius: 10, padding: '12px 14px' } as React.CSSProperties,
+  input: { width: '100%', padding: '10px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.055)', color: '#fff', fontSize: 13, outline: 'none', fontFamily: "'DM Sans',sans-serif" } as React.CSSProperties,
+  btn: (c = '#00E0C4') => ({ padding: '7px 14px', borderRadius: 8, background: `${c}10`, border: `1px solid ${c}20`, color: c, fontSize: 11, fontWeight: 600 as const, cursor: 'pointer', transition: 'all 0.2s', display: 'inline-flex' as const, alignItems: 'center' as const, gap: 5 }),
+  btnSolid: { padding: '9px 18px', borderRadius: 10, background: '#00E0C4', color: '#080C14', fontSize: 12, fontWeight: 700 as const, cursor: 'pointer', border: 'none' },
+  mono: { fontFamily: "'DM Mono',monospace" },
+};
+
+function Modal({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: React.ReactNode }) {
   if (!open) return null;
-
-  const handleClose = () => {
-    setCurrentPw('');
-    setNewPw('');
-    setConfirmPw('');
-    setError('');
-    setSuccess(false);
-    onClose();
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setSuccess(false);
-
-    if (newPw.length < 8) {
-      setError('New password must be at least 8 characters.');
-      return;
-    }
-    if (newPw !== confirmPw) {
-      setError('New passwords do not match.');
-      return;
-    }
-    if (currentPw === newPw) {
-      setError('New password must be different from current password.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const ok = await changePassword(currentPw, newPw);
-      if (ok) {
-        setSuccess(true);
-        setCurrentPw('');
-        setNewPw('');
-        setConfirmPw('');
-      } else {
-        setError('Current password is incorrect.');
-      }
-    } catch {
-      setError('Failed to change password.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-dag-card border border-dag-border rounded-xl shadow-2xl w-full max-w-md p-6">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold text-white">Change Password</h2>
-          <button onClick={handleClose} className="text-dag-muted hover:text-white transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}>
+      <div style={{ ...S.card, maxWidth: 440, width: '100%', boxShadow: '0 24px 60px rgba(0,0,0,0.6)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{title}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.25)', cursor: 'pointer', fontSize: 16 }}>✕</button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs text-dag-muted mb-1">Current Password</label>
-            <input
-              type="password"
-              value={currentPw}
-              onChange={(e) => setCurrentPw(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-dag-bg border border-dag-border text-white text-sm focus:outline-none focus:border-dag-accent"
-              autoFocus
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-dag-muted mb-1">New Password (min 8 characters)</label>
-            <input
-              type="password"
-              value={newPw}
-              onChange={(e) => setNewPw(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-dag-bg border border-dag-border text-white text-sm focus:outline-none focus:border-dag-accent"
-              required
-              minLength={8}
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-dag-muted mb-1">Confirm New Password</label>
-            <input
-              type="password"
-              value={confirmPw}
-              onChange={(e) => setConfirmPw(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-dag-bg border border-dag-border text-white text-sm focus:outline-none focus:border-dag-accent"
-              required
-              minLength={8}
-            />
-          </div>
-          {error && (
-            <div className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-              {error}
-            </div>
-          )}
-          {success && (
-            <div className="text-green-400 text-xs bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
-              Password changed successfully.
-            </div>
-          )}
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="px-4 py-2 rounded-lg bg-slate-700 text-slate-200 text-sm font-medium hover:bg-slate-600 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 rounded-lg bg-dag-accent text-white text-sm font-medium hover:bg-dag-accent/80 transition-colors disabled:opacity-50"
-            >
-              {loading ? 'Changing...' : 'Change Password'}
-            </button>
-          </div>
-        </form>
+        {children}
       </div>
     </div>
   );
 }
 
-const WALLETS_PER_PAGE = 8;
+function ChangePwModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [cur, setCur] = useState(''); const [np, setNp] = useState(''); const [cp, setCp] = useState('');
+  const [err, setErr] = useState(''); const [ok, setOk] = useState(false); const [ld, setLd] = useState(false);
+  const close = () => { setCur(''); setNp(''); setCp(''); setErr(''); setOk(false); onClose(); };
+  return (
+    <Modal open={open} title="Change Password" onClose={close}>
+      <form onSubmit={async e => { e.preventDefault(); setErr(''); setOk(false); if (np.length < 8) { setErr('Min 8 chars.'); return; } if (np !== cp) { setErr("Don't match."); return; } setLd(true); try { (await changePassword(cur, np)) ? setOk(true) : setErr('Wrong current password.'); } catch { setErr('Failed.'); } finally { setLd(false); } }}
+        style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {[{ l: 'Current', v: cur, s: setCur }, { l: 'New', v: np, s: setNp }, { l: 'Confirm', v: cp, s: setCp }].map((f, i) => (
+          <div key={i}><div style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', marginBottom: 3 }}>{f.l}</div><input type="password" style={S.input} value={f.v} onChange={e => f.s(e.target.value)} required /></div>
+        ))}
+        {err && <div style={{ fontSize: 10.5, color: '#EF4444', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 8, padding: '7px 10px' }}>{err}</div>}
+        {ok && <div style={{ fontSize: 10.5, color: '#00E0C4', background: 'rgba(0,224,196,0.06)', border: '1px solid rgba(0,224,196,0.15)', borderRadius: 8, padding: '7px 10px' }}>Changed!</div>}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+          <button type="button" onClick={close} style={S.btn('rgba(255,255,255,0.3)')}>Cancel</button>
+          <button type="submit" disabled={ld} style={S.btnSolid}>{ld ? '...' : 'Change'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
 
 interface WalletPageProps {
-  unlocked: boolean;
-  hasStore: boolean;
-  wallets: Wallet[];
-  balances: Map<string, WalletBalance>;
-  onCreate: (password: string) => Promise<void>;
-  onUnlock: (password: string) => Promise<boolean>;
-  onImportBlob: (json: string) => boolean;
-  onAddWallet: (name: string, secretKey: string, address: string) => Promise<void>;
-  onRemoveWallet: (index: number) => Promise<void>;
-  onExportBlob: () => string | null;
+  unlocked: boolean; hasStore: boolean; wallets: Wallet[]; balances: Map<string, WalletBalance>;
+  onCreate: (p: string) => Promise<void>; onUnlock: (p: string) => Promise<boolean>;
+  onImportBlob: (j: string) => boolean; onAddWallet: (n: string, s: string, a: string) => Promise<void>;
+  onRemoveWallet: (i: number) => Promise<void>; onExportBlob: () => string | null;
   onGenerateKeypair: () => Promise<{ secret_key: string; address: string } | null>;
-  webauthnAvailable?: boolean;
-  webauthnEnrolled?: boolean;
-  onEnrollWebAuthn?: () => Promise<boolean>;
-  onRemoveWebAuthn?: () => void;
-  notificationsSupported?: boolean;
-  notificationsEnabled?: boolean;
+  webauthnAvailable?: boolean; webauthnEnrolled?: boolean;
+  onEnrollWebAuthn?: () => Promise<boolean>; onRemoveWebAuthn?: () => void;
+  notificationsSupported?: boolean; notificationsEnabled?: boolean;
   onToggleNotifications?: () => Promise<void>;
 }
 
 export function WalletPage({
-  unlocked,
-  hasStore,
-  wallets,
-  balances,
-  onCreate,
-  onUnlock,
-  onImportBlob,
-  onAddWallet,
-  onRemoveWallet,
-  onExportBlob,
-  onGenerateKeypair,
-  webauthnAvailable,
-  webauthnEnrolled,
-  onEnrollWebAuthn,
-  onRemoveWebAuthn,
-  notificationsSupported,
-  notificationsEnabled,
-  onToggleNotifications,
+  unlocked, hasStore, wallets, balances, onCreate, onUnlock, onImportBlob,
+  onAddWallet, onRemoveWallet, onExportBlob, onGenerateKeypair,
+  webauthnAvailable, webauthnEnrolled, onEnrollWebAuthn, onRemoveWebAuthn,
 }: WalletPageProps) {
-  const [showKeystoreModal, setShowKeystoreModal] = useState(false);
+  const [showKsModal, setShowKsModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showChangePwModal, setShowChangePwModal] = useState(false);
-  const [selectedWallet, setSelectedWallet] = useState<number | null>(null);
-  const [page, setPage] = useState(1);
+  const [showPwModal, setShowPwModal] = useState(false);
+  const [sel, setSel] = useState<number | null>(null);
+  const pw = getPasskeyWallet();
 
-  // If not unlocked, show locked state
   if (!unlocked) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Wallet</h1>
-          <p className="text-sm text-dag-muted mt-1">Manage your UltraDAG wallets</p>
+      <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+        <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
+        <h1 style={{ fontSize: 21, fontWeight: 700, color: '#fff', marginBottom: 4, animation: 'slideUp 0.3s ease' }}>Wallet</h1>
+        <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)' }}>Manage your UltraDAG wallets</p>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '70px 0', gap: 18 }}>
+          <div style={{ width: 72, height: 72, borderRadius: 18, background: 'linear-gradient(135deg,rgba(0,224,196,0.06),rgba(0,102,255,0.06))', border: '1px solid rgba(0,224,196,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>◇</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>{hasStore ? 'Wallet Locked' : 'No Wallet Yet'}</div>
+            <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)', marginTop: 4, maxWidth: 280 }}>{hasStore ? 'Enter your password to access your wallets.' : 'Create a new wallet or import an existing one.'}</div>
+          </div>
+          <button onClick={() => setShowKsModal(true)} style={S.btnSolid}>{hasStore ? 'Unlock' : 'Get Started'}</button>
         </div>
-
-        <div className="flex flex-col items-center justify-center py-20 space-y-6">
-          <div className="w-20 h-20 rounded-2xl bg-dag-card border border-dag-border flex items-center justify-center">
-            <ShieldAlert className="w-10 h-10 text-dag-muted" />
-          </div>
-          <div className="text-center">
-            <h2 className="text-lg font-semibold text-white">
-              {hasStore ? 'Wallet Locked' : 'No Wallet Yet'}
-            </h2>
-            <p className="text-sm text-dag-muted mt-1 max-w-sm">
-              {hasStore
-                ? 'Enter your password to access your wallets.'
-                : 'Create a new wallet or import an existing one to get started.'}
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowKeystoreModal(true)}
-              className="px-5 py-2.5 rounded-lg bg-dag-accent text-white font-medium text-sm hover:bg-dag-accent/80 transition-colors"
-            >
-              {hasStore ? 'Unlock' : 'Get Started'}
-            </button>
-          </div>
-        </div>
-
-        <CreateKeystoreModal
-          open={showKeystoreModal}
-          onClose={() => setShowKeystoreModal(false)}
-          onCreateOrUnlock={async (pw) => {
-            if (hasStore) {
-              return onUnlock(pw);
-            } else {
-              await onCreate(pw);
-              return true;
-            }
-          }}
-          onCreateWithKey={async (pw, name, secretKey, address) => {
-            await onCreate(pw);
-            await onAddWallet(name, secretKey, address);
-            return true;
-          }}
-          onImport={onImportBlob}
-          hasExisting={hasStore}
-        />
+        <CreateKeystoreModal open={showKsModal} onClose={() => setShowKsModal(false)}
+          onCreateOrUnlock={async pw => { if (hasStore) return onUnlock(pw); await onCreate(pw); return true; }}
+          onCreateWithKey={async (pw, n, s, a) => { await onCreate(pw); await onAddWallet(n, s, a); return true; }}
+          onImport={onImportBlob} hasExisting={hasStore} />
       </div>
     );
   }
 
-  // Unlocked state
-  const totalPages = Math.ceil(wallets.length / WALLETS_PER_PAGE);
-  const pagedWallets = wallets.slice((page - 1) * WALLETS_PER_PAGE, page * WALLETS_PER_PAGE);
-  const selected = selectedWallet !== null ? wallets[selectedWallet] : null;
+  const handleExport = () => { const j = onExportBlob(); if (j) { const b = new Blob([j], { type: 'application/json' }); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = 'ultradag-keystore.json'; a.click(); URL.revokeObjectURL(u); } };
+  const selected = sel !== null ? wallets[sel] : null;
+  const selBal = selected ? balances.get(selected.address) : null;
 
-  const handleExport = () => {
-    const json = onExportBlob();
-    if (json) {
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'ultradag-keystore.json';
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-  };
+  // Totals
+  let totalBal = 0, totalStaked = 0, totalDelegated = 0;
+  for (const w of wallets) { const b = balances.get(w.address); if (b) { totalBal += b.balance; totalStaked += b.staked; totalDelegated += b.delegated; } }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+      <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, animation: 'slideUp 0.3s ease' }}>
         <div>
-          <h1 className="text-2xl font-bold text-white">Wallet</h1>
-          <p className="text-sm text-dag-muted mt-1">{wallets.length} wallet{wallets.length !== 1 ? 's' : ''}</p>
+          <h1 style={{ fontSize: 21, fontWeight: 700, color: '#fff' }}>Wallets</h1>
+          <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>{wallets.length} wallet{wallets.length !== 1 ? 's' : ''} managed</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {notificationsSupported && onToggleNotifications && (
-            <button
-              onClick={onToggleNotifications}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                notificationsEnabled
-                  ? 'bg-dag-green/15 text-dag-green hover:bg-dag-green/25'
-                  : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
-              }`}
-            >
-              {notificationsEnabled ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
-              {notificationsEnabled ? 'Notifications On' : 'Enable Notifications'}
-            </button>
-          )}
+        <div style={{ display: 'flex', gap: 7 }}>
           {webauthnAvailable && onEnrollWebAuthn && onRemoveWebAuthn && (
-            <button
-              onClick={async () => {
-                if (webauthnEnrolled) {
-                  onRemoveWebAuthn();
-                } else {
-                  try { await onEnrollWebAuthn(); } catch {}
-                }
-              }}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                webauthnEnrolled
-                  ? 'bg-dag-green/15 text-dag-green hover:bg-dag-green/25'
-                  : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
-              }`}
-            >
-              <Fingerprint className="w-3.5 h-3.5" />
-              {webauthnEnrolled ? 'Biometrics On' : 'Enable Biometrics'}
+            <button onClick={async () => { webauthnEnrolled ? onRemoveWebAuthn() : await onEnrollWebAuthn?.(); }} style={S.btn(webauthnEnrolled ? '#00E0C4' : 'rgba(255,255,255,0.3)')}>
+              ◎ {webauthnEnrolled ? 'Biometrics On' : 'Biometrics'}
             </button>
           )}
-          <button
-            onClick={() => setShowChangePwModal(true)}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700 text-slate-200 text-xs font-medium hover:bg-slate-600 transition-colors"
-          >
-            <KeyRound className="w-3.5 h-3.5" />
-            Password
-          </button>
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700 text-slate-200 text-xs font-medium hover:bg-slate-600 transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Export
-          </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-dag-accent text-white text-sm font-medium hover:bg-dag-accent/80 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add Wallet
-          </button>
+          <button onClick={() => setShowPwModal(true)} style={S.btn('rgba(255,255,255,0.3)')}>⚿ Password</button>
+          <button onClick={handleExport} style={S.btn('rgba(255,255,255,0.3)')}>↓ Export</button>
+          <button onClick={() => setShowAddModal(true)} style={S.btnSolid}>+ Add Wallet</button>
+        </div>
+      </div>
+
+      {/* Portfolio Summary */}
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(0,224,196,0.03), rgba(0,102,255,0.03))',
+        border: '1px solid rgba(0,224,196,0.08)', borderRadius: 16, padding: '18px 24px', marginBottom: 16,
+        animation: 'slideUp 0.4s ease',
+      }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.25)', letterSpacing: 1.8, marginBottom: 10 }}>TOTAL PORTFOLIO</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
+          {[
+            { l: 'Total', v: totalBal + totalStaked + totalDelegated, c: '#fff' },
+            { l: 'Available', v: totalBal, c: '#00E0C4' },
+            { l: 'Staked', v: totalStaked, c: '#0066FF' },
+            { l: 'Delegated', v: totalDelegated, c: '#A855F7' },
+          ].map((p, i) => (
+            <div key={i}>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginBottom: 3 }}>{p.l}</div>
+              <div style={{ fontSize: 21, fontWeight: 700, color: p.c, ...S.mono }}>{fmt(p.v)}</div>
+              <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.15)' }}>UDAG</div>
+            </div>
+          ))}
         </div>
       </div>
 
       {wallets.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 space-y-4">
-          <WalletIcon className="w-12 h-12 text-slate-600" />
-          <p className="text-dag-muted text-sm">No wallets yet. Add one to get started.</p>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="px-5 py-2.5 rounded-lg bg-dag-accent text-white font-medium text-sm hover:bg-dag-accent/80 transition-colors"
-          >
-            Add Wallet
-          </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '50px 0', gap: 14 }}>
+          <span style={{ fontSize: 36, opacity: 0.1 }}>◇</span>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>No wallets yet. Add one to get started.</p>
+          <button onClick={() => setShowAddModal(true)} style={S.btnSolid}>Add Wallet</button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {/* Wallet list */}
-          <div className="space-y-3">
-            {pagedWallets.map((w, i) => {
-              const globalIndex = (page - 1) * WALLETS_PER_PAGE + i;
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 14, animation: 'slideUp 0.5s ease' }}>
+          {/* Wallet List */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {wallets.map((w, i) => {
+              const bal = balances.get(w.address);
+              const isPk = pw?.address === w.address;
+              const active = sel === i;
+              const totalVal = (bal?.balance ?? 0) + (bal?.staked ?? 0) + (bal?.delegated ?? 0);
               return (
-                <WalletCard
-                  key={w.address}
-                  name={w.name}
-                  address={w.address}
-                  balance={balances.get(w.address)}
-                  selected={selectedWallet === globalIndex}
-                  onClick={() => setSelectedWallet(selectedWallet === globalIndex ? null : globalIndex)}
-                />
+                <div key={w.address} onClick={() => setSel(active ? null : i)} style={{
+                  ...S.card, cursor: 'pointer', transition: 'all 0.25s',
+                  borderColor: active ? 'rgba(0,224,196,0.25)' : 'rgba(255,255,255,0.04)',
+                  background: active ? 'rgba(0,224,196,0.025)' : 'rgba(255,255,255,0.012)',
+                  transform: active ? 'scale(1.005)' : 'none',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{
+                        width: 40, height: 40, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: isPk ? 'linear-gradient(135deg,#00E0C4,#0066FF)' : `hsl(${i * 60}, 40%, 20%)`,
+                        fontSize: 15, fontWeight: 800, color: '#fff',
+                        boxShadow: active ? '0 0 12px rgba(0,224,196,0.15)' : 'none',
+                      }}>{w.name[0]?.toUpperCase() || '?'}</div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{w.name}</span>
+                          {isPk && <span style={{ fontSize: 8, background: 'rgba(0,224,196,0.1)', color: '#00E0C4', padding: '1px 5px', borderRadius: 3, fontWeight: 700, letterSpacing: 0.6 }}>PASSKEY</span>}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.18)', ...S.mono, marginTop: 2 }}>{shortAddr(w.address)}</div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', ...S.mono }}>{fmt(totalVal)}</div>
+                      <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.18)' }}>UDAG</div>
+                    </div>
+                  </div>
+                  {/* Mini balance bar */}
+                  {totalVal > 0 && (
+                    <div style={{ display: 'flex', borderRadius: 3, overflow: 'hidden', height: 3, marginTop: 10, background: 'rgba(255,255,255,0.02)' }}>
+                      {(bal?.balance ?? 0) > 0 && <div style={{ width: `${((bal?.balance ?? 0) / totalVal) * 100}%`, background: '#00E0C4' }} />}
+                      {(bal?.staked ?? 0) > 0 && <div style={{ width: `${((bal?.staked ?? 0) / totalVal) * 100}%`, background: '#0066FF' }} />}
+                      {(bal?.delegated ?? 0) > 0 && <div style={{ width: `${((bal?.delegated ?? 0) / totalVal) * 100}%`, background: '#A855F7' }} />}
+                    </div>
+                  )}
+                </div>
               );
             })}
-            <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
           </div>
 
-          {/* Wallet detail */}
-          <div>
+          {/* Detail Panel */}
+          <div style={S.card}>
             {selected ? (
-              <WalletDetail
-                name={selected.name}
-                address={selected.address}
-                secretKey={selected.secret_key}
-                balance={balances.get(selected.address)}
-                onRemove={() => {
-                  if (selectedWallet !== null) {
-                    onRemoveWallet(selectedWallet);
-                    setSelectedWallet(null);
-                  }
-                }}
-              />
+              <div>
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
+                  <div style={{
+                    width: 48, height: 48, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: pw?.address === selected.address ? 'linear-gradient(135deg,#00E0C4,#0066FF)' : 'rgba(255,255,255,0.04)',
+                    fontSize: 20, fontWeight: 800, color: '#fff',
+                  }}>{selected.name[0]?.toUpperCase()}</div>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{selected.name}</div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)', ...S.mono, marginTop: 1 }}>{fullAddr(selected.address)}</div>
+                  </div>
+                </div>
+
+                {/* Stats grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
+                  {[
+                    { l: 'AVAILABLE', v: fmt(selBal?.balance ?? 0), c: '#00E0C4', i: '◎' },
+                    { l: 'STAKED', v: fmt(selBal?.staked ?? 0), c: '#0066FF', i: '⬡' },
+                    { l: 'DELEGATED', v: fmt(selBal?.delegated ?? 0), c: '#A855F7', i: '◈' },
+                    { l: 'NONCE', v: String(selBal?.nonce ?? 0), c: '#fff', i: '#' },
+                  ].map((x, i) => (
+                    <div key={i} style={S.stat}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
+                        <span style={{ fontSize: 10, color: x.c }}>{x.i}</span>
+                        <span style={{ fontSize: 8.5, color: 'rgba(255,255,255,0.22)', letterSpacing: 1 }}>{x.l}</span>
+                      </div>
+                      <div style={{ fontSize: 17, fontWeight: 700, color: x.c, ...S.mono }}>{x.v}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Quick actions */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                  <Link to="/wallet/send" style={{ ...S.btn(), textDecoration: 'none' }}>⇄ Send</Link>
+                  <Link to="/staking" style={{ ...S.btn('#0066FF'), textDecoration: 'none' }}>⬡ Stake</Link>
+                  <Link to="/smart-account" style={{ ...S.btn('#A855F7'), textDecoration: 'none' }}>◎ SmartAccount</Link>
+                </div>
+
+                {/* Address copy + remove */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+                  <CopyButton text={selected.address} />
+                  <CopyButton text={fullAddr(selected.address)} />
+                  {sel !== null && (
+                    <button onClick={() => { onRemoveWallet(sel); setSel(null); }} style={S.btn('#EF4444')}>Remove</button>
+                  )}
+                </div>
+              </div>
             ) : (
-              <div className="bg-dag-card border border-dag-border rounded-xl p-8 flex flex-col items-center justify-center text-center h-full min-h-[200px]">
-                <WalletIcon className="w-8 h-8 text-slate-600 mb-3" />
-                <p className="text-sm text-dag-muted">Select a wallet to view details</p>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 260, gap: 10 }}>
+                <span style={{ fontSize: 32, opacity: 0.08 }}>◇</span>
+                <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.18)' }}>Select a wallet to view details</p>
+                <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.1)' }}>Click any wallet on the left</p>
               </div>
             )}
           </div>
         </div>
       )}
 
-      <AddWalletModal
-        open={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onGenerate={onGenerateKeypair}
-        onAdd={onAddWallet}
-      />
-
-      <ChangePasswordModal
-        open={showChangePwModal}
-        onClose={() => setShowChangePwModal(false)}
-      />
+      <AddWalletModal open={showAddModal} onClose={() => setShowAddModal(false)} onGenerate={onGenerateKeypair} onAdd={onAddWallet} />
+      <ChangePwModal open={showPwModal} onClose={() => setShowPwModal(false)} />
     </div>
   );
 }

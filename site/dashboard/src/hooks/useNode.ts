@@ -60,6 +60,7 @@ export function useNode() {
 
   const connect = useCallback(async () => {
     setLoading(true);
+    setStatus(null); // Clear stale data immediately on reconnect/network switch
     const ok = await connectToNode();
     setConnected(ok);
     setNodeUrl(getNodeUrl());

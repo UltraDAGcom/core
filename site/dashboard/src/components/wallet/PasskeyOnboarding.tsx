@@ -205,144 +205,150 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
     }
   }, [p256PubkeyHex, username, nameAvailable, credentialId]);
 
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '12px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.03)',
+    border: '1px solid rgba(255,255,255,0.055)', color: '#fff', fontSize: 14, outline: 'none',
+    fontFamily: "'DM Sans',sans-serif", transition: 'border-color 0.2s',
+  };
+
   return (
-    <div className="max-w-md mx-auto p-6">
+    <div style={{ maxWidth: 400, margin: '0 auto', padding: '24px 20px', fontFamily: "'DM Sans',sans-serif" }}>
+
       {/* Step 1: Create Passkey */}
       {step === 'passkey' && (
-        <div className="text-center space-y-6">
-          <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-dag-accent to-purple-500 flex items-center justify-center">
-            <Fingerprint className="w-10 h-10 text-white" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold text-white">Create Your Wallet</h2>
-            <p className="text-dag-muted mt-2">
-              Use your fingerprint, face, or security key. No seed phrases required.
-            </p>
+        <div style={{ textAlign: 'center', animation: 'slideUp 0.4s ease' }}>
+          <div style={{
+            width: 80, height: 80, borderRadius: 20, margin: '0 auto 24px',
+            background: 'linear-gradient(135deg, rgba(0,224,196,0.08), rgba(0,102,255,0.08))',
+            border: '1px solid rgba(0,224,196,0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <span style={{ fontSize: 36 }}>◎</span>
           </div>
 
-          <button
-            onClick={handleCreatePasskey}
-            className="w-full py-4 bg-dag-accent hover:bg-dag-accent/90 text-white font-semibold rounded-xl transition-all text-lg"
-          >
-            <Fingerprint className="w-5 h-5 inline mr-2" />
-            Create with Biometrics
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 8 }}>Create Your Wallet</h2>
+          <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.3)', marginBottom: 28, lineHeight: 1.6 }}>
+            Use your fingerprint, face, or security key.<br />No seed phrases. No passwords.
+          </p>
+
+          <button onClick={handleCreatePasskey} style={{
+            width: '100%', padding: '14px 0', borderRadius: 12,
+            background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
+            color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
+            boxShadow: '0 4px 20px rgba(0,224,196,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          }}>
+            ◎ Create with Biometrics
           </button>
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-red-400 text-sm text-left">
-              <AlertTriangle className="w-4 h-4 inline mr-1" />
+            <div style={{ marginTop: 16, fontSize: 11, color: '#EF4444', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 8, padding: '10px 12px', textAlign: 'left' }}>
               {error}
             </div>
           )}
 
-          <button
-            onClick={onFallbackToAdvanced}
-            className="text-dag-muted text-sm hover:text-white transition-colors flex items-center gap-1 mx-auto"
-          >
-            <Key className="w-3 h-3" />
-            Advanced: Import with seed phrase or private key
-            <ChevronDown className="w-3 h-3" />
+          <button onClick={onFallbackToAdvanced} style={{
+            background: 'none', border: 'none', color: 'rgba(255,255,255,0.18)',
+            fontSize: 11.5, cursor: 'pointer', marginTop: 24, display: 'flex', alignItems: 'center', gap: 4, margin: '24px auto 0',
+          }}>
+            ◇ Advanced: Import with seed phrase or key
           </button>
         </div>
       )}
 
       {/* Step 2: Choose Username */}
       {step === 'username' && (
-        <div className="space-y-6">
-          <div className="text-center">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-green-500/20 flex items-center justify-center mb-4">
-              <CheckCircle className="w-8 h-8 text-green-400" />
+        <div style={{ animation: 'slideUp 0.4s ease' }}>
+          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+            <div style={{
+              width: 60, height: 60, borderRadius: 16, margin: '0 auto 16px',
+              background: 'rgba(0,224,196,0.08)', border: '1px solid rgba(0,224,196,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <span style={{ fontSize: 26, color: '#00E0C4' }}>✓</span>
             </div>
-            <h2 className="text-2xl font-bold text-white">Passkey Created!</h2>
-            <p className="text-dag-muted mt-2">Now choose your username.</p>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: '#fff', marginBottom: 4 }}>Passkey Created!</h2>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.28)' }}>Now choose your username.</p>
           </div>
 
-          <div>
-            <label className="text-sm text-dag-muted mb-1 block">Choose a username</label>
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dag-muted" />
-              <input
-                type="text"
-                value={username}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 600, color: 'rgba(255,255,255,0.28)', letterSpacing: 1, marginBottom: 6 }}>CHOOSE A USERNAME</div>
+            <div style={{ position: 'relative' }}>
+              <input type="text" value={username}
                 onChange={(e) => checkName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                placeholder="john29"
-                maxLength={20}
-                className="w-full pl-10 pr-4 py-3 bg-dag-bg border border-dag-border rounded-xl text-white placeholder-slate-600 focus:border-dag-accent focus:outline-none"
-                autoFocus
-              />
-              {checking && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dag-muted animate-spin" />}
-              {!checking && nameAvailable === true && (
-                <CheckCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-400" />
-              )}
+                placeholder="john29" maxLength={20} autoFocus
+                style={inputStyle} />
+              {checking && <span style={{ position: 'absolute', right: 14, top: 13, color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>...</span>}
+              {!checking && nameAvailable === true && <span style={{ position: 'absolute', right: 14, top: 12, color: '#00E0C4', fontSize: 16 }}>✓</span>}
             </div>
-            {nameError && <p className="text-red-400 text-xs mt-1">{nameError}</p>}
-            {nameAvailable && nameFee && <p className="text-green-400 text-xs mt-1">{username} is available! ({nameFee})</p>}
+            {nameError && <p style={{ fontSize: 10.5, color: '#FFB800', marginTop: 4 }}>{nameError}</p>}
+            {nameAvailable && nameFee && <p style={{ fontSize: 10.5, color: '#00E0C4', marginTop: 4 }}>{username} is available! ({nameFee})</p>}
           </div>
 
-          <button
-            onClick={handleCreate}
-            disabled={creating}
-            className="w-full py-4 bg-dag-accent hover:bg-dag-accent/90 disabled:opacity-50 text-white font-semibold rounded-xl transition-all text-lg"
-          >
-            {username.length >= 3 && nameAvailable
-              ? `Create Wallet as ${username}`
-              : 'Create Wallet'
-            }
+          <button onClick={handleCreate} disabled={creating} style={{
+            width: '100%', padding: '13px 0', borderRadius: 12,
+            background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
+            color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
+            opacity: creating ? 0.5 : 1, boxShadow: '0 4px 20px rgba(0,224,196,0.2)',
+          }}>
+            {username.length >= 3 && nameAvailable ? `Create Wallet as ${username}` : 'Create Wallet'}
           </button>
 
-          <button
-            onClick={() => handleCreate()}
-            className="text-dag-muted text-sm hover:text-white transition-colors block mx-auto"
-          >
+          <button onClick={() => handleCreate()} style={{ display: 'block', margin: '14px auto 0', background: 'none', border: 'none', color: 'rgba(255,255,255,0.18)', fontSize: 11, cursor: 'pointer' }}>
             Skip username for now
           </button>
 
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-red-400 text-sm">
-              {error}
-            </div>
-          )}
+          {error && <div style={{ marginTop: 12, fontSize: 11, color: '#EF4444', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 8, padding: '8px 12px' }}>{error}</div>}
         </div>
       )}
 
       {/* Step 3: Creating */}
       {step === 'creating' && (
-        <div className="text-center space-y-6 py-12">
-          <Loader2 className="w-12 h-12 text-dag-accent animate-spin mx-auto" />
-          <div>
-            <h2 className="text-xl font-bold text-white">Creating Your Wallet</h2>
-            <p className="text-dag-muted mt-2">Funding account and registering on the network...</p>
-          </div>
+        <div style={{ textAlign: 'center', padding: '50px 0', animation: 'slideUp 0.3s ease' }}>
+          <div style={{ width: 48, height: 48, border: '3px solid rgba(0,224,196,0.2)', borderTop: '3px solid #00E0C4', borderRadius: '50%', margin: '0 auto 20px', animation: 'spin 0.8s linear infinite' }} />
+          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+          <h2 style={{ fontSize: 17, fontWeight: 700, color: '#fff', marginBottom: 6 }}>Creating Your Wallet</h2>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>Funding account on the network...</p>
         </div>
       )}
 
       {/* Step 4: Done */}
       {step === 'done' && result && (
-        <div className="text-center space-y-6">
-          <div className="w-20 h-20 mx-auto rounded-2xl bg-green-500/20 flex items-center justify-center">
-            <CheckCircle className="w-10 h-10 text-green-400" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold text-white">You're All Set!</h2>
-            {result.name ? (
-              <p className="text-dag-accent text-lg font-semibold mt-2">You're {result.name}</p>
-            ) : (
-              <p className="text-dag-muted mt-2">Your wallet is ready.</p>
-            )}
-            <p className="text-dag-muted text-sm mt-2 font-mono break-all">{result.address}</p>
+        <div style={{ textAlign: 'center', animation: 'slideUp 0.4s ease' }}>
+          <div style={{
+            width: 80, height: 80, borderRadius: 20, margin: '0 auto 20px',
+            background: 'rgba(0,224,196,0.08)', border: '1px solid rgba(0,224,196,0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <span style={{ fontSize: 36, color: '#00E0C4' }}>✓</span>
           </div>
 
-          <div className="bg-dag-card border border-dag-border rounded-xl p-4 text-left space-y-2">
-            <p className="text-sm text-dag-muted">Your wallet is secured by your device's biometrics.</p>
-            <p className="text-sm text-dag-muted">
-              <strong className="text-white">Tip:</strong> Go to SmartAccount settings to add a backup device and set up recovery guardians.
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 6 }}>You're All Set!</h2>
+          {result.name ? (
+            <p style={{ fontSize: 17, fontWeight: 600, color: '#00E0C4', marginBottom: 4 }}>You're {result.name}</p>
+          ) : (
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginBottom: 4 }}>Your wallet is ready.</p>
+          )}
+          <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.18)', fontFamily: "'DM Mono',monospace", wordBreak: 'break-all', marginBottom: 20 }}>{result.address}</p>
+
+          <div style={{
+            background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)',
+            borderRadius: 12, padding: '14px 16px', textAlign: 'left', marginBottom: 20,
+          }}>
+            <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.3)', lineHeight: 1.6 }}>
+              Your wallet is secured by your device's biometrics. The private key never leaves the secure enclave.
+            </p>
+            <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.3)', marginTop: 6, lineHeight: 1.6 }}>
+              <strong style={{ color: 'rgba(255,255,255,0.5)' }}>Tip:</strong> Go to SmartAccount to add a backup device and set up recovery guardians.
             </p>
           </div>
 
-          <button
-            onClick={() => onComplete(result.address, result.name)}
-            className="w-full py-4 bg-dag-accent hover:bg-dag-accent/90 text-white font-semibold rounded-xl transition-all text-lg"
-          >
+          <button onClick={() => onComplete(result.address, result.name)} style={{
+            width: '100%', padding: '14px 0', borderRadius: 12,
+            background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
+            color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
+            boxShadow: '0 4px 20px rgba(0,224,196,0.2)',
+          }}>
             Open Wallet
           </button>
         </div>

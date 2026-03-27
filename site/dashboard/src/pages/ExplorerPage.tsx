@@ -1,186 +1,164 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { getStatus, getRound, connectToNode, isConnected } from '../lib/api.ts';
-import { SearchBar } from '../components/explorer/SearchBar.tsx';
-import { RoundTable } from '../components/explorer/RoundTable.tsx';
-import { Pagination } from '../components/shared/Pagination.tsx';
-import { Badge, FinalityBadge } from '../components/shared/Badge.tsx';
+import { Link } from 'react-router-dom';
+import { getStatus, getRound, connectToNode, isConnected } from '../lib/api';
+import { SearchBar } from '../components/explorer/SearchBar';
 
 const PAGE_SIZE = 10;
-const AUTO_REFRESH_INTERVAL_MS = 10_000;
+const SATS = 100_000_000;
+
+const S = {
+  card: { background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '18px 20px' } as React.CSSProperties,
+  th: { fontSize: 8.5, fontWeight: 600, color: 'rgba(255,255,255,0.18)', letterSpacing: 1.5, paddingBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.03)' } as React.CSSProperties,
+  td: { fontSize: 11.5, color: 'rgba(255,255,255,0.45)', padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.015)' } as React.CSSProperties,
+  mono: { fontFamily: "'DM Mono',monospace" },
+};
 
 interface RoundData {
   round: number;
-  vertices: Array<{
-    hash: string;
-    validator: string;
-    reward_udag?: number;
-    reward?: number;
-    tx_count: number;
-    parent_count: number;
-  }>;
+  vertices: Array<{ hash: string; validator: string; tx_count: number; parent_count: number }>;
   finalized: boolean;
-}
-
-interface NetworkStats {
-  dagRound: number;
-  lastFinalized: number;
-  finalityLag: number;
-  validatorCount: number;
-  totalSupply: number;
 }
 
 export function ExplorerPage() {
   const [rounds, setRounds] = useState<RoundData[]>([]);
-  const [stats, setStats] = useState<NetworkStats>({ dagRound: 0, lastFinalized: 0, finalityLag: 0, validatorCount: 0, totalSupply: 0 });
+  const [dagRound, setDagRound] = useState(0);
+  const [finalized, setFinalized] = useState(0);
+  const [validators, setValidators] = useState(0);
+  const [supply, setSupply] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ivRef = useRef<ReturnType<typeof setInterval>>();
 
   const fetchRounds = useCallback(async () => {
     try {
       if (!isConnected()) await connectToNode();
-      const statusData = await getStatus();
-      const dagRound = Number(statusData.dag_round ?? 0);
-      const finalized = Number(statusData.last_finalized_round ?? 0);
-      const validatorCount = Number(statusData.validator_count ?? statusData.active_stakers ?? 0);
-      const totalSupply = Number(statusData.total_supply ?? 0);
-
-      setStats({
-        dagRound,
-        lastFinalized: finalized,
-        finalityLag: dagRound - finalized,
-        validatorCount,
-        totalSupply,
-      });
-
-      if (finalized <= 0) {
-        setRounds([]);
-        setLoading(false);
-        return;
-      }
-
-      // Fetch PAGE_SIZE rounds starting from the most recent finalized
-      const startRound = finalized - (page - 1) * PAGE_SIZE;
-      const endRound = Math.max(1, startRound - PAGE_SIZE + 1);
-
-      const promises: Promise<RoundData | null>[] = [];
-      for (let r = startRound; r >= endRound; r--) {
-        promises.push(
-          getRound(r)
-            .then((data) => ({
-              round: r,
-              vertices: Array.isArray(data) ? data : data?.vertices ?? [],
-              finalized: r <= finalized,
-            }))
-            .catch(() => null)
-        );
-      }
-
-      const results = await Promise.all(promises);
+      const s = await getStatus();
+      const dr = Number(s.dag_round ?? 0);
+      const fin = Number(s.last_finalized_round ?? 0);
+      setDagRound(dr); setFinalized(fin);
+      setValidators(Number(s.validator_count ?? s.active_stakers ?? 0));
+      setSupply(Number(s.total_supply ?? 0));
+      if (fin <= 0) { setRounds([]); setLoading(false); return; }
+      const start = fin - (page - 1) * PAGE_SIZE;
+      const end = Math.max(1, start - PAGE_SIZE + 1);
+      const results = await Promise.all(
+        Array.from({ length: start - end + 1 }, (_, i) => start - i).map(r =>
+          getRound(r).then(d => ({ round: r, vertices: Array.isArray(d) ? d : d?.vertices ?? [], finalized: r <= fin })).catch(() => null)
+        )
+      );
       setRounds(results.filter((r): r is RoundData => r !== null));
-      setError('');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to fetch rounds');
-    } finally {
-      setLoading(false);
-    }
+    } catch {} finally { setLoading(false); }
   }, [page]);
 
+  useEffect(() => { setLoading(true); fetchRounds(); }, [fetchRounds]);
   useEffect(() => {
-    setLoading(true);
-    fetchRounds();
-  }, [fetchRounds]);
-
-  // Auto-refresh every 10s when on page 1
-  useEffect(() => {
-    if (autoRefreshRef.current) {
-      clearInterval(autoRefreshRef.current);
-      autoRefreshRef.current = null;
-    }
-
-    if (page === 1) {
-      autoRefreshRef.current = setInterval(() => {
-        fetchRounds();
-      }, AUTO_REFRESH_INTERVAL_MS);
-    }
-
-    return () => {
-      if (autoRefreshRef.current) {
-        clearInterval(autoRefreshRef.current);
-        autoRefreshRef.current = null;
-      }
-    };
+    if (ivRef.current) clearInterval(ivRef.current);
+    if (page === 1) ivRef.current = setInterval(fetchRounds, 10000);
+    return () => { if (ivRef.current) clearInterval(ivRef.current); };
   }, [page, fetchRounds]);
 
-  const totalPages = Math.max(1, Math.ceil(stats.lastFinalized / PAGE_SIZE));
+  useEffect(() => {
+    const handler = () => { setRounds([]); setDagRound(0); setFinalized(0); setValidators(0); setSupply(0); setLoading(true); fetchRounds(); };
+    window.addEventListener('ultradag-network-switch', handler);
+    return () => window.removeEventListener('ultradag-network-switch', handler);
+  }, [fetchRounds]);
+
+  const totalPages = Math.max(1, Math.ceil(finalized / PAGE_SIZE));
+  const lag = dagRound - finalized;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between">
+    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+      <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Explorer</h1>
-          <p className="text-sm text-slate-400">Search and browse the UltraDAG</p>
+          <h1 style={{ fontSize: 21, fontWeight: 700, color: '#fff' }}>Explorer</h1>
+          <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>Search and browse the DAG</p>
         </div>
-        {stats.dagRound > 0 && (
-          <div className="flex items-center gap-2">
-            <FinalityBadge lag={stats.finalityLag} />
-            <Badge label={`${stats.validatorCount} validators`} variant="purple" />
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {lag <= 3 && <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#00E0C4', boxShadow: '0 0 6px #00E0C4', animation: 'pulse 2s infinite' }} />
+            <span style={{ fontSize: 10.5, color: '#00E0C4', fontWeight: 600 }}>LIVE</span>
+          </div>}
+          <span style={{ fontSize: 10.5, padding: '3px 10px', borderRadius: 6, background: lag <= 3 ? 'rgba(0,224,196,0.08)' : lag <= 10 ? 'rgba(255,184,0,0.08)' : 'rgba(239,68,68,0.08)', color: lag <= 3 ? '#00E0C4' : lag <= 10 ? '#FFB800' : '#EF4444', fontWeight: 600 }}>
+            Lag: {lag}
+          </span>
+        </div>
       </div>
 
-      {/* Network stats */}
-      {stats.dagRound > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard label="DAG Round" value={stats.dagRound.toLocaleString()} />
-          <StatCard label="Finalized Round" value={stats.lastFinalized.toLocaleString()} highlight />
-          <StatCard label="Finality Lag" value={String(stats.finalityLag)} badge={stats.finalityLag <= 3 ? 'green' : stats.finalityLag <= 10 ? 'yellow' : 'red'} />
-          <StatCard label="Validators" value={String(stats.validatorCount)} />
-        </div>
-      )}
-
-      <SearchBar />
-
-      {error && <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">{error}</div>}
-
-      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <h2 className="text-sm font-semibold text-slate-200">Recent Finalized Rounds</h2>
-            {page === 1 && (
-              <span className="text-[10px] text-slate-500 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-dag-green animate-pulse inline-block" />
-                Auto-refreshing every 10s
-              </span>
-            )}
+      {/* Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16, animation: 'slideUp 0.4s ease' }}>
+        {[
+          { l: 'DAG ROUND', v: dagRound.toLocaleString(), c: '#fff', i: '◈' },
+          { l: 'FINALIZED', v: finalized.toLocaleString(), c: '#00E0C4', i: '✓' },
+          { l: 'VALIDATORS', v: String(validators), c: '#A855F7', i: '♛' },
+          { l: 'SUPPLY', v: (supply / SATS).toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' UDAG', c: '#0066FF', i: '◎' },
+        ].map((s, i) => (
+          <div key={i} style={S.card}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <span style={{ color: s.c, fontSize: 13 }}>{s.i}</span>
+              <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)', letterSpacing: 1.2 }}>{s.l}</span>
+            </div>
+            <div style={{ fontSize: 21, fontWeight: 700, color: s.c, ...S.mono }}>{s.v}</div>
           </div>
-          {stats.lastFinalized > 0 && (
-            <span className="text-xs text-slate-500">
-              Showing rounds {Math.max(1, stats.lastFinalized - (page - 1) * PAGE_SIZE - PAGE_SIZE + 1).toLocaleString()} &ndash; {(stats.lastFinalized - (page - 1) * PAGE_SIZE).toLocaleString()} of {stats.lastFinalized.toLocaleString()}
-            </span>
-          )}
+        ))}
+      </div>
+
+      {/* Search */}
+      <div style={{ marginBottom: 16, animation: 'slideUp 0.5s ease' }}>
+        <SearchBar />
+      </div>
+
+      {/* Round Table */}
+      <div style={{ ...S.card, animation: 'slideUp 0.6s ease' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: '#A855F7', fontSize: 14 }}>◉</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Finalized Rounds</span>
+            {page === 1 && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9.5, color: 'rgba(255,255,255,0.18)' }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#00E0C4', animation: 'pulse 1.5s infinite' }} /> Auto-refresh
+            </span>}
+          </div>
+          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.18)', ...S.mono }}>Page {page}/{totalPages}</span>
         </div>
 
         {loading ? (
-          <div className="text-slate-500 text-sm py-8 text-center">Loading rounds...</div>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', textAlign: 'center', padding: '30px 0' }}>Loading rounds...</p>
+        ) : rounds.length === 0 ? (
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', textAlign: 'center', padding: '30px 0' }}>No rounds yet.</p>
         ) : (
           <>
-            <RoundTable rounds={rounds} />
-            <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr 1fr 1fr', gap: '0 16px' }}>
+              {['ROUND', 'VERTICES', 'TXS', 'PARENTS', 'STATUS'].map((h, i) => (
+                <div key={i} style={S.th}>{h}</div>
+              ))}
+              {rounds.map(r => {
+                const txs = r.vertices.reduce((s, v) => s + v.tx_count, 0);
+                const parents = r.vertices.length > 0 ? Math.round(r.vertices.reduce((s, v) => s + v.parent_count, 0) / r.vertices.length) : 0;
+                return [
+                  <Link key={`r${r.round}`} to={`/round/${r.round}`} style={{ ...S.td, fontWeight: 600, color: '#00E0C4', ...S.mono, textDecoration: 'none' }}>{r.round.toLocaleString()}</Link>,
+                  <div key={`v${r.round}`} style={S.td}>{r.vertices.length}</div>,
+                  <div key={`t${r.round}`} style={{ ...S.td, color: txs > 0 ? '#FFB800' : undefined }}>{txs}</div>,
+                  <div key={`p${r.round}`} style={S.td}>~{parents}</div>,
+                  <div key={`s${r.round}`} style={S.td}>
+                    <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 4, background: r.finalized ? 'rgba(0,224,196,0.08)' : 'rgba(255,184,0,0.08)', color: r.finalized ? '#00E0C4' : '#FFB800', fontWeight: 600 }}>
+                      {r.finalized ? 'Finalized' : 'Pending'}
+                    </span>
+                  </div>,
+                ];
+              }).flat()}
+            </div>
+            {/* Pagination */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 14 }}>
+              <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1}
+                style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.055)', color: page === 1 ? 'rgba(255,255,255,0.1)' : '#fff', fontSize: 11, cursor: page === 1 ? 'default' : 'pointer' }}>← Prev</button>
+              <span style={{ padding: '5px 10px', fontSize: 11, color: 'rgba(255,255,255,0.3)', ...S.mono }}>{page} / {totalPages}</span>
+              <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page === totalPages}
+                style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.055)', color: page === totalPages ? 'rgba(255,255,255,0.1)' : '#fff', fontSize: 11, cursor: page === totalPages ? 'default' : 'pointer' }}>Next →</button>
+            </div>
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-function StatCard({ label, value, highlight, badge }: { label: string; value: string; highlight?: boolean; badge?: string }) {
-  const borderColor = badge === 'green' ? 'border-green-500/30' : badge === 'yellow' ? 'border-yellow-500/30' : badge === 'red' ? 'border-red-500/30' : 'border-slate-700';
-  return (
-    <div className={`bg-slate-800/50 border ${borderColor} rounded-lg p-3`}>
-      <p className="text-xs text-slate-500 mb-1">{label}</p>
-      <p className={`text-lg font-bold font-mono ${highlight ? 'text-blue-400' : 'text-white'}`}>{value}</p>
     </div>
   );
 }

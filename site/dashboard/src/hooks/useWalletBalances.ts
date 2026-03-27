@@ -67,6 +67,13 @@ export function useWalletBalances(wallets: Wallet[], connected: boolean) {
     };
   }, [fetchAll]);
 
+  // Clear stale balances and refetch on network switch
+  useEffect(() => {
+    const handler = () => { setBalances(new Map()); fetchAll(); };
+    window.addEventListener('ultradag-network-switch', handler);
+    return () => window.removeEventListener('ultradag-network-switch', handler);
+  }, [fetchAll]);
+
   const totalBalance = Array.from(balances.values()).reduce((s, b) => s + b.balance, 0);
   const totalStaked = Array.from(balances.values()).reduce((s, b) => s + b.staked, 0);
   const totalDelegated = Array.from(balances.values()).reduce((s, b) => s + b.delegated, 0);

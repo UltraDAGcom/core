@@ -88,41 +88,53 @@ function App() {
     }
   }, []);
 
-  // Passkey wallet: if it exists but is locked, show biometric unlock (not WelcomeScreen)
+  // Passkey wallet: if it exists but is locked, show biometric unlock
   if (pk.hasWallet && !pk.unlocked && !showOnboarding) {
     return (
       <ToastProvider>
-        <div className="min-h-screen bg-dag-bg">
-          <header className="h-14 bg-dag-sidebar/80 backdrop-blur border-b border-dag-border flex items-center px-4 lg:px-6">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-dag-accent to-purple-500 flex items-center justify-center">
-                <span className="text-white font-bold text-xs">U</span>
+        <div style={{ minHeight: '100vh', background: '#080C14', fontFamily: "'DM Sans',sans-serif", display: 'flex', flexDirection: 'column' }}>
+          <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}} @keyframes glow{0%,100%{box-shadow:0 0 20px rgba(0,224,196,0.15)}50%{box-shadow:0 0 40px rgba(0,224,196,0.3)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}`}</style>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ maxWidth: 380, width: '100%', textAlign: 'center', padding: '0 20px', animation: 'slideUp 0.5s ease' }}>
+              {/* Logo */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 40, opacity: 0.6 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 7, background: 'linear-gradient(135deg,#00E0C4,#0066FF)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#fff' }}>U</div>
+                <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.5, color: '#fff' }}>ULTRADAG</span>
               </div>
-              <span className="font-semibold text-white text-sm">UltraDAG</span>
-            </div>
-          </header>
-          <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
-            <div className="max-w-md w-full space-y-6 text-center">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-dag-accent to-purple-500 flex items-center justify-center mx-auto shadow-lg shadow-dag-accent/20">
-                <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 11c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm-6 0c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm0 0V8a4 4 0 118 0v3" /></svg>
-              </div>
-              <h1 className="text-2xl font-bold text-white">Welcome Back{pk.wallet?.name ? `, ${pk.wallet.name}` : ''}</h1>
-              <p className="text-dag-muted text-sm">Verify your identity to unlock</p>
 
-              <button
-                onClick={async () => {
-                  const ok = await pk.unlock();
-                  if (!ok) {
-                    // Could show error, but for now just let user retry
-                  }
-                }}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-dag-accent to-purple-500 text-white font-semibold text-lg hover:opacity-90 transition-all flex items-center justify-center gap-2"
-              >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 11c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm-6 0c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm0 0V8a4 4 0 118 0v3" /></svg>
-                Unlock with Biometrics
+              {/* Biometric icon */}
+              <div style={{
+                width: 88, height: 88, borderRadius: 22, margin: '0 auto 24px',
+                background: 'linear-gradient(135deg, rgba(0,224,196,0.08), rgba(0,102,255,0.08))',
+                border: '1px solid rgba(0,224,196,0.15)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                animation: 'glow 3s ease-in-out infinite',
+              }}>
+                <span style={{ fontSize: 38 }}>◎</span>
+              </div>
+
+              <h1 style={{ fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 6 }}>
+                Welcome back{pk.wallet?.name ? `, ${pk.wallet.name}` : ''}
+              </h1>
+              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', marginBottom: 28 }}>
+                Verify your identity to unlock your wallet
+              </p>
+
+              <button onClick={async () => { await pk.unlock(); }} style={{
+                width: '100%', padding: '14px 0', borderRadius: 12,
+                background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
+                color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
+                boxShadow: '0 4px 20px rgba(0,224,196,0.2)',
+                transition: 'opacity 0.2s',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}>
+                ◎ Unlock with Biometrics
               </button>
 
-              <button onClick={() => pk.destroy()} className="text-xs text-slate-500 hover:text-red-400 transition-colors">
+              <button onClick={() => pk.destroy()} style={{
+                background: 'none', border: 'none', color: 'rgba(255,255,255,0.15)',
+                fontSize: 11, cursor: 'pointer', marginTop: 20, transition: 'color 0.2s',
+              }}>
                 Start Fresh
               </button>
             </div>
@@ -136,14 +148,22 @@ function App() {
   if ((!pk.hasWallet && !ks.unlocked) || showOnboarding) {
     return (
       <ToastProvider>
-        <div className="min-h-screen bg-dag-bg">
-          {/* Minimal top bar — network is chosen during onboarding */}
-          <header className="h-14 bg-dag-sidebar/80 backdrop-blur border-b border-dag-border flex items-center px-4 lg:px-6">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-dag-accent to-purple-500 flex items-center justify-center">
-                <span className="text-white font-bold text-xs">U</span>
-              </div>
-              <span className="font-semibold text-white text-sm">UltraDAG</span>
+        <div style={{ minHeight: '100vh', background: '#080C14', fontFamily: "'DM Sans',sans-serif" }}>
+          <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}} @keyframes glow{0%,100%{box-shadow:0 0 12px rgba(0,224,196,0.15)}50%{box-shadow:0 0 20px rgba(0,224,196,0.3)}}`}</style>
+          {/* Minimal top bar */}
+          <header style={{
+            height: 52, display: 'flex', alignItems: 'center', padding: '0 20px',
+            borderBottom: '1px solid rgba(255,255,255,0.03)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <div style={{
+                width: 28, height: 28, borderRadius: 7,
+                background: 'linear-gradient(135deg,#00E0C4,#0066FF)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12, fontWeight: 800, color: '#fff',
+                animation: 'glow 4s ease-in-out infinite',
+              }}>U</div>
+              <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.2, color: '#fff' }}>ULTRADAG</span>
             </div>
           </header>
           <WelcomeScreen

@@ -55,10 +55,9 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 /* NAV */
 nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 48px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid transparent;transition:border-color .3s,background .3s;background:rgba(10,14,26,.92);backdrop-filter:blur(16px)}
 nav.scrolled{border-color:var(--border)}
-.nav-logo{font-family:'Cormorant',serif;font-size:22px;font-weight:300;letter-spacing:.08em;color:var(--white);text-decoration:none;display:flex;align-items:center;gap:10px}
-.nav-logo:hover{color:var(--accent)}
-.nav-logo-mark{width:28px;height:28px;border:1px solid var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
-.nav-logo-mark::after{content:'';width:8px;height:8px;background:var(--accent);border-radius:50%;box-shadow:0 0 8px var(--accent)}
+.nav-logo{text-decoration:none;display:flex;align-items:center;gap:12px}
+.nav-logo:hover{opacity:.85}
+.nav-logo-img{height:32px;width:auto;display:block}
 .nav-links{display:flex;align-items:center;gap:32px;list-style:none}
 .nav-links>li{position:relative}
 .nav-links a{font-family:'DM Mono',monospace;font-size:12px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--subtle);text-decoration:none;transition:color .2s;position:relative;padding-bottom:4px;display:block}
@@ -611,9 +610,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 }
 @media(max-width:900px){
   nav{padding:0 24px;height:56px}
-  .nav-logo{font-size:18px}
-  .nav-logo-mark{width:24px;height:24px}
-  .nav-logo-mark::after{width:6px;height:6px}
+  .nav-logo-img{height:28px}
   .nav-links{display:none}
   .hamburger{display:flex}
   .mobile-menu{display:block;top:56px}
@@ -671,8 +668,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
 <!-- NAV -->
 <nav id="nav">
   <a href="/" class="nav-logo">
-    <div class="nav-logo-mark"></div>
-    UltraDAG
+    <img src="media/logo/logo_website.png" alt="UltraDAG" class="nav-logo-img">
   </a>
   <ul class="nav-links">
     <li><a href="index.html">Home</a></li>
@@ -1369,8 +1365,7 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);background
     <div class="footer-top">
       <div class="footer-brand">
         <div class="footer-logo">
-          <div class="nav-logo-mark"></div>
-          <span>UltraDAG</span>
+          <img src="media/logo/logo_website.png" alt="UltraDAG" class="nav-logo-img" style="height:40px">
         </div>
         <p class="footer-tagline">The simplest production-ready DAG chain.<br>Fast BFT finality for machine-to-machine micropayments.</p>
         <div class="footer-social">

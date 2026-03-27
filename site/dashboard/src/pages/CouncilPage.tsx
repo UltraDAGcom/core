@@ -1,31 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getCouncil, getGovernanceConfig, shortAddr } from '../lib/api.ts';
-import { Card } from '../components/shared/Card.tsx';
-import { CouncilSeatGrid } from '../components/governance/CouncilSeatGrid.tsx';
-import { CopyButton } from '../components/shared/CopyButton.tsx';
+import { getCouncil, getGovernanceConfig, shortAddr } from '../lib/api';
+import { CopyButton } from '../components/shared/CopyButton';
+import { CouncilSeatGrid } from '../components/governance/CouncilSeatGrid';
 
-interface CouncilMember {
-  address: string;
-  category: string;
-}
-
-interface SeatInfo {
-  available: number;
-  filled: number;
-  max: number;
-}
-
+interface CouncilMember { address: string; category: string }
+interface SeatInfo { available: number; filled: number; max: number }
 interface CouncilData {
-  members: CouncilMember[];
-  total_seats: number;
-  filled_seats: number;
-  member_count: number;
-  max_members: number;
-  emission_percent: number;
-  per_member_reward_sats: number;
-  per_member_reward_udag: number;
+  members: CouncilMember[]; total_seats: number; filled_seats: number;
+  member_count: number; max_members: number; emission_percent: number;
+  per_member_reward_sats: number; per_member_reward_udag: number;
   seats: Record<string, SeatInfo>;
 }
+
+const S = {
+  card: { background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '18px 20px' } as React.CSSProperties,
+  mono: { fontFamily: "'DM Mono',monospace" },
+};
+
+const catColor: Record<string, string> = {
+  Engineering: '#00E0C4', Growth: '#0066FF', Legal: '#A855F7',
+  Research: '#FFB800', Community: '#22D3EE', Operations: '#F472B6', Security: '#EF4444',
+};
 
 export function CouncilPage() {
   const [council, setCouncil] = useState<CouncilData | null>(null);
@@ -34,31 +29,20 @@ export function CouncilPage() {
 
   const refresh = useCallback(async () => {
     try {
-      const [councilData, config] = await Promise.all([
-        getCouncil().catch(() => null),
-        getGovernanceConfig().catch(() => null),
-      ]);
-      if (councilData) setCouncil(councilData);
-      if (config) setGovConfig(config);
-    } catch {
-      // ignore
-    }
-    setLoading(false);
+      const [c, g] = await Promise.all([getCouncil().catch(() => null), getGovernanceConfig().catch(() => null)]);
+      if (c) setCouncil(c); if (g) setGovConfig(g);
+    } catch {} setLoading(false);
   }, []);
 
+  useEffect(() => { refresh(); const iv = setInterval(refresh, 30000); return () => clearInterval(iv); }, [refresh]);
+
   useEffect(() => {
-    refresh();
-    const interval = setInterval(refresh, 30000);
-    return () => clearInterval(interval);
+    const handler = () => { setCouncil(null); setGovConfig(null); setLoading(true); refresh(); };
+    window.addEventListener('ultradag-network-switch', handler);
+    return () => window.removeEventListener('ultradag-network-switch', handler);
   }, [refresh]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-pulse text-dag-muted">Loading council data...</div>
-      </div>
-    );
-  }
+  if (loading) return <div style={{ padding: '18px 26px', color: 'rgba(255,255,255,0.2)', fontSize: 12, fontFamily: "'DM Sans',sans-serif" }}>Loading council...</div>;
 
   const members = council?.members ?? [];
   const memberCount = council?.member_count ?? members.length;
@@ -68,124 +52,118 @@ export function CouncilPage() {
   const emissionPercent = council?.emission_percent ?? 10;
 
   return (
-    <div className="space-y-6 animate-page-enter">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Council of 21</h1>
-        <p className="text-sm text-dag-muted mt-1">The elected governance body that guides UltraDAG</p>
+    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+      <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
+
+      <div style={{ marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
+        <h1 style={{ fontSize: 21, fontWeight: 700, color: '#fff' }}>Council of 21</h1>
+        <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>The elected governance body that guides UltraDAG</p>
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="rounded-lg bg-dag-card border border-dag-border p-4">
-          <span className="text-dag-muted text-xs block mb-1">Members</span>
-          <span className="text-white font-bold text-xl font-mono">{memberCount}<span className="text-dag-muted text-sm font-normal">/{maxMembers}</span></span>
-        </div>
-        <div className="rounded-lg bg-dag-card border border-dag-border p-4">
-          <span className="text-dag-muted text-xs block mb-1">Open Seats</span>
-          <span className={`font-bold text-xl font-mono ${openSeats > 0 ? 'text-dag-green' : 'text-dag-muted'}`}>{openSeats}</span>
-        </div>
-        <div className="rounded-lg bg-dag-card border border-dag-border p-4">
-          <span className="text-dag-muted text-xs block mb-1">Per-member Reward</span>
-          <span className="text-white font-bold text-xl font-mono">{perMemberReward}<span className="text-dag-muted text-sm font-normal"> UDAG/round</span></span>
-        </div>
-        <div className="rounded-lg bg-dag-card border border-dag-border p-4">
-          <span className="text-dag-muted text-xs block mb-1">Emission</span>
-          <span className="text-dag-accent font-bold text-xl font-mono">{emissionPercent}%</span>
-        </div>
+      {/* Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 18, animation: 'slideUp 0.4s ease' }}>
+        {[
+          { l: 'MEMBERS', v: `${memberCount}/${maxMembers}`, c: '#A855F7', i: '♛' },
+          { l: 'OPEN SEATS', v: String(openSeats), c: openSeats > 0 ? '#00E0C4' : 'rgba(255,255,255,0.3)', i: '◇' },
+          { l: 'PER-MEMBER', v: `${perMemberReward} UDAG`, c: '#FFB800', i: '⬡' },
+          { l: 'EMISSION', v: `${emissionPercent}%`, c: '#0066FF', i: '◎' },
+        ].map((s, i) => (
+          <div key={i} style={S.card}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <span style={{ color: s.c, fontSize: 13 }}>{s.i}</span>
+              <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)', letterSpacing: 1.2 }}>{s.l}</span>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: s.c, ...S.mono }}>{s.v}</div>
+          </div>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card title="Seat Categories">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, animation: 'slideUp 0.5s ease' }}>
+        {/* Seat Categories */}
+        <div style={S.card}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
+            <span style={{ color: '#A855F7', fontSize: 14 }}>♛</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Seat Categories</span>
+          </div>
           <CouncilSeatGrid members={members} seats={council?.seats} />
-        </Card>
+        </div>
 
+        {/* Governance Parameters */}
         {govConfig && (
-          <Card title="Governance Parameters">
-            <div className="space-y-4">
-              {/* Derived percentages */}
-              {(() => {
-                const pctKeys = ['quorum_percent', 'approval_percent'];
-                const pctEntries = Object.entries(govConfig).filter(([k]) => pctKeys.includes(k));
-                return pctEntries.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    {pctEntries.map(([key, value]) => (
-                      <div key={key} className="bg-dag-bg/50 rounded-lg p-3 text-center">
-                        <span className="text-dag-muted text-xs block mb-1">{key.replace(/_/g, ' ')}</span>
-                        <span className="text-white font-bold text-lg">
-                          {typeof value === 'number' ? `${value}%` : `${value}%`}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : null;
-              })()}
+          <div style={S.card}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
+              <span style={{ color: '#0066FF', fontSize: 14 }}>⚙</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Governance Parameters</span>
+            </div>
 
-              {/* Governable params tag list */}
-              {Array.isArray(govConfig.governable_params) && (
-                <div>
-                  <span className="text-dag-muted text-xs block mb-2">Governable parameters</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(govConfig.governable_params as string[]).map((param) => (
-                      <span
-                        key={param}
-                        className="inline-block px-2 py-0.5 rounded-full bg-dag-accent/15 text-dag-accent text-xs font-medium"
-                      >
-                        {param.replace(/_/g, ' ')}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Raw numeric params */}
-              <div className="space-y-2">
-                {Object.entries(govConfig)
-                  .filter(([key]) => !['quorum_percent', 'approval_percent', 'governable_params'].includes(key))
-                  .map(([key, value]) => (
-                    <div key={key} className="flex items-center justify-between text-sm">
-                      <span className="text-dag-muted">{key.replace(/_/g, ' ')}</span>
-                      <span className="text-white font-mono text-xs">
-                        {typeof value === 'number' ? value.toLocaleString() : String(value)}
-                      </span>
+            {/* Percentage params */}
+            {(() => {
+              const pcts = Object.entries(govConfig).filter(([k]) => k.includes('percent'));
+              return pcts.length > 0 ? (
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(pcts.length, 3)},1fr)`, gap: 8, marginBottom: 12 }}>
+                  {pcts.map(([k, v]) => (
+                    <div key={k} style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 8, padding: '10px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.22)', letterSpacing: 0.8, marginBottom: 3 }}>{k.replace(/_/g, ' ')}</div>
+                      <div style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>{String(v)}%</div>
                     </div>
                   ))}
+                </div>
+              ) : null;
+            })()}
+
+            {/* Governable params tags */}
+            {Array.isArray(govConfig.governable_params) && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.22)', letterSpacing: 1, marginBottom: 6 }}>GOVERNABLE</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {(govConfig.governable_params as string[]).map(p => (
+                    <span key={p} style={{ fontSize: 9.5, padding: '2px 8px', borderRadius: 4, background: 'rgba(0,224,196,0.08)', color: '#00E0C4', fontWeight: 500 }}>{p.replace(/_/g, ' ')}</span>
+                  ))}
+                </div>
               </div>
+            )}
+
+            {/* Other params */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {Object.entries(govConfig)
+                .filter(([k]) => !k.includes('percent') && k !== 'governable_params')
+                .map(([k, v]) => (
+                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                    <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.28)' }}>{k.replace(/_/g, ' ')}</span>
+                    <span style={{ fontSize: 10.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)', ...S.mono }}>{typeof v === 'number' ? v.toLocaleString() : String(v)}</span>
+                  </div>
+                ))}
             </div>
-          </Card>
+          </div>
         )}
       </div>
 
-      <Card title={`Members (${members.length})`}>
+      {/* Members Table */}
+      <div style={{ ...S.card, marginTop: 16, animation: 'slideUp 0.6s ease' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
+          <span style={{ color: '#A855F7', fontSize: 14 }}>◉</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Members ({members.length})</span>
+        </div>
         {members.length === 0 ? (
-          <p className="text-dag-muted text-sm">No council members.</p>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', textAlign: 'center', padding: '20px 0' }}>No council members.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-dag-muted border-b border-dag-border">
-                  <th className="py-2 px-3 font-medium">#</th>
-                  <th className="py-2 px-3 font-medium">Address</th>
-                  <th className="py-2 px-3 font-medium">Category</th>
-                </tr>
-              </thead>
-              <tbody>
-                {members.map((m, i) => (
-                  <tr key={m.address} className="border-b border-dag-border/50 hover:bg-dag-card-hover transition-colors">
-                    <td className="py-2.5 px-3 text-dag-muted">{i + 1}</td>
-                    <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-1">
-                        <span className="font-mono text-xs text-white">{shortAddr(m.address)}</span>
-                        <CopyButton text={m.address} />
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-3 text-dag-muted">{m.category}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto 2fr 1fr', gap: '0 16px' }}>
+            {['#', 'ADDRESS', 'CATEGORY'].map((h, i) => (
+              <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'rgba(255,255,255,0.18)', letterSpacing: 1.5, paddingBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.03)' }}>{h}</div>
+            ))}
+            {members.map((m, i) => [
+              <div key={`n${i}`} style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)', padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.015)' }}>{i + 1}</div>,
+              <div key={`a${i}`} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.015)' }}>
+                <span style={{ fontSize: 11, color: '#fff', ...S.mono }}>{shortAddr(m.address)}</span>
+                <CopyButton text={m.address} />
+              </div>,
+              <div key={`c${i}`} style={{ padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.015)' }}>
+                <span style={{ fontSize: 9.5, padding: '2px 8px', borderRadius: 4, background: (catColor[m.category] || '#888') + '12', color: catColor[m.category] || '#888', fontWeight: 600 }}>{m.category}</span>
+              </div>,
+            ]).flat()}
           </div>
         )}
-      </Card>
+      </div>
     </div>
   );
 }

@@ -42,6 +42,8 @@ export function switchNetwork(network: NetworkType) {
   const nodes = network === 'mainnet' ? MAINNET_NODES : TESTNET_NODES;
   currentNode = nodes[0];
   connected = false;
+  // Notify all pages to refetch immediately
+  window.dispatchEvent(new CustomEvent('ultradag-network-switch', { detail: network }));
 }
 
 async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {

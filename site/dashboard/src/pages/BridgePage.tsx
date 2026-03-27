@@ -474,7 +474,8 @@ export function BridgePage() {
   };
 
   return (
-    <div className="animate-page-enter">
+    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif", animation: 'slideUp 0.3s ease' }}>
+      <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
       {/* Wallet Picker Modal */}
       {showWalletPicker && (
         <WalletPickerModal
@@ -485,14 +486,15 @@ export function BridgePage() {
       )}
 
       {/* Hero Header */}
-      <div className="mb-8">
+      <div style={{ marginBottom: 22 }}>
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-dag-accent via-dag-blue to-dag-purple bg-clip-text text-transparent">
-              UltraDAG Bridge
-            </h1>
-            <p className="text-sm text-dag-muted mt-1.5">
-              Secured by the same validator federation that powers DAG consensus — no external relayers
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 18, color: '#00E0C4' }}>⟷</span>
+              <h1 style={{ fontSize: 21, fontWeight: 700, color: '#fff' }}>UltraDAG Bridge</h1>
+            </div>
+            <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)' }}>
+              Secured by the validator federation — no external relayers
             </p>
           </div>
           <div className="flex items-center gap-3">

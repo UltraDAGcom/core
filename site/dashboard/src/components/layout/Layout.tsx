@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
-import { TopBar } from './TopBar';
+import { colors, fonts, globalStyles } from '../../lib/theme';
 import type { NetworkType } from '../../lib/api';
 
 interface LayoutProps {
@@ -21,31 +21,20 @@ export function Layout({ connected, nodeUrl, keystoreUnlocked, network, walletAd
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div style={{ display: 'flex', minHeight: '100vh', background: colors.bg, fontFamily: fonts.sans, color: '#fff' }}>
+      <style>{globalStyles}</style>
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         network={network}
+        onSwitchNetwork={onSwitchNetwork}
+        onToggleLock={onToggleLock}
         sessionSecondsLeft={keystoreUnlocked ? sessionSecondsLeft : undefined}
         sessionTotalSeconds={keystoreUnlocked ? sessionTotalSeconds : undefined}
       />
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <TopBar
-          connected={connected}
-          nodeUrl={nodeUrl}
-          keystoreUnlocked={keystoreUnlocked}
-          network={network}
-          walletAddress={walletAddress}
-          walletBalance={walletBalance}
-          sessionSecondsLeft={keystoreUnlocked ? sessionSecondsLeft : undefined}
-          onToggleSidebar={() => setSidebarOpen((o) => !o)}
-          onToggleLock={onToggleLock}
-          onSwitchNetwork={onSwitchNetwork}
-        />
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          <div className="max-w-7xl mx-auto">
-            <Outlet />
-          </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+        <main style={{ flex: 1, overflowY: 'auto', maxHeight: '100vh' }}>
+          <Outlet />
         </main>
       </div>
     </div>

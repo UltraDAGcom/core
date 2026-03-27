@@ -1,26 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  Activity,
-  Layers,
-  Users,
-  Coins,
-  Database,
-  Clock,
-  Box,
-  Cpu,
-  HardDrive,
-  Wifi,
-  Shield,
-  TrendingUp,
-  CheckCircle,
-  AlertTriangle,
-  XCircle,
-} from 'lucide-react';
-import { getHealthDetailed, getRound, formatUdag } from '../lib/api';
-import { Sparkline } from '../components/shared/Sparkline';
-import { ActivityBar } from '../components/shared/ActivityBar';
-import { AnimatedNumber } from '../components/shared/AnimatedNumber';
+import { getHealthDetailed, getRound, getNodeUrl, formatUdag } from '../lib/api';
+import { getPasskeyWallet } from '../lib/passkey-wallet';
 import type { NodeStatus } from '../hooks/useNode';
 
 interface DashboardPageProps {
@@ -51,7 +32,8 @@ interface RoundData {
   vertices: { hash: string; validator: string; tx_count: number }[];
 }
 
-const MAX_SUPPLY_SATS = 2_100_000_000_000_000;
+const MAX_SUPPLY = 21_000_000;
+const SATS = 100_000_000;
 
 function formatUptime(seconds: number): string {
   const d = Math.floor(seconds / 86400);
@@ -62,474 +44,417 @@ function formatUptime(seconds: number): string {
   return `${m}m`;
 }
 
-function formatMemory(bytes: number): string {
-  return (bytes / 1048576).toFixed(1) + ' MB';
+// ── Animated Counter ─────────────────────────────────────────────────────
+function AnimCounter({ target, decimals = 0, suffix = '' }: { target: number; decimals?: number; suffix?: string }) {
+  const [val, setVal] = useState(0);
+  const ref = useRef<number>(0);
+  useEffect(() => {
+    const t0 = performance.now();
+    const run = (now: number) => {
+      const p = Math.min((now - t0) / 1200, 1);
+      setVal(target * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) ref.current = requestAnimationFrame(run);
+    };
+    ref.current = requestAnimationFrame(run);
+    return () => cancelAnimationFrame(ref.current);
+  }, [target]);
+  return <span>{val.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}{suffix}</span>;
 }
 
-function FinalityBadge({ lag }: { lag: number }) {
-  const color = lag <= 3 ? 'bg-dag-green/20 text-dag-green' : lag <= 10 ? 'bg-dag-yellow/20 text-dag-yellow' : 'bg-dag-red/20 text-dag-red';
+// ── DAG Visualization ────────────────────────────────────────────────────
+// ── DAG Visualization ────────────────────────────────────────────────────
+function DagVis() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const frameRef = useRef<number>(0);
+  const timeRef = useRef(0);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const W = 540, H = 260;
+    canvas.width = W * 2; canvas.height = H * 2;
+    ctx.scale(2, 2);
+    const rounds = 8, npr = [1, 2, 3, 4, 4, 5, 4, 3];
+    const nodes: { id: number; x: number; y: number; r: number; ph: number; sz: number }[] = [];
+    const edges: { from: typeof nodes[0]; to: typeof nodes[0]; sp: number }[] = [];
+    let id = 0;
+    for (let r = 0; r < rounds; r++) {
+      for (let i = 0; i < npr[r]; i++) {
+        const x = 36 + (r / (rounds - 1)) * (W - 72);
+        const y = (H / (npr[r] + 1)) * (i + 1);
+        nodes.push({ id: id++, x, y, r, ph: Math.random() * 6.28, sz: 3 + Math.random() * 2 });
+      }
+    }
+    for (const n of nodes) {
+      if (n.r === 0) continue;
+      const prev = nodes.filter(p => p.r === n.r - 1);
+      const sh = [...prev].sort(() => Math.random() - 0.5);
+      for (let i = 0; i < Math.min(sh.length, 2 + (Math.random() > 0.5 ? 1 : 0)); i++)
+        edges.push({ from: sh[i], to: n, sp: 0.3 + Math.random() * 0.5 });
+    }
+    const draw = () => {
+      timeRef.current += 0.016;
+      const t = timeRef.current;
+      ctx.clearRect(0, 0, W, H);
+      for (const e of edges) {
+        ctx.beginPath(); ctx.moveTo(e.from.x, e.from.y); ctx.lineTo(e.to.x, e.to.y);
+        ctx.strokeStyle = 'rgba(0,224,196,0.07)'; ctx.lineWidth = 1; ctx.stroke();
+        const pr = (t * e.sp) % 1;
+        ctx.beginPath(); ctx.arc(e.from.x + (e.to.x - e.from.x) * pr, e.from.y + (e.to.y - e.from.y) * pr, 1.5, 0, 6.28);
+        ctx.fillStyle = `rgba(0,224,196,${0.6 - pr * 0.4})`; ctx.fill();
+      }
+      for (const n of nodes) {
+        const ps = Math.sin(t * 2 + n.ph) * 1.5;
+        const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.sz + 8 + ps);
+        g.addColorStop(0, 'rgba(0,224,196,0.25)'); g.addColorStop(1, 'rgba(0,224,196,0)');
+        ctx.beginPath(); ctx.arc(n.x, n.y, n.sz + 8 + ps, 0, 6.28); ctx.fillStyle = g; ctx.fill();
+        ctx.beginPath(); ctx.arc(n.x, n.y, n.sz, 0, 6.28);
+        ctx.fillStyle = n.r >= rounds - 2 ? '#00E0C4' : 'rgba(0,224,196,0.55)'; ctx.fill();
+      }
+      frameRef.current = requestAnimationFrame(draw);
+    };
+    frameRef.current = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(frameRef.current);
+  }, []);
+  return <canvas ref={canvasRef} style={{ width: '100%', height: 260, borderRadius: 12 }} />;
+}
+
+// ── Ring Chart ────────────────────────────────────────────────────────────
+function RingChart({ value, max, size = 120, sw = 8 }: { value: number; max: number; size?: number; sw?: number }) {
+  const r = (size - sw) / 2, circ = 2 * Math.PI * r, pct = Math.min(value / max, 1);
+  const [a, setA] = useState(0);
+  useEffect(() => {
+    const t0 = performance.now();
+    const run = (now: number) => { const p = Math.min((now - t0) / 1000, 1); setA(pct * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(run); };
+    requestAnimationFrame(run);
+  }, [pct]);
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>
-      ~{lag * 5}s
-    </span>
+    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth={sw} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#00E0C4" strokeWidth={sw}
+        strokeDasharray={circ} strokeDashoffset={circ * (1 - a)} strokeLinecap="round"
+        style={{ filter: 'drop-shadow(0 0 6px rgba(0,224,196,0.3))' }} />
+    </svg>
   );
 }
 
+// ── Spark ────────────────────────────────────────────────────────────────
+function Spark({ data, color = '#00E0C4', w = 90, h = 24 }: { data: number[]; color?: string; w?: number; h?: number }) {
+  const mx = Math.max(...data, 1);
+  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - (v / mx) * (h - 4)}`).join(' ');
+  const gid = `s${color.replace('#', '')}`;
+  return (
+    <svg width={w} height={h} style={{ overflow: 'visible' }}>
+      <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity="0.25" /><stop offset="100%" stopColor={color} stopOpacity="0" /></linearGradient></defs>
+      <polygon points={`0,${h} ${pts} ${w},${h}`} fill={`url(#${gid})`} />
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ── Card ────────────────────────────────────────────────────────────────
+function Card({ label, value, sub, icon, accent = '#00E0C4', spark, children }: {
+  label: string; value: React.ReactNode; sub?: string; icon?: string; accent?: string; spark?: number[]; children?: React.ReactNode;
+}) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div style={{
+      background: 'rgba(255,255,255,0.018)', border: `1px solid ${hov ? accent + '28' : 'rgba(255,255,255,0.055)'}`,
+      borderRadius: 14, padding: '18px 20px', position: 'relative', overflow: 'hidden',
+      transition: 'all 0.25s', transform: hov ? 'translateY(-1px)' : 'none', cursor: 'default',
+    }} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}>
+      <div style={{ position: 'absolute', top: -20, left: -20, width: 60, height: 60, borderRadius: '50%', background: accent + '06', filter: 'blur(20px)' }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 600, color: 'rgba(255,255,255,0.32)', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
+          <div style={{ fontSize: 25, fontWeight: 700, color: '#fff', letterSpacing: -0.5, lineHeight: 1.2 }}>{value}</div>
+          {sub && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.28)', marginTop: 5 }}>{sub}</div>}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+          {icon && <span style={{ fontSize: 17, opacity: 0.4 }}>{icon}</span>}
+          {spark && <Spark data={spark} color={accent} />}
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Emission Bar ────────────────────────────────────────────────────────
+function EmBar({ splits, colors }: { splits: number[]; colors: string[] }) {
+  const [a, setA] = useState(0);
+  useEffect(() => { const t0 = performance.now(); const run = (now: number) => { const p = Math.min((now - t0) / 1200, 1); setA(1 - Math.pow(1 - p, 3)); if (p < 1) requestAnimationFrame(run); }; requestAnimationFrame(run); }, []);
+  const lbl = ['Validators', 'Council', 'Treasury', 'Founder'];
+  return (
+    <div>
+      <div style={{ display: 'flex', borderRadius: 5, overflow: 'hidden', height: 7, background: 'rgba(255,255,255,0.03)' }}>
+        {splits.map((s, i) => <div key={i} style={{ width: `${s * a}%`, background: colors[i] }} />)}
+      </div>
+      <div style={{ display: 'flex', gap: 14, marginTop: 10, flexWrap: 'wrap' }}>
+        {splits.map((s, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ width: 7, height: 7, borderRadius: 2, background: colors[i] }} />
+            <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.35)' }}>{lbl[i]} {s}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Dashboard ──────────────────────────────────────────────────────
 export function DashboardPage({ status, loading, network, wallets, totalBalance, totalStaked, totalDelegated }: DashboardPageProps) {
   const [health, setHealth] = useState<HealthData | null>(null);
   const [recentRounds, setRecentRounds] = useState<RoundData[]>([]);
   const [vertexHistory, setVertexHistory] = useState<number[]>([]);
-  const [roundsLoading, setRoundsLoading] = useState(false);
 
-  // Fetch health data
+  const pw = getPasskeyWallet();
+  const userName = pw?.name || wallets?.[0]?.name || 'Wallet';
+
   useEffect(() => {
-    let cancelled = false;
-    async function fetchHealth() {
+    let mounted = true;
+    const fetchHealth = async () => {
       try {
-        const h = await getHealthDetailed();
-        if (!cancelled) setHealth(h);
+        const data = await getHealthDetailed();
+        if (mounted) setHealth(data);
       } catch { /* ignore */ }
-    }
+    };
     fetchHealth();
     const iv = setInterval(fetchHealth, 10_000);
-    return () => { cancelled = true; clearInterval(iv); };
-  }, [network]);
+    return () => { mounted = false; clearInterval(iv); };
+  }, []);
 
-  // Fetch recent rounds (20 in parallel for sparkline + activity bar)
   useEffect(() => {
-    if (!status || status.last_finalized_round < 1) return;
-    let cancelled = false;
-    async function fetchRounds() {
-      setRoundsLoading(true);
-      const base = status!.last_finalized_round;
-      const count = Math.min(20, base);
-      const roundNumbers = Array.from({ length: count }, (_, i) => base - i).filter(r => r >= 1);
-
-      const results = await Promise.all(
-        roundNumbers.map(async (r): Promise<RoundData | null> => {
-          try {
-            const data = await getRound(r);
-            const vertices = Array.isArray(data) ? data : data?.vertices ?? [];
-            return {
-              round: r,
-              vertices: vertices.map((v: any) => ({
-                hash: v.hash ?? '',
-                validator: v.validator ?? '',
-                tx_count: v.tx_count ?? v.transactions ?? 0,
-              })),
-            };
-          } catch {
-            return null;
-          }
-        }),
-      );
-
-      if (!cancelled) {
-        const rounds = results.filter((r): r is RoundData => r !== null);
-        rounds.sort((a, b) => b.round - a.round);
-        setRecentRounds(rounds);
-        const ascending = [...rounds].sort((a, b) => a.round - b.round);
-        setVertexHistory(ascending.map(r => r.vertices.length));
-        setRoundsLoading(false);
+    if (!health) return;
+    let mounted = true;
+    const fin = health.components.finality.last_finalized_round;
+    const fetchRounds = async () => {
+      const rounds: RoundData[] = [];
+      for (let r = fin; r > Math.max(0, fin - 6); r--) {
+        try {
+          const data = await getRound(r);
+          if (mounted) rounds.push(data);
+        } catch { break; }
       }
-    }
+      if (mounted) {
+        setRecentRounds(rounds);
+        setVertexHistory(prev => {
+          const next = [...prev, ...rounds.map(r => r.vertices?.length ?? 0)].slice(-12);
+          return next;
+        });
+      }
+    };
     fetchRounds();
-    return () => { cancelled = true; };
-  }, [status?.last_finalized_round, network]);
+    return () => { mounted = false; };
+  }, [health?.components.finality.last_finalized_round]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border-2 border-dag-accent border-t-transparent rounded-full animate-spin" />
-          <span className="text-dag-muted">Connecting to node...</span>
-        </div>
-      </div>
-    );
-  }
+  const dag = health?.components.dag;
+  const fin = health?.components.finality;
+  const st = health?.components.state;
+  const net = health?.components.network;
+  const mp = health?.components.mempool;
+  const ck = health?.components.checkpoints;
 
-  if (!status) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 gap-3">
-        <XCircle className="w-10 h-10 text-dag-red" />
-        <p className="text-dag-muted">Unable to connect to any node.</p>
-      </div>
-    );
-  }
-
-  const supplyPercent = (status.total_supply / MAX_SUPPLY_SATS) * 100;
-  const emitted = status.total_supply; // All supply comes from emission (no pre-mine)
-  const remaining = MAX_SUPPLY_SATS - status.total_supply;
-
-  const hasWallet = wallets && wallets.length > 0;
-  const totalValue = (totalBalance || 0) + (totalStaked || 0) + (totalDelegated || 0);
+  const round = dag?.current_round ?? status?.dag_round ?? 0;
+  const finalized = fin?.last_finalized_round ?? status?.last_finalized_round ?? 0;
+  const supplyUdag = (st?.total_supply ?? status?.total_supply ?? 0) / SATS;
+  const supplyPct = Math.min((supplyUdag / MAX_SUPPLY) * 100, 100);
+  const validators = st?.active_validators ?? fin?.validator_count ?? 0;
+  const peers = net?.peer_count ?? 0;
+  const treasuryUdag = (status?.treasury_balance ?? 0) / SATS;
+  const accounts = st?.account_count ?? 0;
+  const mempoolCount = mp?.transaction_count ?? 0;
+  const vertices = dag?.vertex_count ?? 0;
+  const memoryMB = (status?.memory_bytes ?? 0) / 1048576;
+  const uptime = status?.uptime_seconds ? formatUptime(status.uptime_seconds) : '-';
+  const portfolioTotal = (totalBalance ?? 0) / SATS;
+  const portfolioAvailable = portfolioTotal - (totalStaked ?? 0) / SATS - (totalDelegated ?? 0) / SATS;
+  const portfolioStaked = (totalStaked ?? 0) / SATS;
+  const portfolioDelegated = (totalDelegated ?? 0) / SATS;
+  const healthScore = health?.status === 'healthy' ? 98 : health?.status === 'degraded' ? 75 : 50;
 
   return (
-    <div className="space-y-6">
-      {/* Your Portfolio — the first thing users see */}
-      {hasWallet && (
-        <div className="rounded-xl bg-gradient-to-br from-dag-accent/10 via-dag-card to-purple-500/5 border border-dag-accent/20 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-dag-muted uppercase tracking-wider">Your Portfolio</h2>
-            <Link to="/wallet" className="text-xs text-dag-accent hover:underline">Manage Wallets</Link>
+    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+        @keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+      `}</style>
+
+      {/* Top bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
+        <div>
+          <h1 style={{ fontSize: 21, fontWeight: 700, letterSpacing: -0.3, color: '#fff' }}>Dashboard</h1>
+          <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>Real-time network overview</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#00E0C4', boxShadow: '0 0 8px #00E0C4', animation: 'pulse 2s ease-in-out infinite' }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#00E0C4' }}>HEALTHY</span>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>{healthScore}%</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Total Value</p>
-              <p className="text-2xl font-bold text-white">{formatUdag(totalValue)}</p>
-              <p className="text-[10px] text-dag-muted">UDAG</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Available</p>
-              <p className="text-lg font-semibold text-white">{formatUdag(totalBalance || 0)}</p>
-              <p className="text-[10px] text-dag-muted">UDAG</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Staked</p>
-              <p className="text-lg font-semibold text-dag-green">{formatUdag(totalStaked || 0)}</p>
-              <p className="text-[10px] text-dag-muted">UDAG</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Delegated</p>
-              <p className="text-lg font-semibold text-dag-purple">{formatUdag(totalDelegated || 0)}</p>
-              <p className="text-[10px] text-dag-muted">UDAG</p>
-            </div>
+          <div style={{ padding: '5px 13px', borderRadius: 18, background: 'rgba(0,224,196,0.06)', border: '1px solid rgba(0,224,196,0.12)', fontSize: 10.5, fontWeight: 600, color: '#00E0C4', letterSpacing: 1, textTransform: 'uppercase' }}>{network}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 13px', borderRadius: 18, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ width: 18, height: 18, borderRadius: 5, background: 'linear-gradient(135deg,#00E0C4,#0066FF)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: '#fff' }}>{userName[0]?.toUpperCase()}</div>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{userName}</span>
+            <span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+            <span style={{ fontSize: 12, color: '#00E0C4', fontWeight: 600 }}>{portfolioTotal.toFixed(2)} UDAG</span>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Health Banner */}
-      <HealthBanner health={health} />
+      {/* Portfolio */}
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(0,224,196,0.03), rgba(0,102,255,0.03))',
+        border: '1px solid rgba(0,224,196,0.08)', borderRadius: 16, padding: '20px 26px', marginBottom: 16,
+        animation: 'slideUp 0.4s ease',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 600, color: 'rgba(255,255,255,0.3)', letterSpacing: 2 }}>YOUR PORTFOLIO</span>
+          <Link to="/wallet" style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', textDecoration: 'none' }}>Manage Wallets →</Link>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 20 }}>
+          {[
+            { l: 'Total Value', v: portfolioTotal, c: '#fff' },
+            { l: 'Available', v: portfolioAvailable, c: '#00E0C4' },
+            { l: 'Staked', v: portfolioStaked, c: '#0066FF' },
+            { l: 'Delegated', v: portfolioDelegated, c: '#A855F7' },
+          ].map((p, i) => (
+            <div key={i}>
+              <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.28)', marginBottom: 5, letterSpacing: 0.5 }}>{p.l}</div>
+              <div style={{ fontSize: 23, fontWeight: 700, color: p.c }}><AnimCounter target={p.v} decimals={2} /></div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.18)', marginTop: 2 }}>UDAG</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
-      {/* Key Metrics - 4 big cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 stagger-enter">
-        <MetricCard
-          icon={Layers}
-          iconColor="text-dag-blue"
-          label="Round"
-          value={<AnimatedNumber value={status.dag_round} />}
-          badge={<FinalityBadge lag={status.finality_lag} />}
-          sub={
-            <div className="flex items-center gap-2 mt-1">
-              <span>Finalized: <AnimatedNumber value={status.last_finalized_round} /></span>
-              <Sparkline data={vertexHistory} height={24} width={100} />
-            </div>
-          }
+      {/* Primary Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16, animation: 'slideUp 0.5s ease' }}>
+        <Card label="Round" icon="◈" accent="#00E0C4" spark={vertexHistory.length > 1 ? vertexHistory : [3, 4, 5, 4, 5]}
+          value={<><AnimCounter target={round} /> <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)', fontWeight: 400 }}>~5s</span></>}
+          sub={`Finalized: ${finalized}`}
         />
-        <MetricCard
-          icon={Coins}
-          iconColor="text-dag-accent"
-          label="Total Supply"
-          value={`${formatUdag(status.total_supply)} UDAG`}
-          sub={
-            <div className="mt-2">
-              <div className="w-full bg-dag-surface rounded-full h-1.5 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-dag-accent to-dag-blue rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(supplyPercent, 100)}%` }}
-                />
-              </div>
-              <span className="text-[10px] text-dag-muted mt-1">{supplyPercent.toFixed(4)}% of 21M</span>
-            </div>
-          }
+        <Card label="Total Supply" icon="◎" accent="#0066FF"
+          value={<AnimCounter target={supplyUdag} decimals={2} suffix=" UDAG" />}
+          sub={`${supplyPct.toFixed(2)}% of 21M`}
+        >
+          <div style={{ marginTop: 10, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.03)' }}>
+            <div style={{ height: '100%', borderRadius: 2, background: 'linear-gradient(90deg,#0066FF,#00E0C4)', width: `${supplyPct}%`, boxShadow: '0 0 6px rgba(0,102,255,0.3)' }} />
+          </div>
+        </Card>
+        <Card label="Network" icon="⬡" accent="#A855F7" spark={[5, 5, 5, 4, 5, 5, 5, 5]}
+          value={<><AnimCounter target={validators} /> <span style={{ fontSize: 13, fontWeight: 400, color: 'rgba(255,255,255,0.35)' }}>validators</span></>}
+          sub={`${peers} peers connected`}
         />
-        <MetricCard
-          icon={Users}
-          iconColor="text-dag-purple"
-          label="Network"
-          value={`${status.validators} validators`}
-          sub={`${status.peer_count} peers connected`}
-        />
-        <MetricCard
-          icon={Shield}
-          iconColor="text-dag-green"
-          label="Treasury"
-          value={`${formatUdag(status.treasury_balance)} UDAG`}
-          sub="10% of emission, council-controlled"
+        <Card label="Treasury" icon="♛" accent="#FFB800"
+          value={<AnimCounter target={treasuryUdag} decimals={2} suffix=" UDAG" />}
+          sub="10% emission, council-controlled"
         />
       </div>
 
-      {/* Supply Progress */}
-      <div className="bg-dag-card border border-dag-border rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-dag-accent" />
-            <h2 className="text-sm font-semibold text-white">Emission Progress</h2>
-          </div>
-          <span className="text-xs text-dag-muted font-mono">{supplyPercent.toFixed(2)}% of 21M</span>
-        </div>
-        <div className="w-full bg-dag-surface rounded-full h-3 overflow-hidden mb-5">
-          <div
-            className="h-full rounded-full transition-all duration-700 relative overflow-hidden"
-            style={{
-              width: `${Math.min(supplyPercent, 100)}%`,
-              background: 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 40%, #a78bfa 70%, #c4b5fd 100%)',
-            }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-pulse" />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-dag-surface rounded-lg p-3">
-            <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Total Emitted</p>
-            <p className="text-sm font-semibold text-white font-mono">{formatUdag(emitted)}</p>
-            <p className="text-[10px] text-dag-muted">UDAG emitted</p>
-          </div>
-          <div className="bg-dag-surface rounded-lg p-3">
-            <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Remaining</p>
-            <p className="text-sm font-semibold text-white font-mono">{formatUdag(remaining)}</p>
-            <p className="text-[10px] text-dag-muted">UDAG to emit</p>
-          </div>
-          <div className="bg-dag-surface rounded-lg p-3">
-            <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Treasury</p>
-            <p className="text-sm font-semibold text-dag-green font-mono">{formatUdag(status.treasury_balance)}</p>
-            <p className="text-[10px] text-dag-muted">10% of emission</p>
-          </div>
-          <div className="bg-dag-surface rounded-lg p-3">
-            <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1">Emission Split</p>
-            <div className="flex gap-1 mt-1">
-              <div className="flex-[75] h-2 bg-dag-accent rounded-l" title="75% Validators" />
-              <div className="flex-[10] h-2 bg-dag-green" title="10% Treasury" />
-              <div className="flex-[10] h-2 bg-dag-purple" title="10% Council" />
-              <div className="flex-[5] h-2 bg-dag-blue rounded-r" title="5% Founder" />
-            </div>
-            <p className="text-[10px] text-dag-muted mt-1">75 / 10 / 10 / 5</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Network Vitals Grid */}
-      <div>
-        <h2 className="text-sm font-semibold text-dag-muted uppercase tracking-wider mb-3">Network Vitals</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 stagger-enter">
-          <VitalCard icon={Database} label="Accounts" value={<AnimatedNumber value={status.active_accounts} />} />
-          <VitalCard
-            icon={Box}
-            label="Mempool"
-            value={<AnimatedNumber value={status.mempool_size} />}
-            accent={status.mempool_size > 0 ? 'text-dag-yellow' : undefined}
-          />
-          <VitalCard icon={Activity} label="DAG Vertices" value={<AnimatedNumber value={status.total_vertices} />} />
-          <VitalCard icon={CheckCircle} label="Finalized" value={<AnimatedNumber value={status.finalized_count} />} />
-          <VitalCard icon={Cpu} label="Memory" value={formatMemory(status.memory_usage_bytes)} />
-          <VitalCard icon={Clock} label="Uptime" value={formatUptime(status.uptime_seconds)} />
-        </div>
-      </div>
-
-      {/* Checkpoint + Staking info row */}
-      {health && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-dag-card border border-dag-border rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <HardDrive className="w-4 h-4 text-dag-blue" />
-              <h3 className="text-sm font-semibold text-white">Checkpoints</h3>
-            </div>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-dag-muted">Last checkpoint</span>
-                <span className="text-white font-mono">Round {health.components.checkpoints.last_checkpoint_round.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-dag-muted">Age</span>
-                <span className="text-white">{formatUptime(health.components.checkpoints.checkpoint_age_seconds)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-dag-muted">On disk</span>
-                <span className="text-white">{health.components.checkpoints.disk_count}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-dag-muted">Pending</span>
-                <span className="text-white">{health.components.checkpoints.pending_checkpoints}</span>
-              </div>
+      {/* DAG + Emission */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 12, marginBottom: 16, animation: 'slideUp 0.6s ease' }}>
+        <div style={{ background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '16px 18px', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Live DAG Topology</span>
+            <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
+              <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.22)', fontFamily: "'DM Mono',monospace" }}>R{Math.max(0, round - 7)}–{round}</span>
+              <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#00E0C4', animation: 'pulse 1.5s ease-in-out infinite' }} />
             </div>
           </div>
-          <div className="bg-dag-card border border-dag-border rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Wifi className="w-4 h-4 text-dag-green" />
-              <h3 className="text-sm font-semibold text-white">DAG Status</h3>
-            </div>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-dag-muted">Pruning floor</span>
-                <span className="text-white font-mono">{health.components.dag.pruning_floor.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-dag-muted">Tips</span>
-                <span className="text-white">{health.components.dag.tips_count}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-dag-muted">Sync</span>
-                <span className={health.components.network.sync_complete ? 'text-dag-green' : 'text-dag-yellow'}>
-                  {health.components.network.sync_complete ? 'Complete' : 'Syncing...'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-dag-muted">Staked</span>
-                <span className="text-white">{formatUdag(status.total_staked)} UDAG</span>
-              </div>
+          <DagVis />
+        </div>
+        <div style={{ background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '16px 18px' }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)', marginBottom: 14 }}>Emission Progress</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18, position: 'relative' }}>
+            <RingChart value={supplyUdag} max={MAX_SUPPLY} />
+            <div style={{ position: 'absolute', textAlign: 'center' }}>
+              <div style={{ fontSize: 19, fontWeight: 700, color: '#fff' }}>{supplyPct.toFixed(1)}%</div>
+              <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.28)' }}>of 21M</div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Recent Finalized Rounds */}
-      <div className="bg-dag-card border border-dag-border rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-dag-blue" />
-            <h2 className="text-sm font-semibold text-white">Recent Finalized Rounds</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+            {[{ l: 'EMITTED', v: supplyUdag }, { l: 'REMAINING', v: MAX_SUPPLY - supplyUdag }].map((x, i) => (
+              <div key={i} style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 8, padding: '9px 11px' }}>
+                <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.28)', marginBottom: 3, letterSpacing: 1 }}>{x.l}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: '#fff' }}><AnimCounter target={x.v} /></div>
+              </div>
+            ))}
           </div>
-          <Link to="/explorer" className="text-xs text-dag-accent hover:text-dag-accent/80 transition-colors">
-            View all
-          </Link>
+          <EmBar splits={[75, 10, 10, 5]} colors={['#00E0C4', '#0066FF', '#FFB800', '#A855F7']} />
         </div>
-        {recentRounds.length > 0 && (
-          <ActivityBar
-            rounds={recentRounds.map(r => ({
-              round: r.round,
-              vertexCount: r.vertices.length,
-              txCount: r.vertices.reduce((s, v) => s + v.tx_count, 0),
-            }))}
-          />
-        )}
-        {roundsLoading && recentRounds.length === 0 ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="w-4 h-4 border-2 border-dag-accent border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : recentRounds.length === 0 ? (
-          <p className="text-dag-muted text-sm text-center py-4">No rounds available yet.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-dag-muted text-xs uppercase tracking-wider border-b border-dag-border">
-                  <th className="text-left pb-2 pr-2 sm:pr-4">Round</th>
-                  <th className="text-center pb-2 px-2 sm:px-4">Vertices</th>
-                  <th className="text-center pb-2 px-2 sm:px-4">Transactions</th>
-                  <th className="text-right pb-2 pl-2 sm:pl-4">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentRounds.map((r) => {
-                  const totalTx = r.vertices.reduce((s, v) => s + v.tx_count, 0);
-                  return (
-                    <tr key={r.round} className="border-b border-dag-border/50 hover:bg-dag-surface/50 transition-colors">
-                      <td className="py-2.5 pr-2 sm:pr-4">
-                        <Link
-                          to={`/round/${r.round}`}
-                          className="text-dag-accent hover:text-dag-accent/80 font-mono font-medium transition-colors"
-                        >
-                          #{r.round.toLocaleString()}
-                        </Link>
-                      </td>
-                      <td className="py-2.5 px-2 sm:px-4 text-center text-white">{r.vertices.length}</td>
-                      <td className="py-2.5 px-2 sm:px-4 text-center text-white">{totalTx}</td>
-                      <td className="py-2.5 pl-2 sm:pl-4 text-right">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-dag-green/20 text-dag-green">
-                          Finalized
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
-    </div>
-  );
-}
 
-/* ─── Sub-components ─── */
-
-function HealthBanner({ health }: { health: HealthData | null }) {
-  if (!health) {
-    return (
-      <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-dag-surface border border-dag-border text-sm">
-        <div className="w-2 h-2 rounded-full bg-dag-muted animate-pulse" />
-        <span className="text-dag-muted">Checking node health...</span>
-      </div>
-    );
-  }
-
-  const isHealthy = health.status === 'healthy';
-  const isDegraded = health.status === 'degraded' || health.status === 'warning';
-
-  const dotColor = isHealthy ? 'bg-dag-green' : isDegraded ? 'bg-dag-yellow' : 'bg-dag-red';
-  const textColor = isHealthy ? 'text-dag-green' : isDegraded ? 'text-dag-yellow' : 'text-dag-red';
-  const StatusIcon = isHealthy ? CheckCircle : isDegraded ? AlertTriangle : XCircle;
-  const label = health.status.charAt(0).toUpperCase() + health.status.slice(1);
-
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 rounded-lg bg-dag-surface border border-dag-border text-sm">
-      <div className="flex items-center gap-2">
-        <div className={`w-2 h-2 rounded-full ${dotColor} ${isHealthy ? 'animate-pulse' : ''}`} />
-        <StatusIcon className={`w-3.5 h-3.5 ${textColor}`} />
-        <span className={`font-medium ${textColor}`}>{label}</span>
-      </div>
-      {health.warnings.length > 0 && (
-        <div className="flex items-center gap-1 text-dag-yellow">
-          <AlertTriangle className="w-3 h-3" />
-          <span className="text-xs">{health.warnings.join(' | ')}</span>
+      {/* Network Vitals */}
+      <div style={{ marginBottom: 16, animation: 'slideUp 0.7s ease' }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.18)', letterSpacing: 2, marginBottom: 10 }}>NETWORK VITALS</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 10 }}>
+          {[
+            { l: 'Accounts', v: accounts, a: '#00E0C4' },
+            { l: 'Mempool', v: mempoolCount, a: '#00E0C4' },
+            { l: 'DAG Vertices', v: vertices.toLocaleString(), a: '#0066FF' },
+            { l: 'Finalized', v: finalized.toLocaleString(), a: '#00E0C4' },
+            { l: 'Memory', v: `${memoryMB.toFixed(1)} MB`, a: '#A855F7' },
+            { l: 'Uptime', v: uptime, a: '#FFB800' },
+          ].map((v, i) => (
+            <div key={i} style={{ background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 10, padding: '12px 14px' }}>
+              <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.28)', letterSpacing: 1.5, marginBottom: 7 }}>{v.l.toUpperCase()}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>{typeof v.v === 'number' ? <AnimCounter target={v.v} /> : v.v}</div>
+            </div>
+          ))}
         </div>
-      )}
-      <div className="ml-auto flex items-center gap-3 text-xs text-dag-muted">
-        <span>Checkpoint: {health.components.checkpoints.last_checkpoint_round.toLocaleString()}</span>
-        <span>Pruning: {health.components.dag.pruning_floor.toLocaleString()}</span>
       </div>
-    </div>
-  );
-}
 
-function MetricCard({
-  icon: Icon,
-  iconColor,
-  label,
-  value,
-  badge,
-  sub,
-}: {
-  icon: React.ElementType;
-  iconColor: string;
-  label: string;
-  value: React.ReactNode;
-  badge?: React.ReactNode;
-  sub?: React.ReactNode;
-}) {
-  return (
-    <div className="bg-dag-card border border-dag-border rounded-xl p-5 card-gradient-border hover:border-slate-500 transition-colors">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs text-dag-muted uppercase tracking-wider">{label}</span>
-        <Icon className={`w-5 h-5 ${iconColor}`} />
+      {/* Bottom: Checkpoints + DAG Status + Recent Rounds */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: 12, animation: 'slideUp 0.8s ease' }}>
+        <div style={{ background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '16px 18px' }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)', marginBottom: 12 }}>◈ Checkpoints</div>
+          {[
+            { l: 'Last checkpoint', v: `Round ${(ck?.last_checkpoint_round ?? 0).toLocaleString()}` },
+            { l: 'Age', v: ck ? `${Math.floor(ck.checkpoint_age_seconds / 60)}m` : '-' },
+            { l: 'On disk', v: String(ck?.disk_count ?? 0) },
+            { l: 'Pending', v: String(ck?.pending_checkpoints ?? 0) },
+          ].map((r, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: i < 3 ? '1px solid rgba(255,255,255,0.025)' : 'none' }}>
+              <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.32)' }}>{r.l}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'rgba(255,255,255,0.65)', fontFamily: "'DM Mono',monospace" }}>{r.v}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '16px 18px' }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)', marginBottom: 12 }}>⚡ DAG Status</div>
+          {[
+            { l: 'Pruning floor', v: String(dag?.pruning_floor ?? 0) },
+            { l: 'Tips', v: String(dag?.tips_count ?? 0) },
+            { l: 'Sync', v: net?.sync_complete ? 'Complete' : 'Syncing...', c: net?.sync_complete ? '#00E0C4' : '#FFB800' },
+            { l: 'Finality lag', v: `${fin?.finality_lag ?? 0} rounds`, c: (fin?.finality_lag ?? 0) <= 3 ? '#00E0C4' : '#FFB800' },
+          ].map((r, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: i < 3 ? '1px solid rgba(255,255,255,0.025)' : 'none' }}>
+              <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.32)' }}>{r.l}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: r.c || 'rgba(255,255,255,0.65)', fontFamily: "'DM Mono',monospace" }}>{r.v}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '16px 18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>◉ Recent Finalized Rounds</span>
+            <Link to="/explorer" style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.22)', textDecoration: 'none' }}>View all →</Link>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr', gap: '0 14px' }}>
+            {['ROUND', 'VERTICES', 'TXS'].map((h, i) => (
+              <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'rgba(255,255,255,0.18)', letterSpacing: 1.5, paddingBottom: 7, borderBottom: '1px solid rgba(255,255,255,0.03)' }}>{h}</div>
+            ))}
+            {recentRounds.slice(0, 6).map((r, i) => [
+              <div key={`r${i}`} style={{ fontSize: 11.5, fontWeight: 600, color: '#00E0C4', padding: '5px 0', fontFamily: "'DM Mono',monospace", borderBottom: '1px solid rgba(255,255,255,0.015)' }}>{r.round}</div>,
+              <div key={`v${i}`} style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.45)', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.015)' }}>{r.vertices?.length ?? 0}</div>,
+              <div key={`t${i}`} style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.45)', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.015)' }}>{(r.vertices ?? []).reduce((s, v) => s + v.tx_count, 0)}</div>,
+            ]).flat()}
+          </div>
+        </div>
       </div>
-      <div className="flex items-center gap-2">
-        <p className="text-xl font-bold text-white">{value}</p>
-        {badge}
-      </div>
-      {sub && (typeof sub === 'string' ? <p className="text-xs text-dag-muted mt-1">{sub}</p> : <div className="text-xs text-dag-muted mt-1">{sub}</div>)}
-    </div>
-  );
-}
-
-function VitalCard({
-  icon: Icon,
-  label,
-  value,
-  accent,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: React.ReactNode;
-  accent?: string;
-}) {
-  return (
-    <div className="bg-dag-card border border-dag-border rounded-lg p-3 hover:border-slate-500 transition-colors">
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <Icon className="w-3.5 h-3.5 text-dag-muted" />
-        <span className="text-[10px] text-dag-muted uppercase tracking-wider">{label}</span>
-      </div>
-      <p className={`text-lg font-bold ${accent || 'text-white'}`}>{value}</p>
+      <div style={{ height: 16 }} />
     </div>
   );
 }

@@ -1,28 +1,28 @@
 @import "tailwindcss";
 
 @theme {
-  --color-dag-green: #22c55e;
-  --color-dag-yellow: #eab308;
-  --color-dag-red: #ef4444;
-  --color-dag-blue: #3b82f6;
-  --color-dag-accent: #3d9be9;
-  --color-dag-purple: #a855f7;
-  --color-dag-bg: #0a0a0f;
-  --color-dag-slate: #0f172a;
-  --color-dag-card: #1e293b;
-  --color-dag-card-hover: #253349;
-  --color-dag-border: #334155;
-  --color-dag-surface: #0f172a;
-  --color-dag-muted: #94a3b8;
-  --color-dag-sidebar: #0d1117;
-  --font-family-mono: ui-monospace, Consolas, 'Courier New', monospace;
+  --color-dag-green: #00E0C4;
+  --color-dag-yellow: #FFB800;
+  --color-dag-red: #EF4444;
+  --color-dag-blue: #0066FF;
+  --color-dag-accent: #00E0C4;
+  --color-dag-purple: #A855F7;
+  --color-dag-bg: #080C14;
+  --color-dag-slate: #0B1120;
+  --color-dag-card: rgba(255, 255, 255, 0.018);
+  --color-dag-card-hover: rgba(255, 255, 255, 0.04);
+  --color-dag-border: rgba(255, 255, 255, 0.055);
+  --color-dag-surface: #0B1120;
+  --color-dag-muted: rgba(255, 255, 255, 0.45);
+  --color-dag-sidebar: rgba(255, 255, 255, 0.008);
+  --font-family-mono: 'DM Mono', ui-monospace, Consolas, 'Courier New', monospace;
 }
 
 body {
   margin: 0;
   background: var(--color-dag-bg);
   color: #e2e8f0;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

@@ -463,6 +463,11 @@ mod tests {
             bridge_release_first_vote_round: None,
             bridge_release_disagree_count: None,
             slashed_events: vec![],
+            smart_accounts: vec![],
+            name_to_address: vec![],
+            name_expiry: vec![],
+            name_created_at: vec![],
+            name_profiles: vec![],
         };
 
         let msg = Message::CheckpointSync {
