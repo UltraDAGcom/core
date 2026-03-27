@@ -1574,38 +1574,10 @@ ultradag_banned_ips {ban_count}
                 txs_to_broadcast.push(tx);
                 nonce += 1;
 
-                // 2. Sponsored name registration: name owned by user, fee paid by relay
-                if let Some(ref name) = relay_req.name {
-                    let name_fee = ultradag_coin::tx::name_registry::name_annual_fee(name);
-
-                    // Build RegisterNameTx with fee_payer (sponsored)
-                    // from = user_addr (name owner), fee_payer = faucet (pays the fee)
-                    let user_nonce = 0u64; // New account, nonce starts at 0
-                    let mut reg_tx = ultradag_coin::tx::name_registry::RegisterNameTx {
-                        from: user_addr,
-                        name: name.clone(),
-                        duration_years: 1,
-                        fee: name_fee,
-                        nonce: user_nonce,
-                        pub_key: [0u8; 32], // User has no Ed25519 key (passkey wallet)
-                        signature: ultradag_coin::Signature([0u8; 64]), // No user signature needed for sponsored tx
-                        fee_payer: None, // Set below
-                    };
-
-                    // Fee payer signs the registration's signable_bytes
-                    let signable = reg_tx.signable_bytes();
-                    let fp_signature = faucet_sk.sign(&signable);
-                    reg_tx.fee_payer = Some(ultradag_coin::tx::smart_account::FeePayer {
-                        address: faucet_addr,
-                        pub_key: faucet_sk.verifying_key().to_bytes(),
-                        signature: fp_signature,
-                        nonce,
-                    });
-
-                    let tx = Transaction::RegisterName(reg_tx);
-                    let _ = mp.insert(tx.clone());
-                    txs_to_broadcast.push(tx);
-                }
+                // Name registration is handled client-side after the account is funded.
+                // The relay just returns the name in the response for the client to store locally.
+                // On-chain name registration can be done later via RegisterNameTx when the user
+                // has an active SmartAccount with a registered key.
             }
 
             // Broadcast funded transactions

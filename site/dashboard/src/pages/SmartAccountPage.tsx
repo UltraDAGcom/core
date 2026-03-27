@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { Key, Shield, Clock, Users, Wallet, Plus, Trash2, AlertTriangle, CheckCircle, Loader2, Tag, RefreshCw } from 'lucide-react';
 import { getNodeUrl } from '../lib/api';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
-import { signAndSubmitWithPasskey } from '../lib/webauthn-sign';
 
 interface AuthorizedKey {
   key_id: string;
@@ -87,6 +86,7 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
   const [policyDailyLimit, setPolicyDailyLimit] = useState('10');
 
   const [submitting, setSubmitting] = useState(false);
+  const localName = getPasskeyWallet()?.name || null;
 
   const fetchInfo = useCallback(async () => {
     if (!walletAddress) return;
@@ -160,14 +160,22 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
 
       {/* ── Name ── */}
       <Card title="Your Name" icon={<Tag className="w-5 h-5 text-dag-accent" />}
-        action={!nameInfo && !showNameForm ? <ActionButton onClick={() => setShowNameForm(true)}>Claim Name</ActionButton> : undefined}>
+        action={!nameInfo && !localName && !showNameForm ? <ActionButton onClick={() => setShowNameForm(true)}>Claim Name</ActionButton> : undefined}>
         {nameInfo ? (
           <div className="space-y-2">
             <div className="flex items-center gap-3">
               <span className="text-2xl font-bold text-dag-accent">{nameInfo.name}</span>
-              <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">Active</span>
+              <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">On-chain</span>
             </div>
             {nameInfo.expiry_round && <p className="text-dag-muted text-sm">Expires at round {nameInfo.expiry_round.toLocaleString()}</p>}
+          </div>
+        ) : localName ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl font-bold text-dag-accent">{localName}</span>
+              <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full">Local only</span>
+            </div>
+            <p className="text-dag-muted text-xs">Your name is saved locally. On-chain registration happens automatically when the network confirms your account.</p>
           </div>
         ) : showNameForm ? (
           <div className="space-y-3">
