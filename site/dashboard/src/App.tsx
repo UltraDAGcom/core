@@ -174,7 +174,13 @@ function App() {
             onSwitchNetwork={handleSwitchNetwork}
             onCreateWallet={async (pw, name, secretKey, address) => {
               setShowOnboarding(true);
-              await ks.create(pw);
+              if (ks.hasStore) {
+                // Unlock existing keystore — preserves all previous wallets
+                const ok = await ks.unlock(pw);
+                if (!ok) return false;
+              } else {
+                await ks.create(pw);
+              }
               await ks.addWallet(name, secretKey, address);
               return true;
             }}
@@ -300,7 +306,12 @@ function App() {
           }
         }}
         onCreateWithKey={async (pw, name, secretKey, address) => {
-          await ks.create(pw);
+          if (ks.hasStore) {
+            const ok = await ks.unlock(pw);
+            if (!ok) return false;
+          } else {
+            await ks.create(pw);
+          }
           await ks.addWallet(name, secretKey, address);
           return true;
         }}

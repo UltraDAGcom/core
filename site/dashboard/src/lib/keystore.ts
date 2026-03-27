@@ -126,6 +126,8 @@ export function destroy(): void {
 
 export async function addWallet(name: string, secretKey: string, address: string): Promise<void> {
   if (!keystoreData) throw new Error('Keystore not unlocked');
+  // Skip if wallet with same address already exists
+  if (keystoreData.wallets.some(w => w.address === address)) return;
   keystoreData.wallets.push({ name, secret_key: secretKey, address });
   await save();
   notify();
