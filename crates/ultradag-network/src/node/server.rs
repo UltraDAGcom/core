@@ -1289,6 +1289,10 @@ async fn handle_peer(
                         warn!("Rejected vertex with non-zero coinbase from {} round={}", peer_addr, round);
                         continue;
                     }
+                    Err(DagInsertError::InvalidMerkleRoot) => {
+                        warn!("Rejected vertex with invalid merkle root from {} round={}", peer_addr, round);
+                        continue;
+                    }
                     Err(DagInsertError::FutureRound) => {
                         debug!("Skipped vertex from {} round={}: future round", peer_addr, round);
                         continue;
@@ -1476,7 +1480,7 @@ async fn handle_peer(
                             Err(DagInsertError::InvalidSignature) => {
                                 warn!("Rejected sync vertex from {} round={}: invalid signature", peer_addr, vertex.round);
                             }
-                            Err(DagInsertError::TooManyParents) | Err(DagInsertError::TooLarge) | Err(DagInsertError::InvalidCoinbase) => {
+                            Err(DagInsertError::TooManyParents) | Err(DagInsertError::TooLarge) | Err(DagInsertError::InvalidCoinbase) | Err(DagInsertError::InvalidMerkleRoot) => {
                                 // Silently reject
                             }
                             Err(DagInsertError::FutureRound) | Err(DagInsertError::FutureTimestamp) => {
@@ -1714,25 +1718,33 @@ async fn handle_peer(
                     continue;
                 }
 
-                // checkpoint.round == our_finalized: verify state_root matches
-                // We need to compute state at the checkpoint round, not current state
-                // (which may have advanced beyond checkpoint.round)
-                let state_r = state.read().await;
-                let checkpoint_round_finalized = state_r.last_finalized_round().unwrap_or(0);
-                
-                // Only validate if we've applied state up to exactly this checkpoint round
-                if checkpoint_round_finalized != checkpoint.round {
-                    debug!(
-                        "Checkpoint at round {} but our state is at round {} - skipping validation",
-                        checkpoint.round, checkpoint_round_finalized
-                    );
+                // checkpoint.round == our_finalized: verify state_root matches.
+                // First try loading the saved checkpoint state for this round (saved at
+                // checkpoint production time). This is more reliable than current state
+                // which may have advanced past the checkpoint round by the time we receive
+                // the proposal, causing state_root mismatch and failed co-signing.
+                let our_root = if let Some(saved_snapshot) = ultradag_coin::persistence::load_checkpoint_state(data_dir, checkpoint.round) {
+                    ultradag_coin::consensus::compute_state_root(&saved_snapshot)
+                } else {
+                    // No saved checkpoint state — fall back to current state but only if
+                    // it's at exactly the checkpoint round (narrow window).
+                    let state_r = state.read().await;
+                    let checkpoint_round_finalized = state_r.last_finalized_round().unwrap_or(0);
+
+                    if checkpoint_round_finalized != checkpoint.round {
+                        debug!(
+                            "Checkpoint at round {} but our state is at round {} and no saved snapshot - skipping validation",
+                            checkpoint.round, checkpoint_round_finalized
+                        );
+                        drop(state_r);
+                        continue;
+                    }
+
+                    let our_snapshot = state_r.snapshot();
+                    let root = ultradag_coin::consensus::compute_state_root(&our_snapshot);
                     drop(state_r);
-                    continue;
-                }
-                
-                let our_snapshot = state_r.snapshot();
-                let our_root = ultradag_coin::consensus::compute_state_root(&our_snapshot);
-                drop(state_r);
+                    root
+                };
                 
                 if our_root != checkpoint.state_root {
                     warn!(
