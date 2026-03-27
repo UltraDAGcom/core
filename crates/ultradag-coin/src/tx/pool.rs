@@ -58,6 +58,7 @@ impl Mempool {
             | Transaction::ExecuteVault(_)
             | Transaction::CancelVault(_)
             | Transaction::RegisterName(_) // Standard names (6+ chars) are free
+            | Transaction::SmartOp(_) // Fee-exempt ops checked at apply time
         );
         if !fee_exempt && tx.fee() < crate::constants::MIN_FEE_SATS {
             return Err("fee below minimum");

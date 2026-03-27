@@ -4,7 +4,7 @@ use crate::address::{Address, Signature};
 use crate::tx::stake::{StakeTx, UnstakeTx};
 use crate::tx::delegate::{DelegateTx, UndelegateTx, SetCommissionTx};
 use crate::tx::bridge::{BridgeDepositTx, BridgeReleaseTx};
-use crate::tx::smart_account::{AddKeyTx, RemoveKeyTx, SmartTransferTx, SetRecoveryTx, RecoverAccountTx, CancelRecoveryTx, SetPolicyTx, ExecuteVaultTx, CancelVaultTx};
+use crate::tx::smart_account::{AddKeyTx, RemoveKeyTx, SmartTransferTx, SmartOpTx, SetRecoveryTx, RecoverAccountTx, CancelRecoveryTx, SetPolicyTx, ExecuteVaultTx, CancelVaultTx};
 use crate::tx::name_registry::{RegisterNameTx, RenewNameTx, TransferNameTx, UpdateProfileTx};
 use crate::governance::{CreateProposalTx, VoteTx};
 
@@ -42,6 +42,8 @@ pub enum Transaction {
     RenewName(RenewNameTx),
     TransferName(TransferNameTx),
     UpdateProfile(UpdateProfileTx),
+    // Generic P256-signed operation (staking, governance, names — all via passkey)
+    SmartOp(SmartOpTx),
 }
 
 /// A transaction transferring UDAG from one address to another.
@@ -89,6 +91,7 @@ impl Transaction {
             Transaction::RenewName(tx) => tx.hash(),
             Transaction::TransferName(tx) => tx.hash(),
             Transaction::UpdateProfile(tx) => tx.hash(),
+            Transaction::SmartOp(tx) => tx.hash(),
         }
     }
 
@@ -120,6 +123,7 @@ impl Transaction {
             Transaction::RenewName(tx) => tx.verify_signature(),
             Transaction::TransferName(tx) => tx.verify_signature(),
             Transaction::UpdateProfile(tx) => tx.verify_signature(),
+            Transaction::SmartOp(tx) => tx.verify_signature(),
         }
     }
 
@@ -149,6 +153,7 @@ impl Transaction {
             Transaction::RenewName(tx) => tx.from,
             Transaction::TransferName(tx) => tx.from,
             Transaction::UpdateProfile(tx) => tx.from,
+            Transaction::SmartOp(tx) => tx.from,
         }
     }
 
@@ -178,6 +183,7 @@ impl Transaction {
             Transaction::RenewName(tx) => tx.nonce,
             Transaction::TransferName(tx) => tx.nonce,
             Transaction::UpdateProfile(tx) => tx.nonce,
+            Transaction::SmartOp(tx) => tx.nonce,
         }
     }
 
@@ -196,6 +202,7 @@ impl Transaction {
             Transaction::RenewName(tx) => tx.fee,
             Transaction::TransferName(tx) => tx.fee,
             Transaction::UpdateProfile(tx) => tx.fee,
+            Transaction::SmartOp(tx) => tx.fee,
             Transaction::Stake(_)
             | Transaction::Unstake(_)
             | Transaction::Delegate(_)
@@ -235,7 +242,8 @@ impl Transaction {
             | Transaction::RegisterName(_)
             | Transaction::RenewName(_)
             | Transaction::TransferName(_)
-            | Transaction::UpdateProfile(_) => 0,
+            | Transaction::UpdateProfile(_)
+            | Transaction::SmartOp(_) => 0,
         }
     }
 
@@ -274,8 +282,8 @@ impl Transaction {
             Transaction::RenewName(tx) => tx.pub_key,
             Transaction::TransferName(tx) => tx.pub_key,
             Transaction::UpdateProfile(tx) => tx.pub_key,
-            // SmartTransfer uses signing_key_id, not a raw pub_key.
-            Transaction::SmartTransfer(_) => [0u8; 32],
+            // SmartTransfer and SmartOp use signing_key_id, not a raw pub_key., not a raw pub_key.
+            Transaction::SmartTransfer(_) | Transaction::SmartOp(_) => [0u8; 32],
         }
     }
 
@@ -305,6 +313,7 @@ impl Transaction {
             Transaction::RenewName(tx) => tx.signable_bytes(),
             Transaction::TransferName(tx) => tx.signable_bytes(),
             Transaction::UpdateProfile(tx) => tx.signable_bytes(),
+            Transaction::SmartOp(tx) => tx.signable_bytes(),
         }
     }
 
@@ -325,6 +334,7 @@ impl Transaction {
             Transaction::RenewName(tx) => tx.total_cost(),
             Transaction::TransferName(tx) => tx.total_cost(),
             Transaction::UpdateProfile(tx) => tx.total_cost(),
+            Transaction::SmartOp(tx) => tx.total_cost(),
             Transaction::Unstake(_)
             | Transaction::Undelegate(_)
             | Transaction::SetCommission(_)

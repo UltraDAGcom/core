@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { postVote } from '../../lib/api';
-import { hasPasskeyWallet } from '../../lib/passkey-wallet';
+import { postVote, getNodeUrl } from '../../lib/api';
+import { hasPasskeyWallet, getPasskeyWallet } from '../../lib/passkey-wallet';
+import { signAndSubmitSmartOp } from '../../lib/webauthn-sign';
 
 interface VoteButtonProps {
   proposalId: number;
@@ -15,13 +16,21 @@ export function VoteButton({ proposalId, secretKey, approve, fee, onSuccess }: V
   const [error, setError] = useState('');
 
   const handleVote = async () => {
-    if (hasPasskeyWallet() && !secretKey) {
-      setError('Governance voting with passkey wallet requires an Ed25519 key. Add one via SmartAccount settings.');
-      return;
-    }
     setLoading(true);
     setError('');
     try {
+      if (hasPasskeyWallet() && !secretKey) {
+        const pw = getPasskeyWallet();
+        if (!pw) throw new Error('No passkey wallet');
+        const balRes = await fetch(`${getNodeUrl()}/balance/${pw.address}`, { signal: AbortSignal.timeout(5000) });
+        const balData = await balRes.json();
+        await signAndSubmitSmartOp(
+          { Vote: { proposal_id: proposalId, approve } },
+          fee, balData.nonce ?? 0,
+        );
+        onSuccess();
+        return;
+      }
       await postVote({
         secret_key: secretKey,
         proposal_id: proposalId,

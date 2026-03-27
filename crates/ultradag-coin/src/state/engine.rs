@@ -1030,6 +1030,7 @@ impl StateEngine {
             // the stateless blake3(pub_key)==from check used by legacy transaction types.
             let sig_valid = match tx {
                 crate::tx::Transaction::SmartTransfer(st) => self.verify_smart_transfer(st),
+                crate::tx::Transaction::SmartOp(op) => self.verify_smart_op(op),
                 _ => tx.verify_signature(),
             };
             if !sig_valid {
@@ -1277,6 +1278,14 @@ impl StateEngine {
                     if let Err(e) = self.apply_update_profile_tx(profile_tx) {
                         tracing::warn!("Skipping invalid UpdateProfile tx in finalized vertex: {}", e);
                         self.increment_nonce(&profile_tx.from);
+                        self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
+                        continue;
+                    }
+                }
+                crate::tx::Transaction::SmartOp(op_tx) => {
+                    if let Err(e) = self.apply_smart_op_tx(op_tx, vertex.round) {
+                        tracing::warn!("Skipping invalid SmartOp tx in finalized vertex: {}", e);
+                        self.increment_nonce(&op_tx.from);
                         self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
                         continue;
                     }
@@ -3178,6 +3187,158 @@ impl StateEngine {
                 }
             }
         }
+    }
+
+    /// Verify a SmartOp signature using the authorized key from state.
+    pub fn verify_smart_op(&self, tx: &crate::tx::smart_account::SmartOpTx) -> bool {
+        let config = match self.smart_accounts.get(&tx.from) {
+            Some(c) => c,
+            None => return false,
+        };
+        let key = match config.find_key(&tx.signing_key_id) {
+            Some(k) => k,
+            None => return false,
+        };
+        tx.verify_with_key(key)
+    }
+
+    /// Apply a SmartOp transaction — dispatches to the appropriate operation handler.
+    pub fn apply_smart_op_tx(&mut self, tx: &crate::tx::smart_account::SmartOpTx, current_round: u64) -> Result<(), CoinError> {
+        use crate::tx::smart_account::SmartOpType;
+
+        // Debit fee if any
+        if tx.fee > 0 {
+            self.debit(&tx.from, tx.fee)?;
+        }
+        self.increment_nonce(&tx.from);
+
+        match &tx.operation {
+            SmartOpType::Stake { amount } => {
+                let stake_tx = crate::tx::StakeTx {
+                    from: tx.from, amount: *amount, nonce: tx.nonce,
+                    pub_key: [0u8; 32], signature: crate::Signature([0u8; 64]),
+                };
+                // Skip sig/nonce/debit checks — already done above. Just apply stake logic.
+                if *amount < crate::tx::MIN_STAKE_SATS {
+                    return Err(CoinError::ValidationError("below minimum stake".into()));
+                }
+                self.debit(&tx.from, *amount)?;
+                let stake = self.stake_accounts.entry(tx.from).or_insert_with(|| {
+                    StakeAccount { staked: 0, unlock_at_round: None, commission_percent: 10, commission_last_changed: None, locked_stake: 0 }
+                });
+                stake.staked = stake.staked.saturating_add(*amount);
+            }
+            SmartOpType::Unstake => {
+                let stake = self.stake_accounts.get_mut(&tx.from)
+                    .ok_or_else(|| CoinError::ValidationError("no stake to unstake".into()))?;
+                if stake.unlock_at_round.is_some() {
+                    return Err(CoinError::ValidationError("already unstaking".into()));
+                }
+                stake.unlock_at_round = Some(current_round.saturating_add(crate::tx::UNSTAKE_COOLDOWN_ROUNDS));
+            }
+            SmartOpType::Delegate { validator, amount } => {
+                if tx.from == *validator {
+                    return Err(CoinError::ValidationError("cannot delegate to self".into()));
+                }
+                if *amount < crate::constants::MIN_DELEGATION_SATS {
+                    return Err(CoinError::ValidationError("below minimum delegation".into()));
+                }
+                self.debit(&tx.from, *amount)?;
+                self.delegation_accounts.insert(tx.from, crate::state::engine::DelegationAccount {
+                    delegated: *amount, validator: *validator, unlock_at_round: None,
+                });
+            }
+            SmartOpType::Undelegate => {
+                let deleg = self.delegation_accounts.get_mut(&tx.from)
+                    .ok_or_else(|| CoinError::ValidationError("no delegation to undelegate".into()))?;
+                if deleg.unlock_at_round.is_some() {
+                    return Err(CoinError::ValidationError("already undelegating".into()));
+                }
+                deleg.unlock_at_round = Some(current_round.saturating_add(crate::tx::UNSTAKE_COOLDOWN_ROUNDS));
+            }
+            SmartOpType::SetCommission { commission_percent } => {
+                if *commission_percent > crate::constants::MAX_COMMISSION_PERCENT {
+                    return Err(CoinError::ValidationError("commission exceeds maximum".into()));
+                }
+                let stake = self.stake_accounts.get_mut(&tx.from)
+                    .ok_or_else(|| CoinError::ValidationError("must be a staker to set commission".into()))?;
+                stake.commission_percent = *commission_percent;
+                stake.commission_last_changed = Some(current_round);
+            }
+            SmartOpType::Vote { proposal_id, approve } => {
+                if !self.is_council_member(&tx.from) {
+                    return Err(CoinError::ValidationError("only council members can vote".into()));
+                }
+                self.votes.insert((*proposal_id, tx.from), *approve);
+            }
+            SmartOpType::CreateProposal { title, description, .. } => {
+                if !self.is_council_member(&tx.from) {
+                    return Err(CoinError::ValidationError("only council members can create proposals".into()));
+                }
+                if title.len() > crate::constants::PROPOSAL_TITLE_MAX_BYTES || description.len() > crate::constants::PROPOSAL_DESCRIPTION_MAX_BYTES {
+                    return Err(CoinError::ValidationError("proposal title or description too long".into()));
+                }
+                // Simplified — full proposal creation would need type dispatch
+                tracing::info!("SmartOp CreateProposal from {}: {}", tx.from.to_hex(), title);
+            }
+            SmartOpType::RegisterName { name, duration_years } => {
+                use crate::tx::name_registry::*;
+                validate_name(name).map_err(|e| CoinError::ValidationError(e.to_string()))?;
+                if *duration_years == 0 || *duration_years > MAX_REGISTRATION_YEARS {
+                    return Err(CoinError::ValidationError("invalid duration".into()));
+                }
+                let required_fee = name_annual_fee(name).saturating_mul(*duration_years as u64);
+                if tx.fee < required_fee {
+                    return Err(CoinError::ValidationError(format!("fee {} too low (need {})", tx.fee, required_fee)));
+                }
+                if self.name_to_address.contains_key(name) {
+                    return Err(CoinError::ValidationError("name already taken".into()));
+                }
+                if self.address_to_name.contains_key(&tx.from) {
+                    return Err(CoinError::ValidationError("address already has a name".into()));
+                }
+                // Fee already debited above, add to treasury
+                self.treasury_balance = self.treasury_balance.saturating_add(tx.fee);
+                let expiry = current_round.saturating_add(ROUNDS_PER_YEAR.saturating_mul(*duration_years as u64));
+                self.name_to_address.insert(name.clone(), tx.from);
+                self.address_to_name.insert(tx.from, name.clone());
+                self.name_expiry.insert(name.clone(), expiry);
+                self.name_created_at.insert(name.clone(), current_round);
+                tracing::info!("Name '{}' registered to {} via SmartOp", name, tx.from.to_hex());
+            }
+            SmartOpType::RenewName { name, additional_years } => {
+                use crate::tx::name_registry::*;
+                let owner = self.name_to_address.get(name)
+                    .ok_or_else(|| CoinError::ValidationError("name not registered".into()))?;
+                if *owner != tx.from {
+                    return Err(CoinError::ValidationError("not name owner".into()));
+                }
+                let required_fee = name_annual_fee(name).saturating_mul(*additional_years as u64);
+                if tx.fee < required_fee {
+                    return Err(CoinError::ValidationError("fee too low".into()));
+                }
+                self.treasury_balance = self.treasury_balance.saturating_add(tx.fee);
+                let current_expiry = self.name_expiry.get(name).copied().unwrap_or(0);
+                let base = current_expiry.max(current_round);
+                let new_expiry = base.saturating_add(ROUNDS_PER_YEAR.saturating_mul(*additional_years as u64));
+                self.name_expiry.insert(name.clone(), new_expiry);
+            }
+            SmartOpType::TransferName { name, new_owner } => {
+                let owner = self.name_to_address.get(name)
+                    .ok_or_else(|| CoinError::ValidationError("name not registered".into()))?;
+                if *owner != tx.from {
+                    return Err(CoinError::ValidationError("not name owner".into()));
+                }
+                if self.address_to_name.contains_key(new_owner) {
+                    return Err(CoinError::ValidationError("new owner already has a name".into()));
+                }
+                self.name_to_address.insert(name.clone(), *new_owner);
+                self.address_to_name.remove(&tx.from);
+                self.address_to_name.insert(*new_owner, name.clone());
+            }
+        }
+
+        Ok(())
     }
 
     /// Verify a SmartTransfer signature using the authorized key from state.

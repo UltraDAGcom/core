@@ -1348,6 +1348,12 @@ ultradag_banned_ips {ban_count}
                         "from": t.from.to_hex(),
                         "name": t.name,
                     }),
+                    Transaction::SmartOp(t) => serde_json::json!({
+                        "type": "smart_op",
+                        "hash": hex_encode(&tx.hash()),
+                        "from": t.from.to_hex(),
+                        "fee": t.fee,
+                    }),
                 }
             }).collect();
             json_response(StatusCode::OK, &txs)
@@ -2735,6 +2741,7 @@ ultradag_banned_ips {ban_count}
                         Transaction::RenewName(_) => "renew_name",
                         Transaction::TransferName(_) => "transfer_name",
                         Transaction::UpdateProfile(_) => "update_profile",
+                        Transaction::SmartOp(_) => "smart_op",
                     },
                     "from": tx.from().to_hex(),
                     "fee": tx.fee(),
@@ -2908,6 +2915,8 @@ ultradag_banned_ips {ban_count}
                             &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
                     }
                 }
+                // SmartOp: fee validation depends on operation (some are fee-exempt)
+                Transaction::SmartOp(_) => {}
                 Transaction::AddKey(t) => {
                     if t.fee < ultradag_coin::constants::MIN_FEE_SATS {
                         return Ok(error_response(StatusCode::BAD_REQUEST,

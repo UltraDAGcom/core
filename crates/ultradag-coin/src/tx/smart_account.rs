@@ -901,6 +901,157 @@ pub fn compute_vault_transfer_id(from: &Address, to: &Address, amount: u64, nonc
     id
 }
 
+// ────────────────────────────────────────────────────────────
+// SmartOp — generic P256-signed operation for passkey wallets
+// ────────────────────────────────────────────────────────────
+
+/// The operation being performed inside a SmartOp.
+/// Each variant maps to an existing transaction type but signed with a SmartAccount key.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SmartOpType {
+    /// Stake UDAG as validator.
+    Stake { amount: u64 },
+    /// Begin unstake cooldown.
+    Unstake,
+    /// Delegate UDAG to a validator.
+    Delegate { validator: Address, amount: u64 },
+    /// Begin undelegation cooldown.
+    Undelegate,
+    /// Set validator commission rate.
+    SetCommission { commission_percent: u8 },
+    /// Create a governance proposal.
+    CreateProposal { title: String, description: String, proposal_type_tag: u8, param: String, new_value: u64 },
+    /// Vote on a governance proposal.
+    Vote { proposal_id: u64, approve: bool },
+    /// Register a name (free for 6+ chars).
+    RegisterName { name: String, duration_years: u8 },
+    /// Renew a name registration.
+    RenewName { name: String, additional_years: u8 },
+    /// Transfer a name to a new owner.
+    TransferName { name: String, new_owner: Address },
+}
+
+/// A generic SmartAccount operation signed with any authorized key (Ed25519 or P256).
+/// This single transaction type replaces the need for Smart* variants of every tx type.
+/// The inner `operation` specifies what to do; the outer envelope handles authentication.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SmartOpTx {
+    /// SmartAccount sender address.
+    pub from: Address,
+    /// The operation to perform.
+    pub operation: SmartOpType,
+    /// Fee in sats (0 for fee-exempt operations like stake/unstake).
+    pub fee: u64,
+    /// Sender nonce.
+    pub nonce: u64,
+    /// Which authorized key signed this transaction.
+    pub signing_key_id: [u8; 8],
+    /// Signature bytes (Ed25519 64 bytes, P256 64-72 bytes, or WebAuthn envelope).
+    pub signature: Vec<u8>,
+    /// Optional WebAuthn signature envelope.
+    #[serde(default)]
+    pub webauthn: Option<WebAuthnSignature>,
+}
+
+impl SmartOpTx {
+    pub fn signable_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(128);
+        buf.extend_from_slice(crate::constants::NETWORK_ID);
+        buf.extend_from_slice(b"smart_op");
+        buf.extend_from_slice(&self.from.0);
+        // Serialize operation type for domain separation
+        match &self.operation {
+            SmartOpType::Stake { amount } => {
+                buf.push(0);
+                buf.extend_from_slice(&amount.to_le_bytes());
+            }
+            SmartOpType::Unstake => { buf.push(1); }
+            SmartOpType::Delegate { validator, amount } => {
+                buf.push(2);
+                buf.extend_from_slice(&validator.0);
+                buf.extend_from_slice(&amount.to_le_bytes());
+            }
+            SmartOpType::Undelegate => { buf.push(3); }
+            SmartOpType::SetCommission { commission_percent } => {
+                buf.push(4);
+                buf.push(*commission_percent);
+            }
+            SmartOpType::CreateProposal { title, description, proposal_type_tag, param, new_value } => {
+                buf.push(5);
+                buf.extend_from_slice(&(title.len() as u32).to_le_bytes());
+                buf.extend_from_slice(title.as_bytes());
+                buf.extend_from_slice(&(description.len() as u32).to_le_bytes());
+                buf.extend_from_slice(description.as_bytes());
+                buf.push(*proposal_type_tag);
+                buf.extend_from_slice(&(param.len() as u32).to_le_bytes());
+                buf.extend_from_slice(param.as_bytes());
+                buf.extend_from_slice(&new_value.to_le_bytes());
+            }
+            SmartOpType::Vote { proposal_id, approve } => {
+                buf.push(6);
+                buf.extend_from_slice(&proposal_id.to_le_bytes());
+                buf.push(*approve as u8);
+            }
+            SmartOpType::RegisterName { name, duration_years } => {
+                buf.push(7);
+                buf.extend_from_slice(&(name.len() as u32).to_le_bytes());
+                buf.extend_from_slice(name.as_bytes());
+                buf.push(*duration_years);
+            }
+            SmartOpType::RenewName { name, additional_years } => {
+                buf.push(8);
+                buf.extend_from_slice(&(name.len() as u32).to_le_bytes());
+                buf.extend_from_slice(name.as_bytes());
+                buf.push(*additional_years);
+            }
+            SmartOpType::TransferName { name, new_owner } => {
+                buf.push(9);
+                buf.extend_from_slice(&(name.len() as u32).to_le_bytes());
+                buf.extend_from_slice(name.as_bytes());
+                buf.extend_from_slice(&new_owner.0);
+            }
+        }
+        buf.extend_from_slice(&self.fee.to_le_bytes());
+        buf.extend_from_slice(&self.nonce.to_le_bytes());
+        buf.extend_from_slice(&self.signing_key_id);
+        buf
+    }
+
+    pub fn hash(&self) -> [u8; 32] {
+        *blake3::hash(&self.signable_bytes()).as_bytes()
+    }
+
+    pub fn total_cost(&self) -> u64 {
+        match &self.operation {
+            SmartOpType::Stake { amount } => *amount,
+            SmartOpType::Delegate { amount, .. } => *amount,
+            _ => self.fee,
+        }
+    }
+
+    /// Verify using an authorized key (called by StateEngine).
+    pub fn verify_with_key(&self, key: &AuthorizedKey) -> bool {
+        if let Some(ref webauthn) = self.webauthn {
+            if key.key_type != KeyType::P256 { return false; }
+            return verify_webauthn(&key.pubkey, webauthn, &self.signable_bytes());
+        }
+        verify_by_key_type(key.key_type, &key.pubkey, &self.signature, &self.signable_bytes())
+    }
+
+    /// Stateless verify — returns false (needs state for key lookup).
+    pub fn verify_signature(&self) -> bool { false }
+
+    /// Check if this operation is fee-exempt.
+    pub fn is_fee_exempt(&self) -> bool {
+        matches!(self.operation,
+            SmartOpType::Stake { .. } | SmartOpType::Unstake
+            | SmartOpType::Delegate { .. } | SmartOpType::Undelegate
+            | SmartOpType::SetCommission { .. }
+            | SmartOpType::RegisterName { .. } // Free for 6+ chars
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

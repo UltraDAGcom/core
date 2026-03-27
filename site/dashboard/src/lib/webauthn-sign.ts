@@ -128,6 +128,117 @@ export async function signAndSubmitWithPasskey(
   return res.json();
 }
 
+/**
+ * Sign and submit a SmartOp (stake, delegate, vote, register name, etc.) via WebAuthn.
+ * This enables passkey wallets to do everything, not just transfers.
+ */
+export async function signAndSubmitSmartOp(
+  operation: Record<string, unknown>,
+  fee: number,
+  nonce: number,
+): Promise<{ tx_hash: string }> {
+  const passkey = getPasskeyWallet();
+  if (!passkey) throw new Error('No passkey wallet found');
+
+  const NETWORK_ID = new TextEncoder().encode('ultradag-testnet-v1');
+  const fromBytes = hexToBytes(passkey.address);
+  const keyIdBytes = hexToBytes(passkey.keyId);
+
+  // Build signable_bytes for SmartOpTx
+  const parts: Uint8Array[] = [
+    NETWORK_ID,
+    new TextEncoder().encode('smart_op'),
+    fromBytes,
+  ];
+
+  // Serialize operation type (must match Rust SmartOpTx::signable_bytes exactly)
+  if ('Stake' in operation) {
+    const op = operation.Stake as { amount: number };
+    parts.push(new Uint8Array([0]));
+    parts.push(u64ToLE(BigInt(op.amount)));
+  } else if ('Unstake' in operation) {
+    parts.push(new Uint8Array([1]));
+  } else if ('Delegate' in operation) {
+    const op = operation.Delegate as { validator: string; amount: number };
+    parts.push(new Uint8Array([2]));
+    parts.push(hexToBytes(op.validator));
+    parts.push(u64ToLE(BigInt(op.amount)));
+  } else if ('Undelegate' in operation) {
+    parts.push(new Uint8Array([3]));
+  } else if ('Vote' in operation) {
+    const op = operation.Vote as { proposal_id: number; approve: boolean };
+    parts.push(new Uint8Array([6]));
+    parts.push(u64ToLE(BigInt(op.proposal_id)));
+    parts.push(new Uint8Array([op.approve ? 1 : 0]));
+  } else if ('RegisterName' in operation) {
+    const op = operation.RegisterName as { name: string; duration_years: number };
+    const nameBytes = new TextEncoder().encode(op.name);
+    parts.push(new Uint8Array([7]));
+    parts.push(u32ToLE(nameBytes.length));
+    parts.push(nameBytes);
+    parts.push(new Uint8Array([op.duration_years]));
+  } else {
+    throw new Error('Unsupported SmartOp type');
+  }
+
+  parts.push(u64ToLE(BigInt(fee)));
+  parts.push(u64ToLE(BigInt(nonce)));
+  parts.push(keyIdBytes);
+
+  const signableBytes = concat(parts);
+
+  // WebAuthn sign
+  const challengeBuffer = await crypto.subtle.digest('SHA-256', signableBytes);
+  const challenge = new Uint8Array(challengeBuffer);
+
+  const credential = await navigator.credentials.get({
+    publicKey: {
+      challenge,
+      rpId: window.location.hostname,
+      userVerification: 'required',
+      timeout: 60000,
+    },
+  }) as PublicKeyCredential | null;
+
+  if (!credential) throw new Error('WebAuthn signing cancelled');
+
+  const assertion = credential.response as AuthenticatorAssertionResponse;
+  const authenticatorData = new Uint8Array(assertion.authenticatorData);
+  const clientDataJSON = new Uint8Array(assertion.clientDataJSON);
+  const signature = new Uint8Array(assertion.signature);
+  const rawSig = derToRaw(signature);
+
+  const tx = {
+    SmartOp: {
+      from: Array.from(fromBytes),
+      operation,
+      fee,
+      nonce,
+      signing_key_id: Array.from(keyIdBytes),
+      signature: [],
+      webauthn: {
+        authenticator_data: Array.from(authenticatorData),
+        client_data_json: Array.from(clientDataJSON),
+        signature: Array.from(rawSig),
+      },
+    },
+  };
+
+  const res = await fetch(`${getNodeUrl()}/tx/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(tx),
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || `Server error: ${res.status}`);
+  }
+
+  return res.json();
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 function hexToBytes(hex: string): Uint8Array {

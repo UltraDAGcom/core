@@ -143,7 +143,11 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
         } else if (!data.available) {
           setNameError('This name is taken');
         } else {
-          setNameFee(`${data.annual_fee_udag} UDAG/year`);
+          setNameFee(data.annual_fee_udag > 0 ? `${data.annual_fee_udag} UDAG/year` : 'Free');
+          // Show phishing similarity warning if present
+          if (data.similar_warning) {
+            setNameError(data.similar_warning);
+          }
         }
       }
     } catch {
