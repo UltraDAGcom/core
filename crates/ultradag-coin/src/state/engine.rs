@@ -3478,6 +3478,7 @@ impl StateEngine {
         // If the tx includes the P256 pubkey and it derives to the sender address,
         // auto-create the SmartAccount, register the key, and verify the signature.
         if let Some(ref pubkey_bytes) = tx.p256_pubkey {
+            tracing::info!("SmartOp auto-reg: p256_pubkey len={} from={}", pubkey_bytes.len(), tx.from.to_hex());
             if pubkey_bytes.len() == 33 || pubkey_bytes.len() == 65 {
                 // Check address derivation: blake3("smart_account_p256" || pubkey)[:20] == from
                 let mut hasher = blake3::Hasher::new();
@@ -3486,9 +3487,13 @@ impl StateEngine {
                 let hash = hasher.finalize();
                 let mut derived_addr = [0u8; 20];
                 derived_addr.copy_from_slice(&hash.as_bytes()[..20]);
+                let derived_hex: String = derived_addr.iter().map(|b| format!("{b:02x}")).collect();
+                tracing::info!("SmartOp auto-reg: derived={} from={} match={}", derived_hex, tx.from.to_hex(), derived_addr == tx.from.0);
                 if derived_addr == tx.from.0 {
                     // Address matches — build a temporary AuthorizedKey and verify
                     let key_id = AuthorizedKey::compute_key_id(KeyType::P256, pubkey_bytes);
+                    let key_id_match = key_id == tx.signing_key_id;
+                    tracing::info!("SmartOp auto-reg: key_id={:?} tx_key_id={:?} match={}", &key_id, &tx.signing_key_id, key_id_match);
                     if key_id == tx.signing_key_id {
                         let temp_key = AuthorizedKey {
                             key_id,

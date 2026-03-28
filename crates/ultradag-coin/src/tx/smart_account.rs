@@ -148,7 +148,8 @@ pub fn verify_webauthn(
     };
 
     if challenge_value != expected_challenge_b64 {
-        return false; // Challenge mismatch — potential replay from different context
+        tracing::warn!("WebAuthn challenge mismatch: expected={} got={} signable_len={}", expected_challenge_b64, challenge_value, signable_bytes.len());
+        return false;
     }
 
     // 3. Compute clientDataHash = SHA-256(clientDataJSON)
@@ -162,7 +163,11 @@ pub fn verify_webauthn(
     signed_data.extend_from_slice(&client_data_hash);
 
     // 5. Verify P256 signature over authenticatorData || clientDataHash
-    verify_p256(pubkey, &webauthn.signature, &signed_data)
+    let result = verify_p256(pubkey, &webauthn.signature, &signed_data);
+    if !result {
+        tracing::warn!("WebAuthn P256 verify failed: pubkey_len={} sig_len={} auth_data_len={} client_data_len={}", pubkey.len(), webauthn.signature.len(), webauthn.authenticator_data.len(), webauthn.client_data_json.len());
+    }
+    result
 }
 
 /// Base64url encode (no padding) — for WebAuthn challenge comparison.
