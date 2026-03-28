@@ -48,7 +48,7 @@ macro_rules! write_lock_or_503 {
     };
 }
 
-use ultradag_coin::{Address, Mempool, SecretKey, Signature, StateEngine, Transaction, TransferTx, StakeTx, UnstakeTx, DelegateTx, UndelegateTx, SetCommissionTx, BridgeDepositTx, MIN_STAKE_SATS};
+use ultradag_coin::{Address, Mempool, SecretKey, Signature, StateEngine, Transaction, TransferTx, StakeTx, UnstakeTx, DelegateTx, UndelegateTx, SetCommissionTx, BridgeDepositTx, CreateStreamTx, WithdrawStreamTx, CancelStreamTx, MIN_STAKE_SATS};
 use ultradag_coin::governance::{CreateProposalTx, VoteTx, ProposalType, CouncilAction, CouncilSeatCategory};
 use ultradag_network::{Message, NodeServer};
 use crate::rate_limit::{RateLimiter, limits};
@@ -581,6 +581,34 @@ struct BridgeDepositRequest {
     amount: u64,
     fee: u64,
     destination_chain_id: u64,
+}
+
+#[derive(Deserialize)]
+struct CreateStreamRequest {
+    secret_key: String,
+    recipient: String,
+    rate_sats_per_round: u64,
+    deposit: u64,
+    #[serde(default)]
+    cliff_rounds: u64,
+    #[serde(default)]
+    fee: Option<u64>,
+}
+
+#[derive(Deserialize)]
+struct CancelStreamRequest {
+    secret_key: String,
+    stream_id: String,
+    #[serde(default)]
+    fee: Option<u64>,
+}
+
+#[derive(Deserialize)]
+struct WithdrawStreamRequest {
+    secret_key: String,
+    stream_id: String,
+    #[serde(default)]
+    fee: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -3424,6 +3452,318 @@ ultradag_banned_ips {ban_count}
                 "address": addr.to_hex(),
                 "count": streams.len(),
                 "streams": streams,
+            }))
+        }
+
+        (&Method::POST, ["stream", "create"]) => {
+            // TESTNET ONLY: accepts secret_key in body. Mainnet: use /tx/submit with pre-signed CreateStreamTx.
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE,
+                    "POST /stream/create disabled: private keys must not transit over the network. Use /tx/submit with a pre-signed CreateStreamTx."));
+            }
+            if !rate_limiter.check_rate_limit(client_ip, limits::STAKE) {
+                return Ok(error_response(StatusCode::TOO_MANY_REQUESTS, "rate limit exceeded: too many stream requests"));
+            }
+
+            let body = req.collect().await?.to_bytes();
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large (max 1MB)"));
+            }
+            let Ok(stream_req) = serde_json::from_slice::<CreateStreamRequest>(&body) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    "invalid JSON body, need: {secret_key, recipient, rate_sats_per_round, deposit, cliff_rounds?, fee?}"));
+            };
+
+            let sk = match parse_secret_key(&stream_req.secret_key) {
+                Ok(sk) => sk,
+                Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, e)),
+            };
+            let sender = sk.address();
+
+            let Some(recipient) = Address::parse(&stream_req.recipient) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    "invalid recipient address: expected 40-char hex or bech32m (udag1.../tudg1...)"));
+            };
+
+            if stream_req.rate_sats_per_round == 0 {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "rate_sats_per_round must be greater than 0"));
+            }
+            if stream_req.deposit == 0 {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "deposit must be greater than 0"));
+            }
+
+            let fee = stream_req.fee.unwrap_or(ultradag_coin::constants::MIN_FEE_SATS);
+            if fee < ultradag_coin::constants::MIN_FEE_SATS {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    &format!("fee too low: minimum {} sats (0.0001 UDAG)", ultradag_coin::constants::MIN_FEE_SATS)));
+            }
+
+            let (tx, tx_hash, nonce, stream_id_hex) = {
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
+
+                let nonce = next_nonce(&state, &mp, &sender);
+
+                let balance = state.balance(&sender);
+                let pc = pending_cost(&mp, &sender);
+                let tx_cost = stream_req.deposit.saturating_add(fee);
+                let total_needed = pc.saturating_add(tx_cost);
+                if balance < total_needed {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!("insufficient balance: need {} sats (incl. {} pending), have {} sats ({:.4} UDAG)",
+                            total_needed, pc, balance, balance as f64 / ultradag_coin::SATS_PER_UDAG as f64)));
+                }
+
+                let mut create_tx = CreateStreamTx {
+                    from: sender,
+                    recipient,
+                    rate_sats_per_round: stream_req.rate_sats_per_round,
+                    deposit: stream_req.deposit,
+                    cliff_rounds: stream_req.cliff_rounds,
+                    fee,
+                    nonce,
+                    pub_key: sk.verifying_key().to_bytes(),
+                    signature: Signature([0u8; 64]),
+                };
+                create_tx.signature = sk.sign(&create_tx.signable_bytes());
+
+                // Compute stream ID the same way the engine does: blake3(sender || recipient || nonce)
+                let stream_id = {
+                    let mut hasher = blake3::Hasher::new();
+                    hasher.update(&sender.0);
+                    hasher.update(&recipient.0);
+                    hasher.update(&nonce.to_le_bytes());
+                    *hasher.finalize().as_bytes()
+                };
+                let stream_id_hex = hex_encode(&stream_id);
+
+                let tx = Transaction::CreateStream(create_tx);
+                let tx_hash = tx.hash();
+
+                if let Err(reason) = mp.insert_with_reason(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, reason));
+                }
+
+                (tx, tx_hash, nonce, stream_id_hex)
+            };
+
+            server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+            let _ = server.tx_tx.send(tx);
+
+            json_response(StatusCode::OK, &serde_json::json!({
+                "status": "pending",
+                "tx_hash": hex_encode(&tx_hash),
+                "stream_id": stream_id_hex,
+                "from": sender.to_hex(),
+                "recipient": stream_req.recipient,
+                "rate_sats_per_round": stream_req.rate_sats_per_round,
+                "deposit": stream_req.deposit,
+                "deposit_udag": stream_req.deposit as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                "cliff_rounds": stream_req.cliff_rounds,
+                "fee": fee,
+                "nonce": nonce,
+                "note": "Stream creation transaction added to mempool. Will be active when included in a finalized vertex."
+            }))
+        }
+
+        (&Method::POST, ["stream", "cancel"]) => {
+            // TESTNET ONLY
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE,
+                    "POST /stream/cancel disabled: use /tx/submit with a pre-signed CancelStreamTx."));
+            }
+            if !rate_limiter.check_rate_limit(client_ip, limits::STAKE) {
+                return Ok(error_response(StatusCode::TOO_MANY_REQUESTS, "rate limit exceeded: too many stream requests"));
+            }
+
+            let body = req.collect().await?.to_bytes();
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large (max 1MB)"));
+            }
+            let Ok(cancel_req) = serde_json::from_slice::<CancelStreamRequest>(&body) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    "invalid JSON body, need: {secret_key, stream_id, fee?}"));
+            };
+
+            let sk = match parse_secret_key(&cancel_req.secret_key) {
+                Ok(sk) => sk,
+                Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, e)),
+            };
+            let sender = sk.address();
+
+            // Parse stream_id from hex
+            if cancel_req.stream_id.len() != 64 || !cancel_req.stream_id.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "stream_id must be 64 hex characters"));
+            }
+            let mut stream_id = [0u8; 32];
+            for (i, chunk) in cancel_req.stream_id.as_bytes().chunks(2).enumerate() {
+                let s = std::str::from_utf8(chunk).unwrap_or("00");
+                stream_id[i] = u8::from_str_radix(s, 16).unwrap_or(0);
+            }
+
+            let fee = cancel_req.fee.unwrap_or(ultradag_coin::constants::MIN_FEE_SATS);
+            if fee < ultradag_coin::constants::MIN_FEE_SATS {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    &format!("fee too low: minimum {} sats (0.0001 UDAG)", ultradag_coin::constants::MIN_FEE_SATS)));
+            }
+
+            let (tx, tx_hash, nonce) = {
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
+
+                // Verify stream exists and sender owns it
+                if let Some(stream) = state.stream(&stream_id) {
+                    if stream.sender != sender {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "only the stream sender can cancel"));
+                    }
+                    if stream.cancelled_at_round.is_some() {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "stream already cancelled"));
+                    }
+                } else {
+                    return Ok(error_response(StatusCode::NOT_FOUND, "stream not found"));
+                }
+
+                let nonce = next_nonce(&state, &mp, &sender);
+
+                let balance = state.balance(&sender);
+                let pc = pending_cost(&mp, &sender);
+                let total_needed = pc.saturating_add(fee);
+                if balance < total_needed {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!("insufficient balance for fee: need {} sats, have {} sats", total_needed, balance)));
+                }
+
+                let mut cancel_tx = CancelStreamTx {
+                    from: sender,
+                    stream_id,
+                    fee,
+                    nonce,
+                    pub_key: sk.verifying_key().to_bytes(),
+                    signature: Signature([0u8; 64]),
+                };
+                cancel_tx.signature = sk.sign(&cancel_tx.signable_bytes());
+                let tx = Transaction::CancelStream(cancel_tx);
+                let tx_hash = tx.hash();
+
+                if let Err(reason) = mp.insert_with_reason(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, reason));
+                }
+
+                (tx, tx_hash, nonce)
+            };
+
+            server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+            let _ = server.tx_tx.send(tx);
+
+            json_response(StatusCode::OK, &serde_json::json!({
+                "status": "pending",
+                "tx_hash": hex_encode(&tx_hash),
+                "stream_id": cancel_req.stream_id,
+                "from": sender.to_hex(),
+                "fee": fee,
+                "nonce": nonce,
+                "note": "Stream cancellation transaction added to mempool."
+            }))
+        }
+
+        (&Method::POST, ["stream", "withdraw"]) => {
+            // TESTNET ONLY
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE,
+                    "POST /stream/withdraw disabled: use /tx/submit with a pre-signed WithdrawStreamTx."));
+            }
+            if !rate_limiter.check_rate_limit(client_ip, limits::STAKE) {
+                return Ok(error_response(StatusCode::TOO_MANY_REQUESTS, "rate limit exceeded: too many stream requests"));
+            }
+
+            let body = req.collect().await?.to_bytes();
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large (max 1MB)"));
+            }
+            let Ok(withdraw_req) = serde_json::from_slice::<WithdrawStreamRequest>(&body) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    "invalid JSON body, need: {secret_key, stream_id, fee?}"));
+            };
+
+            let sk = match parse_secret_key(&withdraw_req.secret_key) {
+                Ok(sk) => sk,
+                Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, e)),
+            };
+            let sender = sk.address();
+
+            // Parse stream_id from hex
+            if withdraw_req.stream_id.len() != 64 || !withdraw_req.stream_id.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Ok(error_response(StatusCode::BAD_REQUEST, "stream_id must be 64 hex characters"));
+            }
+            let mut stream_id = [0u8; 32];
+            for (i, chunk) in withdraw_req.stream_id.as_bytes().chunks(2).enumerate() {
+                let s = std::str::from_utf8(chunk).unwrap_or("00");
+                stream_id[i] = u8::from_str_radix(s, 16).unwrap_or(0);
+            }
+
+            let fee = withdraw_req.fee.unwrap_or(ultradag_coin::constants::MIN_FEE_SATS);
+            if fee < ultradag_coin::constants::MIN_FEE_SATS {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    &format!("fee too low: minimum {} sats (0.0001 UDAG)", ultradag_coin::constants::MIN_FEE_SATS)));
+            }
+
+            let (tx, tx_hash, nonce) = {
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
+
+                // Verify stream exists and sender is the recipient
+                if let Some(stream) = state.stream(&stream_id) {
+                    if stream.recipient != sender {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "only the stream recipient can withdraw"));
+                    }
+                    let current_round = state.last_finalized_round().unwrap_or(0);
+                    if stream.withdrawable_at(current_round) == 0 {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "no funds available to withdraw"));
+                    }
+                } else {
+                    return Ok(error_response(StatusCode::NOT_FOUND, "stream not found"));
+                }
+
+                let nonce = next_nonce(&state, &mp, &sender);
+
+                let balance = state.balance(&sender);
+                let pc = pending_cost(&mp, &sender);
+                let total_needed = pc.saturating_add(fee);
+                if balance < total_needed {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!("insufficient balance for fee: need {} sats, have {} sats", total_needed, balance)));
+                }
+
+                let mut withdraw_tx = WithdrawStreamTx {
+                    from: sender,
+                    stream_id,
+                    fee,
+                    nonce,
+                    pub_key: sk.verifying_key().to_bytes(),
+                    signature: Signature([0u8; 64]),
+                };
+                withdraw_tx.signature = sk.sign(&withdraw_tx.signable_bytes());
+                let tx = Transaction::WithdrawStream(withdraw_tx);
+                let tx_hash = tx.hash();
+
+                if let Err(reason) = mp.insert_with_reason(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, reason));
+                }
+
+                (tx, tx_hash, nonce)
+            };
+
+            server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+            let _ = server.tx_tx.send(tx);
+
+            json_response(StatusCode::OK, &serde_json::json!({
+                "status": "pending",
+                "tx_hash": hex_encode(&tx_hash),
+                "stream_id": withdraw_req.stream_id,
+                "from": sender.to_hex(),
+                "fee": fee,
+                "nonce": nonce,
+                "note": "Stream withdrawal transaction added to mempool."
             }))
         }
 

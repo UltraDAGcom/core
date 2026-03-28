@@ -90,6 +90,9 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
   const [cliffRounds, setCliffRounds] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [formMsg, setFormMsg] = useState('');
+  const [formError, setFormError] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [tab, setTab] = useState<'create' | 'outgoing' | 'incoming'>('create');
 
   const myAddresses = wallets.map(w => w.address.toLowerCase());
@@ -173,13 +176,52 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
   useEffect(() => { const h = () => { setAllStreams([]); setLoading(true); fetchStreams(); }; window.addEventListener('ultradag-network-switch', h); return () => window.removeEventListener('ultradag-network-switch', h); }, [fetchStreams]);
   useEffect(() => { const iv = setInterval(() => setTick(t => t + 1), 1000); return () => clearInterval(iv); }, []);
 
-  const handleCreate = () => {
-    if (!recipient) { setFormMsg('Enter a recipient address'); return; }
-    if (satsPerRound <= 0) { setFormMsg('Rate must be greater than 0'); return; }
-    if (totalDeposit < 0.0001) { setFormMsg('Total deposit too small'); return; }
+  const handleCreate = async () => {
+    if (!recipient) { setFormMsg('Enter a recipient address'); setFormError(true); return; }
+    if (satsPerRound <= 0) { setFormMsg('Rate must be greater than 0'); setFormError(true); return; }
+    if (totalDeposit < 0.0001) { setFormMsg('Total deposit too small'); setFormError(true); return; }
+    const wallet = wallets[0];
+    if (!wallet?.secret_key) { setFormMsg('No wallet with secret key available'); setFormError(true); return; }
+
     setFormMsg('');
-    const rb = rateBreakdown();
-    alert(`Stream parameters:\n\nType: ${STREAM_TYPE_INFO[streamType].label}\nRecipient: ${recipient}\nRate: ${satsPerRound.toLocaleString()} sats/round (${rb.perHour} UDAG/hr)\nDuration: ${fmtDuration(durationSeconds)} (${totalRounds.toLocaleString()} rounds)\nTotal deposit: ${totalDeposit.toFixed(4)} UDAG\n${cliffRoundsNum > 0 ? `Cliff: ${cliffRoundsNum} rounds (${fmtDuration(cliffRoundsNum * 5)})\n` : ''}Fee: 0.0001 UDAG\n\nSubmit via /tx/submit with client-side signing.`);
+    setFormError(false);
+    setSubmitting(true);
+    try {
+      const depositSats = Math.floor(totalDeposit * SATS);
+      const res = await fetch(`${getNodeUrl()}/stream/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          secret_key: wallet.secret_key,
+          recipient,
+          rate_sats_per_round: satsPerRound,
+          deposit: depositSats,
+          cliff_rounds: cliffRoundsNum,
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFormMsg(data.error || 'Failed to create stream');
+        setFormError(true);
+        return;
+      }
+      setFormMsg(`Stream created! TX: ${(data.tx_hash || '').slice(0, 12)}... Stream ID: ${(data.stream_id || '').slice(0, 12)}...`);
+      setFormError(false);
+      // Clear form
+      setRecipient('');
+      setRateAmount('');
+      setDurAmount('');
+      setTotalDepositInput('');
+      setCliffRounds('');
+      // Refresh streams and switch to outgoing tab
+      setTimeout(() => { fetchStreams(); setTab('outgoing'); }, 2000);
+    } catch (err) {
+      setFormMsg(err instanceof Error ? err.message : 'Network error');
+      setFormError(true);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const isValid = recipient && satsPerRound > 0 && totalDeposit >= 0.0001;
@@ -439,20 +481,21 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
               </div>
 
               {formMsg && (
-                <div style={{ fontSize: 11, color: '#FFB800', background: 'rgba(255,184,0,0.06)', border: '1px solid rgba(255,184,0,0.15)', borderRadius: 8, padding: '8px 12px', marginTop: 12 }}>
+                <div style={{ fontSize: 11, color: formError ? '#EF4444' : '#00E0C4', background: formError ? 'rgba(239,68,68,0.06)' : 'rgba(0,224,196,0.06)', border: `1px solid ${formError ? 'rgba(239,68,68,0.15)' : 'rgba(0,224,196,0.15)'}`, borderRadius: 8, padding: '8px 12px', marginTop: 12 }}>
                   {formMsg}
                 </div>
               )}
 
-              <button onClick={handleCreate} disabled={!isValid} style={{
+              <button onClick={handleCreate} disabled={!isValid || submitting} style={{
                 width: '100%', padding: '13px 0', borderRadius: 10, border: 'none', marginTop: 14,
-                background: !isValid ? 'var(--dag-border)' : 'linear-gradient(135deg, #00E0C4, #0066FF)',
-                color: !isValid ? 'var(--dag-text-faint)' : '#fff',
-                fontSize: 14, fontWeight: 700, cursor: !isValid ? 'not-allowed' : 'pointer',
+                background: (!isValid || submitting) ? 'var(--dag-border)' : 'linear-gradient(135deg, #00E0C4, #0066FF)',
+                color: (!isValid || submitting) ? 'var(--dag-text-faint)' : '#fff',
+                fontSize: 14, fontWeight: 700, cursor: (!isValid || submitting) ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: isValid ? '0 4px 20px rgba(0,224,196,0.15)' : 'none',
+                boxShadow: isValid && !submitting ? '0 4px 20px rgba(0,224,196,0.15)' : 'none',
+                opacity: submitting ? 0.7 : 1,
               }}>
-                ≋ Start Stream
+                {submitting ? 'Creating...' : '\u224B Start Stream'}
               </button>
             </div>
 
@@ -510,7 +553,23 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--dag-text-secondary)', ...S.mono }}>{fmtUdag(s.accrued)}</div>
                     <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: statusBg(s.status), color: statusColor(s.status), display: 'inline-block', textAlign: 'center' }}>{s.status.toUpperCase()}</span>
-                    {s.status === 'Active' && <button onClick={() => alert('Cancel via /tx/submit')} style={S.btn('#EF4444')}>Cancel</button>}
+                    {s.status === 'Active' && <button disabled={actionLoading === s.id} onClick={async () => {
+                      const wallet = wallets[0];
+                      if (!wallet?.secret_key) { alert('No wallet with secret key'); return; }
+                      setActionLoading(s.id);
+                      try {
+                        const res = await fetch(`${getNodeUrl()}/stream/cancel`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ secret_key: wallet.secret_key, stream_id: s.id }),
+                          signal: AbortSignal.timeout(10000),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) { alert(data.error || 'Failed to cancel stream'); return; }
+                        fetchStreams();
+                      } catch (err) { alert(err instanceof Error ? err.message : 'Network error'); }
+                      finally { setActionLoading(null); }
+                    }} style={S.btn('#EF4444')}>{actionLoading === s.id ? '...' : 'Cancel'}</button>}
                   </div>
                 ))}
               </div>
@@ -553,7 +612,23 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
                       )}
                     </div>
                     <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: statusBg(s.status), color: statusColor(s.status), display: 'inline-block', textAlign: 'center' }}>{s.status.toUpperCase()}</span>
-                    {s.withdrawable > 0 && <button onClick={() => alert('Withdraw via /tx/submit')} style={S.btn('#00E0C4')}>Withdraw</button>}
+                    {s.withdrawable > 0 && <button disabled={actionLoading === s.id} onClick={async () => {
+                      const wallet = wallets[0];
+                      if (!wallet?.secret_key) { alert('No wallet with secret key'); return; }
+                      setActionLoading(s.id);
+                      try {
+                        const res = await fetch(`${getNodeUrl()}/stream/withdraw`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ secret_key: wallet.secret_key, stream_id: s.id }),
+                          signal: AbortSignal.timeout(10000),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) { alert(data.error || 'Failed to withdraw'); return; }
+                        fetchStreams();
+                      } catch (err) { alert(err instanceof Error ? err.message : 'Network error'); }
+                      finally { setActionLoading(null); }
+                    }} style={S.btn('#00E0C4')}>{actionLoading === s.id ? '...' : 'Withdraw'}</button>}
                   </div>
                 ))}
               </div>
