@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getBalance, getStake, getDelegation } from '../lib/api';
+import { getBalance } from '../lib/api';
 import type { Wallet } from '../lib/keystore';
 
 export interface WalletBalance {
