@@ -56,6 +56,9 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
   const [guardians, setGuardians] = useState(['', '', '']);
   const [threshold, setThreshold] = useState(2);
   const [showPolicyForm, setShowPolicyForm] = useState(false);
+  const [policyInstant, setPolicyInstant] = useState('');
+  const [policyVault, setPolicyVault] = useState('');
+  const [policyDaily, setPolicyDaily] = useState('');
 
   const pw = getPasskeyWallet();
   const localName = pw?.name || null;
@@ -142,7 +145,10 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
               {nameWarn && <p style={{ fontSize: 10, color: '#FFB800' }}>{nameWarn}</p>}
               {nameAvail && <p style={{ fontSize: 10, color: '#00E0C4' }}>{nameInput} available! {nameFee > 0 ? `${fmt(nameFee)} UDAG/yr` : 'Free'}</p>}
               <div style={{ display: 'flex', gap: 8 }}>
-                <button style={S.btnSolid()}>Register</button>
+                <button onClick={() => {
+                  if (!nameAvail || !nameInput) return;
+                  alert(`Register Name Transaction:\n\nName: ${nameInput}\nOwner: ${walletAddress}\nFee: ${nameFee > 0 ? fmt(nameFee) + ' UDAG/yr' : 'Free'}\n\nThis will be submitted as a SmartOp::RegisterName transaction.\nClient-side signing coming soon.`);
+                }} style={S.btnSolid()}>Register Name</button>
                 <button onClick={() => setShowNameForm(false)} style={S.btn('var(--dag-text-muted)')}>Cancel</button>
               </div>
             </div>
@@ -233,7 +239,12 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
               </div>
 
               <div style={{ display: 'flex', gap: 8 }}>
-                <button style={S.btnSolid('#A855F7')}>Save Guardians</button>
+                <button onClick={() => {
+                  const valid = guardians.filter(g => g.length >= 40);
+                  if (valid.length < 2) { alert('Add at least 2 guardian addresses.'); return; }
+                  if (threshold < 1 || threshold > valid.length) { alert('Invalid threshold.'); return; }
+                  alert(`Set Recovery Guardians Transaction:\n\nGuardians (${valid.length}):\n${valid.map((g, i) => `  ${i + 1}. ${g.slice(0, 12)}...${g.slice(-8)}`).join('\n')}\nThreshold: ${threshold}-of-${valid.length}\nDelay: 2,016 rounds (~2.8 hours)\n\nThis will be submitted as a SmartOp::SetRecovery transaction.\nClient-side signing coming soon.`);
+                }} style={S.btnSolid('#A855F7')}>Save Guardians</button>
                 <button onClick={() => setShowRecoveryForm(false)} style={S.btn('var(--dag-text-muted)')}>Cancel</button>
               </div>
             </div>
@@ -268,18 +279,26 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
             </div>
           ) : showPolicyForm ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {[
-                { l: 'Instant limit (UDAG)', p: '1' },
-                { l: 'Vault threshold (UDAG)', p: '100' },
-                { l: 'Daily cap (UDAG)', p: '10' },
-              ].map((f, i) => (
-                <div key={i}>
-                  <span style={{ ...S.label, display: 'block' }}>{f.l}</span>
-                  <input type="number" placeholder={f.p} style={S.input} />
-                </div>
-              ))}
+              <div>
+                <span style={{ ...S.label, display: 'block' }}>Instant limit (UDAG)</span>
+                <input type="number" placeholder="1" value={policyInstant} onChange={e => setPolicyInstant(e.target.value)} style={S.input} />
+              </div>
+              <div>
+                <span style={{ ...S.label, display: 'block' }}>Vault threshold (UDAG)</span>
+                <input type="number" placeholder="100" value={policyVault} onChange={e => setPolicyVault(e.target.value)} style={S.input} />
+              </div>
+              <div>
+                <span style={{ ...S.label, display: 'block' }}>Daily cap (UDAG)</span>
+                <input type="number" placeholder="10" value={policyDaily} onChange={e => setPolicyDaily(e.target.value)} style={S.input} />
+              </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button style={S.btnSolid('#FFB800')}>Save (2.8hr time-lock)</button>
+                <button onClick={() => {
+                  const instant = parseFloat(policyInstant) || 0;
+                  const vault = parseFloat(policyVault) || 0;
+                  const daily = parseFloat(policyDaily) || 0;
+                  if (instant <= 0 && vault <= 0 && daily <= 0) { alert('Set at least one limit.'); return; }
+                  alert(`Set Spending Policy Transaction:\n\nInstant limit: ${instant > 0 ? instant + ' UDAG' : 'None'}\nVault threshold: ${vault > 0 ? vault + ' UDAG' : 'None'}\nVault delay: 2,016 rounds (~2.8 hours)\nDaily cap: ${daily > 0 ? daily + ' UDAG' : 'None'}\n\nPolicy changes are time-locked (~2.8 hours) for security.\nThis will be submitted as a SmartOp::SetPolicy transaction.\nClient-side signing coming soon.`);
+                }} style={S.btnSolid('#FFB800')}>Save (2.8hr time-lock)</button>
                 <button onClick={() => setShowPolicyForm(false)} style={S.btn('var(--dag-text-muted)')}>Cancel</button>
               </div>
             </div>

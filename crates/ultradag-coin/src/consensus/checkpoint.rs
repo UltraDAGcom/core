@@ -420,6 +420,95 @@ pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
             }
             None => { hasher.update(&[0u8]); }
         }
+        // Recovery config
+        match &config.recovery {
+            Some(rc) => {
+                hasher.update(&[1u8]);
+                hasher.update(&(rc.guardians.len() as u64).to_le_bytes());
+                for g in &rc.guardians {
+                    hasher.update(&g.0);
+                }
+                hasher.update(&[rc.threshold]);
+                hasher.update(&rc.delay_rounds.to_le_bytes());
+            }
+            None => { hasher.update(&[0u8]); }
+        }
+        // Pending recovery
+        match &config.pending_recovery {
+            Some(pr) => {
+                hasher.update(&[1u8]);
+                // new_key fields
+                hasher.update(&pr.new_key.key_id);
+                hasher.update(&[pr.new_key.key_type as u8]);
+                hasher.update(&(pr.new_key.pubkey.len() as u32).to_le_bytes());
+                hasher.update(&pr.new_key.pubkey);
+                hasher.update(&(pr.new_key.label.len() as u32).to_le_bytes());
+                hasher.update(pr.new_key.label.as_bytes());
+                match pr.new_key.daily_limit {
+                    Some(limit) => { hasher.update(&[1u8]); hasher.update(&limit.to_le_bytes()); }
+                    None => { hasher.update(&[0u8]); }
+                }
+                // approvals (sorted by address for determinism)
+                hasher.update(&(pr.approvals.len() as u64).to_le_bytes());
+                for a in &pr.approvals {
+                    hasher.update(&a.0);
+                }
+                hasher.update(&pr.initiated_at_round.to_le_bytes());
+                hasher.update(&pr.executes_at_round.to_le_bytes());
+                hasher.update(&[pr.revoke_existing as u8]);
+            }
+            None => { hasher.update(&[0u8]); }
+        }
+        // Spending policy
+        match &config.policy {
+            Some(sp) => {
+                hasher.update(&[1u8]);
+                hasher.update(&sp.instant_limit.to_le_bytes());
+                hasher.update(&sp.vault_threshold.to_le_bytes());
+                hasher.update(&sp.vault_delay_rounds.to_le_bytes());
+                hasher.update(&(sp.whitelisted_recipients.len() as u64).to_le_bytes());
+                for wr in &sp.whitelisted_recipients {
+                    hasher.update(&wr.0);
+                }
+                match sp.daily_limit {
+                    Some(dl) => { hasher.update(&[1u8]); hasher.update(&dl.to_le_bytes()); }
+                    None => { hasher.update(&[0u8]); }
+                }
+                // daily_spent is transient (resets per day), not included in state root
+            }
+            None => { hasher.update(&[0u8]); }
+        }
+        // Pending policy change
+        match &config.pending_policy_change {
+            Some(ppc) => {
+                hasher.update(&[1u8]);
+                // new_policy fields
+                hasher.update(&ppc.new_policy.instant_limit.to_le_bytes());
+                hasher.update(&ppc.new_policy.vault_threshold.to_le_bytes());
+                hasher.update(&ppc.new_policy.vault_delay_rounds.to_le_bytes());
+                hasher.update(&(ppc.new_policy.whitelisted_recipients.len() as u64).to_le_bytes());
+                for wr in &ppc.new_policy.whitelisted_recipients {
+                    hasher.update(&wr.0);
+                }
+                match ppc.new_policy.daily_limit {
+                    Some(dl) => { hasher.update(&[1u8]); hasher.update(&dl.to_le_bytes()); }
+                    None => { hasher.update(&[0u8]); }
+                }
+                hasher.update(&ppc.initiated_at_round.to_le_bytes());
+                hasher.update(&ppc.executes_at_round.to_le_bytes());
+            }
+            None => { hasher.update(&[0u8]); }
+        }
+        // Pending vault transfers (sorted by transfer_id for determinism)
+        hasher.update(&(config.pending_vault_transfers.len() as u64).to_le_bytes());
+        for pvt in &config.pending_vault_transfers {
+            hasher.update(&pvt.transfer_id);
+            hasher.update(&pvt.to.0);
+            hasher.update(&pvt.amount.to_le_bytes());
+            hasher.update(&pvt.fee.to_le_bytes());
+            hasher.update(&pvt.created_at_round.to_le_bytes());
+            hasher.update(&pvt.executes_at_round.to_le_bytes());
+        }
     }
 
     // Name Registry (sorted by name string in snapshot())
