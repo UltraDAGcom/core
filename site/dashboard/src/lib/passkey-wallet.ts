@@ -13,7 +13,7 @@
  * No secret keys. No passwords. No seed phrases. Security = biometrics.
  */
 
-const STORAGE_KEY = 'ultradag_passkey';
+const STORAGE_KEY = 'ultradag_passkey'; // v2: address normalization
 const SESSION_KEY = 'ultradag_passkey_unlocked';
 
 export interface PasskeyWallet {
