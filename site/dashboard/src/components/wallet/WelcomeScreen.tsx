@@ -390,6 +390,8 @@ export function WelcomeScreen({
               onFinishOnboarding?.();
             }}
             onFallbackToAdvanced={() => setShowAdvancedCreate(true)}
+            network={network}
+            onSwitchNetwork={onSwitchNetwork}
           />
         </div>
       );

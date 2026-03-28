@@ -1,22 +1,18 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { getNodeUrl } from '../../lib/api';
+import type { NetworkType } from '../../lib/api';
 import { savePasskeyWallet } from '../../lib/passkey-wallet';
 
 interface PasskeyOnboardingProps {
   onComplete: (address: string, name: string | null) => void;
   onFallbackToAdvanced: () => void;
+  network: NetworkType;
+  onSwitchNetwork: (net: NetworkType) => void;
 }
 
 type Step = 'passkey' | 'username' | 'creating' | 'done';
 
-/**
- * Passkey-first onboarding flow:
- * 1. Create passkey via WebAuthn (biometric prompt)
- * 2. Choose username (name availability check)
- * 3. Relay creates account (funded + key registered)
- * 4. Done — wallet ready
- */
-export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyOnboardingProps) {
+export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, onSwitchNetwork }: PasskeyOnboardingProps) {
   const [step, setStep] = useState<Step>('passkey');
   const [p256PubkeyHex, setP256PubkeyHex] = useState('');
   const [credentialId, setCredentialId] = useState('');
@@ -28,18 +24,18 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ address: string; name: string | null } | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Step 1: Create passkey via WebAuthn
   const handleCreatePasskey = useCallback(async () => {
     setError('');
     try {
-      // Check WebAuthn support
       if (!window.PublicKeyCredential) {
         setError('WebAuthn is not supported on this device. Use the advanced import option.');
         return;
       }
 
-      // Create a new P256 credential
       const challenge = crypto.getRandomValues(new Uint8Array(32));
       const credential = await navigator.credentials.create({
         publicKey: {
@@ -62,35 +58,16 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
         },
       }) as PublicKeyCredential | null;
 
-      if (!credential) {
-        setError('Passkey creation was cancelled.');
-        return;
-      }
+      if (!credential) { setError('Passkey creation was cancelled.'); return; }
 
-      // Extract P256 public key from attestation
       const attestation = credential.response as AuthenticatorAttestationResponse;
       const pubkeyCose = attestation.getPublicKey?.();
+      if (!pubkeyCose) { setError('Could not extract public key. Try a different browser or use advanced import.'); return; }
 
-      if (!pubkeyCose) {
-        // Fallback: extract from attestation object (older browsers)
-        setError('Could not extract public key. Try a different browser or use advanced import.');
-        return;
-      }
-
-      // Convert COSE key to compressed SEC1 format (33 bytes)
-      // The raw public key from WebAuthn is in SPKI format — extract the raw P256 point
       const spkiKey = new Uint8Array(pubkeyCose);
-
-      // Import as CryptoKey to export as raw
-      const cryptoKey = await crypto.subtle.importKey(
-        'spki', spkiKey,
-        { name: 'ECDSA', namedCurve: 'P-256' },
-        true, ['verify']
-      );
+      const cryptoKey = await crypto.subtle.importKey('spki', spkiKey, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['verify']);
       const rawKey = new Uint8Array(await crypto.subtle.exportKey('raw', cryptoKey));
 
-      // rawKey is 65 bytes (uncompressed: 0x04 || x || y)
-      // Compress to 33 bytes (0x02 or 0x03 prefix based on y parity)
       let compressed: Uint8Array;
       if (rawKey.length === 65 && rawKey[0] === 0x04) {
         compressed = new Uint8Array(33);
@@ -98,10 +75,7 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
         compressed.set(rawKey.slice(1, 33), 1);
       } else if (rawKey.length === 33) {
         compressed = rawKey;
-      } else {
-        setError('Unexpected key format from WebAuthn.');
-        return;
-      }
+      } else { setError('Unexpected key format from WebAuthn.'); return; }
 
       const hexPubkey = Array.from(compressed).map(b => b.toString(16).padStart(2, '0')).join('');
       setP256PubkeyHex(hexPubkey);
@@ -117,23 +91,19 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
     }
   }, []);
 
-  // Step 2: Check name availability
-  const checkName = useCallback(async (name: string) => {
-    setUsername(name);
-    setNameAvailable(null);
-    setNameError('');
-    setNameFee('');
-
-    if (name.length < 3) {
-      setNameError(name.length > 0 ? 'Name must be at least 3 characters' : '');
-      return;
-    }
+  // Step 2: Check name availability (debounced, with abort)
+  const checkNameNow = useCallback(async (name: string) => {
+    // Abort any in-flight request
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     setChecking(true);
     try {
       const res = await fetch(`${getNodeUrl()}/name/available/${encodeURIComponent(name)}`, {
-        signal: AbortSignal.timeout(5000),
+        signal: controller.signal,
       });
+      if (controller.signal.aborted) return;
       if (res.ok) {
         const data = await res.json();
         setNameAvailable(data.available);
@@ -143,19 +113,49 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
           setNameError('This name is taken');
         } else {
           setNameFee(data.annual_fee_udag > 0 ? `${data.annual_fee_udag} UDAG/year` : 'Free');
-          if (data.similar_warning) {
-            setNameError(data.similar_warning);
-          }
+          if (data.similar_warning) setNameError(data.similar_warning);
         }
       } else if (res.status === 404) {
-        setNameError('Name service not available on this network yet. Please switch to testnet or try again later.');
+        setNameError('Name service not available on this network. Try switching networks.');
+      } else {
+        setNameError('Could not check name');
       }
-    } catch {
-      setNameError('Could not reach the network. Check your connection.');
+    } catch (e: unknown) {
+      if (e instanceof DOMException && e.name === 'AbortError') return; // Cancelled by new keystroke
+      setNameError('Checking...');
+      // Silent retry after 2s
+      setTimeout(() => { if (!controller.signal.aborted) checkNameNow(name); }, 2000);
+      return;
     } finally {
-      setChecking(false);
+      if (!controller.signal.aborted) setChecking(false);
     }
   }, []);
+
+  const handleNameChange = useCallback((name: string) => {
+    setUsername(name);
+    setNameAvailable(null);
+    setNameError('');
+    setNameFee('');
+
+    if (name.length < 3) {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      return;
+    }
+
+    // Debounce: wait 400ms after last keystroke before checking
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => checkNameNow(name), 400);
+  }, [checkNameNow]);
+
+  // Re-check when network changes
+  useEffect(() => {
+    if (username.length >= 3) {
+      setNameAvailable(null);
+      setNameError('');
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => checkNameNow(username), 300);
+    }
+  }, [network]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Step 3: Create account via relay
   const handleCreate = useCallback(async () => {
@@ -165,9 +165,7 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
 
     try {
       const body: Record<string, unknown> = { p256_pubkey: p256PubkeyHex };
-      if (username.length >= 3 && nameAvailable) {
-        body.name = username;
-      }
+      if (username.length >= 3 && nameAvailable) body.name = username;
 
       const res = await fetch(`${getNodeUrl()}/relay/create-account`, {
         method: 'POST',
@@ -182,20 +180,15 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
       }
 
       const data = await res.json();
-      const resultData = {
-        address: data.address,
-        name: username.length >= 3 && nameAvailable ? username : null,
-      };
+      const resultData = { address: data.address, name: username.length >= 3 && nameAvailable ? username : null };
       setResult(resultData);
       setStep('done');
 
-      // Store passkey wallet info (no secret keys — secure enclave only)
       savePasskeyWallet({
-        credentialId,
-        p256PubkeyHex,
+        credentialId, p256PubkeyHex,
         address: data.address,
         keyId: data.p256_key_id,
-        name: username.length >= 3 && nameAvailable ? username : null,
+        name: resultData.name,
       });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Account creation failed');
@@ -210,6 +203,32 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
     border: '1px solid var(--dag-border)', color: 'var(--dag-text)', fontSize: 14, outline: 'none',
     fontFamily: "'DM Sans',sans-serif", transition: 'border-color 0.2s',
   };
+
+  const isMainnet = network === 'mainnet';
+
+  // Network switcher component (compact, inline)
+  const NetworkSwitch = () => (
+    <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)', marginBottom: 20 }}>
+      {(['mainnet', 'testnet'] as const).map(net => (
+        <button key={net} onClick={() => onSwitchNetwork(net)} style={{
+          flex: 1, padding: '8px 0', border: 'none', cursor: 'pointer',
+          fontSize: 11, fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase',
+          transition: 'all 0.2s',
+          background: network === net
+            ? net === 'mainnet' ? 'rgba(0,224,196,0.1)' : 'rgba(255,184,0,0.1)'
+            : 'transparent',
+          color: network === net
+            ? net === 'mainnet' ? '#00E0C4' : '#FFB800'
+            : 'var(--dag-text-faint)',
+          borderBottom: network === net
+            ? `2px solid ${net === 'mainnet' ? '#00E0C4' : '#FFB800'}`
+            : '2px solid transparent',
+        }}>
+          {net === 'mainnet' ? '◈ Mainnet' : '◇ Testnet'}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div style={{ maxWidth: 400, margin: '0 auto', padding: '24px 20px', fontFamily: "'DM Sans',sans-serif" }}>
@@ -227,14 +246,17 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
           </div>
 
           <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 8 }}>Create Your Wallet</h2>
-          <p style={{ fontSize: 12.5, color: 'var(--dag-text-muted)', marginBottom: 28, lineHeight: 1.6 }}>
+          <p style={{ fontSize: 12.5, color: 'var(--dag-text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
             Use your fingerprint, face, or security key.<br />No seed phrases. No passwords.
           </p>
+
+          {/* Network selector */}
+          <NetworkSwitch />
 
           <button onClick={handleCreatePasskey} style={{
             width: '100%', padding: '14px 0', borderRadius: 12,
             background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
-            color: 'var(--dag-text)', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
+            color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
             boxShadow: '0 4px 20px rgba(0,224,196,0.2)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           }}>
@@ -259,7 +281,7 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
       {/* Step 2: Choose Username */}
       {step === 'username' && (
         <div style={{ animation: 'slideUp 0.4s ease' }}>
-          <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
             <div style={{
               width: 60, height: 60, borderRadius: 16, margin: '0 auto 16px',
               background: 'rgba(0,224,196,0.08)', border: '1px solid rgba(0,224,196,0.15)',
@@ -271,17 +293,29 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
             <p style={{ fontSize: 12, color: 'var(--dag-text-muted)' }}>This is how people will find and pay you.</p>
           </div>
 
+          {/* Network badge */}
+          <div style={{ textAlign: 'center', marginBottom: 14 }}>
+            <span style={{
+              display: 'inline-block', fontSize: 10, fontWeight: 600, letterSpacing: 0.5,
+              padding: '3px 10px', borderRadius: 6,
+              background: isMainnet ? 'rgba(0,224,196,0.08)' : 'rgba(255,184,0,0.08)',
+              color: isMainnet ? '#00E0C4' : '#FFB800',
+              border: `1px solid ${isMainnet ? 'rgba(0,224,196,0.15)' : 'rgba(255,184,0,0.15)'}`,
+            }}>
+              {isMainnet ? '◈ MAINNET' : '◇ TESTNET'}
+            </span>
+          </div>
+
           <div style={{ marginBottom: 20 }}>
             <div style={{ position: 'relative' }}>
               <input type="text" value={username}
-                onChange={(e) => checkName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                onChange={(e) => handleNameChange(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                 placeholder="your-username" maxLength={20} autoFocus
                 style={{ ...inputStyle, fontSize: 18, padding: '14px 44px 14px 14px', textAlign: 'center' }} />
               {checking && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--dag-text-faint)', fontSize: 14 }}>...</span>}
               {!checking && nameAvailable === true && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#00E0C4', fontSize: 18 }}>✓</span>}
               {!checking && nameAvailable === false && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#EF4444', fontSize: 18 }}>✗</span>}
             </div>
-            {/* Status message below input */}
             <div style={{ minHeight: 22, marginTop: 6, textAlign: 'center' }}>
               {username.length > 0 && username.length < 3 && (
                 <span style={{ fontSize: 11, color: 'var(--dag-text-faint)' }}>At least 3 characters</span>
@@ -315,7 +349,7 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
           <div style={{ width: 48, height: 48, border: '3px solid rgba(0,224,196,0.2)', borderTop: '3px solid #00E0C4', borderRadius: '50%', margin: '0 auto 20px', animation: 'spin 0.8s linear infinite' }} />
           <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
           <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 6 }}>Creating Your Wallet</h2>
-          <p style={{ fontSize: 12, color: 'var(--dag-subheading)' }}>Funding account on the network...</p>
+          <p style={{ fontSize: 12, color: 'var(--dag-subheading)' }}>Registering on {isMainnet ? 'mainnet' : 'testnet'}...</p>
         </div>
       )}
 
@@ -331,12 +365,19 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
           </div>
 
           <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 6 }}>You're All Set!</h2>
-          {result.name ? (
-            <p style={{ fontSize: 17, fontWeight: 600, color: '#00E0C4', marginBottom: 4 }}>You're {result.name}</p>
-          ) : (
-            <p style={{ fontSize: 12, color: 'var(--dag-text-muted)', marginBottom: 4 }}>Your wallet is ready.</p>
+          {result.name && (
+            <p style={{ fontSize: 17, fontWeight: 600, color: '#00E0C4', marginBottom: 4 }}>Welcome, {result.name}</p>
           )}
-          <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', fontFamily: "'DM Mono',monospace", wordBreak: 'break-all', marginBottom: 20 }}>{result.address}</p>
+
+          <div style={{ display: 'inline-block', marginBottom: 16 }}>
+            <span style={{
+              fontSize: 9, fontWeight: 600, letterSpacing: 0.5, padding: '2px 8px', borderRadius: 4,
+              background: isMainnet ? 'rgba(0,224,196,0.08)' : 'rgba(255,184,0,0.08)',
+              color: isMainnet ? '#00E0C4' : '#FFB800',
+            }}>
+              {isMainnet ? 'MAINNET' : 'TESTNET'}
+            </span>
+          </div>
 
           <div style={{
             background: 'var(--dag-card)', border: '1px solid var(--dag-border)',
@@ -353,7 +394,7 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
           <button onClick={() => onComplete(result.address, result.name)} style={{
             width: '100%', padding: '14px 0', borderRadius: 12,
             background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
-            color: 'var(--dag-text)', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
+            color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
             boxShadow: '0 4px 20px rgba(0,224,196,0.2)',
           }}>
             Open Wallet
