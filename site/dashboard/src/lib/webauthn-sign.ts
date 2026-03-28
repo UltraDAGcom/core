@@ -290,6 +290,8 @@ export async function signAndSubmitSmartOp(
         client_data_json: Array.from(clientDataJSON),
         signature: Array.from(rawSig),
       },
+      // Include P256 pubkey for auto-registration on first SmartOp
+      p256_pubkey: Array.from(hexToBytes(passkey.p256PubkeyHex)),
     },
   };
 

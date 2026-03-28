@@ -3464,16 +3464,57 @@ impl StateEngine {
     }
 
     /// Verify a SmartOp signature using the authorized key from state.
-    pub fn verify_smart_op(&self, tx: &crate::tx::smart_account::SmartOpTx) -> bool {
-        let config = match self.smart_accounts.get(&tx.from) {
-            Some(c) => c,
-            None => return false,
-        };
-        let key = match config.find_key(&tx.signing_key_id) {
-            Some(k) => k,
-            None => return false,
-        };
-        tx.verify_with_key(key)
+    pub fn verify_smart_op(&mut self, tx: &crate::tx::smart_account::SmartOpTx) -> bool {
+        use crate::tx::smart_account::{AuthorizedKey, KeyType};
+
+        // First try: existing SmartAccount with registered key
+        if let Some(config) = self.smart_accounts.get(&tx.from) {
+            if let Some(key) = config.find_key(&tx.signing_key_id) {
+                return tx.verify_with_key(key);
+            }
+        }
+
+        // Second try: auto-registration via p256_pubkey field.
+        // If the tx includes the P256 pubkey and it derives to the sender address,
+        // auto-create the SmartAccount, register the key, and verify the signature.
+        if let Some(ref pubkey_bytes) = tx.p256_pubkey {
+            if pubkey_bytes.len() == 33 || pubkey_bytes.len() == 65 {
+                // Check address derivation: blake3("smart_account_p256" || pubkey)[:20] == from
+                let mut hasher = blake3::Hasher::new();
+                hasher.update(b"smart_account_p256");
+                hasher.update(pubkey_bytes);
+                let hash = hasher.finalize();
+                let mut derived_addr = [0u8; 20];
+                derived_addr.copy_from_slice(&hash.as_bytes()[..20]);
+                if derived_addr == tx.from.0 {
+                    // Address matches — build a temporary AuthorizedKey and verify
+                    let key_id = AuthorizedKey::compute_key_id(KeyType::P256, pubkey_bytes);
+                    if key_id == tx.signing_key_id {
+                        let temp_key = AuthorizedKey {
+                            key_id,
+                            key_type: KeyType::P256,
+                            pubkey: pubkey_bytes.clone(),
+                            label: "passkey".to_string(),
+                            daily_limit: None,
+                            daily_spent: (0, 0),
+                        };
+                        if tx.verify_with_key(&temp_key) {
+                            // Signature valid — auto-register the key for future use
+                            let round = self.last_finalized_round.unwrap_or(0);
+                            self.ensure_smart_account_at_round(&tx.from, round);
+                            if let Some(config) = self.smart_accounts.get_mut(&tx.from) {
+                                if !config.authorized_keys.iter().any(|k| k.key_id == key_id) {
+                                    config.authorized_keys.push(temp_key);
+                                }
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        false
     }
 
     /// Apply a SmartOp transaction — dispatches to the appropriate operation handler.
@@ -3695,20 +3736,13 @@ impl StateEngine {
     /// Returns true if the signing_key_id exists on the sender's SmartAccount
     /// and the signature verifies with the corresponding key.
     pub fn verify_smart_transfer(&self, tx: &crate::tx::smart_account::SmartTransferTx) -> bool {
-        let config = match self.smart_accounts.get(&tx.from) {
-            Some(c) => c,
-            None => {
-                // No SmartAccount — SmartTransfer is only for SmartAccounts
-                return false;
+        if let Some(config) = self.smart_accounts.get(&tx.from) {
+            if let Some(key) = config.find_key(&tx.signing_key_id) {
+                return tx.verify_with_key(key);
             }
-        };
-
-        let key = match config.find_key(&tx.signing_key_id) {
-            Some(k) => k,
-            None => return false,
-        };
-
-        tx.verify_with_key(key)
+        }
+        // No SmartAccount or key not found — SmartTransfer requires registered key
+        false
     }
 
     /// Apply a SmartTransfer transaction (P256 or Ed25519 signed transfer from a SmartAccount).

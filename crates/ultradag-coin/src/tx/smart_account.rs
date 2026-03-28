@@ -957,6 +957,11 @@ pub struct SmartOpTx {
     /// Optional WebAuthn signature envelope.
     #[serde(default)]
     pub webauthn: Option<WebAuthnSignature>,
+    /// Optional P256 public key for first-time SmartAccount auto-registration.
+    /// When set and no SmartAccount exists, the verifier checks address derivation
+    /// (blake3("smart_account_p256" || pubkey)[:20] == from) and auto-creates the account.
+    #[serde(default)]
+    pub p256_pubkey: Option<Vec<u8>>,
 }
 
 impl SmartOpTx {
