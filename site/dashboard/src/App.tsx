@@ -233,7 +233,17 @@ function App() {
                 onCreate={ks.create}
                 onUnlock={ks.unlock}
                 onImportBlob={ks.importBlob}
-                onAddWallet={ks.addWallet}
+                onAddWallet={async (name, secretKey, address) => {
+                  // If passkey wallet is active but keystore isn't unlocked, auto-create one
+                  if (pk.unlocked && !ks.unlocked) {
+                    if (!ks.hasStore) {
+                      await ks.create('passkey-managed');
+                    } else {
+                      await ks.unlock('passkey-managed');
+                    }
+                  }
+                  await ks.addWallet(name, secretKey, address);
+                }}
                 onRemoveWallet={ks.removeWallet}
                 onExportBlob={ks.exportBlob}
                 onGenerateKeypair={handleGenerateKeypair}

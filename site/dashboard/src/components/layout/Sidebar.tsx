@@ -143,11 +143,15 @@ export function Sidebar({ open, onClose, network = 'testnet', onSwitchNetwork, o
             <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#00E0C4', boxShadow: '0 0 6px #00E0C4' }} />
             <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Connected</span>
           </div>
-          {sessionSecondsLeft != null && sessionSecondsLeft < 9000 && (
+          {sessionSecondsLeft != null && sessionSecondsLeft < 9000 ? (
             <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.15)', fontFamily: fonts.mono }}>
               Session {mins}:{secs.toString().padStart(2, '0')}
             </div>
-          )}
+          ) : sessionSecondsLeft != null && sessionSecondsLeft >= 9000 ? (
+            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.12)' }}>
+              ◎ Passkey session
+            </div>
+          ) : null}
         </div>
       </aside>
     </>
