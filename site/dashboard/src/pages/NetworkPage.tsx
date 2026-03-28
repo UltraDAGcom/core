@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getStatus, getPeers, getMempool, getMetrics, getHealthDetailed, connectToNode, isConnected, getNodeUrl } from '../lib/api';
+import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 const S = {
@@ -20,6 +21,9 @@ export function NetworkPage() {
   const [mempool, setMempool] = useState<Array<Record<string, unknown>>>([]);
   const [metrics, setMetrics] = useState<Record<string, unknown> | null>(null);
   const [health, setHealth] = useState<{ status: string; components: Record<string, { available?: boolean; [k: string]: unknown }> } | null>(null);
+  const [peerPage, setPeerPage] = useState(1);
+  const [mempoolPage, setMempoolPage] = useState(1);
+  const NET_PAGE_SIZE = 10;
 
   const fetchAll = useCallback(async () => {
     try {
@@ -36,7 +40,7 @@ export function NetworkPage() {
   useEffect(() => { fetchAll(); const iv = setInterval(fetchAll, 5000); return () => clearInterval(iv); }, [fetchAll]);
 
   useEffect(() => {
-    const handler = () => { setStatus(null); setPeers([]); setBootstrap([]); setMempool([]); setMetrics(null); setHealth(null); fetchAll(); };
+    const handler = () => { setStatus(null); setPeers([]); setBootstrap([]); setMempool([]); setMetrics(null); setHealth(null); setPeerPage(1); setMempoolPage(1); fetchAll(); };
     window.addEventListener('ultradag-network-switch', handler);
     return () => window.removeEventListener('ultradag-network-switch', handler);
   }, [fetchAll]);
@@ -112,12 +116,13 @@ export function NetworkPage() {
             <p style={{ fontSize: 11, color: 'var(--dag-text-faint)' }}>No peers connected</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {peers.map((p, i) => (
+              {peers.slice((peerPage - 1) * NET_PAGE_SIZE, peerPage * NET_PAGE_SIZE).map((p, pi) => (
                 <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0', borderBottom: '1px solid var(--dag-row-border)' }}>
-                  <span style={{ fontSize: 10, color: 'var(--dag-text-faint)', width: 16 }}>{i + 1}</span>
+                  <span style={{ fontSize: 10, color: 'var(--dag-text-faint)', width: 16 }}>{(peerPage - 1) * NET_PAGE_SIZE + pi + 1}</span>
                   <span style={{ fontSize: 10.5, color: 'var(--dag-cell-text)', ...S.mono, wordBreak: 'break-all' }}>{p}</span>
                 </div>
               ))}
+              <Pagination page={peerPage} totalPages={Math.ceil(peers.length / NET_PAGE_SIZE)} onPageChange={setPeerPage} totalItems={peers.length} pageSize={NET_PAGE_SIZE} />
             </div>
           )}
           {bootstrap.length > 0 && bootstrap.some(n => n.connected) && (
@@ -146,13 +151,13 @@ export function NetworkPage() {
             <p style={{ fontSize: 11, color: 'var(--dag-text-faint)' }}>Mempool empty</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {mempool.slice(0, 15).map((tx, i) => (
+              {mempool.slice((mempoolPage - 1) * NET_PAGE_SIZE, mempoolPage * NET_PAGE_SIZE).map((tx, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--dag-row-border)' }}>
                   <span style={{ fontSize: 10, color: 'var(--dag-cell-text)' }}>{String(tx.type ?? 'tx')}</span>
                   <span style={{ fontSize: 10, ...S.mono, color: 'var(--dag-text-faint)' }}>{String(tx.hash ?? '').slice(0, 12)}…</span>
                 </div>
               ))}
-              {mempool.length > 15 && <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginTop: 4 }}>+{mempool.length - 15} more</p>}
+              <Pagination page={mempoolPage} totalPages={Math.ceil(mempool.length / NET_PAGE_SIZE)} onPageChange={setMempoolPage} totalItems={mempool.length} pageSize={NET_PAGE_SIZE} />
             </div>
           )}
         </div>

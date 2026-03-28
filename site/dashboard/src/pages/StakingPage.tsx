@@ -3,6 +3,7 @@ import { getValidators, getDelegation, shortAddr, postDelegate, postUndelegate, 
 import { useKeystore } from '../hooks/useKeystore';
 import { hasPasskeyWallet, getPasskeyWallet } from '../lib/passkey-wallet';
 import { signAndSubmitSmartOp } from '../lib/webauthn-sign';
+import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 const SATS = 100_000_000;
@@ -42,6 +43,9 @@ export function StakingPage() {
   const [showValidators, setShowValidators] = useState(false);
   const [customValidator, setCustomValidator] = useState<string | null>(null);
   const [undelegateLoading, setUndelegateLoading] = useState('');
+  const [validatorPage, setValidatorPage] = useState(1);
+  const [delegationPage, setDelegationPage] = useState(1);
+  const STAKING_PAGE_SIZE = 10;
   const pw = getPasskeyWallet();
 
   const refresh = useCallback(async () => {
@@ -64,7 +68,7 @@ export function StakingPage() {
   useEffect(() => { refresh(); const iv = setInterval(refresh, 30000); return () => clearInterval(iv); }, [refresh]);
 
   useEffect(() => {
-    const handler = () => { setValidators([]); setTotalStaked(0); setTotalDelegated(0); setDelegations([]); setLoading(true); refresh(); };
+    const handler = () => { setValidators([]); setTotalStaked(0); setTotalDelegated(0); setDelegations([]); setLoading(true); setValidatorPage(1); setDelegationPage(1); refresh(); };
     window.addEventListener('ultradag-network-switch', handler);
     return () => window.removeEventListener('ultradag-network-switch', handler);
   }, [refresh]);
@@ -214,7 +218,7 @@ export function StakingPage() {
                 <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Your Staked UDAG</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {delegations.map(d => (
+                {delegations.slice((delegationPage - 1) * STAKING_PAGE_SIZE, delegationPage * STAKING_PAGE_SIZE).map(d => (
                   <div key={d.address} style={{ ...S.stat, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -238,6 +242,7 @@ export function StakingPage() {
                     </div>
                   </div>
                 ))}
+                <Pagination page={delegationPage} totalPages={Math.ceil(delegations.length / STAKING_PAGE_SIZE)} onPageChange={setDelegationPage} totalItems={delegations.length} pageSize={STAKING_PAGE_SIZE} />
               </div>
             </div>
           )}
@@ -265,7 +270,7 @@ export function StakingPage() {
                         <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'var(--dag-text-faint)', letterSpacing: 1.5 }}>{h}</div>
                       ))}
                     </div>
-                    {validators.map(v => (
+                    {validators.slice((validatorPage - 1) * STAKING_PAGE_SIZE, validatorPage * STAKING_PAGE_SIZE).map(v => (
                       <div key={v.address} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'center', padding: '8px 4px', borderTop: '1px solid var(--dag-row-border)', minWidth: m ? 500 : undefined }}>
                         <div style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono }}>{shortAddr(v.address)}</div>
                         <div style={{ fontSize: 11, color: 'var(--dag-cell-text)' }}>{fmt(v.effective_stake)}</div>
@@ -277,6 +282,7 @@ export function StakingPage() {
                         )}
                       </div>
                     ))}
+                    <Pagination page={validatorPage} totalPages={Math.ceil(validators.length / STAKING_PAGE_SIZE)} onPageChange={setValidatorPage} totalItems={validators.length} pageSize={STAKING_PAGE_SIZE} />
                   </div>
                 )}
               </div>

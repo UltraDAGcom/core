@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getCouncil, getGovernanceConfig, shortAddr } from '../lib/api';
 import { CopyButton } from '../components/shared/CopyButton';
+import { Pagination } from '../components/shared/Pagination';
 import { CouncilSeatGrid } from '../components/governance/CouncilSeatGrid';
 import { useIsMobile } from '../hooks/useIsMobile';
 
@@ -28,6 +29,8 @@ export function CouncilPage() {
   const [council, setCouncil] = useState<CouncilData | null>(null);
   const [govConfig, setGovConfig] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [memberPage, setMemberPage] = useState(1);
+  const COUNCIL_PAGE_SIZE = 10;
 
   const refresh = useCallback(async () => {
     try {
@@ -39,7 +42,7 @@ export function CouncilPage() {
   useEffect(() => { refresh(); const iv = setInterval(refresh, 30000); return () => clearInterval(iv); }, [refresh]);
 
   useEffect(() => {
-    const handler = () => { setCouncil(null); setGovConfig(null); setLoading(true); refresh(); };
+    const handler = () => { setCouncil(null); setGovConfig(null); setLoading(true); setMemberPage(1); refresh(); };
     window.addEventListener('ultradag-network-switch', handler);
     return () => window.removeEventListener('ultradag-network-switch', handler);
   }, [refresh]);
@@ -149,21 +152,27 @@ export function CouncilPage() {
         {members.length === 0 ? (
           <p style={{ fontSize: 12, color: 'var(--dag-text-faint)', textAlign: 'center', padding: '20px 0' }}>No council members.</p>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto 2fr 1fr', gap: '0 16px' }}>
-            {['#', 'ADDRESS', 'CATEGORY'].map((h, i) => (
-              <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'var(--dag-text-faint)', letterSpacing: 1.5, paddingBottom: 8, borderBottom: '1px solid var(--dag-table-border)' }}>{h}</div>
-            ))}
-            {members.map((m, i) => [
-              <div key={`n${i}`} style={{ fontSize: 11, color: 'var(--dag-text-faint)', padding: '7px 0', borderBottom: '1px solid var(--dag-row-border)' }}>{i + 1}</div>,
-              <div key={`a${i}`} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 0', borderBottom: '1px solid var(--dag-row-border)' }}>
-                <span style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono }}>{shortAddr(m.address)}</span>
-                <CopyButton text={m.address} />
-              </div>,
-              <div key={`c${i}`} style={{ padding: '7px 0', borderBottom: '1px solid var(--dag-row-border)' }}>
-                <span style={{ fontSize: 9.5, padding: '2px 8px', borderRadius: 4, background: (catColor[m.category] || '#888') + '12', color: catColor[m.category] || '#888', fontWeight: 600 }}>{m.category}</span>
-              </div>,
-            ]).flat()}
-          </div>
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 2fr 1fr', gap: '0 16px' }}>
+              {['#', 'ADDRESS', 'CATEGORY'].map((h, i) => (
+                <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'var(--dag-text-faint)', letterSpacing: 1.5, paddingBottom: 8, borderBottom: '1px solid var(--dag-table-border)' }}>{h}</div>
+              ))}
+              {members.slice((memberPage - 1) * COUNCIL_PAGE_SIZE, memberPage * COUNCIL_PAGE_SIZE).map((mb, pi) => {
+                const idx = (memberPage - 1) * COUNCIL_PAGE_SIZE + pi;
+                return [
+                  <div key={`n${idx}`} style={{ fontSize: 11, color: 'var(--dag-text-faint)', padding: '7px 0', borderBottom: '1px solid var(--dag-row-border)' }}>{idx + 1}</div>,
+                  <div key={`a${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 0', borderBottom: '1px solid var(--dag-row-border)' }}>
+                    <span style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono }}>{shortAddr(mb.address)}</span>
+                    <CopyButton text={mb.address} />
+                  </div>,
+                  <div key={`c${idx}`} style={{ padding: '7px 0', borderBottom: '1px solid var(--dag-row-border)' }}>
+                    <span style={{ fontSize: 9.5, padding: '2px 8px', borderRadius: 4, background: (catColor[mb.category] || '#888') + '12', color: catColor[mb.category] || '#888', fontWeight: 600 }}>{mb.category}</span>
+                  </div>,
+                ];
+              }).flat()}
+            </div>
+            <Pagination page={memberPage} totalPages={Math.ceil(members.length / COUNCIL_PAGE_SIZE)} onPageChange={setMemberPage} totalItems={members.length} pageSize={COUNCIL_PAGE_SIZE} />
+          </>
         )}
       </div>
     </div>

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { getStatus, getRound, connectToNode, isConnected } from '../lib/api';
 import { SearchBar } from '../components/explorer/SearchBar';
+import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 const PAGE_SIZE = 10;
@@ -153,13 +154,7 @@ export function ExplorerPage() {
             </div>
             </div>
             {/* Pagination */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 14 }}>
-              <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1}
-                style={{ padding: '5px 12px', borderRadius: 6, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)', color: page === 1 ? 'var(--dag-text-faint)' : 'var(--dag-text)', fontSize: 11, cursor: page === 1 ? 'default' : 'pointer' }}>← Prev</button>
-              <span style={{ padding: '5px 10px', fontSize: 11, color: 'var(--dag-text-muted)', ...S.mono }}>{page} / {totalPages}</span>
-              <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page === totalPages}
-                style={{ padding: '5px 12px', borderRadius: 6, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)', color: page === totalPages ? 'var(--dag-text-faint)' : 'var(--dag-text)', fontSize: 11, cursor: page === totalPages ? 'default' : 'pointer' }}>Next →</button>
-            </div>
+            <Pagination page={page} totalPages={totalPages} onPageChange={setPage} totalItems={finalized} pageSize={PAGE_SIZE} />
           </>
         )}
       </div>

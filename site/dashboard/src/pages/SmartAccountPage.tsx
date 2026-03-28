@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
 import { VerifiedAddressInput } from '../components/shared/VerifiedAddressInput';
+import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 interface AuthorizedKey { key_id: string; key_type: string; label: string; daily_limit: number | null }
@@ -57,6 +58,8 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
   const [guardians, setGuardians] = useState(['', '', '']);
   const [threshold, setThreshold] = useState(2);
   const [showPolicyForm, setShowPolicyForm] = useState(false);
+  const [keyPage, setKeyPage] = useState(1);
+  const SA_PAGE_SIZE = 10;
   const [policyInstant, setPolicyInstant] = useState('');
   const [policyVault, setPolicyVault] = useState('');
   const [policyDaily, setPolicyDaily] = useState('');
@@ -162,7 +165,7 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
         <Section icon="◇" color="#0066FF" title="Authorized Keys">
           {info && info.authorized_keys.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {info.authorized_keys.map(key => (
+              {info.authorized_keys.slice((keyPage - 1) * SA_PAGE_SIZE, keyPage * SA_PAGE_SIZE).map(key => (
                 <div key={key.key_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--dag-card)', borderRadius: 10, padding: '10px 13px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: key.key_type === 'p256' ? 'rgba(168,85,247,0.12)' : 'rgba(0,102,255,0.12)', fontSize: 14 }}>
@@ -181,6 +184,7 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
                   ◷ Key removal pending (round {info.pending_key_removal.executes_at_round})
                 </div>
               )}
+              <Pagination page={keyPage} totalPages={Math.ceil(info.authorized_keys.length / SA_PAGE_SIZE)} onPageChange={setKeyPage} totalItems={info.authorized_keys.length} pageSize={SA_PAGE_SIZE} />
               <p style={{ fontSize: 10, color: 'var(--dag-text-faint)' }}>Add a backup device by scanning a QR from another wallet.</p>
             </div>
           ) : (

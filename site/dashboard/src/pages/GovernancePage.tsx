@@ -3,6 +3,7 @@ import { getProposals, getProposal, shortAddr, formatProposalType } from '../lib
 import { useKeystore } from '../hooks/useKeystore';
 import { VoteButton } from '../components/governance/VoteButton';
 import { CreateProposalModal } from '../components/governance/CreateProposalModal';
+import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 const S = {
@@ -33,6 +34,9 @@ export function GovernancePage() {
   const [selected, setSelected] = useState<Proposal | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [proposalPage, setProposalPage] = useState(1);
+  const [voterPage, setVoterPage] = useState(1);
+  const GOV_PAGE_SIZE = 10;
 
   const refresh = useCallback(async () => {
     try {
@@ -49,12 +53,13 @@ export function GovernancePage() {
   useEffect(() => { refresh(); const iv = setInterval(refresh, 30000); return () => clearInterval(iv); }, [refresh]);
 
   useEffect(() => {
-    const handler = () => { setProposals([]); setSelected(null); setLoading(true); refresh(); };
+    const handler = () => { setProposals([]); setSelected(null); setLoading(true); setProposalPage(1); setVoterPage(1); refresh(); };
     window.addEventListener('ultradag-network-switch', handler);
     return () => window.removeEventListener('ultradag-network-switch', handler);
   }, [refresh]);
 
   const selectProposal = async (id: number) => {
+    setVoterPage(1);
     try { const d = await getProposal(id); const s = normalizeStatus(d.status); setSelected({ ...d, status: s.label, execute_at_round: s.execute_at_round ?? d.execute_at_round }); }
     catch { setSelected(proposals.find(p => p.id === id) || null); }
   };
@@ -90,7 +95,7 @@ export function GovernancePage() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {proposals.map(p => {
+              {proposals.slice((proposalPage - 1) * GOV_PAGE_SIZE, proposalPage * GOV_PAGE_SIZE).map(p => {
                 const sc = statusColor(p.status);
                 const active = selected?.id === p.id;
                 return (
@@ -117,6 +122,7 @@ export function GovernancePage() {
                   </div>
                 );
               })}
+              <Pagination page={proposalPage} totalPages={Math.ceil(proposals.length / GOV_PAGE_SIZE)} onPageChange={setProposalPage} totalItems={proposals.length} pageSize={GOV_PAGE_SIZE} />
             </div>
           )}
         </div>
@@ -159,7 +165,7 @@ export function GovernancePage() {
               {selected.voters && selected.voters.length > 0 && (
                 <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--dag-table-border)' }}>
                   <div style={{ fontSize: 10, color: 'var(--dag-subheading)', letterSpacing: 1, marginBottom: 8 }}>VOTERS ({selected.voters.length})</div>
-                  {selected.voters.map(v => (
+                  {selected.voters.slice((voterPage - 1) * GOV_PAGE_SIZE, voterPage * GOV_PAGE_SIZE).map(v => (
                     <div key={v.address} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--dag-row-border)' }}>
                       <span style={{ fontSize: 10.5, color: 'var(--dag-text-muted)', ...S.mono }}>{shortAddr(v.address)}</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -168,6 +174,7 @@ export function GovernancePage() {
                       </div>
                     </div>
                   ))}
+                  <Pagination page={voterPage} totalPages={Math.ceil(selected.voters.length / GOV_PAGE_SIZE)} onPageChange={setVoterPage} totalItems={selected.voters.length} pageSize={GOV_PAGE_SIZE} />
                 </div>
               )}
             </div>

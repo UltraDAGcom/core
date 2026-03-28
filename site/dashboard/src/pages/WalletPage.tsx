@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { shortAddr, fullAddr } from '../lib/api';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
@@ -6,6 +6,7 @@ import { CreateKeystoreModal } from '../components/wallet/CreateKeystoreModal';
 import { AddWalletModal } from '../components/wallet/AddWalletModal';
 import { changePassword } from '../lib/keystore';
 import { CopyButton } from '../components/shared/CopyButton';
+import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
 import type { Wallet } from '../lib/keystore';
 import type { WalletBalance } from '../hooks/useWalletBalances';
@@ -81,8 +82,12 @@ export function WalletPage({
   const [showPwModal, setShowPwModal] = useState(false);
   const [sel, setSel] = useState<number | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [walletPage, setWalletPage] = useState(1);
   const pw = getPasskeyWallet();
   const m = useIsMobile();
+  const WALLET_PAGE_SIZE = 10;
+
+  useEffect(() => { setWalletPage(1); }, [wallets.length]);
 
   if (!unlocked) {
     return (
@@ -169,7 +174,8 @@ export function WalletPage({
         <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '1.2fr 1fr', gap: 14, animation: 'slideUp 0.5s ease' }}>
           {/* Wallet List */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {wallets.map((w, i) => {
+            {wallets.slice((walletPage - 1) * WALLET_PAGE_SIZE, walletPage * WALLET_PAGE_SIZE).map((w, _pi) => {
+              const i = (walletPage - 1) * WALLET_PAGE_SIZE + _pi;
               const bal = balances.get(w.address);
               const isPk = pw?.address === w.address;
               const active = sel === i;
@@ -213,6 +219,7 @@ export function WalletPage({
                 </div>
               );
             })}
+            <Pagination page={walletPage} totalPages={Math.ceil(wallets.length / WALLET_PAGE_SIZE)} onPageChange={setWalletPage} totalItems={wallets.length} pageSize={WALLET_PAGE_SIZE} />
           </div>
 
           {/* Detail Panel */}

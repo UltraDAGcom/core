@@ -86,7 +86,7 @@ export function MempoolTable({ transactions }: MempoolTableProps) {
           </tbody>
         </table>
       </div>
-      <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+      <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { getNodeUrl } from '../lib/api';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
 import { signAndSubmitSmartOp } from '../lib/webauthn-sign';
+import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
 import type { NetworkType } from '../lib/api';
 
@@ -98,6 +99,9 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
   const [submitting, setSubmitting] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [tab, setTab] = useState<'create' | 'outgoing' | 'incoming'>('create');
+  const [outgoingPage, setOutgoingPage] = useState(1);
+  const [incomingPage, setIncomingPage] = useState(1);
+  const STREAM_PAGE_SIZE = 10;
 
   const myAddresses = wallets.map(w => w.address.toLowerCase());
   const outgoing = allStreams.filter(s => myAddresses.includes(s.sender.toLowerCase()));
@@ -177,7 +181,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
   }, [myAddresses.join(',')]);
 
   useEffect(() => { fetchStreams(); const iv = setInterval(fetchStreams, 5000); return () => clearInterval(iv); }, [fetchStreams]);
-  useEffect(() => { const h = () => { setAllStreams([]); setLoading(true); fetchStreams(); }; window.addEventListener('ultradag-network-switch', h); return () => window.removeEventListener('ultradag-network-switch', h); }, [fetchStreams]);
+  useEffect(() => { const h = () => { setAllStreams([]); setLoading(true); setOutgoingPage(1); setIncomingPage(1); fetchStreams(); }; window.addEventListener('ultradag-network-switch', h); return () => window.removeEventListener('ultradag-network-switch', h); }, [fetchStreams]);
   useEffect(() => { const iv = setInterval(() => setTick(t => t + 1), 1000); return () => clearInterval(iv); }, []);
 
   const handleCreate = async () => {
@@ -574,7 +578,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                     <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'var(--dag-text-faint)', letterSpacing: 1.5 }}>{h}</div>
                   ))}
                 </div>
-                {outgoing.map(s => (
+                {outgoing.slice((outgoingPage - 1) * STREAM_PAGE_SIZE, outgoingPage * STREAM_PAGE_SIZE).map(s => (
                   <div key={s.id} className="stream-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 2fr 1fr 1fr auto', gap: 8, alignItems: 'center', padding: '10px 4px', borderTop: '1px solid var(--dag-row-border)', borderRadius: 6, transition: 'background 0.15s', minWidth: m ? 650 : undefined }}>
                     <div style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono }}>{shortAddr(s.recipient)}</div>
                     <div style={{ fontSize: 11, color: 'var(--dag-cell-text)' }}>{s.rate_udag_per_hour?.toFixed(4) ?? '—'}/hr</div>
@@ -610,6 +614,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                     }} style={S.btn('#EF4444')}>{actionLoading === s.id ? '...' : 'Cancel'}</button>}
                   </div>
                 ))}
+                <Pagination page={outgoingPage} totalPages={Math.ceil(outgoing.length / STREAM_PAGE_SIZE)} onPageChange={setOutgoingPage} totalItems={outgoing.length} pageSize={STREAM_PAGE_SIZE} />
               </div>
             )}
           </div>
@@ -635,7 +640,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                     <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'var(--dag-text-faint)', letterSpacing: 1.5 }}>{h}</div>
                   ))}
                 </div>
-                {incoming.map(s => (
+                {incoming.slice((incomingPage - 1) * STREAM_PAGE_SIZE, incomingPage * STREAM_PAGE_SIZE).map(s => (
                   <div key={s.id} className="stream-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1.5fr 1fr auto', gap: 8, alignItems: 'center', padding: '10px 4px', borderTop: '1px solid var(--dag-row-border)', borderRadius: 6, transition: 'background 0.15s', minWidth: m ? 650 : undefined }}>
                     <div style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono }}>{shortAddr(s.sender)}</div>
                     <div style={{ fontSize: 11, color: 'var(--dag-cell-text)' }}>{s.rate_udag_per_hour?.toFixed(4) ?? '—'}/hr</div>
@@ -676,6 +681,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                     }} style={S.btn('#00E0C4')}>{actionLoading === s.id ? '...' : 'Withdraw'}</button>}
                   </div>
                 ))}
+                <Pagination page={incomingPage} totalPages={Math.ceil(incoming.length / STREAM_PAGE_SIZE)} onPageChange={setIncomingPage} totalItems={incoming.length} pageSize={STREAM_PAGE_SIZE} />
               </div>
             )}
           </div>
