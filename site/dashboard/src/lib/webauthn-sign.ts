@@ -132,6 +132,36 @@ export async function signAndSubmitWithPasskey(
  * Sign and submit a SmartOp (stake, delegate, vote, register name, etc.) via WebAuthn.
  * This enables passkey wallets to do everything, not just transfers.
  */
+/**
+ * Convert operation object for JSON serialization.
+ * Rust's serde expects Address as [u8; 20] (byte array), not hex string.
+ * Also converts [u8; 32] fields (like stream_id) to byte arrays.
+ */
+function serializeOperation(op: Record<string, unknown>): Record<string, unknown> {
+  if ('Stake' in op) return { Stake: op.Stake };
+  if ('Unstake' in op) return { Unstake: op.Unstake ?? {} };
+  if ('Delegate' in op) {
+    const d = op.Delegate as { validator: string; amount: number };
+    return { Delegate: { validator: Array.from(hexToBytes(d.validator)), amount: d.amount } };
+  }
+  if ('Undelegate' in op) return { Undelegate: op.Undelegate ?? {} };
+  if ('Vote' in op) return { Vote: op.Vote };
+  if ('RegisterName' in op) return { RegisterName: op.RegisterName };
+  if ('StreamCreate' in op) {
+    const s = op.StreamCreate as { recipient: string; rate_sats_per_round: number; deposit: number; cliff_rounds?: number };
+    return { StreamCreate: { recipient: Array.from(hexToBytes(s.recipient)), rate_sats_per_round: s.rate_sats_per_round, deposit: s.deposit, cliff_rounds: s.cliff_rounds ?? 0 } };
+  }
+  if ('StreamWithdraw' in op) {
+    const s = op.StreamWithdraw as { stream_id: string };
+    return { StreamWithdraw: { stream_id: Array.from(hexToBytes(s.stream_id)) } };
+  }
+  if ('StreamCancel' in op) {
+    const s = op.StreamCancel as { stream_id: string };
+    return { StreamCancel: { stream_id: Array.from(hexToBytes(s.stream_id)) } };
+  }
+  return op;
+}
+
 export async function signAndSubmitSmartOp(
   operation: Record<string, unknown>,
   fee: number,
@@ -223,10 +253,13 @@ export async function signAndSubmitSmartOp(
   const signature = new Uint8Array(assertion.signature);
   const rawSig = derToRaw(signature);
 
+  // Convert operation for JSON serialization — Address fields need byte arrays, not hex strings
+  const jsonOperation = serializeOperation(operation);
+
   const tx = {
     SmartOp: {
       from: Array.from(fromBytes),
-      operation,
+      operation: jsonOperation,
       fee,
       nonce,
       signing_key_id: Array.from(keyIdBytes),
