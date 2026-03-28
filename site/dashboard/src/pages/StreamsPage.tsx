@@ -217,7 +217,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
 
       if (passkey) {
         // Passkey wallet: use WebAuthn SmartOp signing
-        const balRes = await fetch(`${getNodeUrl()}/balance/${passkey.address}`, { signal: AbortSignal.timeout(5000) });
+        const balRes = await fetch(`${getNodeUrl()}/balance/${passkey.address.length > 40 ? passkey.address.slice(0, 40) : passkey.address}`, { signal: AbortSignal.timeout(5000) });
         const balData = await balRes.json();
         const nonce = balData.nonce ?? 0;
         await signAndSubmitSmartOp(
@@ -589,7 +589,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                       try {
                         const passkey = getPasskeyWallet();
                         if (passkey) {
-                          const balRes = await fetch(`${getNodeUrl()}/balance/${passkey.address}`, { signal: AbortSignal.timeout(5000) });
+                          const balRes = await fetch(`${getNodeUrl()}/balance/${passkey.address.length > 40 ? passkey.address.slice(0, 40) : passkey.address}`, { signal: AbortSignal.timeout(5000) });
                           const balData = await balRes.json();
                           await signAndSubmitSmartOp({ StreamCancel: { stream_id: s.id } }, MIN_FEE, balData.nonce ?? 0);
                         } else {
@@ -655,7 +655,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                       try {
                         const passkey = getPasskeyWallet();
                         if (passkey) {
-                          const balRes = await fetch(`${getNodeUrl()}/balance/${passkey.address}`, { signal: AbortSignal.timeout(5000) });
+                          const balRes = await fetch(`${getNodeUrl()}/balance/${passkey.address.length > 40 ? passkey.address.slice(0, 40) : passkey.address}`, { signal: AbortSignal.timeout(5000) });
                           const balData = await balRes.json();
                           await signAndSubmitSmartOp({ StreamWithdraw: { stream_id: s.id } }, MIN_FEE, balData.nonce ?? 0);
                         } else {

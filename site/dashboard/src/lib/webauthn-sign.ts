@@ -44,7 +44,9 @@ export async function signAndSubmitWithPasskey(
   const NETWORK_ID = new TextEncoder().encode(networkStr);
   const TYPE_TAG = new TextEncoder().encode('smart_transfer');
 
-  const fromBytes = hexToBytes(passkey.address);
+  const fromBytesRaw = hexToBytes(passkey.address);
+  // Address is always 20 bytes — truncate if stored as 32 bytes (full hash)
+  const fromBytes = fromBytesRaw.length > 20 ? fromBytesRaw.slice(0, 20) : fromBytesRaw;
   const toBytes = hexToBytes(to);
   const keyIdBytes = hexToBytes(passkey.keyId);
 
@@ -192,7 +194,9 @@ export async function signAndSubmitSmartOp(
 
   const networkStr = localStorage.getItem('ultradag_network') === 'mainnet' ? 'ultradag-mainnet-v1' : 'ultradag-testnet-v1';
   const NETWORK_ID = new TextEncoder().encode(networkStr);
-  const fromBytes = hexToBytes(passkey.address);
+  const fromBytesRaw = hexToBytes(passkey.address);
+  // Address is always 20 bytes — truncate if stored as 32 bytes (full hash)
+  const fromBytes = fromBytesRaw.length > 20 ? fromBytesRaw.slice(0, 20) : fromBytesRaw;
   const keyIdBytes = hexToBytes(passkey.keyId);
 
   // Build signable_bytes for SmartOpTx

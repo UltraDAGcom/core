@@ -41,13 +41,25 @@ export function hasPasskeyWallet(): boolean {
   return localStorage.getItem(STORAGE_KEY) !== null;
 }
 
+/** Normalize address to exactly 40 hex chars (20 bytes = UltraDAG Address size). */
+function normalizeAddr(addr: string): string {
+  const clean = addr.replace(/^0x/, '').toLowerCase();
+  return clean.length > 40 ? clean.slice(0, 40) : clean;
+}
+
 /** Get the stored passkey wallet info (or null). */
 export function getPasskeyWallet(): PasskeyWallet | null {
   if (cachedWallet) return cachedWallet;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    cachedWallet = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as PasskeyWallet;
+    // Fix old wallets that stored 64-char addresses (32 bytes) instead of 40-char (20 bytes)
+    if (parsed.address && parsed.address.replace(/^0x/, '').length > 40) {
+      parsed.address = normalizeAddr(parsed.address);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    }
+    cachedWallet = parsed;
     return cachedWallet;
   } catch {
     return null;
@@ -56,6 +68,7 @@ export function getPasskeyWallet(): PasskeyWallet | null {
 
 /** Save a new passkey wallet after creation. */
 export function savePasskeyWallet(wallet: PasskeyWallet): void {
+  wallet = { ...wallet, address: normalizeAddr(wallet.address) };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(wallet));
   cachedWallet = wallet;
   // Auto-unlock on creation
