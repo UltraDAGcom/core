@@ -27,52 +27,93 @@ const S = {
 };
 
 function ReceiveAddress({ wallet }: { wallet: Wallet }) {
-  const [showFull, setShowFull] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+      {/* QR Code */}
       <div style={{ background: '#fff', borderRadius: 12, padding: 12, display: 'inline-block' }}>
         <QrCode value={fullAddr(wallet.address)} size={200} />
       </div>
 
-      <div style={{ width: '100%' }}>
-        <span style={S.label}>Your Address</span>
-        <div style={{ background: 'var(--dag-card)', borderRadius: 10, padding: '12px 14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dag-text)' }}>{wallet.name}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            <code style={{ fontSize: 12, color: 'var(--dag-subheading)', ...S.mono }}>
-              {shortAddr(wallet.address)}
-            </code>
-            <CopyButton text={fullAddr(wallet.address)} label="Copy Address" />
-          </div>
-
-          {/* Show full address toggle */}
-          <button onClick={() => setShowFull(!showFull)} style={{
-            background: 'none', border: 'none', color: 'var(--dag-text-faint)', fontSize: 10,
-            cursor: 'pointer', padding: '6px 0 0', display: 'flex', alignItems: 'center', gap: 4,
-          }}>
-            <span style={{ transform: showFull ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'inline-block', fontSize: 8 }}>&#9654;</span>
-            {showFull ? 'Hide full address' : 'Show full address'}
-          </button>
-          {showFull && (
-            <div style={{ marginTop: 6, padding: '8px 10px', background: 'var(--dag-input-bg)', borderRadius: 8 }}>
-              <code style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono, wordBreak: 'break-all', lineHeight: 1.6 }}>
-                {prettyAddr(wallet.address)}
-              </code>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingTop: 6, marginTop: 6, borderTop: '1px solid var(--dag-table-border)' }}>
-                <span style={{ fontSize: 9, color: 'var(--dag-text-faint)', letterSpacing: 1 }}>HEX</span>
-                <code style={{ fontSize: 10, color: 'var(--dag-subheading)', ...S.mono, wordBreak: 'break-all' }}>{wallet.address}</code>
-                <CopyButton text={wallet.address} />
-              </div>
-            </div>
-          )}
+      {/* Primary: just the name */}
+      <div style={{ width: '100%', textAlign: 'center' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 4 }}>{wallet.name}</div>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'var(--dag-input-bg)', borderRadius: 8, padding: '6px 14px' }}>
+          <code style={{ fontSize: 12, color: 'var(--dag-text-muted)', ...S.mono }}>{shortAddr(wallet.address)}</code>
+          <CopyButton text={fullAddr(wallet.address)} label="Copy" />
         </div>
       </div>
 
       <p style={{ fontSize: 10.5, color: 'var(--dag-text-faint)', textAlign: 'center' }}>
-        Share your address or QR code. Names, bech32m, and hex are all accepted.
+        Share your name or scan the QR code to receive UDAG.
       </p>
+
+      {/* Advanced: full address details */}
+      <button onClick={() => setShowAdvanced(!showAdvanced)} style={{
+        background: 'none', border: 'none', color: 'var(--dag-text-faint)', fontSize: 10,
+        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+      }}>
+        <span style={{ fontSize: 8, transform: showAdvanced ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'inline-block' }}>▶</span>
+        Advanced
+      </button>
+      {showAdvanced && (
+        <div style={{ width: '100%', padding: '10px 12px', background: 'var(--dag-input-bg)', borderRadius: 10 }}>
+          <div style={{ marginBottom: 8 }}>
+            <span style={{ fontSize: 9, color: 'var(--dag-text-faint)', letterSpacing: 1 }}>BECH32M</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              <code style={{ fontSize: 10.5, color: 'var(--dag-text-muted)', ...S.mono, wordBreak: 'break-all', lineHeight: 1.5 }}>{prettyAddr(wallet.address)}</code>
+              <CopyButton text={fullAddr(wallet.address)} />
+            </div>
+          </div>
+          <div style={{ borderTop: '1px solid var(--dag-border)', paddingTop: 8 }}>
+            <span style={{ fontSize: 9, color: 'var(--dag-text-faint)', letterSpacing: 1 }}>HEX</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              <code style={{ fontSize: 10.5, color: 'var(--dag-text-muted)', ...S.mono, wordBreak: 'break-all' }}>{wallet.address}</code>
+              <CopyButton text={wallet.address} />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SendToInput({ value, onChange, onScanQr }: { value: string; onChange: (v: string) => void; onScanQr: () => void }) {
+  const [mode, setMode] = useState<'name' | 'address'>('name');
+  // Auto-detect: if user pastes something that looks like an address, switch to address mode
+  const handleChange = (v: string) => {
+    onChange(v);
+    if (v.startsWith('udag1') || v.startsWith('tudg1') || /^[0-9a-f]{40,64}$/i.test(v)) {
+      setMode('address');
+    }
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+        <div style={{ flex: 1, position: 'relative' }}>
+          <input
+            type="text" value={value} onChange={e => handleChange(e.target.value)}
+            placeholder={mode === 'name' ? 'Enter username (e.g. alice)' : 'udag1... or hex address'}
+            style={{ ...S.input, paddingRight: 40 }}
+          />
+          {mode === 'name' && (
+            <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: 'var(--dag-text-faint)' }}>@</span>
+          )}
+        </div>
+        <button onClick={onScanQr} style={{
+          padding: '0 12px', borderRadius: 10, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)',
+          color: 'var(--dag-text-muted)', cursor: 'pointer', fontSize: 16, flexShrink: 0, height: 42,
+        }} title="Scan QR">📷</button>
+      </div>
+
+      <button onClick={() => setMode(mode === 'name' ? 'address' : 'name')} style={{
+        background: 'none', border: 'none', color: 'var(--dag-text-faint)', fontSize: 10,
+        cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4,
+      }}>
+        <span style={{ fontSize: 8, transform: mode === 'address' ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'inline-block' }}>▶</span>
+        {mode === 'name' ? 'Use address instead' : 'Use name instead'}
+      </button>
     </div>
   );
 }
@@ -203,16 +244,8 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
               </div>
 
               <div>
-                <span style={S.label}>Recipient</span>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <div style={{ flex: 1 }}>
-                    <VerifiedAddressInput value={to} onChange={setTo} placeholder="Address, bech32m, or name" />
-                  </div>
-                  <button onClick={() => setShowScanner(true)} style={{
-                    padding: '0 12px', borderRadius: 10, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)',
-                    color: 'var(--dag-text-muted)', cursor: 'pointer', fontSize: 16, flexShrink: 0, alignSelf: 'flex-start', height: 42,
-                  }} title="Scan QR">📷</button>
-                </div>
+                <span style={S.label}>Send to</span>
+                <SendToInput value={to} onChange={v => { setTo(v); setError(''); }} onScanQr={() => setShowScanner(true)} />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
