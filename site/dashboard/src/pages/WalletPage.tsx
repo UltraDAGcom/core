@@ -79,6 +79,7 @@ export function WalletPage({
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPwModal, setShowPwModal] = useState(false);
   const [sel, setSel] = useState<number | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const pw = getPasskeyWallet();
 
   if (!unlocked) {
@@ -225,7 +226,7 @@ export function WalletPage({
                   }}>{selected.name[0]?.toUpperCase()}</div>
                   <div>
                     <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--dag-text)' }}>{selected.name}</div>
-                    <div style={{ fontSize: 10, color: 'var(--dag-text-faint)', ...S.mono, marginTop: 1 }}>{fullAddr(selected.address)}</div>
+                    <div style={{ fontSize: 10, color: 'var(--dag-text-faint)', ...S.mono, marginTop: 1 }}>{shortAddr(selected.address)}</div>
                   </div>
                 </div>
 
@@ -254,12 +255,30 @@ export function WalletPage({
                   <Link to="/smart-account" style={{ ...S.btn('#A855F7'), textDecoration: 'none' }}>◎ SmartAccount</Link>
                 </div>
 
-                {/* Address copy + remove */}
+                {/* Copy address + remove */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 12, borderTop: '1px solid var(--dag-table-border)' }}>
-                  <CopyButton text={selected.address} />
-                  <CopyButton text={fullAddr(selected.address)} />
+                  <CopyButton text={fullAddr(selected.address)} label="Copy Address" />
                   {sel !== null && (
                     <button onClick={() => { onRemoveWallet(sel); setSel(null); }} style={S.btn('#EF4444')}>Remove</button>
+                  )}
+                </div>
+
+                {/* Advanced section */}
+                <div style={{ marginTop: 14 }}>
+                  <button onClick={() => setShowAdvanced(!showAdvanced)} style={{
+                    background: 'none', border: 'none', color: 'var(--dag-text-faint)', fontSize: 10, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 4, padding: 0,
+                  }}>
+                    <span style={{ transform: showAdvanced ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'inline-block' }}>&#9654;</span>
+                    Advanced
+                  </button>
+                  {showAdvanced && (
+                    <div style={{ marginTop: 10, padding: '10px 12px', background: 'rgba(239,68,68,0.03)', border: '1px solid rgba(239,68,68,0.1)', borderRadius: 10 }}>
+                      <div style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginBottom: 4 }}>Full Bech32m Address</div>
+                      <div style={{ fontSize: 10, color: 'var(--dag-subheading)', ...S.mono, wordBreak: 'break-all', marginBottom: 8 }}>{fullAddr(selected.address)}</div>
+                      <div style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginBottom: 4 }}>Hex Address</div>
+                      <div style={{ fontSize: 10, color: 'var(--dag-subheading)', ...S.mono, wordBreak: 'break-all' }}>{selected.address}</div>
+                    </div>
                   )}
                 </div>
               </div>

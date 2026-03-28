@@ -800,7 +800,18 @@ export function WelcomeScreen({
                   <p className="text-[10px] text-dag-muted uppercase tracking-wider mb-1.5">Wallet Address</p>
                   <div className="flex items-center gap-2 bg-slate-800/60 rounded-lg p-2.5">
                     <Wallet className="w-3.5 h-3.5 text-dag-green flex-shrink-0" />
-                    <p className="text-xs font-mono text-dag-green break-all flex-1">{generatedKey?.address}</p>
+                    <p className="text-xs font-mono text-dag-green flex-1">
+                      {generatedKey?.address ? `${generatedKey.address.slice(0, 8)}...${generatedKey.address.slice(-6)}` : ''}
+                    </p>
+                    {generatedKey?.address && (
+                      <button onClick={() => copyText(generatedKey.address, 'address')}
+                        className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-all flex-shrink-0 ${
+                          copied === 'address' ? 'bg-dag-green/15 text-dag-green' : 'bg-slate-700/50 text-slate-400 hover:text-white'
+                        }`}>
+                        {copied === 'address' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                        {copied === 'address' ? 'Copied!' : 'Copy'}
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1004,7 +1015,7 @@ export function WelcomeScreen({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-dag-green font-semibold flex items-center gap-1.5"><Check className="w-3.5 h-3.5" /> Wallet Found</p>
-                    <p className="text-xs font-mono text-dag-green/80 break-all mt-0.5">{derivedAddress}</p>
+                    <p className="text-xs font-mono text-dag-green/80 mt-0.5">{derivedAddress.slice(0, 8)}...{derivedAddress.slice(-6)}</p>
                   </div>
                 </div>
               </div>

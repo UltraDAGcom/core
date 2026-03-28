@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Eye, EyeOff, Copy, Check, AlertTriangle } from 'lucide-react';
 
 interface AddWalletModalProps {
   open: boolean;
@@ -116,35 +116,13 @@ export function AddWalletModal({ open, onClose, onGenerate, onAdd }: AddWalletMo
           </div>
 
           {tab === 'generate' && (
-            <>
-              {!generated ? (
-                <button
-                  onClick={handleGenerate}
-                  disabled={loading}
-                  className="w-full py-2.5 rounded-lg bg-slate-700 text-slate-200 font-medium text-sm hover:bg-slate-600 disabled:opacity-50 transition-colors"
-                >
-                  {loading ? 'Generating...' : 'Generate Keypair'}
-                </button>
-              ) : (
-                <>
-                  <div>
-                    <label className="text-xs text-dag-muted uppercase tracking-wider">Address</label>
-                    <p className="mt-1 text-xs font-mono text-slate-300 bg-slate-800 px-3 py-2 rounded-lg break-all">
-                      {address}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-xs text-dag-muted uppercase tracking-wider">Secret Key</label>
-                    <p className="mt-1 text-xs font-mono text-yellow-400 bg-slate-800 px-3 py-2 rounded-lg break-all">
-                      {secretKey}
-                    </p>
-                    <p className="mt-1 text-[11px] text-yellow-500">
-                      Save this key securely. It cannot be recovered if lost.
-                    </p>
-                  </div>
-                </>
-              )}
-            </>
+            <GenerateTab
+              generated={generated}
+              loading={loading}
+              address={address}
+              secretKey={secretKey}
+              onGenerate={handleGenerate}
+            />
           )}
 
           {tab === 'import' && (
@@ -152,7 +130,7 @@ export function AddWalletModal({ open, onClose, onGenerate, onAdd }: AddWalletMo
               <div>
                 <label className="text-xs text-dag-muted uppercase tracking-wider">Secret Key (64 hex)</label>
                 <input
-                  type="text"
+                  type="password"
                   value={secretKey}
                   onChange={(e) => setSecretKey(e.target.value)}
                   placeholder="Enter 64-character hex secret key"
@@ -169,6 +147,7 @@ export function AddWalletModal({ open, onClose, onGenerate, onAdd }: AddWalletMo
                   className="mt-1 w-full px-3 py-2.5 bg-slate-800 border border-dag-border rounded-lg text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-dag-accent"
                 />
               </div>
+              <p className="text-[10px] text-slate-500">Your key is stored encrypted on this device. It never leaves your browser.</p>
             </>
           )}
 
@@ -184,6 +163,68 @@ export function AddWalletModal({ open, onClose, onGenerate, onAdd }: AddWalletMo
         </div>
       </div>
     </div>
+  );
+}
+
+function GenerateTab({ generated, loading, address, secretKey, onGenerate }: {
+  generated: boolean; loading: boolean; address: string; secretKey: string; onGenerate: () => void;
+}) {
+  const [showKey, setShowKey] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const truncAddr = address ? `${address.slice(0, 8)}...${address.slice(-6)}` : '';
+
+  const handleCopyKey = async () => {
+    try {
+      await navigator.clipboard.writeText(secretKey);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard unavailable */ }
+  };
+
+  if (!generated) {
+    return (
+      <button onClick={onGenerate} disabled={loading}
+        className="w-full py-2.5 rounded-lg bg-slate-700 text-slate-200 font-medium text-sm hover:bg-slate-600 disabled:opacity-50 transition-colors">
+        {loading ? 'Generating...' : 'Generate Keypair'}
+      </button>
+    );
+  }
+
+  return (
+    <>
+      <div>
+        <label className="text-xs text-dag-muted uppercase tracking-wider">Your Address</label>
+        <p className="mt-1 text-xs font-mono text-slate-300 bg-slate-800 px-3 py-2 rounded-lg">
+          {truncAddr}
+        </p>
+      </div>
+      <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-2">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
+          <p className="text-[11px] text-amber-400 font-medium">Save your private key. It cannot be recovered if lost.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowKey(!showKey)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[10px] font-medium bg-slate-700/60 text-slate-300 hover:bg-slate-700 hover:text-white transition-all">
+            {showKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+            {showKey ? 'Hide Key' : 'Show Private Key'}
+          </button>
+          <button onClick={handleCopyKey}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[10px] font-medium transition-all ${
+              copied ? 'bg-green-500/15 text-green-400' : 'bg-slate-700/60 text-slate-300 hover:bg-slate-700 hover:text-white'
+            }`}>
+            {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+            {copied ? 'Copied!' : 'Copy Key'}
+          </button>
+        </div>
+        {showKey && (
+          <p className="text-xs font-mono text-amber-300 bg-slate-800/80 px-3 py-2 rounded break-all border border-amber-500/10">
+            {secretKey}
+          </p>
+        )}
+      </div>
+    </>
   );
 }
 

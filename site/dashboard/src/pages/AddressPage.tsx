@@ -1,9 +1,52 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ChevronLeft, Wallet, Shield, Users, Crown } from 'lucide-react';
+import { ChevronLeft, Wallet, Shield, Users, Crown, ChevronDown, ChevronUp } from 'lucide-react';
 import { getBalance, getStake, getDelegation, getCouncil, connectToNode, isConnected, formatUdag, fullAddr, shortAddr } from '../lib/api.ts';
 import { CopyButton } from '../components/shared/CopyButton.tsx';
 import { Badge } from '../components/shared/Badge.tsx';
+
+function AddressHeader({ address, registeredName, isSmartAccount }: { address: string; registeredName: string | null; isSmartAccount: boolean }) {
+  const [showHex, setShowHex] = useState(false);
+  const bech = address ? fullAddr(address) : '';
+  const isHex = /^[0-9a-fA-F]{40}$/.test(address);
+
+  return (
+    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 space-y-2">
+      {registeredName && (
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-dag-accent font-bold text-lg">{registeredName}</span>
+          {isSmartAccount && <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">SmartAccount</span>}
+        </div>
+      )}
+
+      {/* Primary: bech32m address */}
+      <div>
+        <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Bech32m Address</p>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-sm text-slate-200 break-all">{bech}</span>
+          {bech && <CopyButton text={bech} />}
+        </div>
+      </div>
+
+      {/* Collapsible hex section */}
+      {isHex && (
+        <div>
+          <button onClick={() => setShowHex(!showHex)}
+            className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-300 transition-colors mt-1">
+            {showHex ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            {showHex ? 'Hide hex address' : 'Show hex address'}
+          </button>
+          {showHex && (
+            <div className="flex items-center gap-2 mt-1.5 pl-1">
+              <p className="font-mono text-xs text-slate-500 break-all">{address}</p>
+              <CopyButton text={address} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function AddressPage() {
   const { address } = useParams<{ address: string }>();
@@ -73,21 +116,7 @@ export function AddressPage() {
         <h1 className="text-xl font-bold text-white">Address</h1>
       </div>
 
-      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 space-y-1">
-        {registeredName && (
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-dag-accent font-bold text-lg">{registeredName}</span>
-            {isSmartAccount && <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">SmartAccount</span>}
-          </div>
-        )}
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-sm text-slate-200 break-all">{address ? fullAddr(address) : ''}</span>
-          {address && <CopyButton text={address} />}
-        </div>
-        {address && /^[0-9a-fA-F]{40}$/.test(address) && (
-          <p className="font-mono text-xs text-slate-500 break-all">{address}</p>
-        )}
-      </div>
+      <AddressHeader address={address ?? ''} registeredName={registeredName} isSmartAccount={isSmartAccount} />
 
       {error && <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">{error}</div>}
 

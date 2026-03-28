@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 
-export function CopyButton({ text }: { text: string }) {
+export function CopyButton({ text, label }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -21,6 +21,7 @@ export function CopyButton({ text }: { text: string }) {
       title="Copy"
     >
       {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+      {label && <span className="ml-1 text-[10px]">{label}</span>}
       {copied && (
         <span className="absolute -top-7 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded bg-dag-card border border-dag-border text-[10px] text-dag-green whitespace-nowrap shadow-lg animate-copy-tooltip pointer-events-none">
           Copied!

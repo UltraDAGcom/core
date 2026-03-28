@@ -26,6 +26,57 @@ const S = {
   mono: { fontFamily: "'DM Mono',monospace" },
 };
 
+function ReceiveAddress({ wallet }: { wallet: Wallet }) {
+  const [showFull, setShowFull] = useState(false);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+      <div style={{ background: '#fff', borderRadius: 12, padding: 12, display: 'inline-block' }}>
+        <QrCode value={fullAddr(wallet.address)} size={200} />
+      </div>
+
+      <div style={{ width: '100%' }}>
+        <span style={S.label}>Your Address</span>
+        <div style={{ background: 'var(--dag-card)', borderRadius: 10, padding: '12px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dag-text)' }}>{wallet.name}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <code style={{ fontSize: 12, color: 'var(--dag-subheading)', ...S.mono }}>
+              {shortAddr(wallet.address)}
+            </code>
+            <CopyButton text={fullAddr(wallet.address)} label="Copy Address" />
+          </div>
+
+          {/* Show full address toggle */}
+          <button onClick={() => setShowFull(!showFull)} style={{
+            background: 'none', border: 'none', color: 'var(--dag-text-faint)', fontSize: 10,
+            cursor: 'pointer', padding: '6px 0 0', display: 'flex', alignItems: 'center', gap: 4,
+          }}>
+            <span style={{ transform: showFull ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'inline-block', fontSize: 8 }}>&#9654;</span>
+            {showFull ? 'Hide full address' : 'Show full address'}
+          </button>
+          {showFull && (
+            <div style={{ marginTop: 6, padding: '8px 10px', background: 'var(--dag-input-bg)', borderRadius: 8 }}>
+              <code style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono, wordBreak: 'break-all', lineHeight: 1.6 }}>
+                {prettyAddr(wallet.address)}
+              </code>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingTop: 6, marginTop: 6, borderTop: '1px solid var(--dag-table-border)' }}>
+                <span style={{ fontSize: 9, color: 'var(--dag-text-faint)', letterSpacing: 1 }}>HEX</span>
+                <code style={{ fontSize: 10, color: 'var(--dag-subheading)', ...S.mono, wordBreak: 'break-all' }}>{wallet.address}</code>
+                <CopyButton text={wallet.address} />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <p style={{ fontSize: 10.5, color: 'var(--dag-text-faint)', textAlign: 'center' }}>
+        Share your address or QR code. Names, bech32m, and hex are all accepted.
+      </p>
+    </div>
+  );
+}
+
 interface SendPageProps {
   wallets: Wallet[];
   balances: Map<string, WalletBalance>;
@@ -225,32 +276,7 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
           </div>
 
           {receiveWallet && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-              <div style={{ background: '#fff', borderRadius: 12, padding: 12, display: 'inline-block' }}>
-                <QrCode value={fullAddr(receiveWallet.address)} size={200} />
-              </div>
-
-              <div style={{ width: '100%' }}>
-                <span style={S.label}>Your Address</span>
-                <div style={{ background: 'var(--dag-card)', borderRadius: 10, padding: '12px 14px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
-                    <code style={{ fontSize: 12, color: 'var(--dag-text)', ...S.mono, wordBreak: 'break-all', lineHeight: 1.6 }}>
-                      {prettyAddr(receiveWallet.address)}
-                    </code>
-                    <CopyButton text={fullAddr(receiveWallet.address)} />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingTop: 8, borderTop: '1px solid var(--dag-table-border)' }}>
-                    <span style={{ fontSize: 9, color: 'var(--dag-text-faint)', letterSpacing: 1 }}>HEX</span>
-                    <code style={{ fontSize: 10.5, color: 'var(--dag-subheading)', ...S.mono, wordBreak: 'break-all' }}>{receiveWallet.address}</code>
-                    <CopyButton text={receiveWallet.address} />
-                  </div>
-                </div>
-              </div>
-
-              <p style={{ fontSize: 10.5, color: 'var(--dag-text-faint)', textAlign: 'center' }}>
-                Both bech32m and hex formats are accepted. Names also work — try sending to a username.
-              </p>
-            </div>
+            <ReceiveAddress wallet={receiveWallet} />
           )}
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Plus, Key, ChevronLeft, Wallet } from 'lucide-react';
+import { X, Plus, Key, ChevronLeft, Wallet, Eye, EyeOff, Copy, Check, AlertTriangle } from 'lucide-react';
 import { deriveAddress, generateKeypair } from '../../lib/keygen';
 
 interface CreateKeystoreModalProps {
@@ -181,18 +181,7 @@ export function CreateKeystoreModal({
           {screen === 'create' && (
             <>
               {generatedKey && (
-                <div className="bg-slate-800/50 rounded-lg p-3 border border-dag-accent/30 space-y-2">
-                  <p className="text-[10px] text-dag-accent uppercase tracking-wider font-semibold">Your New Wallet</p>
-                  <div>
-                    <p className="text-[10px] text-dag-muted uppercase tracking-wider">Address</p>
-                    <p className="text-xs font-mono text-dag-green break-all">{generatedKey.address}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-dag-muted uppercase tracking-wider">Private Key</p>
-                    <p className="text-xs font-mono text-slate-400 break-all blur-sm hover:blur-none transition-all cursor-pointer" title="Hover to reveal">{generatedKey.secret_key}</p>
-                  </div>
-                  <p className="text-[10px] text-amber-400">Save your private key somewhere safe. It cannot be recovered.</p>
-                </div>
+                <KeystoreKeyDisplay address={generatedKey.address} secretKey={generatedKey.secret_key} />
               )}
               <input
                 type="text" value={walletName} onChange={(e) => setWalletName(e.target.value)}
@@ -229,8 +218,8 @@ export function CreateKeystoreModal({
               />
               {derivedAddress && (
                 <div className="bg-slate-800/50 rounded-lg px-3 py-2 border border-dag-border/50">
-                  <p className="text-[10px] text-dag-muted uppercase tracking-wider">Address</p>
-                  <p className="text-xs font-mono text-dag-green break-all">{derivedAddress}</p>
+                  <p className="text-[10px] text-dag-muted uppercase tracking-wider">Detected Address</p>
+                  <p className="text-xs font-mono text-dag-green">{derivedAddress.slice(0, 8)}...{derivedAddress.slice(-6)}</p>
                 </div>
               )}
               <input
@@ -268,6 +257,57 @@ export function CreateKeystoreModal({
           )}
 
         </div>
+      </div>
+    </div>
+  );
+}
+
+function KeystoreKeyDisplay({ address, secretKey }: { address: string; secretKey: string }) {
+  const [showKey, setShowKey] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const truncAddr = `${address.slice(0, 8)}...${address.slice(-6)}`;
+
+  const handleCopyKey = async () => {
+    try {
+      await navigator.clipboard.writeText(secretKey);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard unavailable */ }
+  };
+
+  return (
+    <div className="bg-slate-800/50 rounded-lg p-3 border border-dag-accent/30 space-y-3">
+      <p className="text-[10px] text-dag-accent uppercase tracking-wider font-semibold">Your New Wallet</p>
+      <div>
+        <p className="text-[10px] text-dag-muted uppercase tracking-wider">Address</p>
+        <p className="text-xs font-mono text-dag-green">{truncAddr}</p>
+      </div>
+
+      <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-2.5 space-y-2">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="w-3 h-3 text-amber-400 mt-0.5 flex-shrink-0" />
+          <p className="text-[10px] text-amber-400 font-medium">Save your private key somewhere safe. It cannot be recovered.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowKey(!showKey)}
+            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium bg-slate-700/60 text-slate-300 hover:bg-slate-700 hover:text-white transition-all">
+            {showKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+            {showKey ? 'Hide Key' : 'Show Private Key'}
+          </button>
+          <button onClick={handleCopyKey}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-all ${
+              copied ? 'bg-green-500/15 text-green-400' : 'bg-slate-700/60 text-slate-300 hover:bg-slate-700 hover:text-white'
+            }`}>
+            {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+            {copied ? 'Copied!' : 'Copy Key'}
+          </button>
+        </div>
+        {showKey && (
+          <p className="text-xs font-mono text-amber-300 bg-slate-800/80 px-2.5 py-2 rounded break-all border border-amber-500/10">
+            {secretKey}
+          </p>
+        )}
       </div>
     </div>
   );
