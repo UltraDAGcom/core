@@ -13,7 +13,9 @@
  * No secret keys. No passwords. No seed phrases. Security = biometrics.
  */
 
-const STORAGE_KEY = 'ultradag_passkey'; // v2: address normalization
+import { blake3 } from '@noble/hashes/blake3.js';
+
+const STORAGE_KEY = 'ultradag_passkey';
 const SESSION_KEY = 'ultradag_passkey_unlocked';
 
 export interface PasskeyWallet {
@@ -32,14 +34,26 @@ let sessionUnlocked = false;
 // Check sessionStorage for unlock state (survives page refresh within tab)
 if (typeof window !== 'undefined') {
   sessionUnlocked = sessionStorage.getItem(SESSION_KEY) === 'true';
-  // Auto-fix old passkey wallets with 64-char addresses (should be 40)
+  // Auto-fix passkey wallets with wrong addresses.
+  // Re-derive the correct address from P256 pubkey: blake3("smart_account_p256" || pubkey)[:20]
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const w = JSON.parse(raw);
-      if (w.address && w.address.replace(/^0x/, '').length > 40) {
-        w.address = w.address.replace(/^0x/, '').toLowerCase().slice(0, 40);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(w));
+      if (w.p256PubkeyHex) {
+        const pubkeyBytes = new Uint8Array(w.p256PubkeyHex.length / 2);
+        for (let i = 0; i < w.p256PubkeyHex.length; i += 2)
+          pubkeyBytes[i / 2] = parseInt(w.p256PubkeyHex.substring(i, i + 2), 16);
+        const prefix = new TextEncoder().encode('smart_account_p256');
+        const combined = new Uint8Array(prefix.length + pubkeyBytes.length);
+        combined.set(prefix); combined.set(pubkeyBytes, prefix.length);
+        const fullHash = blake3(combined);
+        const correctAddr = Array.from(fullHash.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join('');
+        if (w.address !== correctAddr) {
+          console.log(`[passkey] Fixing address: ${w.address} → ${correctAddr}`);
+          w.address = correctAddr;
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(w));
+        }
       }
     }
   } catch { /* ignore */ }
@@ -52,10 +66,16 @@ export function hasPasskeyWallet(): boolean {
   return localStorage.getItem(STORAGE_KEY) !== null;
 }
 
-/** Normalize address to exactly 40 hex chars (20 bytes = UltraDAG Address size). */
-function normalizeAddr(addr: string): string {
-  const clean = addr.replace(/^0x/, '').toLowerCase();
-  return clean.length > 40 ? clean.slice(0, 40) : clean;
+/** Derive correct address from P256 pubkey: blake3("smart_account_p256" || pubkey)[:20] */
+function deriveAddress(p256PubkeyHex: string): string {
+  const pubkeyBytes = new Uint8Array(p256PubkeyHex.length / 2);
+  for (let i = 0; i < p256PubkeyHex.length; i += 2)
+    pubkeyBytes[i / 2] = parseInt(p256PubkeyHex.substring(i, i + 2), 16);
+  const prefix = new TextEncoder().encode('smart_account_p256');
+  const combined = new Uint8Array(prefix.length + pubkeyBytes.length);
+  combined.set(prefix); combined.set(pubkeyBytes, prefix.length);
+  const fullHash = blake3(combined);
+  return Array.from(fullHash.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 /** Get the stored passkey wallet info (or null). */
@@ -65,10 +85,13 @@ export function getPasskeyWallet(): PasskeyWallet | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PasskeyWallet;
-    // Fix old wallets that stored 64-char addresses (32 bytes) instead of 40-char (20 bytes)
-    if (parsed.address && parsed.address.replace(/^0x/, '').length > 40) {
-      parsed.address = normalizeAddr(parsed.address);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    // Always verify address matches the P256 pubkey derivation
+    if (parsed.p256PubkeyHex) {
+      const correct = deriveAddress(parsed.p256PubkeyHex);
+      if (parsed.address !== correct) {
+        parsed.address = correct;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      }
     }
     cachedWallet = parsed;
     return cachedWallet;
@@ -79,7 +102,10 @@ export function getPasskeyWallet(): PasskeyWallet | null {
 
 /** Save a new passkey wallet after creation. */
 export function savePasskeyWallet(wallet: PasskeyWallet): void {
-  wallet = { ...wallet, address: normalizeAddr(wallet.address) };
+  // Always derive address from pubkey to ensure correctness
+  if (wallet.p256PubkeyHex) {
+    wallet = { ...wallet, address: deriveAddress(wallet.p256PubkeyHex) };
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(wallet));
   cachedWallet = wallet;
   // Auto-unlock on creation
