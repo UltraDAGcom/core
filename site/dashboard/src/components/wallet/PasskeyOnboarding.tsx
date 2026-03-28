@@ -267,33 +267,42 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
             }}>
               <span style={{ fontSize: 26, color: '#00E0C4' }}>✓</span>
             </div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 4 }}>Passkey Created!</h2>
-            <p style={{ fontSize: 12, color: 'var(--dag-text-muted)' }}>Now choose your username.</p>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 4 }}>Choose a Username</h2>
+            <p style={{ fontSize: 12, color: 'var(--dag-text-muted)' }}>This is how people will find and pay you.</p>
           </div>
 
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--dag-text-muted)', letterSpacing: 1, marginBottom: 6 }}>CHOOSE A USERNAME</div>
+          <div style={{ marginBottom: 20 }}>
             <div style={{ position: 'relative' }}>
               <input type="text" value={username}
                 onChange={(e) => checkName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                placeholder="john29" maxLength={20} autoFocus
-                style={inputStyle} />
-              {checking && <span style={{ position: 'absolute', right: 14, top: 13, color: 'var(--dag-text-faint)', fontSize: 12 }}>...</span>}
-              {!checking && nameAvailable === true && <span style={{ position: 'absolute', right: 14, top: 12, color: '#00E0C4', fontSize: 16 }}>✓</span>}
+                placeholder="your-username" maxLength={20} autoFocus
+                style={{ ...inputStyle, fontSize: 18, padding: '14px 44px 14px 14px', textAlign: 'center' }} />
+              {checking && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--dag-text-faint)', fontSize: 14 }}>...</span>}
+              {!checking && nameAvailable === true && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#00E0C4', fontSize: 18 }}>✓</span>}
+              {!checking && nameAvailable === false && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#EF4444', fontSize: 18 }}>✗</span>}
             </div>
-            {nameError && <p style={{ fontSize: 10.5, color: '#FFB800', marginTop: 4 }}>{nameError}</p>}
-            {nameAvailable && nameFee && <p style={{ fontSize: 10.5, color: '#00E0C4', marginTop: 4 }}>{username} is available! ({nameFee})</p>}
+            {/* Status message below input */}
+            <div style={{ minHeight: 22, marginTop: 6, textAlign: 'center' }}>
+              {username.length > 0 && username.length < 3 && (
+                <span style={{ fontSize: 11, color: 'var(--dag-text-faint)' }}>At least 3 characters</span>
+              )}
+              {nameError && <span style={{ fontSize: 11, color: '#FFB800' }}>{nameError}</span>}
+              {!nameError && nameAvailable && nameFee && (
+                <span style={{ fontSize: 11, color: '#00E0C4' }}>Available {nameFee !== 'Free' ? `· ${nameFee}` : ''}</span>
+              )}
+            </div>
           </div>
 
           <button onClick={handleCreate} disabled={creating || !(username.length >= 3 && nameAvailable)} style={{
-            width: '100%', padding: '13px 0', borderRadius: 12,
-            background: (username.length >= 3 && nameAvailable) ? 'linear-gradient(135deg, #00E0C4, #0066FF)' : 'var(--dag-border)',
-            color: (username.length >= 3 && nameAvailable) ? '#fff' : 'var(--dag-text-faint)',
-            fontSize: 14, fontWeight: 700, cursor: (username.length >= 3 && nameAvailable) ? 'pointer' : 'not-allowed', border: 'none',
-            opacity: creating ? 0.5 : 1, boxShadow: (username.length >= 3 && nameAvailable) ? '0 4px 20px rgba(0,224,196,0.2)' : 'none',
-            transition: 'all 0.2s',
+            width: '100%', padding: '14px 0', borderRadius: 12,
+            background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
+            color: '#fff', fontSize: 14, fontWeight: 700, border: 'none',
+            opacity: (creating || !(username.length >= 3 && nameAvailable)) ? 0.35 : 1,
+            cursor: (creating || !(username.length >= 3 && nameAvailable)) ? 'default' : 'pointer',
+            boxShadow: '0 4px 20px rgba(0,224,196,0.2)',
+            transition: 'opacity 0.2s',
           }}>
-            {username.length >= 3 && nameAvailable ? `Create Wallet as ${username}` : 'Choose a username to continue'}
+            {creating ? 'Creating...' : 'Create Wallet'}
           </button>
 
           {error && <div style={{ marginTop: 12, fontSize: 11, color: '#EF4444', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 8, padding: '8px 12px' }}>{error}</div>}

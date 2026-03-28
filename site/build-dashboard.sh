@@ -13,9 +13,14 @@ rm -f assets/*.js assets/*.css
 
 npm run build
 
-echo "📦 Copying built files..."
+echo "📦 Copying built assets..."
 rm -rf assets/*.js assets/*.css
-cp -r dist/* .
+# Copy built assets (JS/CSS) but keep the dev index.html intact
+cp -r dist/assets/* assets/
+# The production index.html goes to index.html (Netlify serves this)
+# but we keep a dev copy for local development
+cp index.html index.dev.html
+cp dist/index.html index.html
 
 echo "✅ Dashboard built and ready for deployment!"
 echo ""
