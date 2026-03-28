@@ -25,6 +25,7 @@ import { usePasskeyWallet } from './hooks/usePasskeyWallet';
 import { useNode } from './hooks/useNode';
 import { useWalletBalances } from './hooks/useWalletBalances';
 import { useNotifications } from './hooks/useNotifications';
+import { useTheme } from './hooks/useTheme';
 import { getNodeUrl, getNetwork, switchNetwork, type NetworkType } from './lib/api';
 import { ToastProvider } from './hooks/useToast';
 
@@ -32,6 +33,7 @@ function App() {
   const pk = usePasskeyWallet();
   const ks = useKeystore();
   const node = useNode();
+  const { theme, toggle: toggleTheme } = useTheme();
 
   // Unified wallet list: passkey wallet (if exists) + keystore wallets
   // Memoized to prevent infinite re-render loops in useWalletBalances
@@ -93,14 +95,14 @@ function App() {
   if (pk.hasWallet && !pk.unlocked && !showOnboarding) {
     return (
       <ToastProvider>
-        <div style={{ minHeight: '100vh', background: '#080C14', fontFamily: "'DM Sans',sans-serif", display: 'flex', flexDirection: 'column' }}>
+        <div style={{ minHeight: '100vh', background: 'var(--dag-bg)', fontFamily: "'DM Sans',sans-serif", display: 'flex', flexDirection: 'column' }}>
           <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}} @keyframes glow{0%,100%{box-shadow:0 0 20px rgba(0,224,196,0.15)}50%{box-shadow:0 0 40px rgba(0,224,196,0.3)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}`}</style>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ maxWidth: 380, width: '100%', textAlign: 'center', padding: '0 20px', animation: 'slideUp 0.5s ease' }}>
               {/* Logo */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 40, opacity: 0.6 }}>
                 <div style={{ width: 28, height: 28, borderRadius: 7, background: 'linear-gradient(135deg,#00E0C4,#0066FF)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#fff' }}>U</div>
-                <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.5, color: '#fff' }}>ULTRADAG</span>
+                <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.5, color: 'var(--dag-text)' }}>ULTRADAG</span>
               </div>
 
               {/* Biometric icon */}
@@ -114,10 +116,10 @@ function App() {
                 <span style={{ fontSize: 38 }}>◎</span>
               </div>
 
-              <h1 style={{ fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 6 }}>
+              <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 6 }}>
                 Welcome back{pk.wallet?.name ? `, ${pk.wallet.name}` : ''}
               </h1>
-              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', marginBottom: 28 }}>
+              <p style={{ fontSize: 12, color: 'var(--dag-subheading)', marginBottom: 28 }}>
                 Verify your identity to unlock your wallet
               </p>
 
@@ -133,7 +135,7 @@ function App() {
               </button>
 
               <button onClick={() => pk.destroy()} style={{
-                background: 'none', border: 'none', color: 'rgba(255,255,255,0.15)',
+                background: 'none', border: 'none', color: 'var(--dag-text-faint)',
                 fontSize: 11, cursor: 'pointer', marginTop: 20, transition: 'color 0.2s',
               }}>
                 Start Fresh
@@ -149,12 +151,12 @@ function App() {
   if ((!pk.hasWallet && !ks.unlocked) || showOnboarding) {
     return (
       <ToastProvider>
-        <div style={{ minHeight: '100vh', background: '#080C14', fontFamily: "'DM Sans',sans-serif" }}>
+        <div style={{ minHeight: '100vh', background: 'var(--dag-bg)', fontFamily: "'DM Sans',sans-serif" }}>
           <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}} @keyframes glow{0%,100%{box-shadow:0 0 12px rgba(0,224,196,0.15)}50%{box-shadow:0 0 20px rgba(0,224,196,0.3)}}`}</style>
           {/* Minimal top bar */}
           <header style={{
             height: 52, display: 'flex', alignItems: 'center', padding: '0 20px',
-            borderBottom: '1px solid rgba(255,255,255,0.03)',
+            borderBottom: '1px solid var(--dag-table-border)',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
               <div style={{
@@ -164,7 +166,7 @@ function App() {
                 fontSize: 12, fontWeight: 800, color: '#fff',
                 animation: 'glow 4s ease-in-out infinite',
               }}>U</div>
-              <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.2, color: '#fff' }}>ULTRADAG</span>
+              <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.2, color: 'var(--dag-text)' }}>ULTRADAG</span>
             </div>
           </header>
           <WelcomeScreen
@@ -215,6 +217,8 @@ function App() {
               sessionTotalSeconds={pk.unlocked ? 9999 : ks.sessionTotalSeconds}
               onToggleLock={handleToggleLock}
               onSwitchNetwork={handleSwitchNetwork}
+              theme={theme}
+              onToggleTheme={toggleTheme}
             />
           }
         >

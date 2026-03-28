@@ -13,7 +13,7 @@ interface CouncilData {
 }
 
 const S = {
-  card: { background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '18px 20px' } as React.CSSProperties,
+  card: { background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '18px 20px' } as React.CSSProperties,
   mono: { fontFamily: "'DM Mono',monospace" },
 };
 
@@ -42,7 +42,7 @@ export function CouncilPage() {
     return () => window.removeEventListener('ultradag-network-switch', handler);
   }, [refresh]);
 
-  if (loading) return <div style={{ padding: '18px 26px', color: 'rgba(255,255,255,0.2)', fontSize: 12, fontFamily: "'DM Sans',sans-serif" }}>Loading council...</div>;
+  if (loading) return <div style={{ padding: '18px 26px', color: 'var(--dag-text-faint)', fontSize: 12, fontFamily: "'DM Sans',sans-serif" }}>Loading council...</div>;
 
   const members = council?.members ?? [];
   const memberCount = council?.member_count ?? members.length;
@@ -56,22 +56,22 @@ export function CouncilPage() {
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
       <div style={{ marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
-        <h1 style={{ fontSize: 21, fontWeight: 700, color: '#fff' }}>Council of 21</h1>
-        <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>The elected governance body that guides UltraDAG</p>
+        <h1 style={{ fontSize: 21, fontWeight: 700, color: 'var(--dag-text)' }}>Council of 21</h1>
+        <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>The elected governance body that guides UltraDAG</p>
       </div>
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 18, animation: 'slideUp 0.4s ease' }}>
         {[
           { l: 'MEMBERS', v: `${memberCount}/${maxMembers}`, c: '#A855F7', i: '♛' },
-          { l: 'OPEN SEATS', v: String(openSeats), c: openSeats > 0 ? '#00E0C4' : 'rgba(255,255,255,0.3)', i: '◇' },
+          { l: 'OPEN SEATS', v: String(openSeats), c: openSeats > 0 ? '#00E0C4' : 'var(--dag-text-muted)', i: '◇' },
           { l: 'PER-MEMBER', v: `${perMemberReward} UDAG`, c: '#FFB800', i: '⬡' },
           { l: 'EMISSION', v: `${emissionPercent}%`, c: '#0066FF', i: '◎' },
         ].map((s, i) => (
           <div key={i} style={S.card}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
               <span style={{ color: s.c, fontSize: 13 }}>{s.i}</span>
-              <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)', letterSpacing: 1.2 }}>{s.l}</span>
+              <span style={{ fontSize: 9, color: 'var(--dag-subheading)', letterSpacing: 1.2 }}>{s.l}</span>
             </div>
             <div style={{ fontSize: 22, fontWeight: 700, color: s.c, ...S.mono }}>{s.v}</div>
           </div>
@@ -83,7 +83,7 @@ export function CouncilPage() {
         <div style={S.card}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
             <span style={{ color: '#A855F7', fontSize: 14 }}>♛</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Seat Categories</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Seat Categories</span>
           </div>
           <CouncilSeatGrid members={members} seats={council?.seats} />
         </div>
@@ -93,7 +93,7 @@ export function CouncilPage() {
           <div style={S.card}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
               <span style={{ color: '#0066FF', fontSize: 14 }}>⚙</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Governance Parameters</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Governance Parameters</span>
             </div>
 
             {/* Percentage params */}
@@ -102,9 +102,9 @@ export function CouncilPage() {
               return pcts.length > 0 ? (
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(pcts.length, 3)},1fr)`, gap: 8, marginBottom: 12 }}>
                   {pcts.map(([k, v]) => (
-                    <div key={k} style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 8, padding: '10px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.22)', letterSpacing: 0.8, marginBottom: 3 }}>{k.replace(/_/g, ' ')}</div>
-                      <div style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>{String(v)}%</div>
+                    <div key={k} style={{ background: 'var(--dag-card)', borderRadius: 8, padding: '10px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 9, color: 'var(--dag-text-faint)', letterSpacing: 0.8, marginBottom: 3 }}>{k.replace(/_/g, ' ')}</div>
+                      <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--dag-text)' }}>{String(v)}%</div>
                     </div>
                   ))}
                 </div>
@@ -114,7 +114,7 @@ export function CouncilPage() {
             {/* Governable params tags */}
             {Array.isArray(govConfig.governable_params) && (
               <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.22)', letterSpacing: 1, marginBottom: 6 }}>GOVERNABLE</div>
+                <div style={{ fontSize: 9, color: 'var(--dag-text-faint)', letterSpacing: 1, marginBottom: 6 }}>GOVERNABLE</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                   {(govConfig.governable_params as string[]).map(p => (
                     <span key={p} style={{ fontSize: 9.5, padding: '2px 8px', borderRadius: 4, background: 'rgba(0,224,196,0.08)', color: '#00E0C4', fontWeight: 500 }}>{p.replace(/_/g, ' ')}</span>
@@ -128,9 +128,9 @@ export function CouncilPage() {
               {Object.entries(govConfig)
                 .filter(([k]) => !k.includes('percent') && k !== 'governable_params')
                 .map(([k, v]) => (
-                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
-                    <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.28)' }}>{k.replace(/_/g, ' ')}</span>
-                    <span style={{ fontSize: 10.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)', ...S.mono }}>{typeof v === 'number' ? v.toLocaleString() : String(v)}</span>
+                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--dag-row-border)' }}>
+                    <span style={{ fontSize: 10.5, color: 'var(--dag-text-muted)' }}>{k.replace(/_/g, ' ')}</span>
+                    <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--dag-text-secondary)', ...S.mono }}>{typeof v === 'number' ? v.toLocaleString() : String(v)}</span>
                   </div>
                 ))}
             </div>
@@ -142,22 +142,22 @@ export function CouncilPage() {
       <div style={{ ...S.card, marginTop: 16, animation: 'slideUp 0.6s ease' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
           <span style={{ color: '#A855F7', fontSize: 14 }}>◉</span>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Members ({members.length})</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Members ({members.length})</span>
         </div>
         {members.length === 0 ? (
-          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', textAlign: 'center', padding: '20px 0' }}>No council members.</p>
+          <p style={{ fontSize: 12, color: 'var(--dag-text-faint)', textAlign: 'center', padding: '20px 0' }}>No council members.</p>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'auto 2fr 1fr', gap: '0 16px' }}>
             {['#', 'ADDRESS', 'CATEGORY'].map((h, i) => (
-              <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'rgba(255,255,255,0.18)', letterSpacing: 1.5, paddingBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.03)' }}>{h}</div>
+              <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'var(--dag-text-faint)', letterSpacing: 1.5, paddingBottom: 8, borderBottom: '1px solid var(--dag-table-border)' }}>{h}</div>
             ))}
             {members.map((m, i) => [
-              <div key={`n${i}`} style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)', padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.015)' }}>{i + 1}</div>,
-              <div key={`a${i}`} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.015)' }}>
-                <span style={{ fontSize: 11, color: '#fff', ...S.mono }}>{shortAddr(m.address)}</span>
+              <div key={`n${i}`} style={{ fontSize: 11, color: 'var(--dag-text-faint)', padding: '7px 0', borderBottom: '1px solid var(--dag-row-border)' }}>{i + 1}</div>,
+              <div key={`a${i}`} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 0', borderBottom: '1px solid var(--dag-row-border)' }}>
+                <span style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono }}>{shortAddr(m.address)}</span>
                 <CopyButton text={m.address} />
               </div>,
-              <div key={`c${i}`} style={{ padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.015)' }}>
+              <div key={`c${i}`} style={{ padding: '7px 0', borderBottom: '1px solid var(--dag-row-border)' }}>
                 <span style={{ fontSize: 9.5, padding: '2px 8px', borderRadius: 4, background: (catColor[m.category] || '#888') + '12', color: catColor[m.category] || '#888', fontWeight: 600 }}>{m.category}</span>
               </div>,
             ]).flat()}

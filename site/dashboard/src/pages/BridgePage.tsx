@@ -491,9 +491,9 @@ export function BridgePage() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <span style={{ fontSize: 18, color: '#00E0C4' }}>⟷</span>
-              <h1 style={{ fontSize: 21, fontWeight: 700, color: '#fff' }}>UltraDAG Bridge</h1>
+              <h1 style={{ fontSize: 21, fontWeight: 700, color: 'var(--dag-text)' }}>UltraDAG Bridge</h1>
             </div>
-            <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)' }}>
+            <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)' }}>
               Secured by the validator federation — no external relayers
             </p>
           </div>

@@ -5,7 +5,7 @@ import { VoteButton } from '../components/governance/VoteButton';
 import { CreateProposalModal } from '../components/governance/CreateProposalModal';
 
 const S = {
-  card: { background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '18px 20px' } as React.CSSProperties,
+  card: { background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '18px 20px' } as React.CSSProperties,
   mono: { fontFamily: "'DM Mono',monospace" },
 };
 
@@ -23,7 +23,7 @@ interface Proposal {
   voters?: Array<{ address: string; vote: string; vote_weight: number; category?: string }>;
 }
 
-const statusColor = (s: string) => s === 'Active' ? '#00E0C4' : s === 'Executed' ? '#0066FF' : s === 'PassedPending' ? '#FFB800' : s === 'Rejected' || s === 'Failed' ? '#EF4444' : 'rgba(255,255,255,0.3)';
+const statusColor = (s: string) => s === 'Active' ? '#00E0C4' : s === 'Executed' ? '#0066FF' : s === 'PassedPending' ? '#FFB800' : s === 'Rejected' || s === 'Failed' ? '#EF4444' : 'var(--dag-text-muted)';
 
 export function GovernancePage() {
   const { wallets, unlocked } = useKeystore();
@@ -63,11 +63,11 @@ export function GovernancePage() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
         <div>
-          <h1 style={{ fontSize: 21, fontWeight: 700, color: '#fff' }}>Governance</h1>
-          <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>Vote on proposals that shape the network</p>
+          <h1 style={{ fontSize: 21, fontWeight: 700, color: 'var(--dag-text)' }}>Governance</h1>
+          <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>Vote on proposals that shape the network</p>
         </div>
         {unlocked && wallets.length > 0 && (
-          <button onClick={() => setShowCreate(true)} style={{ padding: '8px 16px', borderRadius: 10, background: '#0066FF', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none' }}>+ New Proposal</button>
+          <button onClick={() => setShowCreate(true)} style={{ padding: '8px 16px', borderRadius: 10, background: '#0066FF', color: 'var(--dag-text)', fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none' }}>+ New Proposal</button>
         )}
       </div>
 
@@ -76,15 +76,15 @@ export function GovernancePage() {
         <div style={S.card}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
             <span style={{ color: '#0066FF', fontSize: 14 }}>⚙</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Proposals ({proposals.length})</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Proposals ({proposals.length})</span>
           </div>
           {loading ? (
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', textAlign: 'center', padding: '30px 0' }}>Loading proposals...</p>
+            <p style={{ fontSize: 12, color: 'var(--dag-text-faint)', textAlign: 'center', padding: '30px 0' }}>Loading proposals...</p>
           ) : proposals.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 0' }}>
               <div style={{ fontSize: 30, opacity: 0.1, marginBottom: 10 }}>⚙</div>
-              <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>No proposals yet</p>
-              <p style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.15)', marginTop: 4 }}>Create the first governance proposal to shape the network.</p>
+              <p style={{ fontSize: 13, color: 'var(--dag-text-muted)' }}>No proposals yet</p>
+              <p style={{ fontSize: 10.5, color: 'var(--dag-text-faint)', marginTop: 4 }}>Create the first governance proposal to shape the network.</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -94,21 +94,21 @@ export function GovernancePage() {
                 return (
                   <div key={p.id} onClick={() => selectProposal(p.id)} style={{
                     padding: '12px 14px', borderRadius: 10, cursor: 'pointer', transition: 'all 0.2s',
-                    background: active ? 'rgba(0,102,255,0.04)' : 'rgba(255,255,255,0.02)',
-                    border: active ? '1px solid rgba(0,102,255,0.2)' : '1px solid rgba(255,255,255,0.03)',
+                    background: active ? 'rgba(0,102,255,0.04)' : 'var(--dag-card)',
+                    border: active ? '1px solid rgba(0,102,255,0.2)' : '1px solid var(--dag-table-border)',
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                          <span style={{ fontSize: 10, ...S.mono, color: 'rgba(255,255,255,0.2)' }}>#{p.id}</span>
+                          <span style={{ fontSize: 10, ...S.mono, color: 'var(--dag-text-faint)' }}>#{p.id}</span>
                           <span style={{ fontSize: 8.5, padding: '1px 6px', borderRadius: 4, background: sc + '12', color: sc, fontWeight: 600 }}>{p.status}</span>
-                          <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.18)', padding: '1px 5px', borderRadius: 3, background: 'rgba(255,255,255,0.03)' }}>{formatProposalType(p.proposal_type)}</span>
+                          <span style={{ fontSize: 9, color: 'var(--dag-text-faint)', padding: '1px 5px', borderRadius: 3, background: 'var(--dag-input-bg)' }}>{formatProposalType(p.proposal_type)}</span>
                         </div>
-                        <div style={{ fontSize: 12.5, fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+                        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--dag-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
                         <span style={{ fontSize: 11, color: '#00E0C4', fontWeight: 600 }}>{p.votes_for}</span>
-                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.15)' }}> / </span>
+                        <span style={{ fontSize: 10, color: 'var(--dag-text-faint)' }}> / </span>
                         <span style={{ fontSize: 11, color: '#EF4444', fontWeight: 600 }}>{p.votes_against}</span>
                       </div>
                     </div>
@@ -125,10 +125,10 @@ export function GovernancePage() {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
                 <span style={{ fontSize: 8.5, padding: '2px 7px', borderRadius: 4, background: statusColor(selected.status) + '12', color: statusColor(selected.status), fontWeight: 600 }}>{selected.status}</span>
-                <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.18)' }}>{formatProposalType(selected.proposal_type)}</span>
+                <span style={{ fontSize: 9, color: 'var(--dag-text-faint)' }}>{formatProposalType(selected.proposal_type)}</span>
               </div>
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 8 }}>{selected.title}</h3>
-              <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.3)', lineHeight: 1.6, marginBottom: 14, whiteSpace: 'pre-wrap' }}>{selected.description}</p>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 8 }}>{selected.title}</h3>
+              <p style={{ fontSize: 11.5, color: 'var(--dag-text-muted)', lineHeight: 1.6, marginBottom: 14, whiteSpace: 'pre-wrap' }}>{selected.description}</p>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
                 {[
@@ -138,8 +138,8 @@ export function GovernancePage() {
                   { l: 'VOTES AGAINST', v: String(selected.votes_against), c: '#EF4444' },
                   ...(selected.execute_at_round != null ? [{ l: 'EXECUTES AT', v: `Round ${selected.execute_at_round.toLocaleString()}` }] : []),
                 ].map((x, i) => (
-                  <div key={i} style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 8, padding: '8px 10px' }}>
-                    <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.22)', letterSpacing: 1, marginBottom: 2 }}>{x.l}</div>
+                  <div key={i} style={{ background: 'var(--dag-card)', borderRadius: 8, padding: '8px 10px' }}>
+                    <div style={{ fontSize: 9, color: 'var(--dag-text-faint)', letterSpacing: 1, marginBottom: 2 }}>{x.l}</div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: x.c || '#fff', ...S.mono }}>{x.v}</div>
                   </div>
                 ))}
@@ -147,7 +147,7 @@ export function GovernancePage() {
 
               {/* Vote buttons */}
               {unlocked && wallets.length > 0 && selected.status === 'Active' && (
-                <div style={{ display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+                <div style={{ display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid var(--dag-table-border)' }}>
                   <VoteButton proposalId={selected.id} secretKey={wallets[0].secret_key} approve={true} fee={10000} onSuccess={refresh} />
                   <VoteButton proposalId={selected.id} secretKey={wallets[0].secret_key} approve={false} fee={10000} onSuccess={refresh} />
                 </div>
@@ -155,13 +155,13 @@ export function GovernancePage() {
 
               {/* Voter list */}
               {selected.voters && selected.voters.length > 0 && (
-                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.03)' }}>
-                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', letterSpacing: 1, marginBottom: 8 }}>VOTERS ({selected.voters.length})</div>
+                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--dag-table-border)' }}>
+                  <div style={{ fontSize: 10, color: 'var(--dag-subheading)', letterSpacing: 1, marginBottom: 8 }}>VOTERS ({selected.voters.length})</div>
                   {selected.voters.map(v => (
-                    <div key={v.address} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.015)' }}>
-                      <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.3)', ...S.mono }}>{shortAddr(v.address)}</span>
+                    <div key={v.address} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--dag-row-border)' }}>
+                      <span style={{ fontSize: 10.5, color: 'var(--dag-text-muted)', ...S.mono }}>{shortAddr(v.address)}</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {v.category && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.18)' }}>{v.category}</span>}
+                        {v.category && <span style={{ fontSize: 9, color: 'var(--dag-text-faint)' }}>{v.category}</span>}
                         <span style={{ fontSize: 10, fontWeight: 600, color: v.vote === 'yes' ? '#00E0C4' : '#EF4444' }}>{v.vote === 'yes' ? 'YES' : 'NO'}</span>
                       </div>
                     </div>
@@ -172,7 +172,7 @@ export function GovernancePage() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 200, gap: 8 }}>
               <span style={{ fontSize: 28, opacity: 0.1 }}>⚙</span>
-              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>Select a proposal to view details</p>
+              <p style={{ fontSize: 12, color: 'var(--dag-text-faint)' }}>Select a proposal to view details</p>
             </div>
           )}
         </div>

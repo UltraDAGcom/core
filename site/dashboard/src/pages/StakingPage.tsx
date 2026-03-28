@@ -17,10 +17,10 @@ function pickBest(vs: ValidatorInfo[]): ValidatorInfo | null {
 }
 
 const S = {
-  card: { background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '20px 22px' } as React.CSSProperties,
-  stat: { background: 'rgba(255,255,255,0.025)', borderRadius: 10, padding: '12px 14px' } as React.CSSProperties,
-  label: { fontSize: 10.5, fontWeight: 600, color: 'rgba(255,255,255,0.32)', letterSpacing: 1.2, textTransform: 'uppercase' as const, marginBottom: 6, display: 'block' },
-  input: { width: '100%', padding: '12px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.055)', color: '#fff', fontSize: 15, outline: 'none', fontFamily: "'DM Mono',monospace" } as React.CSSProperties,
+  card: { background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '20px 22px' } as React.CSSProperties,
+  stat: { background: 'var(--dag-card)', borderRadius: 10, padding: '12px 14px' } as React.CSSProperties,
+  label: { fontSize: 10.5, fontWeight: 600, color: 'var(--dag-text-muted)', letterSpacing: 1.2, textTransform: 'uppercase' as const, marginBottom: 6, display: 'block' },
+  input: { width: '100%', padding: '12px 14px', borderRadius: 10, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)', color: 'var(--dag-text)', fontSize: 15, outline: 'none', fontFamily: "'DM Mono',monospace" } as React.CSSProperties,
   btnSolid: (c = '#00E0C4') => ({ width: '100%', padding: '12px 0', borderRadius: 10, background: c, color: '#080C14', fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', transition: 'opacity 0.2s' }),
   btn: (c = '#00E0C4') => ({ padding: '6px 14px', borderRadius: 8, background: `${c}12`, border: `1px solid ${c}25`, color: c, fontSize: 11, fontWeight: 600, cursor: 'pointer' }),
   mono: { fontFamily: "'DM Mono',monospace" },
@@ -108,8 +108,8 @@ export function StakingPage() {
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} input:focus,select:focus{border-color:rgba(0,224,196,0.3)!important}`}</style>
 
       <div style={{ marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
-        <h1 style={{ fontSize: 21, fontWeight: 700, color: '#fff' }}>Staking</h1>
-        <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>Stake UDAG to earn passive rewards — no node required</p>
+        <h1 style={{ fontSize: 21, fontWeight: 700, color: 'var(--dag-text)' }}>Staking</h1>
+        <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>Stake UDAG to earn passive rewards — no node required</p>
       </div>
 
       {/* Stats Row */}
@@ -122,9 +122,9 @@ export function StakingPage() {
           <div key={i} style={S.card}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
               <span style={{ color: s.c, fontSize: 14 }}>{s.i}</span>
-              <span style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.28)', letterSpacing: 1.2 }}>{s.l}</span>
+              <span style={{ fontSize: 9.5, color: 'var(--dag-text-muted)', letterSpacing: 1.2 }}>{s.l}</span>
             </div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', ...S.mono }}>{s.v}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--dag-text)', ...S.mono }}>{s.v}</div>
           </div>
         ))}
       </div>
@@ -138,12 +138,12 @@ export function StakingPage() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 16 }}>
               <span style={{ color: '#00E0C4', fontSize: 16 }}>⬡</span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Stake UDAG</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Stake UDAG</span>
               {pw && <span style={{ fontSize: 8.5, background: 'rgba(0,224,196,0.12)', color: '#00E0C4', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>PASSKEY</span>}
             </div>
 
             {!unlocked ? (
-              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', textAlign: 'center', padding: '20px 0' }}>Unlock wallet to stake.</p>
+              <p style={{ fontSize: 12, color: 'var(--dag-subheading)', textAlign: 'center', padding: '20px 0' }}>Unlock wallet to stake.</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {wallets.length > 1 && (
@@ -159,16 +159,16 @@ export function StakingPage() {
                   <div style={{ position: 'relative' }}>
                     <input type="number" min="100" step="1" value={amount}
                       onChange={e => { setAmount(e.target.value); setStakeMsg(''); }} placeholder="100" style={S.input} />
-                    <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>UDAG</span>
+                    <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--dag-text-faint)', fontSize: 12 }}>UDAG</span>
                   </div>
-                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.18)', marginTop: 4 }}>Minimum 100 UDAG</p>
+                  <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginTop: 4 }}>Minimum 100 UDAG</p>
                 </div>
 
                 {target && (
                   <div style={{ ...S.stat, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.25)', letterSpacing: 1 }}>{customValidator ? 'SELECTED' : 'AUTO-SELECTED'}</div>
-                      <div style={{ fontSize: 12, color: '#fff', ...S.mono, marginTop: 2 }}>{shortAddr(target)}</div>
+                      <div style={{ fontSize: 9.5, color: 'var(--dag-subheading)', letterSpacing: 1 }}>{customValidator ? 'SELECTED' : 'AUTO-SELECTED'}</div>
+                      <div style={{ fontSize: 12, color: 'var(--dag-text)', ...S.mono, marginTop: 2 }}>{shortAddr(target)}</div>
                     </div>
                     {best && !customValidator && (
                       <span style={{ fontSize: 10, background: 'rgba(0,224,196,0.1)', color: '#00E0C4', padding: '2px 8px', borderRadius: 4 }}>{best.commission_percent}% fee</span>
@@ -193,9 +193,9 @@ export function StakingPage() {
           <div style={S.card}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
               <span style={{ color: '#0066FF', fontSize: 13 }}>◈</span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.45)' }}>How staking works</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-cell-text)' }}>How staking works</span>
             </div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', lineHeight: 1.7 }}>
+            <div style={{ fontSize: 11, color: 'var(--dag-subheading)', lineHeight: 1.7 }}>
               <p>Your UDAG is delegated to a validator who secures the network. You earn rewards proportional to your stake, minus commission.</p>
               <p style={{ marginTop: 6 }}>Unstaking has a ~2.8 hour cooldown before funds are returned.</p>
             </div>
@@ -209,22 +209,22 @@ export function StakingPage() {
             <div style={S.card}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
                 <span style={{ color: '#00E0C4', fontSize: 14 }}>✓</span>
-                <span style={{ fontSize: 13.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Your Staked UDAG</span>
+                <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Your Staked UDAG</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {delegations.map(d => (
                   <div key={d.address} style={{ ...S.stat, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>{d.name}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dag-text)' }}>{d.name}</span>
                         <span style={{ fontSize: 8.5, padding: '1px 6px', borderRadius: 4, fontWeight: 600, background: d.is_undelegating ? 'rgba(255,184,0,0.12)' : 'rgba(0,224,196,0.12)', color: d.is_undelegating ? '#FFB800' : '#00E0C4' }}>
                           {d.is_undelegating ? 'UNSTAKING' : 'EARNING'}
                         </span>
                       </div>
-                      <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.22)', ...S.mono, marginTop: 2 }}>→ {shortAddr(d.validator)}</div>
+                      <div style={{ fontSize: 10.5, color: 'var(--dag-text-faint)', ...S.mono, marginTop: 2 }}>→ {shortAddr(d.validator)}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 17, fontWeight: 700, color: '#fff', ...S.mono }}>{fmt(d.delegated)}</div>
+                      <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--dag-text)', ...S.mono }}>{fmt(d.delegated)}</div>
                       {d.is_undelegating ? (
                         <div style={{ fontSize: 9.5, color: '#FFB800' }}>Round {d.unlock_at_round}</div>
                       ) : (
@@ -246,28 +246,28 @@ export function StakingPage() {
               onClick={() => setShowValidators(!showValidators)}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                 <span style={{ color: '#A855F7', fontSize: 14 }}>♛</span>
-                <span style={{ fontSize: 13.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>All Validators</span>
-                <span style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.2)' }}>{validators.length}</span>
+                <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>All Validators</span>
+                <span style={{ fontSize: 9.5, color: 'var(--dag-text-faint)' }}>{validators.length}</span>
               </div>
-              <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>{showValidators ? '▲' : '▼'}</span>
+              <span style={{ color: 'var(--dag-text-faint)', fontSize: 12 }}>{showValidators ? '▲' : '▼'}</span>
             </div>
             {showValidators && (
               <div>
-                {loading ? <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', padding: '16px 0', textAlign: 'center' }}>Loading...</p> : validators.length === 0 ? (
-                  <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', padding: '16px 0', textAlign: 'center' }}>No validators yet.</p>
+                {loading ? <p style={{ fontSize: 12, color: 'var(--dag-subheading)', padding: '16px 0', textAlign: 'center' }}>Loading...</p> : validators.length === 0 ? (
+                  <p style={{ fontSize: 12, color: 'var(--dag-subheading)', padding: '16px 0', textAlign: 'center' }}>No validators yet.</p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {/* Header */}
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, padding: '0 4px' }}>
                       {['ADDRESS', 'STAKE', 'DELEGATORS', 'FEE', ''].map((h, i) => (
-                        <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'rgba(255,255,255,0.18)', letterSpacing: 1.5 }}>{h}</div>
+                        <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'var(--dag-text-faint)', letterSpacing: 1.5 }}>{h}</div>
                       ))}
                     </div>
                     {validators.map(v => (
-                      <div key={v.address} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'center', padding: '8px 4px', borderTop: '1px solid rgba(255,255,255,0.02)' }}>
-                        <div style={{ fontSize: 11, color: '#fff', ...S.mono }}>{shortAddr(v.address)}</div>
-                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{fmt(v.effective_stake)}</div>
-                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{v.delegator_count}</div>
+                      <div key={v.address} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'center', padding: '8px 4px', borderTop: '1px solid var(--dag-row-border)' }}>
+                        <div style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono }}>{shortAddr(v.address)}</div>
+                        <div style={{ fontSize: 11, color: 'var(--dag-cell-text)' }}>{fmt(v.effective_stake)}</div>
+                        <div style={{ fontSize: 11, color: 'var(--dag-cell-text)' }}>{v.delegator_count}</div>
                         <div style={{ fontSize: 11, color: v.commission_percent <= 10 ? '#00E0C4' : '#FFB800' }}>{v.commission_percent}%</div>
                         {unlocked && wallets.length > 0 && (
                           <button onClick={() => { setCustomValidator(v.address); setShowValidators(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}

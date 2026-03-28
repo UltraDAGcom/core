@@ -1,26 +1,27 @@
 import { NavLink } from 'react-router-dom';
 import { fonts } from '../../lib/theme';
 import type { NetworkType } from '../../lib/api';
+import type { Theme } from '../../hooks/useTheme';
 
 interface NavItem { to: string; icon: string; label: string }
 
 const sections: { label?: string; items: NavItem[] }[] = [
-  { items: [{ to: '/', icon: '◈', label: 'Dashboard' }] },
+  { items: [{ to: '/', icon: '\u25C8', label: 'Dashboard' }] },
   { label: 'WALLET', items: [
-    { to: '/wallet', icon: '◇', label: 'Wallets' },
-    { to: '/wallet/send', icon: '⇄', label: 'Send & Receive' },
-    { to: '/streams', icon: '≋', label: 'Streams' },
-    { to: '/smart-account', icon: '◎', label: 'SmartAccount' },
+    { to: '/wallet', icon: '\u25C7', label: 'Wallets' },
+    { to: '/wallet/send', icon: '\u21C4', label: 'Send & Receive' },
+    { to: '/streams', icon: '\u224B', label: 'Streams' },
+    { to: '/smart-account', icon: '\u25CE', label: 'SmartAccount' },
   ]},
   { label: 'NETWORK', items: [
-    { to: '/staking', icon: '⬡', label: 'Staking' },
-    { to: '/governance', icon: '⚙', label: 'Governance' },
-    { to: '/council', icon: '♛', label: 'Council' },
-    { to: '/explorer', icon: '◉', label: 'Explorer' },
+    { to: '/staking', icon: '\u2B21', label: 'Staking' },
+    { to: '/governance', icon: '\u2699', label: 'Governance' },
+    { to: '/council', icon: '\u265B', label: 'Council' },
+    { to: '/explorer', icon: '\u25C9', label: 'Explorer' },
   ]},
   { label: 'ADVANCED', items: [
-    { to: '/bridge', icon: '⟷', label: 'Bridge' },
-    { to: '/network', icon: '⚡', label: 'Node Status' },
+    { to: '/bridge', icon: '\u27F7', label: 'Bridge' },
+    { to: '/network', icon: '\u26A1', label: 'Node Status' },
   ]},
 ];
 
@@ -32,21 +33,23 @@ interface SidebarProps {
   onToggleLock?: () => void;
   sessionSecondsLeft?: number;
   sessionTotalSeconds?: number;
+  theme?: Theme;
+  onToggleTheme?: () => void;
 }
 
-export function Sidebar({ open, onClose, network = 'testnet', onSwitchNetwork, onToggleLock, sessionSecondsLeft }: SidebarProps) {
+export function Sidebar({ open, onClose, network = 'testnet', onSwitchNetwork, onToggleLock, sessionSecondsLeft, theme, onToggleTheme }: SidebarProps) {
   const mins = Math.floor((sessionSecondsLeft ?? 0) / 60);
   const secs = (sessionSecondsLeft ?? 0) % 60;
   const isMainnet = network === 'mainnet';
 
   return (
     <>
-      {open && <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 40 }} onClick={onClose} />}
+      {open && <div style={{ position: 'fixed', inset: 0, background: 'var(--dag-overlay)', zIndex: 40 }} onClick={onClose} />}
 
       <aside style={{
         width: 216, padding: '18px 10px',
-        background: 'rgba(255,255,255,0.008)',
-        borderRight: '1px solid rgba(255,255,255,0.04)',
+        background: 'var(--dag-sidebar-bg)',
+        borderRight: '1px solid var(--dag-sidebar-border)',
         display: 'flex', flexDirection: 'column',
         position: 'sticky', top: 0, height: '100vh', overflowY: 'auto',
         fontFamily: fonts.sans,
@@ -60,7 +63,7 @@ export function Sidebar({ open, onClose, network = 'testnet', onSwitchNetwork, o
             boxShadow: '0 0 16px rgba(0,224,196,0.25)',
           }}>U</div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.2, color: '#fff' }}>ULTRADAG</div>
+            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.2, color: 'var(--dag-text)' }}>ULTRADAG</div>
             <div style={{ fontSize: 8.5, color: isMainnet ? '#00E0C4' : '#FFB800', letterSpacing: 2.5, fontWeight: 600 }}>
               {network.toUpperCase()} v0.1
             </div>
@@ -72,7 +75,7 @@ export function Sidebar({ open, onClose, network = 'testnet', onSwitchNetwork, o
           <div style={{ padding: '0 6px', marginBottom: 16 }}>
             <div style={{
               display: 'flex', borderRadius: 8, overflow: 'hidden',
-              background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)',
+              background: 'var(--dag-net-switch-bg)', border: '1px solid var(--dag-net-switch-border)',
             }}>
               {(['mainnet', 'testnet'] as const).map(net => (
                 <button key={net} onClick={() => onSwitchNetwork(net)} style={{
@@ -84,12 +87,12 @@ export function Sidebar({ open, onClose, network = 'testnet', onSwitchNetwork, o
                     : 'transparent',
                   color: network === net
                     ? net === 'mainnet' ? '#00E0C4' : '#FFB800'
-                    : 'rgba(255,255,255,0.18)',
+                    : 'var(--dag-net-inactive)',
                   borderBottom: network === net
                     ? `2px solid ${net === 'mainnet' ? '#00E0C4' : '#FFB800'}`
                     : '2px solid transparent',
                 }}>
-                  {net === 'mainnet' ? '◈ Main' : '◇ Test'}
+                  {net === 'mainnet' ? '\u25C8 Main' : '\u25C7 Test'}
                 </button>
               ))}
             </div>
@@ -100,7 +103,7 @@ export function Sidebar({ open, onClose, network = 'testnet', onSwitchNetwork, o
         {sections.map((section, si) => (
           <div key={si}>
             {section.label && (
-              <div style={{ fontSize: 9, fontWeight: 600, color: 'rgba(255,255,255,0.12)', letterSpacing: 2, padding: '12px 8px 5px', marginTop: 2 }}>
+              <div style={{ fontSize: 9, fontWeight: 600, color: 'var(--dag-sidebar-section)', letterSpacing: 2, padding: '12px 8px 5px', marginTop: 2 }}>
                 {section.label}
               </div>
             )}
@@ -111,7 +114,7 @@ export function Sidebar({ open, onClose, network = 'testnet', onSwitchNetwork, o
                   cursor: 'pointer', marginBottom: 1, textDecoration: 'none',
                   background: isActive ? 'rgba(0,224,196,0.06)' : 'transparent',
                   border: isActive ? '1px solid rgba(0,224,196,0.1)' : '1px solid transparent',
-                  color: isActive ? '#00E0C4' : 'rgba(255,255,255,0.35)',
+                  color: isActive ? '#00E0C4' : 'var(--dag-sidebar-inactive)',
                   fontSize: 12.5, fontWeight: isActive ? 600 : 400,
                   transition: 'all 0.2s',
                 })}>
@@ -124,32 +127,45 @@ export function Sidebar({ open, onClose, network = 'testnet', onSwitchNetwork, o
 
         <div style={{ flex: 1 }} />
 
+        {/* Theme toggle */}
+        {onToggleTheme && (
+          <button onClick={onToggleTheme} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            margin: '0 6px 4px', padding: '6px 0', borderRadius: 8,
+            background: 'var(--dag-sidebar-lock-bg)', border: '1px solid var(--dag-sidebar-lock-border)',
+            color: 'var(--dag-text-muted)', fontSize: 11, fontWeight: 500, cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}>
+            {theme === 'dark' ? '\u2600 Light Mode' : '\u263E Dark Mode'}
+          </button>
+        )}
+
         {/* Lock button */}
         {onToggleLock && (
           <button onClick={onToggleLock} style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             margin: '0 6px 8px', padding: '7px 0', borderRadius: 8,
-            background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)',
-            color: 'rgba(255,255,255,0.3)', fontSize: 11, fontWeight: 500, cursor: 'pointer',
+            background: 'var(--dag-sidebar-lock-bg)', border: '1px solid var(--dag-sidebar-lock-border)',
+            color: 'var(--dag-sidebar-lock-text)', fontSize: 11, fontWeight: 500, cursor: 'pointer',
             transition: 'all 0.2s',
           }}>
-            🔒 Lock Wallet
+            \uD83D\uDD12 Lock Wallet
           </button>
         )}
 
         {/* Footer */}
-        <div style={{ padding: '8px 8px', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+        <div style={{ padding: '8px 8px', borderTop: '1px solid var(--dag-sidebar-footer-border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
             <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#00E0C4', boxShadow: '0 0 6px #00E0C4' }} />
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Connected</span>
+            <span style={{ fontSize: 10, color: 'var(--dag-sidebar-footer-text)' }}>Connected</span>
           </div>
           {sessionSecondsLeft != null && sessionSecondsLeft < 9000 ? (
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.15)', fontFamily: fonts.mono }}>
+            <div style={{ fontSize: 9, color: 'var(--dag-sidebar-footer-muted)', fontFamily: fonts.mono }}>
               Session {mins}:{secs.toString().padStart(2, '0')}
             </div>
           ) : sessionSecondsLeft != null && sessionSecondsLeft >= 9000 ? (
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.12)' }}>
-              ◎ Passkey session
+            <div style={{ fontSize: 9, color: 'var(--dag-sidebar-footer-faint)' }}>
+              \u25CE Passkey session
             </div>
           ) : null}
         </div>

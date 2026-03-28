@@ -25,10 +25,10 @@ interface StreamsPageProps {
 }
 
 const S = {
-  card: { background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '20px 22px' } as React.CSSProperties,
-  stat: { background: 'rgba(255,255,255,0.025)', borderRadius: 10, padding: '12px 14px' } as React.CSSProperties,
-  label: { fontSize: 10.5, fontWeight: 600, color: 'rgba(255,255,255,0.32)', letterSpacing: 1.2, textTransform: 'uppercase' as const, marginBottom: 6, display: 'block' },
-  input: { width: '100%', padding: '12px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.055)', color: '#fff', fontSize: 15, outline: 'none', fontFamily: "'DM Mono',monospace", boxSizing: 'border-box' as const } as React.CSSProperties,
+  card: { background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '20px 22px' } as React.CSSProperties,
+  stat: { background: 'var(--dag-card)', borderRadius: 10, padding: '12px 14px' } as React.CSSProperties,
+  label: { fontSize: 10.5, fontWeight: 600, color: 'var(--dag-text-muted)', letterSpacing: 1.2, textTransform: 'uppercase' as const, marginBottom: 6, display: 'block' },
+  input: { width: '100%', padding: '12px 14px', borderRadius: 10, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)', color: 'var(--dag-text)', fontSize: 15, outline: 'none', fontFamily: "'DM Mono',monospace", boxSizing: 'border-box' as const } as React.CSSProperties,
   btn: (c = '#00E0C4') => ({ padding: '6px 14px', borderRadius: 8, background: `${c}12`, border: `1px solid ${c}25`, color: c, fontSize: 11, fontWeight: 600, cursor: 'pointer', transition: 'opacity 0.2s' }),
   mono: { fontFamily: "'DM Mono',monospace" },
 };
@@ -53,7 +53,7 @@ function rateToUdagPerHour(ratePerRound: number): string {
 function ProgressBar({ value, max }: { value: number; max: number }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
-    <div style={{ position: 'relative', height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.04)', overflow: 'hidden', minWidth: 80 }}>
+    <div style={{ position: 'relative', height: 6, borderRadius: 3, background: 'var(--dag-card-hover)', overflow: 'hidden', minWidth: 80 }}>
       <div style={{
         height: '100%', borderRadius: 3, width: `${pct}%`,
         background: 'linear-gradient(90deg, #00E0C4, #0066FF)',
@@ -61,7 +61,7 @@ function ProgressBar({ value, max }: { value: number; max: number }) {
       }} />
       <span style={{
         position: 'absolute', right: 0, top: -16, fontSize: 9,
-        color: 'rgba(255,255,255,0.3)', fontFamily: "'DM Mono',monospace",
+        color: 'var(--dag-text-muted)', fontFamily: "'DM Mono',monospace",
       }}>{pct.toFixed(1)}%</span>
     </div>
   );
@@ -79,7 +79,7 @@ function SkeletonRow() {
   return (
     <div style={{ display: 'flex', gap: 16, padding: '12px 0' }}>
       {[120, 80, 100, 60, 60, 50].map((w, i) => (
-        <div key={i} style={{ width: w, height: 14, borderRadius: 4, background: 'rgba(255,255,255,0.03)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div key={i} style={{ width: w, height: 14, borderRadius: 4, background: 'var(--dag-input-bg)', animation: 'pulse 1.5s ease-in-out infinite' }} />
       ))}
     </div>
   );
@@ -175,16 +175,16 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
         @keyframes streamPulse{0%,100%{opacity:1;text-shadow:0 0 6px rgba(0,224,196,0.2)}50%{opacity:0.75;text-shadow:0 0 12px rgba(0,224,196,0.4)}}
         @keyframes pulse{0%,100%{opacity:0.4}50%{opacity:0.15}}
         input:focus,select:focus{border-color:rgba(0,224,196,0.3)!important}
-        .stream-row:hover{background:rgba(255,255,255,0.015)!important}
+        .stream-row:hover{background:var(--dag-card)!important}
       `}</style>
 
       {/* Header */}
       <div style={{ marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
-        <h1 style={{ fontSize: 21, fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h1 style={{ fontSize: 21, fontWeight: 700, color: 'var(--dag-text)', display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ background: 'linear-gradient(135deg, #00E0C4, #0066FF)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>\u224B</span>
           Streams
         </h1>
-        <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>Continuous payment streams \u2014 money flows in real-time</p>
+        <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>Continuous payment streams \u2014 money flows in real-time</p>
       </div>
 
       {/* Stats Row */}
@@ -197,9 +197,9 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
           <div key={i} style={S.card}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
               <span style={{ color: s.c, fontSize: 14 }}>{s.i}</span>
-              <span style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.28)', letterSpacing: 1.2 }}>{s.l}</span>
+              <span style={{ fontSize: 9.5, color: 'var(--dag-text-muted)', letterSpacing: 1.2 }}>{s.l}</span>
             </div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', ...S.mono }}>{loading ? '\u2014' : s.v}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--dag-text)', ...S.mono }}>{loading ? '\u2014' : s.v}</div>
           </div>
         ))}
       </div>
@@ -214,7 +214,7 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 16 }}>
               <span style={{ color: '#00E0C4', fontSize: 16 }}>\u224B</span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Create Stream</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Create Stream</span>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -229,10 +229,10 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
                 <div style={{ position: 'relative' }}>
                   <input type="number" min="0" step="0.01" value={ratePerHour}
                     onChange={e => { setRatePerHour(e.target.value); setFormMsg(''); }} placeholder="0.50" style={S.input} />
-                  <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>UDAG/hr</span>
+                  <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--dag-text-faint)', fontSize: 12 }}>UDAG/hr</span>
                 </div>
                 {satsPerRound > 0 && (
-                  <p style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.15)', marginTop: 3, ...S.mono }}>{satsPerRound.toLocaleString()} sats/round</p>
+                  <p style={{ fontSize: 9.5, color: 'var(--dag-text-faint)', marginTop: 3, ...S.mono }}>{satsPerRound.toLocaleString()} sats/round</p>
                 )}
               </div>
 
@@ -241,7 +241,7 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
                 <div style={{ position: 'relative' }}>
                   <input type="number" min="0" step="1" value={duration}
                     onChange={e => { setDuration(e.target.value); setFormMsg(''); }} placeholder="24" style={S.input} />
-                  <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>hours</span>
+                  <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--dag-text-faint)', fontSize: 12 }}>hours</span>
                 </div>
               </div>
 
@@ -249,15 +249,15 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
               {totalDeposit > 0 && (
                 <div style={{ ...S.stat, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>Total Deposit</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#fff', ...S.mono }}>{totalDeposit.toFixed(4)} UDAG</span>
+                    <span style={{ fontSize: 10, color: 'var(--dag-subheading)' }}>Total Deposit</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--dag-text)', ...S.mono }}>{totalDeposit.toFixed(4)} UDAG</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>Fee</span>
-                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', ...S.mono }}>0.0001 UDAG</span>
+                    <span style={{ fontSize: 10, color: 'var(--dag-subheading)' }}>Fee</span>
+                    <span style={{ fontSize: 11, color: 'var(--dag-text-muted)', ...S.mono }}>0.0001 UDAG</span>
                   </div>
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: 6, display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>Total Cost</span>
+                  <div style={{ borderTop: '1px solid var(--dag-table-border)', paddingTop: 6, display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 10, color: 'var(--dag-subheading)' }}>Total Cost</span>
                     <span style={{ fontSize: 13, fontWeight: 700, color: '#00E0C4', ...S.mono }}>{(totalDeposit + MIN_FEE / SATS).toFixed(4)} UDAG</span>
                   </div>
                 </div>
@@ -272,8 +272,8 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
               <button onClick={handleCreate} disabled={!recipient || computedRate <= 0 || computedDuration <= 0}
                 style={{
                   width: '100%', padding: '12px 0', borderRadius: 10, border: 'none',
-                  background: (!recipient || computedRate <= 0 || computedDuration <= 0) ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg, #00E0C4, #0066FF)',
-                  color: (!recipient || computedRate <= 0 || computedDuration <= 0) ? 'rgba(255,255,255,0.2)' : '#fff',
+                  background: (!recipient || computedRate <= 0 || computedDuration <= 0) ? 'var(--dag-border)' : 'linear-gradient(135deg, #00E0C4, #0066FF)',
+                  color: (!recipient || computedRate <= 0 || computedDuration <= 0) ? 'var(--dag-text-faint)' : '#fff',
                   fontSize: 13, fontWeight: 700, cursor: (!recipient || computedRate <= 0 || computedDuration <= 0) ? 'not-allowed' : 'pointer',
                   transition: 'all 0.2s',
                   boxShadow: (recipient && computedRate > 0 && computedDuration > 0) ? '0 4px 20px rgba(0,224,196,0.15)' : 'none',
@@ -287,9 +287,9 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
           <div style={S.card}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
               <span style={{ color: '#0066FF', fontSize: 13 }}>\u25C8</span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.45)' }}>How streams work</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-cell-text)' }}>How streams work</span>
             </div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', lineHeight: 1.7 }}>
+            <div style={{ fontSize: 11, color: 'var(--dag-subheading)', lineHeight: 1.7 }}>
               <p>Payment streams continuously transfer UDAG from sender to recipient every round (~5 seconds). The sender deposits upfront, and the recipient can withdraw accrued funds at any time.</p>
               <p style={{ marginTop: 6 }}>Senders can cancel an active stream to reclaim unstreamed funds. Streams automatically stop when the deposit is fully streamed.</p>
               <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -301,7 +301,7 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
                 ].map((step, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ color: '#00E0C4', fontSize: 8 }}>{step.icon}</span>
-                    <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.3)' }}>{step.text}</span>
+                    <span style={{ fontSize: 10.5, color: 'var(--dag-text-muted)' }}>{step.text}</span>
                   </div>
                 ))}
               </div>
@@ -316,7 +316,7 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
           <div style={S.card}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
               <span style={{ color: '#0066FF', fontSize: 14 }}>\u2191</span>
-              <span style={{ fontSize: 13.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Outgoing Streams</span>
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Outgoing Streams</span>
               {outgoing.length > 0 && (
                 <span style={{ fontSize: 9, background: 'rgba(0,102,255,0.12)', color: '#0066FF', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>{outgoing.length}</span>
               )}
@@ -327,26 +327,26 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
             ) : outgoing.length === 0 ? (
               <div style={{ padding: '24px 0', textAlign: 'center' }}>
                 <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.15 }}>\u224B</div>
-                <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.18)' }}>No outgoing streams</p>
-                <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.1)', marginTop: 4 }}>Create a stream to start sending continuous payments</p>
+                <p style={{ fontSize: 12, color: 'var(--dag-text-faint)' }}>No outgoing streams</p>
+                <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginTop: 4 }}>Create a stream to start sending continuous payments</p>
               </div>
             ) : (
               <div>
                 {/* Header */}
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 2fr 1fr 1fr auto', gap: 8, padding: '0 4px', marginBottom: 6 }}>
                   {['RECIPIENT', 'RATE', 'PROGRESS', 'ACCRUED', 'STATUS', ''].map((h, i) => (
-                    <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'rgba(255,255,255,0.18)', letterSpacing: 1.5 }}>{h}</div>
+                    <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'var(--dag-text-faint)', letterSpacing: 1.5 }}>{h}</div>
                   ))}
                 </div>
                 {outgoing.map(s => (
-                  <div key={s.id} className="stream-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 2fr 1fr 1fr auto', gap: 8, alignItems: 'center', padding: '10px 4px', borderTop: '1px solid rgba(255,255,255,0.02)', borderRadius: 6, transition: 'background 0.15s' }}>
-                    <div style={{ fontSize: 11, color: '#fff', ...S.mono }}>{shortAddr(s.recipient)}</div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{rateToUdagPerHour(s.rate_per_round)}/hr</div>
+                  <div key={s.id} className="stream-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 2fr 1fr 1fr auto', gap: 8, alignItems: 'center', padding: '10px 4px', borderTop: '1px solid var(--dag-row-border)', borderRadius: 6, transition: 'background 0.15s' }}>
+                    <div style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono }}>{shortAddr(s.recipient)}</div>
+                    <div style={{ fontSize: 11, color: 'var(--dag-cell-text)' }}>{rateToUdagPerHour(s.rate_per_round)}/hr</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <ProgressBar value={s.accrued} max={s.deposited} />
-                      <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.2)', ...S.mono }}>{formatUdag(s.accrued)} / {formatUdag(s.deposited)}</span>
+                      <span style={{ fontSize: 9, color: 'var(--dag-text-faint)', ...S.mono }}>{formatUdag(s.accrued)} / {formatUdag(s.deposited)}</span>
                     </div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', ...S.mono }}>{formatUdag(s.accrued)}</div>
+                    <div style={{ fontSize: 11, color: 'var(--dag-text-secondary)', ...S.mono }}>{formatUdag(s.accrued)}</div>
                     <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: statusBg(s.status), color: statusColor(s.status), display: 'inline-block', textAlign: 'center' }}>
                       {s.status.toUpperCase()}
                     </span>
@@ -363,7 +363,7 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
           <div style={S.card}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
               <span style={{ color: '#00E0C4', fontSize: 14 }}>\u2193</span>
-              <span style={{ fontSize: 13.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Incoming Streams</span>
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Incoming Streams</span>
               {incoming.length > 0 && (
                 <span style={{ fontSize: 9, background: 'rgba(0,224,196,0.12)', color: '#00E0C4', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>{incoming.length}</span>
               )}
@@ -374,27 +374,27 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
             ) : incoming.length === 0 ? (
               <div style={{ padding: '24px 0', textAlign: 'center' }}>
                 <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.15 }}>\u2193</div>
-                <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.18)' }}>No incoming streams</p>
-                <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.1)', marginTop: 4 }}>Share your address to receive continuous payments</p>
+                <p style={{ fontSize: 12, color: 'var(--dag-text-faint)' }}>No incoming streams</p>
+                <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginTop: 4 }}>Share your address to receive continuous payments</p>
               </div>
             ) : (
               <div>
                 {/* Header */}
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1.5fr 1fr auto', gap: 8, padding: '0 4px', marginBottom: 6 }}>
                   {['SENDER', 'RATE', 'ACCRUED', 'WITHDRAWABLE', 'STATUS', ''].map((h, i) => (
-                    <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'rgba(255,255,255,0.18)', letterSpacing: 1.5 }}>{h}</div>
+                    <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'var(--dag-text-faint)', letterSpacing: 1.5 }}>{h}</div>
                   ))}
                 </div>
                 {incoming.map(s => (
-                  <div key={s.id} className="stream-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1.5fr 1fr auto', gap: 8, alignItems: 'center', padding: '10px 4px', borderTop: '1px solid rgba(255,255,255,0.02)', borderRadius: 6, transition: 'background 0.15s' }}>
-                    <div style={{ fontSize: 11, color: '#fff', ...S.mono }}>{shortAddr(s.sender)}</div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>{rateToUdagPerHour(s.rate_per_round)}/hr</div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', ...S.mono }}>{formatUdag(s.accrued)}</div>
+                  <div key={s.id} className="stream-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1.5fr 1fr auto', gap: 8, alignItems: 'center', padding: '10px 4px', borderTop: '1px solid var(--dag-row-border)', borderRadius: 6, transition: 'background 0.15s' }}>
+                    <div style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono }}>{shortAddr(s.sender)}</div>
+                    <div style={{ fontSize: 11, color: 'var(--dag-cell-text)' }}>{rateToUdagPerHour(s.rate_per_round)}/hr</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dag-text)', ...S.mono }}>{formatUdag(s.accrued)}</div>
                     <div>
                       {s.withdrawable > 0 ? (
                         <PulsingValue value={formatUdag(s.withdrawable)} suffix="UDAG" />
                       ) : (
-                        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', ...S.mono }}>0.00</span>
+                        <span style={{ fontSize: 11, color: 'var(--dag-text-faint)', ...S.mono }}>0.00</span>
                       )}
                     </div>
                     <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: statusBg(s.status), color: statusColor(s.status), display: 'inline-block', textAlign: 'center' }}>

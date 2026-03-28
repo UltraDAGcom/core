@@ -7,9 +7,9 @@ const PAGE_SIZE = 10;
 const SATS = 100_000_000;
 
 const S = {
-  card: { background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '18px 20px' } as React.CSSProperties,
-  th: { fontSize: 8.5, fontWeight: 600, color: 'rgba(255,255,255,0.18)', letterSpacing: 1.5, paddingBottom: 8, borderBottom: '1px solid rgba(255,255,255,0.03)' } as React.CSSProperties,
-  td: { fontSize: 11.5, color: 'rgba(255,255,255,0.45)', padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.015)' } as React.CSSProperties,
+  card: { background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '18px 20px' } as React.CSSProperties,
+  th: { fontSize: 8.5, fontWeight: 600, color: 'var(--dag-text-faint)', letterSpacing: 1.5, paddingBottom: 8, borderBottom: '1px solid var(--dag-table-border)' } as React.CSSProperties,
+  td: { fontSize: 11.5, color: 'var(--dag-cell-text)', padding: '7px 0', borderBottom: '1px solid var(--dag-row-border)' } as React.CSSProperties,
   mono: { fontFamily: "'DM Mono',monospace" },
 };
 
@@ -72,8 +72,8 @@ export function ExplorerPage() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
         <div>
-          <h1 style={{ fontSize: 21, fontWeight: 700, color: '#fff' }}>Explorer</h1>
-          <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>Search and browse the DAG</p>
+          <h1 style={{ fontSize: 21, fontWeight: 700, color: 'var(--dag-text)' }}>Explorer</h1>
+          <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>Search and browse the DAG</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {lag <= 3 && <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -97,7 +97,7 @@ export function ExplorerPage() {
           <div key={i} style={S.card}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
               <span style={{ color: s.c, fontSize: 13 }}>{s.i}</span>
-              <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)', letterSpacing: 1.2 }}>{s.l}</span>
+              <span style={{ fontSize: 9, color: 'var(--dag-subheading)', letterSpacing: 1.2 }}>{s.l}</span>
             </div>
             <div style={{ fontSize: 21, fontWeight: 700, color: s.c, ...S.mono }}>{s.v}</div>
           </div>
@@ -114,18 +114,18 @@ export function ExplorerPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ color: '#A855F7', fontSize: 14 }}>◉</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Finalized Rounds</span>
-            {page === 1 && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9.5, color: 'rgba(255,255,255,0.18)' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Finalized Rounds</span>
+            {page === 1 && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9.5, color: 'var(--dag-text-faint)' }}>
               <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#00E0C4', animation: 'pulse 1.5s infinite' }} /> Auto-refresh
             </span>}
           </div>
-          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.18)', ...S.mono }}>Page {page}/{totalPages}</span>
+          <span style={{ fontSize: 10, color: 'var(--dag-text-faint)', ...S.mono }}>Page {page}/{totalPages}</span>
         </div>
 
         {loading ? (
-          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', textAlign: 'center', padding: '30px 0' }}>Loading rounds...</p>
+          <p style={{ fontSize: 12, color: 'var(--dag-text-faint)', textAlign: 'center', padding: '30px 0' }}>Loading rounds...</p>
         ) : rounds.length === 0 ? (
-          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', textAlign: 'center', padding: '30px 0' }}>No rounds yet.</p>
+          <p style={{ fontSize: 12, color: 'var(--dag-text-faint)', textAlign: 'center', padding: '30px 0' }}>No rounds yet.</p>
         ) : (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr 1fr 1fr', gap: '0 16px' }}>
@@ -151,10 +151,10 @@ export function ExplorerPage() {
             {/* Pagination */}
             <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 14 }}>
               <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1}
-                style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.055)', color: page === 1 ? 'rgba(255,255,255,0.1)' : '#fff', fontSize: 11, cursor: page === 1 ? 'default' : 'pointer' }}>← Prev</button>
-              <span style={{ padding: '5px 10px', fontSize: 11, color: 'rgba(255,255,255,0.3)', ...S.mono }}>{page} / {totalPages}</span>
+                style={{ padding: '5px 12px', borderRadius: 6, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)', color: page === 1 ? 'var(--dag-text-faint)' : 'var(--dag-text)', fontSize: 11, cursor: page === 1 ? 'default' : 'pointer' }}>← Prev</button>
+              <span style={{ padding: '5px 10px', fontSize: 11, color: 'var(--dag-text-muted)', ...S.mono }}>{page} / {totalPages}</span>
               <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page === totalPages}
-                style={{ padding: '5px 12px', borderRadius: 6, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.055)', color: page === totalPages ? 'rgba(255,255,255,0.1)' : '#fff', fontSize: 11, cursor: page === totalPages ? 'default' : 'pointer' }}>Next →</button>
+                style={{ padding: '5px 12px', borderRadius: 6, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)', color: page === totalPages ? 'var(--dag-text-faint)' : 'var(--dag-text)', fontSize: 11, cursor: page === totalPages ? 'default' : 'pointer' }}>Next →</button>
             </div>
           </>
         )}

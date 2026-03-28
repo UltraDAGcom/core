@@ -20,8 +20,8 @@
 
 body {
   margin: 0;
-  background: var(--color-dag-bg);
-  color: #e2e8f0;
+  background: var(--dag-bg, #080C14);
+  color: var(--dag-text, #e2e8f0);
   font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -31,20 +31,20 @@ body {
   min-height: 100vh;
 }
 
-/* Scrollbar styling for dark theme */
+/* Scrollbar styling — adapts to theme */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--color-dag-bg);
+  background: var(--dag-bg, #080C14);
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: var(--dag-border, #334155);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: var(--dag-border-hover, #475569);
 }
 
 /* Modal overlay backdrop */

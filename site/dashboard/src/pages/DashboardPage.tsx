@@ -131,7 +131,7 @@ function RingChart({ value, max, size = 120, sw = 8 }: { value: number; max: num
   }, [pct]);
   return (
     <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth={sw} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--dag-border)" strokeWidth={sw} />
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#00E0C4" strokeWidth={sw}
         strokeDasharray={circ} strokeDashoffset={circ * (1 - a)} strokeLinecap="round"
         style={{ filter: 'drop-shadow(0 0 6px rgba(0,224,196,0.3))' }} />
@@ -160,16 +160,16 @@ function Card({ label, value, sub, icon, accent = '#00E0C4', spark, children }: 
   const [hov, setHov] = useState(false);
   return (
     <div style={{
-      background: 'rgba(255,255,255,0.018)', border: `1px solid ${hov ? accent + '28' : 'rgba(255,255,255,0.055)'}`,
+      background: 'var(--dag-card)', border: `1px solid ${hov ? accent + '28' : 'var(--dag-border)'}`,
       borderRadius: 14, padding: '18px 20px', position: 'relative', overflow: 'hidden',
       transition: 'all 0.25s', transform: hov ? 'translateY(-1px)' : 'none', cursor: 'default',
     }} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}>
       <div style={{ position: 'absolute', top: -20, left: -20, width: 60, height: 60, borderRadius: '50%', background: accent + '06', filter: 'blur(20px)' }} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 10.5, fontWeight: 600, color: 'rgba(255,255,255,0.32)', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
-          <div style={{ fontSize: 25, fontWeight: 700, color: '#fff', letterSpacing: -0.5, lineHeight: 1.2 }}>{value}</div>
-          {sub && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.28)', marginTop: 5 }}>{sub}</div>}
+          <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--dag-text-muted)', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
+          <div style={{ fontSize: 25, fontWeight: 700, color: 'var(--dag-text)', letterSpacing: -0.5, lineHeight: 1.2 }}>{value}</div>
+          {sub && <div style={{ fontSize: 11.5, color: 'var(--dag-text-muted)', marginTop: 5 }}>{sub}</div>}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
           {icon && <span style={{ fontSize: 17, opacity: 0.4 }}>{icon}</span>}
@@ -188,14 +188,14 @@ function EmBar({ splits, colors }: { splits: number[]; colors: string[] }) {
   const lbl = ['Validators', 'Council', 'Treasury', 'Founder'];
   return (
     <div>
-      <div style={{ display: 'flex', borderRadius: 5, overflow: 'hidden', height: 7, background: 'rgba(255,255,255,0.03)' }}>
+      <div style={{ display: 'flex', borderRadius: 5, overflow: 'hidden', height: 7, background: 'var(--dag-input-bg)' }}>
         {splits.map((s, i) => <div key={i} style={{ width: `${s * a}%`, background: colors[i] }} />)}
       </div>
       <div style={{ display: 'flex', gap: 14, marginTop: 10, flexWrap: 'wrap' }}>
         {splits.map((s, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <div style={{ width: 7, height: 7, borderRadius: 2, background: colors[i] }} />
-            <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.35)' }}>{lbl[i]} {s}%</span>
+            <span style={{ fontSize: 10.5, color: 'var(--dag-text-muted)' }}>{lbl[i]} {s}%</span>
           </div>
         ))}
       </div>
@@ -285,20 +285,20 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
       {/* Top bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
         <div>
-          <h1 style={{ fontSize: 21, fontWeight: 700, letterSpacing: -0.3, color: '#fff' }}>Dashboard</h1>
-          <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>Real-time network overview</p>
+          <h1 style={{ fontSize: 21, fontWeight: 700, letterSpacing: -0.3, color: 'var(--dag-text)' }}>Dashboard</h1>
+          <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>Real-time network overview</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#00E0C4', boxShadow: '0 0 8px #00E0C4', animation: 'pulse 2s ease-in-out infinite' }} />
             <span style={{ fontSize: 12, fontWeight: 600, color: '#00E0C4' }}>HEALTHY</span>
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>{healthScore}%</span>
+            <span style={{ fontSize: 11, color: 'var(--dag-subheading)' }}>{healthScore}%</span>
           </div>
           <div style={{ padding: '5px 13px', borderRadius: 18, background: 'rgba(0,224,196,0.06)', border: '1px solid rgba(0,224,196,0.12)', fontSize: 10.5, fontWeight: 600, color: '#00E0C4', letterSpacing: 1, textTransform: 'uppercase' }}>{network}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 13px', borderRadius: 18, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 13px', borderRadius: 18, background: 'var(--dag-card)', border: '1px solid var(--dag-border)' }}>
             <div style={{ width: 18, height: 18, borderRadius: 5, background: 'linear-gradient(135deg,#00E0C4,#0066FF)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: '#fff' }}>{userName[0]?.toUpperCase()}</div>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{userName}</span>
-            <span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)' }}>{userName}</span>
+            <span style={{ color: 'var(--dag-text-faint)' }}>|</span>
             <span style={{ fontSize: 12, color: '#00E0C4', fontWeight: 600 }}>{portfolioTotal.toFixed(2)} UDAG</span>
           </div>
         </div>
@@ -311,8 +311,8 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
         animation: 'slideUp 0.4s ease',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <span style={{ fontSize: 10.5, fontWeight: 600, color: 'rgba(255,255,255,0.3)', letterSpacing: 2 }}>YOUR PORTFOLIO</span>
-          <Link to="/wallet" style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', textDecoration: 'none' }}>Manage Wallets →</Link>
+          <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--dag-text-muted)', letterSpacing: 2 }}>YOUR PORTFOLIO</span>
+          <Link to="/wallet" style={{ fontSize: 11, color: 'var(--dag-subheading)', textDecoration: 'none' }}>Manage Wallets →</Link>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 20 }}>
           {[
@@ -322,9 +322,9 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
             { l: 'Delegated', v: portfolioDelegated, c: '#A855F7' },
           ].map((p, i) => (
             <div key={i}>
-              <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.28)', marginBottom: 5, letterSpacing: 0.5 }}>{p.l}</div>
+              <div style={{ fontSize: 10.5, color: 'var(--dag-text-muted)', marginBottom: 5, letterSpacing: 0.5 }}>{p.l}</div>
               <div style={{ fontSize: 23, fontWeight: 700, color: p.c }}><AnimCounter target={p.v} decimals={2} /></div>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.18)', marginTop: 2 }}>UDAG</div>
+              <div style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginTop: 2 }}>UDAG</div>
             </div>
           ))}
         </div>
@@ -333,19 +333,19 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
       {/* Primary Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16, animation: 'slideUp 0.5s ease' }}>
         <Card label="Round" icon="◈" accent="#00E0C4" spark={vertexHistory.length > 1 ? vertexHistory : [3, 4, 5, 4, 5]}
-          value={<><AnimCounter target={round} /> <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.22)', fontWeight: 400 }}>~5s</span></>}
+          value={<><AnimCounter target={round} /> <span style={{ fontSize: 11, color: 'var(--dag-text-faint)', fontWeight: 400 }}>~5s</span></>}
           sub={`Finalized: ${finalized}`}
         />
         <Card label="Total Supply" icon="◎" accent="#0066FF"
           value={<AnimCounter target={supplyUdag} decimals={2} suffix=" UDAG" />}
           sub={`${supplyPct.toFixed(2)}% of 21M`}
         >
-          <div style={{ marginTop: 10, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.03)' }}>
+          <div style={{ marginTop: 10, height: 3, borderRadius: 2, background: 'var(--dag-input-bg)' }}>
             <div style={{ height: '100%', borderRadius: 2, background: 'linear-gradient(90deg,#0066FF,#00E0C4)', width: `${supplyPct}%`, boxShadow: '0 0 6px rgba(0,102,255,0.3)' }} />
           </div>
         </Card>
         <Card label="Network" icon="⬡" accent="#A855F7" spark={[5, 5, 5, 4, 5, 5, 5, 5]}
-          value={<><AnimCounter target={validators} /> <span style={{ fontSize: 13, fontWeight: 400, color: 'rgba(255,255,255,0.35)' }}>validators</span></>}
+          value={<><AnimCounter target={validators} /> <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--dag-text-muted)' }}>validators</span></>}
           sub={`${peers} peers connected`}
         />
         <Card label="Treasury" icon="♛" accent="#FFB800"
@@ -356,30 +356,30 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
 
       {/* DAG + Emission */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 12, marginBottom: 16, animation: 'slideUp 0.6s ease' }}>
-        <div style={{ background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '16px 18px', overflow: 'hidden' }}>
+        <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '16px 18px', overflow: 'hidden' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Live DAG Topology</span>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Live DAG Topology</span>
             <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
-              <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.22)', fontFamily: "'DM Mono',monospace" }}>R{Math.max(0, round - 7)}–{round}</span>
+              <span style={{ fontSize: 10.5, color: 'var(--dag-text-faint)', fontFamily: "'DM Mono',monospace" }}>R{Math.max(0, round - 7)}–{round}</span>
               <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#00E0C4', animation: 'pulse 1.5s ease-in-out infinite' }} />
             </div>
           </div>
           <DagVis />
         </div>
-        <div style={{ background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '16px 18px' }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)', marginBottom: 14 }}>Emission Progress</div>
+        <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '16px 18px' }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--dag-text-secondary)', marginBottom: 14 }}>Emission Progress</div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18, position: 'relative' }}>
             <RingChart value={supplyUdag} max={MAX_SUPPLY} />
             <div style={{ position: 'absolute', textAlign: 'center' }}>
-              <div style={{ fontSize: 19, fontWeight: 700, color: '#fff' }}>{supplyPct.toFixed(1)}%</div>
-              <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.28)' }}>of 21M</div>
+              <div style={{ fontSize: 19, fontWeight: 700, color: 'var(--dag-text)' }}>{supplyPct.toFixed(1)}%</div>
+              <div style={{ fontSize: 9.5, color: 'var(--dag-text-muted)' }}>of 21M</div>
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
             {[{ l: 'EMITTED', v: supplyUdag }, { l: 'REMAINING', v: MAX_SUPPLY - supplyUdag }].map((x, i) => (
-              <div key={i} style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 8, padding: '9px 11px' }}>
-                <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.28)', marginBottom: 3, letterSpacing: 1 }}>{x.l}</div>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: '#fff' }}><AnimCounter target={x.v} /></div>
+              <div key={i} style={{ background: 'var(--dag-card)', borderRadius: 8, padding: '9px 11px' }}>
+                <div style={{ fontSize: 9.5, color: 'var(--dag-text-muted)', marginBottom: 3, letterSpacing: 1 }}>{x.l}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--dag-text)' }}><AnimCounter target={x.v} /></div>
               </div>
             ))}
           </div>
@@ -389,7 +389,7 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
 
       {/* Network Vitals */}
       <div style={{ marginBottom: 16, animation: 'slideUp 0.7s ease' }}>
-        <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.18)', letterSpacing: 2, marginBottom: 10 }}>NETWORK VITALS</div>
+        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--dag-text-faint)', letterSpacing: 2, marginBottom: 10 }}>NETWORK VITALS</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 10 }}>
           {[
             { l: 'Accounts', v: accounts, a: '#00E0C4' },
@@ -399,9 +399,9 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
             { l: 'Memory', v: `${memoryMB.toFixed(1)} MB`, a: '#A855F7' },
             { l: 'Uptime', v: uptime, a: '#FFB800' },
           ].map((v, i) => (
-            <div key={i} style={{ background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 10, padding: '12px 14px' }}>
-              <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.28)', letterSpacing: 1.5, marginBottom: 7 }}>{v.l.toUpperCase()}</div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>{typeof v.v === 'number' ? <AnimCounter target={v.v} /> : v.v}</div>
+            <div key={i} style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 10, padding: '12px 14px' }}>
+              <div style={{ fontSize: 9.5, color: 'var(--dag-text-muted)', letterSpacing: 1.5, marginBottom: 7 }}>{v.l.toUpperCase()}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--dag-text)' }}>{typeof v.v === 'number' ? <AnimCounter target={v.v} /> : v.v}</div>
             </div>
           ))}
         </div>
@@ -409,47 +409,47 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
 
       {/* Bottom: Checkpoints + DAG Status + Recent Rounds */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: 12, animation: 'slideUp 0.8s ease' }}>
-        <div style={{ background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '16px 18px' }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)', marginBottom: 12 }}>◈ Checkpoints</div>
+        <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '16px 18px' }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--dag-text-secondary)', marginBottom: 12 }}>◈ Checkpoints</div>
           {[
             { l: 'Last checkpoint', v: `Round ${(ck?.last_checkpoint_round ?? 0).toLocaleString()}` },
             { l: 'Age', v: ck ? `${Math.floor(ck.checkpoint_age_seconds / 60)}m` : '-' },
             { l: 'On disk', v: String(ck?.disk_count ?? 0) },
             { l: 'Pending', v: String(ck?.pending_checkpoints ?? 0) },
           ].map((r, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: i < 3 ? '1px solid rgba(255,255,255,0.025)' : 'none' }}>
-              <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.32)' }}>{r.l}</span>
-              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'rgba(255,255,255,0.65)', fontFamily: "'DM Mono',monospace" }}>{r.v}</span>
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: i < 3 ? '1px solid var(--dag-row-border)' : 'none' }}>
+              <span style={{ fontSize: 11.5, color: 'var(--dag-text-muted)' }}>{r.l}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--dag-value-text)', fontFamily: "'DM Mono',monospace" }}>{r.v}</span>
             </div>
           ))}
         </div>
-        <div style={{ background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '16px 18px' }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)', marginBottom: 12 }}>⚡ DAG Status</div>
+        <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '16px 18px' }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--dag-text-secondary)', marginBottom: 12 }}>⚡ DAG Status</div>
           {[
             { l: 'Pruning floor', v: String(dag?.pruning_floor ?? 0) },
             { l: 'Tips', v: String(dag?.tips_count ?? 0) },
             { l: 'Sync', v: net?.sync_complete ? 'Complete' : 'Syncing...', c: net?.sync_complete ? '#00E0C4' : '#FFB800' },
             { l: 'Finality lag', v: `${fin?.finality_lag ?? 0} rounds`, c: (fin?.finality_lag ?? 0) <= 3 ? '#00E0C4' : '#FFB800' },
           ].map((r, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: i < 3 ? '1px solid rgba(255,255,255,0.025)' : 'none' }}>
-              <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.32)' }}>{r.l}</span>
-              <span style={{ fontSize: 11.5, fontWeight: 600, color: r.c || 'rgba(255,255,255,0.65)', fontFamily: "'DM Mono',monospace" }}>{r.v}</span>
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: i < 3 ? '1px solid var(--dag-row-border)' : 'none' }}>
+              <span style={{ fontSize: 11.5, color: 'var(--dag-text-muted)' }}>{r.l}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: r.c || 'var(--dag-value-text)', fontFamily: "'DM Mono',monospace" }}>{r.v}</span>
             </div>
           ))}
         </div>
-        <div style={{ background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '16px 18px' }}>
+        <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '16px 18px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>◉ Recent Finalized Rounds</span>
-            <Link to="/explorer" style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.22)', textDecoration: 'none' }}>View all →</Link>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>◉ Recent Finalized Rounds</span>
+            <Link to="/explorer" style={{ fontSize: 10.5, color: 'var(--dag-text-faint)', textDecoration: 'none' }}>View all →</Link>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr', gap: '0 14px' }}>
             {['ROUND', 'VERTICES', 'TXS'].map((h, i) => (
-              <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'rgba(255,255,255,0.18)', letterSpacing: 1.5, paddingBottom: 7, borderBottom: '1px solid rgba(255,255,255,0.03)' }}>{h}</div>
+              <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'var(--dag-text-faint)', letterSpacing: 1.5, paddingBottom: 7, borderBottom: '1px solid var(--dag-table-border)' }}>{h}</div>
             ))}
             {recentRounds.slice(0, 6).map((r, i) => [
-              <div key={`r${i}`} style={{ fontSize: 11.5, fontWeight: 600, color: '#00E0C4', padding: '5px 0', fontFamily: "'DM Mono',monospace", borderBottom: '1px solid rgba(255,255,255,0.015)' }}>{r.round}</div>,
-              <div key={`v${i}`} style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.45)', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.015)' }}>{r.vertices?.length ?? 0}</div>,
-              <div key={`t${i}`} style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.45)', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.015)' }}>{(r.vertices ?? []).reduce((s, v) => s + v.tx_count, 0)}</div>,
+              <div key={`r${i}`} style={{ fontSize: 11.5, fontWeight: 600, color: '#00E0C4', padding: '5px 0', fontFamily: "'DM Mono',monospace", borderBottom: '1px solid var(--dag-row-border)' }}>{r.round}</div>,
+              <div key={`v${i}`} style={{ fontSize: 11.5, color: 'var(--dag-cell-text)', padding: '5px 0', borderBottom: '1px solid var(--dag-row-border)' }}>{r.vertices?.length ?? 0}</div>,
+              <div key={`t${i}`} style={{ fontSize: 11.5, color: 'var(--dag-cell-text)', padding: '5px 0', borderBottom: '1px solid var(--dag-row-border)' }}>{(r.vertices ?? []).reduce((s, v) => s + v.tx_count, 0)}</div>,
             ]).flat()}
           </div>
         </div>

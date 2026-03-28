@@ -12,11 +12,11 @@ import type { WalletBalance } from '../hooks/useWalletBalances';
 
 const SATS = 100_000_000;
 const S = {
-  card: { background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)', borderRadius: 14, padding: '20px 22px' } as React.CSSProperties,
-  label: { fontSize: 10.5, fontWeight: 600, color: 'rgba(255,255,255,0.32)', letterSpacing: 1.2, textTransform: 'uppercase' as const, marginBottom: 6, display: 'block' },
+  card: { background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '20px 22px' } as React.CSSProperties,
+  label: { fontSize: 10.5, fontWeight: 600, color: 'var(--dag-text-muted)', letterSpacing: 1.2, textTransform: 'uppercase' as const, marginBottom: 6, display: 'block' },
   input: {
-    width: '100%', padding: '11px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.03)',
-    border: '1px solid rgba(255,255,255,0.055)', color: '#fff', fontSize: 13, outline: 'none',
+    width: '100%', padding: '11px 14px', borderRadius: 10, background: 'var(--dag-input-bg)',
+    border: '1px solid var(--dag-border)', color: 'var(--dag-text)', fontSize: 13, outline: 'none',
     fontFamily: "'DM Sans',sans-serif", transition: 'border-color 0.2s',
   } as React.CSSProperties,
   btnSolid: (c = '#00E0C4') => ({
@@ -53,7 +53,7 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
   if (!unlocked) {
     return (
       <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
-        <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Unlock your wallet to send transactions.</p>
+        <p style={{ color: 'var(--dag-text-muted)', fontSize: 13 }}>Unlock your wallet to send transactions.</p>
       </div>
     );
   }
@@ -111,11 +111,11 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
   function WalletSelect({ idx, onChange }: { idx: number; onChange: (i: number) => void }) {
     return (
       <select value={idx} onChange={e => onChange(Number(e.target.value))} style={{
-        ...S.input, appearance: 'none', cursor: 'pointer', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='rgba(255,255,255,0.3)' stroke-width='1.5'/%3E%3C/svg%3E")`,
+        ...S.input, appearance: 'none', cursor: 'pointer', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='var(--dag-text-muted)' stroke-width='1.5'/%3E%3C/svg%3E")`,
         backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center',
       }}>
         {wallets.map((w, i) => (
-          <option key={w.address} value={i} style={{ background: '#0B1120', color: '#fff' }}>
+          <option key={w.address} value={i} style={{ background: '#0B1120', color: 'var(--dag-text)' }}>
             {w.name} — {((balances.get(w.address)?.balance ?? 0) / SATS).toFixed(2)} UDAG
           </option>
         ))}
@@ -128,8 +128,8 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} input:focus,select:focus,textarea:focus{border-color:rgba(0,224,196,0.3)!important}`}</style>
 
       <div style={{ marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
-        <h1 style={{ fontSize: 21, fontWeight: 700, color: '#fff' }}>Send & Receive</h1>
-        <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>Transfer UDAG or receive funds</p>
+        <h1 style={{ fontSize: 21, fontWeight: 700, color: 'var(--dag-text)' }}>Send & Receive</h1>
+        <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>Transfer UDAG or receive funds</p>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, animation: 'slideUp 0.4s ease' }}>
@@ -138,7 +138,7 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
           <div style={S.card}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 16 }}>
               <span style={{ color: '#00E0C4', fontSize: 16 }}>⇄</span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Send UDAG</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Send UDAG</span>
               {pw && wallet?.address === pw.address && (
                 <span style={{ fontSize: 8.5, background: 'rgba(0,224,196,0.12)', color: '#00E0C4', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>PASSKEY</span>
               )}
@@ -148,7 +148,7 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
               <div>
                 <span style={S.label}>From Wallet</span>
                 <WalletSelect idx={selectedIdx} onChange={setSelectedIdx} />
-                {balance && <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.25)', marginTop: 4, ...S.mono }}>Available: {((balance.balance ?? 0) / SATS).toFixed(4)} UDAG</div>}
+                {balance && <div style={{ fontSize: 10.5, color: 'var(--dag-subheading)', marginTop: 4, ...S.mono }}>Available: {((balance.balance ?? 0) / SATS).toFixed(4)} UDAG</div>}
               </div>
 
               <div>
@@ -158,8 +158,8 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
                     <VerifiedAddressInput value={to} onChange={setTo} placeholder="Address, bech32m, or name" />
                   </div>
                   <button onClick={() => setShowScanner(true)} style={{
-                    padding: '0 12px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.055)',
-                    color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: 16, flexShrink: 0, alignSelf: 'flex-start', height: 42,
+                    padding: '0 12px', borderRadius: 10, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)',
+                    color: 'var(--dag-text-muted)', cursor: 'pointer', fontSize: 16, flexShrink: 0, alignSelf: 'flex-start', height: 42,
                   }} title="Scan QR">📷</button>
                 </div>
               </div>
@@ -178,7 +178,7 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={S.label}>Memo (optional)</span>
-                  <span style={{ fontSize: 10, color: memoBytes > 256 ? '#EF4444' : 'rgba(255,255,255,0.2)' }}>{memoBytes}/256</span>
+                  <span style={{ fontSize: 10, color: memoBytes > 256 ? '#EF4444' : 'var(--dag-text-faint)' }}>{memoBytes}/256</span>
                 </div>
                 <textarea value={memo} onChange={e => setMemo(e.target.value)} placeholder="Optional message" rows={2}
                   style={{ ...S.input, resize: 'none', maxHeight: 80 } as React.CSSProperties} />
@@ -198,10 +198,10 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
             <div style={S.card}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
                 <span style={{ color: '#FFB800', fontSize: 14 }}>⬡</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Testnet Faucet</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Testnet Faucet</span>
                 <span style={{ fontSize: 8.5, background: 'rgba(255,184,0,0.12)', color: '#FFB800', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>TESTNET</span>
               </div>
-              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', marginBottom: 10 }}>Request 100 free UDAG for testing.</p>
+              <p style={{ fontSize: 11, color: 'var(--dag-subheading)', marginBottom: 10 }}>Request 100 free UDAG for testing.</p>
               {faucetMsg && <div style={{ fontSize: 11, color: faucetMsg.startsWith('✓') ? '#00E0C4' : '#EF4444', marginBottom: 8 }}>{faucetMsg}</div>}
               <button onClick={handleFaucet} disabled={faucetLoading} style={{ ...S.btnSolid('#FFB800'), opacity: faucetLoading ? 0.5 : 1 }}>
                 {faucetLoading ? 'Requesting...' : '⬡ Request 100 UDAG'}
@@ -214,10 +214,10 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
         <div style={S.card}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 16 }}>
             <span style={{ color: '#0066FF', fontSize: 16 }}>◎</span>
-            <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.55)' }}>Receive UDAG</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Receive UDAG</span>
           </div>
 
-          <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.25)', marginBottom: 14 }}>Share your address or QR code to receive funds.</p>
+          <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginBottom: 14 }}>Share your address or QR code to receive funds.</p>
 
           <div style={{ marginBottom: 14 }}>
             <span style={S.label}>Wallet</span>
@@ -232,22 +232,22 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
 
               <div style={{ width: '100%' }}>
                 <span style={S.label}>Your Address</span>
-                <div style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ background: 'var(--dag-card)', borderRadius: 10, padding: '12px 14px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
-                    <code style={{ fontSize: 12, color: '#fff', ...S.mono, wordBreak: 'break-all', lineHeight: 1.6 }}>
+                    <code style={{ fontSize: 12, color: 'var(--dag-text)', ...S.mono, wordBreak: 'break-all', lineHeight: 1.6 }}>
                       {prettyAddr(receiveWallet.address)}
                     </code>
                     <CopyButton text={fullAddr(receiveWallet.address)} />
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.2)', letterSpacing: 1 }}>HEX</span>
-                    <code style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.25)', ...S.mono, wordBreak: 'break-all' }}>{receiveWallet.address}</code>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingTop: 8, borderTop: '1px solid var(--dag-table-border)' }}>
+                    <span style={{ fontSize: 9, color: 'var(--dag-text-faint)', letterSpacing: 1 }}>HEX</span>
+                    <code style={{ fontSize: 10.5, color: 'var(--dag-subheading)', ...S.mono, wordBreak: 'break-all' }}>{receiveWallet.address}</code>
                     <CopyButton text={receiveWallet.address} />
                   </div>
                 </div>
               </div>
 
-              <p style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.2)', textAlign: 'center' }}>
+              <p style={{ fontSize: 10.5, color: 'var(--dag-text-faint)', textAlign: 'center' }}>
                 Both bech32m and hex formats are accepted. Names also work — try sending to a username.
               </p>
             </div>

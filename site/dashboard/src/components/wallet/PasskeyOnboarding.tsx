@@ -206,8 +206,8 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
   }, [p256PubkeyHex, username, nameAvailable, credentialId]);
 
   const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '12px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.03)',
-    border: '1px solid rgba(255,255,255,0.055)', color: '#fff', fontSize: 14, outline: 'none',
+    width: '100%', padding: '12px 14px', borderRadius: 10, background: 'var(--dag-input-bg)',
+    border: '1px solid var(--dag-border)', color: 'var(--dag-text)', fontSize: 14, outline: 'none',
     fontFamily: "'DM Sans',sans-serif", transition: 'border-color 0.2s',
   };
 
@@ -226,15 +226,15 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
             <span style={{ fontSize: 36 }}>◎</span>
           </div>
 
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 8 }}>Create Your Wallet</h2>
-          <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.3)', marginBottom: 28, lineHeight: 1.6 }}>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 8 }}>Create Your Wallet</h2>
+          <p style={{ fontSize: 12.5, color: 'var(--dag-text-muted)', marginBottom: 28, lineHeight: 1.6 }}>
             Use your fingerprint, face, or security key.<br />No seed phrases. No passwords.
           </p>
 
           <button onClick={handleCreatePasskey} style={{
             width: '100%', padding: '14px 0', borderRadius: 12,
             background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
-            color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
+            color: 'var(--dag-text)', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
             boxShadow: '0 4px 20px rgba(0,224,196,0.2)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           }}>
@@ -248,7 +248,7 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
           )}
 
           <button onClick={onFallbackToAdvanced} style={{
-            background: 'none', border: 'none', color: 'rgba(255,255,255,0.18)',
+            background: 'none', border: 'none', color: 'var(--dag-text-faint)',
             fontSize: 11.5, cursor: 'pointer', marginTop: 24, display: 'flex', alignItems: 'center', gap: 4, margin: '24px auto 0',
           }}>
             ◇ Advanced: Import with seed phrase or key
@@ -267,18 +267,18 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
             }}>
               <span style={{ fontSize: 26, color: '#00E0C4' }}>✓</span>
             </div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, color: '#fff', marginBottom: 4 }}>Passkey Created!</h2>
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.28)' }}>Now choose your username.</p>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 4 }}>Passkey Created!</h2>
+            <p style={{ fontSize: 12, color: 'var(--dag-text-muted)' }}>Now choose your username.</p>
           </div>
 
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 10.5, fontWeight: 600, color: 'rgba(255,255,255,0.28)', letterSpacing: 1, marginBottom: 6 }}>CHOOSE A USERNAME</div>
+            <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--dag-text-muted)', letterSpacing: 1, marginBottom: 6 }}>CHOOSE A USERNAME</div>
             <div style={{ position: 'relative' }}>
               <input type="text" value={username}
                 onChange={(e) => checkName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                 placeholder="john29" maxLength={20} autoFocus
                 style={inputStyle} />
-              {checking && <span style={{ position: 'absolute', right: 14, top: 13, color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>...</span>}
+              {checking && <span style={{ position: 'absolute', right: 14, top: 13, color: 'var(--dag-text-faint)', fontSize: 12 }}>...</span>}
               {!checking && nameAvailable === true && <span style={{ position: 'absolute', right: 14, top: 12, color: '#00E0C4', fontSize: 16 }}>✓</span>}
             </div>
             {nameError && <p style={{ fontSize: 10.5, color: '#FFB800', marginTop: 4 }}>{nameError}</p>}
@@ -288,13 +288,13 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
           <button onClick={handleCreate} disabled={creating} style={{
             width: '100%', padding: '13px 0', borderRadius: 12,
             background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
-            color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
+            color: 'var(--dag-text)', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
             opacity: creating ? 0.5 : 1, boxShadow: '0 4px 20px rgba(0,224,196,0.2)',
           }}>
             {username.length >= 3 && nameAvailable ? `Create Wallet as ${username}` : 'Create Wallet'}
           </button>
 
-          <button onClick={() => handleCreate()} style={{ display: 'block', margin: '14px auto 0', background: 'none', border: 'none', color: 'rgba(255,255,255,0.18)', fontSize: 11, cursor: 'pointer' }}>
+          <button onClick={() => handleCreate()} style={{ display: 'block', margin: '14px auto 0', background: 'none', border: 'none', color: 'var(--dag-text-faint)', fontSize: 11, cursor: 'pointer' }}>
             Skip username for now
           </button>
 
@@ -307,8 +307,8 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
         <div style={{ textAlign: 'center', padding: '50px 0', animation: 'slideUp 0.3s ease' }}>
           <div style={{ width: 48, height: 48, border: '3px solid rgba(0,224,196,0.2)', borderTop: '3px solid #00E0C4', borderRadius: '50%', margin: '0 auto 20px', animation: 'spin 0.8s linear infinite' }} />
           <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-          <h2 style={{ fontSize: 17, fontWeight: 700, color: '#fff', marginBottom: 6 }}>Creating Your Wallet</h2>
-          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>Funding account on the network...</p>
+          <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 6 }}>Creating Your Wallet</h2>
+          <p style={{ fontSize: 12, color: 'var(--dag-subheading)' }}>Funding account on the network...</p>
         </div>
       )}
 
@@ -323,30 +323,30 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
             <span style={{ fontSize: 36, color: '#00E0C4' }}>✓</span>
           </div>
 
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 6 }}>You're All Set!</h2>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 6 }}>You're All Set!</h2>
           {result.name ? (
             <p style={{ fontSize: 17, fontWeight: 600, color: '#00E0C4', marginBottom: 4 }}>You're {result.name}</p>
           ) : (
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginBottom: 4 }}>Your wallet is ready.</p>
+            <p style={{ fontSize: 12, color: 'var(--dag-text-muted)', marginBottom: 4 }}>Your wallet is ready.</p>
           )}
-          <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.18)', fontFamily: "'DM Mono',monospace", wordBreak: 'break-all', marginBottom: 20 }}>{result.address}</p>
+          <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', fontFamily: "'DM Mono',monospace", wordBreak: 'break-all', marginBottom: 20 }}>{result.address}</p>
 
           <div style={{
-            background: 'rgba(255,255,255,0.018)', border: '1px solid rgba(255,255,255,0.055)',
+            background: 'var(--dag-card)', border: '1px solid var(--dag-border)',
             borderRadius: 12, padding: '14px 16px', textAlign: 'left', marginBottom: 20,
           }}>
-            <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.3)', lineHeight: 1.6 }}>
+            <p style={{ fontSize: 11.5, color: 'var(--dag-text-muted)', lineHeight: 1.6 }}>
               Your wallet is secured by your device's biometrics. The private key never leaves the secure enclave.
             </p>
-            <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.3)', marginTop: 6, lineHeight: 1.6 }}>
-              <strong style={{ color: 'rgba(255,255,255,0.5)' }}>Tip:</strong> Go to SmartAccount to add a backup device and set up recovery guardians.
+            <p style={{ fontSize: 11.5, color: 'var(--dag-text-muted)', marginTop: 6, lineHeight: 1.6 }}>
+              <strong style={{ color: 'var(--dag-text-secondary)' }}>Tip:</strong> Go to SmartAccount to add a backup device and set up recovery guardians.
             </p>
           </div>
 
           <button onClick={() => onComplete(result.address, result.name)} style={{
             width: '100%', padding: '14px 0', borderRadius: 12,
             background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
-            color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
+            color: 'var(--dag-text)', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
             boxShadow: '0 4px 20px rgba(0,224,196,0.2)',
           }}>
             Open Wallet
