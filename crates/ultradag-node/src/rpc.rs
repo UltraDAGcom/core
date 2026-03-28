@@ -3367,7 +3367,14 @@ ultradag_banned_ips {ban_count}
                     }))
                 }
                 None => {
-                    error_response(StatusCode::NOT_FOUND, "no active delegation for this address")
+                    json_response(StatusCode::OK, &serde_json::json!({
+                        "address": addr.to_hex(),
+                        "delegated": 0,
+                        "delegated_udag": 0.0,
+                        "validator": null,
+                        "unlock_at_round": null,
+                        "is_undelegating": false,
+                    }))
                 }
             }
         }
