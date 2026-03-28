@@ -138,19 +138,31 @@ export async function signAndSubmitWithPasskey(
  * Rust's serde expects Address as [u8; 20] (byte array), not hex string.
  * Also converts [u8; 32] fields (like stream_id) to byte arrays.
  */
+/**
+ * Convert a hex address to exactly 20 bytes (Address size in Rust).
+ * If 32 bytes given (full blake3 hash), truncate to first 20 bytes.
+ * If 20 bytes, use as-is.
+ */
+function hexToAddress(hex: string): number[] {
+  const bytes = hexToBytes(hex);
+  if (bytes.length === 20) return Array.from(bytes);
+  if (bytes.length === 32) return Array.from(bytes.slice(0, 20)); // truncate to Address size
+  throw new Error(`Invalid address length: ${bytes.length} bytes (expected 20 or 32)`);
+}
+
 function serializeOperation(op: Record<string, unknown>): Record<string, unknown> {
   if ('Stake' in op) return { Stake: op.Stake };
   if ('Unstake' in op) return { Unstake: op.Unstake ?? {} };
   if ('Delegate' in op) {
     const d = op.Delegate as { validator: string; amount: number };
-    return { Delegate: { validator: Array.from(hexToBytes(d.validator)), amount: d.amount } };
+    return { Delegate: { validator: hexToAddress(d.validator), amount: d.amount } };
   }
   if ('Undelegate' in op) return { Undelegate: op.Undelegate ?? {} };
   if ('Vote' in op) return { Vote: op.Vote };
   if ('RegisterName' in op) return { RegisterName: op.RegisterName };
   if ('StreamCreate' in op) {
     const s = op.StreamCreate as { recipient: string; rate_sats_per_round: number; deposit: number; cliff_rounds?: number };
-    return { StreamCreate: { recipient: Array.from(hexToBytes(s.recipient)), rate_sats_per_round: s.rate_sats_per_round, deposit: s.deposit, cliff_rounds: s.cliff_rounds ?? 0 } };
+    return { StreamCreate: { recipient: hexToAddress(s.recipient), rate_sats_per_round: s.rate_sats_per_round, deposit: s.deposit, cliff_rounds: s.cliff_rounds ?? 0 } };
   }
   if ('StreamWithdraw' in op) {
     const s = op.StreamWithdraw as { stream_id: string };
@@ -212,7 +224,7 @@ export async function signAndSubmitSmartOp(
   } else if ('StreamCreate' in operation) {
     const op = operation.StreamCreate as { recipient: string; rate_sats_per_round: number; deposit: number; cliff_rounds?: number };
     parts.push(new Uint8Array([10])); // discriminant 10
-    parts.push(hexToBytes(op.recipient));
+    parts.push(new Uint8Array(hexToAddress(op.recipient)));
     parts.push(u64ToLE(BigInt(op.rate_sats_per_round)));
     parts.push(u64ToLE(BigInt(op.deposit)));
     parts.push(u64ToLE(BigInt(op.cliff_rounds ?? 0)));
