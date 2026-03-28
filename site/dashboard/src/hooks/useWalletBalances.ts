@@ -23,37 +23,29 @@ export function useWalletBalances(wallets: Wallet[], connected: boolean) {
     setLoading(true);
     const results = new Map<string, WalletBalance>();
 
-    await Promise.all(
-      wallets.map(async (w) => {
-        try {
-          const [bal, stake, deleg] = await Promise.all([
-            getBalance(w.address).catch(() => null),
-            getStake(w.address).catch(() => null),
-            getDelegation(w.address).catch(() => null),
-          ]);
-          results.set(w.address, {
-            address: w.address,
-            balance: bal?.balance ?? 0,
-            nonce: bal?.nonce ?? 0,
-            staked: stake?.staked ?? 0,
-            delegated: deleg?.delegated ?? 0,
-            is_active_validator: stake?.is_active_validator ?? false,
-            commission_percent: stake?.commission_percent ?? 10,
-          });
-        } catch (err) {
-          results.set(w.address, {
-            address: w.address,
-            balance: 0,
-            nonce: 0,
-            staked: 0,
-            delegated: 0,
-            is_active_validator: false,
-            commission_percent: 10,
-            error: String(err),
-          });
-        }
-      })
-    );
+    // Only fetch balance for first 10 wallets to avoid request spam
+    const walletsToFetch = wallets.slice(0, 10);
+
+    // Fetch sequentially (not parallel) to avoid overwhelming the node
+    for (const w of walletsToFetch) {
+      try {
+        const bal = await getBalance(w.address).catch(() => null);
+        results.set(w.address, {
+          address: w.address,
+          balance: bal?.balance ?? 0,
+          nonce: bal?.nonce ?? 0,
+          staked: bal?.staked ?? 0,
+          delegated: bal?.delegated ?? 0,
+          is_active_validator: bal?.is_active_validator ?? false,
+          commission_percent: bal?.commission_percent ?? 10,
+        });
+      } catch {
+        results.set(w.address, {
+          address: w.address, balance: 0, nonce: 0, staked: 0, delegated: 0,
+          is_active_validator: false, commission_percent: 10,
+        });
+      }
+    }
 
     setBalances(results);
     setLoading(false);
@@ -61,7 +53,8 @@ export function useWalletBalances(wallets: Wallet[], connected: boolean) {
 
   useEffect(() => {
     fetchAll();
-    intervalRef.current = setInterval(fetchAll, 10_000);
+    // Poll every 30 seconds (was 10s — too aggressive with many wallets)
+    intervalRef.current = setInterval(fetchAll, 30_000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
