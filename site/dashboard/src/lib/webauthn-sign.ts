@@ -177,6 +177,21 @@ export async function signAndSubmitSmartOp(
     parts.push(u32ToLE(nameBytes.length));
     parts.push(nameBytes);
     parts.push(new Uint8Array([op.duration_years]));
+  } else if ('StreamCreate' in operation) {
+    const op = operation.StreamCreate as { recipient: string; rate_sats_per_round: number; deposit: number; cliff_rounds?: number };
+    parts.push(new Uint8Array([10])); // discriminant 10
+    parts.push(hexToBytes(op.recipient));
+    parts.push(u64ToLE(BigInt(op.rate_sats_per_round)));
+    parts.push(u64ToLE(BigInt(op.deposit)));
+    parts.push(u64ToLE(BigInt(op.cliff_rounds ?? 0)));
+  } else if ('StreamWithdraw' in operation) {
+    const op = operation.StreamWithdraw as { stream_id: string };
+    parts.push(new Uint8Array([11])); // discriminant 11
+    parts.push(hexToBytes(op.stream_id));
+  } else if ('StreamCancel' in operation) {
+    const op = operation.StreamCancel as { stream_id: string };
+    parts.push(new Uint8Array([12])); // discriminant 12
+    parts.push(hexToBytes(op.stream_id));
   } else {
     throw new Error('Unsupported SmartOp type');
   }

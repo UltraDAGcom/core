@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getNodeUrl } from '../lib/api';
+import { getPasskeyWallet } from '../lib/passkey-wallet';
+import { signAndSubmitSmartOp } from '../lib/webauthn-sign';
 import { useIsMobile } from '../hooks/useIsMobile';
 import type { NetworkType } from '../lib/api';
 
@@ -182,44 +184,55 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
     if (!recipient) { setFormMsg('Enter a recipient address'); setFormError(true); return; }
     if (satsPerRound <= 0) { setFormMsg('Rate must be greater than 0'); setFormError(true); return; }
     if (totalDeposit < 0.0001) { setFormMsg('Total deposit too small'); setFormError(true); return; }
-    const wallet = wallets[0];
-    if (!wallet?.secret_key) { setFormMsg('No wallet with secret key available'); setFormError(true); return; }
+
+    const depositSats = Math.floor(totalDeposit * SATS);
+    const passkey = getPasskeyWallet();
+    const wallet = wallets.find(w => w.secret_key) || wallets[0];
+
+    if (!passkey && !wallet?.secret_key) {
+      setFormMsg('No wallet available. Create or import a wallet first.');
+      setFormError(true);
+      return;
+    }
 
     setFormMsg('');
     setFormError(false);
     setSubmitting(true);
     try {
-      const depositSats = Math.floor(totalDeposit * SATS);
-      const res = await fetch(`${getNodeUrl()}/stream/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          secret_key: wallet.secret_key,
-          recipient,
-          rate_sats_per_round: satsPerRound,
-          deposit: depositSats,
-          cliff_rounds: cliffRoundsNum,
-        }),
-        signal: AbortSignal.timeout(10000),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setFormMsg(data.error || 'Failed to create stream');
-        setFormError(true);
-        return;
+      if (passkey) {
+        // Passkey wallet: use WebAuthn SmartOp signing
+        const balRes = await fetch(`${getNodeUrl()}/balance/${passkey.address}`, { signal: AbortSignal.timeout(5000) });
+        const balData = await balRes.json();
+        const nonce = balData.nonce ?? 0;
+        await signAndSubmitSmartOp(
+          { StreamCreate: { recipient, rate_sats_per_round: satsPerRound, deposit: depositSats, cliff_rounds: cliffRoundsNum } },
+          MIN_FEE,
+          nonce,
+        );
+        setFormMsg('Stream created with biometrics!');
+      } else {
+        // Traditional wallet: use secret_key POST endpoint
+        const res = await fetch(`${getNodeUrl()}/stream/create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            secret_key: wallet.secret_key,
+            recipient,
+            rate_sats_per_round: satsPerRound,
+            deposit: depositSats,
+            cliff_rounds: cliffRoundsNum,
+          }),
+          signal: AbortSignal.timeout(10000),
+        });
+        const data = await res.json();
+        if (!res.ok) { setFormMsg(data.error || 'Failed to create stream'); setFormError(true); return; }
+        setFormMsg(`Stream created! TX: ${(data.tx_hash || '').slice(0, 12)}...`);
       }
-      setFormMsg(`Stream created! TX: ${(data.tx_hash || '').slice(0, 12)}... Stream ID: ${(data.stream_id || '').slice(0, 12)}...`);
       setFormError(false);
-      // Clear form
-      setRecipient('');
-      setRateAmount('');
-      setDurAmount('');
-      setTotalDepositInput('');
-      setCliffRounds('');
-      // Refresh streams and switch to outgoing tab
+      setRecipient(''); setRateAmount(''); setDurAmount(''); setTotalDepositInput(''); setCliffRounds('');
       setTimeout(() => { fetchStreams(); setTab('outgoing'); }, 2000);
     } catch (err) {
-      setFormMsg(err instanceof Error ? err.message : 'Network error');
+      setFormMsg(err instanceof Error ? err.message : 'Failed to create stream');
       setFormError(true);
     } finally {
       setSubmitting(false);
@@ -556,18 +569,25 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                     <div style={{ fontSize: 11, color: 'var(--dag-text-secondary)', ...S.mono }}>{fmtUdag(s.accrued)}</div>
                     <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: statusBg(s.status), color: statusColor(s.status), display: 'inline-block', textAlign: 'center' }}>{s.status.toUpperCase()}</span>
                     {s.status === 'Active' && <button disabled={actionLoading === s.id} onClick={async () => {
-                      const wallet = wallets[0];
-                      if (!wallet?.secret_key) { alert('No wallet with secret key'); return; }
                       setActionLoading(s.id);
                       try {
-                        const res = await fetch(`${getNodeUrl()}/stream/cancel`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ secret_key: wallet.secret_key, stream_id: s.id }),
-                          signal: AbortSignal.timeout(10000),
-                        });
-                        const data = await res.json();
-                        if (!res.ok) { alert(data.error || 'Failed to cancel stream'); return; }
+                        const passkey = getPasskeyWallet();
+                        if (passkey) {
+                          const balRes = await fetch(`${getNodeUrl()}/balance/${passkey.address}`, { signal: AbortSignal.timeout(5000) });
+                          const balData = await balRes.json();
+                          await signAndSubmitSmartOp({ StreamCancel: { stream_id: s.id } }, MIN_FEE, balData.nonce ?? 0);
+                        } else {
+                          const wallet = wallets.find(w => w.secret_key);
+                          if (!wallet) { alert('No wallet available'); return; }
+                          const res = await fetch(`${getNodeUrl()}/stream/cancel`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ secret_key: wallet.secret_key, stream_id: s.id }),
+                            signal: AbortSignal.timeout(10000),
+                          });
+                          const data = await res.json();
+                          if (!res.ok) { alert(data.error || 'Failed'); return; }
+                        }
                         fetchStreams();
                       } catch (err) { alert(err instanceof Error ? err.message : 'Network error'); }
                       finally { setActionLoading(null); }
@@ -615,18 +635,25 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                     </div>
                     <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: statusBg(s.status), color: statusColor(s.status), display: 'inline-block', textAlign: 'center' }}>{s.status.toUpperCase()}</span>
                     {s.withdrawable > 0 && <button disabled={actionLoading === s.id} onClick={async () => {
-                      const wallet = wallets[0];
-                      if (!wallet?.secret_key) { alert('No wallet with secret key'); return; }
                       setActionLoading(s.id);
                       try {
-                        const res = await fetch(`${getNodeUrl()}/stream/withdraw`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ secret_key: wallet.secret_key, stream_id: s.id }),
-                          signal: AbortSignal.timeout(10000),
-                        });
-                        const data = await res.json();
-                        if (!res.ok) { alert(data.error || 'Failed to withdraw'); return; }
+                        const passkey = getPasskeyWallet();
+                        if (passkey) {
+                          const balRes = await fetch(`${getNodeUrl()}/balance/${passkey.address}`, { signal: AbortSignal.timeout(5000) });
+                          const balData = await balRes.json();
+                          await signAndSubmitSmartOp({ StreamWithdraw: { stream_id: s.id } }, MIN_FEE, balData.nonce ?? 0);
+                        } else {
+                          const wallet = wallets.find(w => w.secret_key);
+                          if (!wallet) { alert('No wallet available'); return; }
+                          const res = await fetch(`${getNodeUrl()}/stream/withdraw`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ secret_key: wallet.secret_key, stream_id: s.id }),
+                            signal: AbortSignal.timeout(10000),
+                          });
+                          const data = await res.json();
+                          if (!res.ok) { alert(data.error || 'Failed'); return; }
+                        }
                         fetchStreams();
                       } catch (err) { alert(err instanceof Error ? err.message : 'Network error'); }
                       finally { setActionLoading(null); }
