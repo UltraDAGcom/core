@@ -2868,9 +2868,25 @@ ultradag_banned_ips {ban_count}
                     "invalid JSON: expected a serialized Transaction or {tx_hex: \"...\"}"));
             };
 
-            // Verify Ed25519 signature
-            if !tx.verify_signature() {
-                return Ok(error_response(StatusCode::BAD_REQUEST, "invalid signature"));
+            // Verify signature — SmartOp and SmartTransfer need state for key lookup
+            match &tx {
+                Transaction::SmartOp(_) | Transaction::SmartTransfer(_) => {
+                    // Signature verified later with state access (verify_smart_op / verify_smart_transfer)
+                    let mut state = write_lock_or_503!(server.state);
+                    let valid = match &tx {
+                        Transaction::SmartOp(t) => state.verify_smart_op(t),
+                        Transaction::SmartTransfer(t) => state.verify_smart_transfer(t),
+                        _ => unreachable!(),
+                    };
+                    if !valid {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "invalid signature"));
+                    }
+                }
+                _ => {
+                    if !tx.verify_signature() {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "invalid signature"));
+                    }
+                }
             }
 
             // Validate transaction-type-specific constraints before touching state/mempool.
