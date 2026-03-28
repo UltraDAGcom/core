@@ -14,12 +14,16 @@ pub enum Message {
         version: u32,
         height: u64,
         listen_port: u16,
+        #[serde(default)]
+        network_id: String,
     },
 
     /// Response to Hello.
     HelloAck {
         version: u32,
         height: u64,
+        #[serde(default)]
+        network_id: String,
     },
 
     /// Announce a new block.
@@ -203,11 +207,12 @@ mod tests {
             version: 1,
             height: 42,
             listen_port: 9000,
+            network_id: String::new(),
         };
         let encoded = roundtrip(&msg);
         let decoded = Message::decode(&encoded[4..]).unwrap();
         match decoded {
-            Message::Hello { version, height, listen_port } => {
+            Message::Hello { version, height, listen_port, .. } => {
                 assert_eq!(version, 1);
                 assert_eq!(height, 42);
                 assert_eq!(listen_port, 9000);
@@ -221,11 +226,12 @@ mod tests {
         let msg = Message::HelloAck {
             version: 1,
             height: 100,
+            network_id: String::new(),
         };
         let encoded = roundtrip(&msg);
         let decoded = Message::decode(&encoded[4..]).unwrap();
         match decoded {
-            Message::HelloAck { version, height } => {
+            Message::HelloAck { version, height, .. } => {
                 assert_eq!(version, 1);
                 assert_eq!(height, 100);
             }

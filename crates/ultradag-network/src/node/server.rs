@@ -691,6 +691,7 @@ impl NodeServer {
                 version: 1,
                 height: current_round,
                 listen_port: self.port,
+                network_id: String::from_utf8_lossy(ultradag_coin::constants::NETWORK_ID).to_string(),
             })
             .await?;
 
@@ -943,6 +944,7 @@ async fn try_connect_peer(
                     version: 1,
                     height: current_round,
                     listen_port,
+                    network_id: String::from_utf8_lossy(ultradag_coin::constants::NETWORK_ID).to_string(),
                 })
                 .await;
 
@@ -1080,7 +1082,7 @@ async fn handle_peer(
         tokio::task::yield_now().await;
 
         match msg {
-            Message::Hello { version, height, listen_port } => {
+            Message::Hello { version, height, listen_port, network_id } => {
                 if version != PROTOCOL_VERSION {
                     warn!("Peer {} sent Hello with unsupported protocol version {} (expected {}), disconnecting and banning",
                         peer_addr, version, PROTOCOL_VERSION);
@@ -1089,11 +1091,21 @@ async fn handle_peer(
                     }
                     return Ok(());
                 }
+                // Network isolation: reject peers from different networks (testnet vs mainnet)
+                if !network_id.is_empty() {
+                    let our_network = String::from_utf8_lossy(ultradag_coin::constants::NETWORK_ID).to_string();
+                    if network_id != our_network {
+                        warn!("Peer {} sent Hello with wrong network_id '{}' (expected '{}'), disconnecting",
+                            peer_addr, network_id, our_network);
+                        return Ok(());
+                    }
+                }
                 let our_round = dag.read().await.current_round();
                 peers
                     .send_to(&peer_addr, &Message::HelloAck {
                         version: 1,
                         height: our_round,
+                        network_id: String::from_utf8_lossy(ultradag_coin::constants::NETWORK_ID).to_string(),
                     })
                     .await?;
 
@@ -1157,7 +1169,7 @@ async fn handle_peer(
                 let _ = peers.send_to(&peer_addr, &Message::GetPeers).await;
             }
 
-            Message::HelloAck { version, height } => {
+            Message::HelloAck { version, height, network_id } => {
                 if version != PROTOCOL_VERSION {
                     warn!("Peer {} sent HelloAck with unsupported protocol version {} (expected {}), disconnecting and banning",
                         peer_addr, version, PROTOCOL_VERSION);
@@ -1165,6 +1177,15 @@ async fn handle_peer(
                         peers.ban_peer(sock_addr.ip()).await;
                     }
                     return Ok(());
+                }
+                // Network isolation: reject peers from different networks (testnet vs mainnet)
+                if !network_id.is_empty() {
+                    let our_network = String::from_utf8_lossy(ultradag_coin::constants::NETWORK_ID).to_string();
+                    if network_id != our_network {
+                        warn!("Peer {} sent HelloAck with wrong network_id '{}' (expected '{}'), disconnecting",
+                            peer_addr, network_id, our_network);
+                        return Ok(());
+                    }
                 }
                 // Track highest network round seen (see Hello handler for rationale on fetch_max)
                 peer_max_round.fetch_max(height, std::sync::atomic::Ordering::Relaxed);

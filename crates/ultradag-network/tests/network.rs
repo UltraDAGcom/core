@@ -62,12 +62,12 @@ async fn hello_handshake_roundtrip() {
     let (_, server_writer) = split_connection(server, "s".into(), None);
     let (mut client_reader, _) = split_connection(client, "c".into(), None);
 
-    let msg = Message::Hello { version: 1, height: 42, listen_port: 9333 };
+    let msg = Message::Hello { version: 1, height: 42, listen_port: 9333, network_id: String::new() };
     server_writer.send(&msg).await.unwrap();
 
     let received = client_reader.recv().await.unwrap();
     match received {
-        Message::Hello { version, height, listen_port } => {
+        Message::Hello { version, height, listen_port, .. } => {
             assert_eq!(version, 1);
             assert_eq!(height, 42);
             assert_eq!(listen_port, 9333);

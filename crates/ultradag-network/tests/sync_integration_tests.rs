@@ -165,13 +165,14 @@ fn test_hello_message_with_listen_port() {
         version: 1,
         height: 100,
         listen_port: 9333,
+        network_id: String::new(),
     };
-    
+
     let serialized = serde_json::to_vec(&msg).unwrap();
     let deserialized: Message = serde_json::from_slice(&serialized).unwrap();
-    
+
     match deserialized {
-        Message::Hello { version, height, listen_port } => {
+        Message::Hello { version, height, listen_port, .. } => {
             assert_eq!(version, 1);
             assert_eq!(height, 100);
             assert_eq!(listen_port, 9333);

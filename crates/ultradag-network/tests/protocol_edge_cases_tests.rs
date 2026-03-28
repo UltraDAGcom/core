@@ -36,13 +36,14 @@ fn test_hello_ack_message() {
     let msg = Message::HelloAck {
         version: 1,
         height: 500,
+        network_id: String::new(),
     };
-    
+
     let serialized = serde_json::to_vec(&msg).unwrap();
     let deserialized: Message = serde_json::from_slice(&serialized).unwrap();
-    
+
     match deserialized {
-        Message::HelloAck { version, height } => {
+        Message::HelloAck { version, height, .. } => {
             assert_eq!(version, 1);
             assert_eq!(height, 500);
         }
