@@ -40,7 +40,8 @@ export async function signAndSubmitWithPasskey(
   if (!passkey) throw new Error('No passkey wallet found');
 
   // Build signable_bytes matching Rust SmartTransferTx::signable_bytes()
-  const NETWORK_ID = new TextEncoder().encode('ultradag-testnet-v1');
+  const networkStr = localStorage.getItem('ultradag_network') === 'mainnet' ? 'ultradag-mainnet-v1' : 'ultradag-testnet-v1';
+  const NETWORK_ID = new TextEncoder().encode(networkStr);
   const TYPE_TAG = new TextEncoder().encode('smart_transfer');
 
   const fromBytes = hexToBytes(passkey.address);
@@ -170,7 +171,8 @@ export async function signAndSubmitSmartOp(
   const passkey = getPasskeyWallet();
   if (!passkey) throw new Error('No passkey wallet found');
 
-  const NETWORK_ID = new TextEncoder().encode('ultradag-testnet-v1');
+  const networkStr = localStorage.getItem('ultradag_network') === 'mainnet' ? 'ultradag-mainnet-v1' : 'ultradag-testnet-v1';
+  const NETWORK_ID = new TextEncoder().encode(networkStr);
   const fromBytes = hexToBytes(passkey.address);
   const keyIdBytes = hexToBytes(passkey.keyId);
 
