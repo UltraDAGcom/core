@@ -185,25 +185,19 @@ pub fn verify_webauthn(
     signed_data.extend_from_slice(&webauthn.authenticator_data);
     signed_data.extend_from_slice(&client_data_hash);
 
-    // 5. Verify P256 signature over authenticatorData || clientDataHash
-    let result = verify_p256(pubkey, &webauthn.signature, &signed_data);
-    if !result {
-        let pubkey_hex: String = pubkey.iter().map(|b| format!("{b:02x}")).collect();
-        let sig_hex: String = webauthn.signature.iter().map(|b| format!("{b:02x}")).collect();
-        let msg_hex: String = signed_data.iter().take(32).map(|b| format!("{b:02x}")).collect();
-        tracing::warn!("WebAuthn P256 verify FAILED: pubkey={} sig={} signed_data_prefix={} signed_data_len={}", pubkey_hex, sig_hex, msg_hex, signed_data.len());
-        // Try with prehashed verification (browser may have already hashed)
-        let prehash_result = {
-            use sha2::{Sha256, Digest as _};
-            let hashed = Sha256::digest(&signed_data);
-            verify_p256_prehashed(pubkey, &webauthn.signature, &hashed)
-        };
-        if prehash_result {
-            tracing::warn!("WebAuthn P256: prehashed verification SUCCEEDED — browser double-hashes");
-            return true;
-        }
+    // 5. Try both verification approaches:
+    // Method A: standard verify (p256 crate SHA-256s the message internally)
+    if verify_p256(pubkey, &webauthn.signature, &signed_data) {
+        return true;
     }
-    result
+    // Method B: prehashed verify (if browser's ECDSA already hashed,
+    // we need to pass the raw hash to avoid double-hashing)
+    let prehash = Sha256::digest(&signed_data);
+    if verify_p256_prehashed(pubkey, &webauthn.signature, &prehash) {
+        return true;
+    }
+    tracing::warn!("WebAuthn P256 verify FAILED both methods: pubkey_len={} sig_len={} signed_data_len={}", pubkey.len(), webauthn.signature.len(), signed_data.len());
+    false
 }
 
 /// Base64url encode (no padding) — for WebAuthn challenge comparison.
