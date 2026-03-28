@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { Fingerprint, User, CheckCircle, Loader2, ChevronDown, Key, AlertTriangle } from 'lucide-react';
 import { getNodeUrl } from '../../lib/api';
 import { savePasskeyWallet } from '../../lib/passkey-wallet';
 

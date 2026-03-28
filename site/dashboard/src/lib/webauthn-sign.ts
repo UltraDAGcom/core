@@ -66,16 +66,16 @@ export async function signAndSubmitWithPasskey(
   const signableBytes = concat(parts);
 
   // Compute challenge = SHA-256(signable_bytes)
-  const challengeBuffer = await crypto.subtle.digest('SHA-256', signableBytes);
+  const challengeBuffer = await crypto.subtle.digest('SHA-256', signableBytes.buffer as ArrayBuffer);
   const challenge = new Uint8Array(challengeBuffer);
 
   // Call WebAuthn to sign
   const credential = await navigator.credentials.get({
     publicKey: {
-      challenge,
+      challenge: challenge.buffer as ArrayBuffer,
       rpId: window.location.hostname,
       allowCredentials: [{
-        id: base64urlToBytes(passkey.credentialId),
+        id: base64urlToBytes(passkey.credentialId).buffer as ArrayBuffer,
         type: 'public-key',
       }],
       userVerification: 'required',
@@ -188,12 +188,12 @@ export async function signAndSubmitSmartOp(
   const signableBytes = concat(parts);
 
   // WebAuthn sign
-  const challengeBuffer = await crypto.subtle.digest('SHA-256', signableBytes);
+  const challengeBuffer = await crypto.subtle.digest('SHA-256', signableBytes.buffer as ArrayBuffer);
   const challenge = new Uint8Array(challengeBuffer);
 
   const credential = await navigator.credentials.get({
     publicKey: {
-      challenge,
+      challenge: challenge.buffer as ArrayBuffer,
       rpId: window.location.hostname,
       userVerification: 'required',
       timeout: 60000,

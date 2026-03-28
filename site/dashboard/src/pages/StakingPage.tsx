@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getValidators, getStake, getDelegation, formatUdag, shortAddr, postDelegate, postUndelegate, getNodeUrl } from '../lib/api';
+import { getValidators, getDelegation, shortAddr, postDelegate, postUndelegate, getNodeUrl } from '../lib/api';
 import { useKeystore } from '../hooks/useKeystore';
 import { hasPasskeyWallet, getPasskeyWallet } from '../lib/passkey-wallet';
 import { signAndSubmitSmartOp } from '../lib/webauthn-sign';

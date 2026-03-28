@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getNodeUrl } from '../lib/api';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
 import { VerifiedAddressInput } from '../components/shared/VerifiedAddressInput';
 

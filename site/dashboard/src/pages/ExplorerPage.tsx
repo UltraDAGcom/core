@@ -27,7 +27,7 @@ export function ExplorerPage() {
   const [supply, setSupply] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const ivRef = useRef<ReturnType<typeof setInterval>>();
+  const ivRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   const fetchRounds = useCallback(async () => {
     try {

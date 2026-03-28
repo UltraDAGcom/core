@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getNodeUrl } from '../lib/api';
 import type { NetworkType } from '../lib/api';
 
@@ -73,7 +73,7 @@ function ProgressBar({ value, max }: { value: number; max: number }) {
   );
 }
 
-export function StreamsPage({ wallets, network }: StreamsPageProps) {
+export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
   const [loading, setLoading] = useState(true);
   const [allStreams, setAllStreams] = useState<Stream[]>([]);
   const [, setTick] = useState(0);
@@ -100,7 +100,7 @@ export function StreamsPage({ wallets, network }: StreamsPageProps) {
   const incoming = allStreams.filter(s => myAddresses.includes(s.recipient.toLowerCase()));
   const activeCount = allStreams.filter(s => s.status === 'Active').length;
   const totalStreaming = allStreams.filter(s => s.status === 'Active').reduce((sum, s) => sum + (s.deposited - (s.withdrawn || 0)), 0);
-  const myCount = new Set([...outgoing.map(s => s.id), ...incoming.map(s => s.id)]).size;
+  // myCount available if needed: new Set([...outgoing.map(s => s.id), ...incoming.map(s => s.id)]).size
 
   // When stream type changes, update defaults
   useEffect(() => {

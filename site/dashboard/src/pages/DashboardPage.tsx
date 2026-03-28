@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { getHealthDetailed, getRound, getNodeUrl, formatUdag } from '../lib/api';
+import { getHealthDetailed, getRound } from '../lib/api';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
 import type { NodeStatus } from '../hooks/useNode';
 
@@ -204,7 +204,7 @@ function EmBar({ splits, colors }: { splits: number[]; colors: string[] }) {
 }
 
 // ── Main Dashboard ──────────────────────────────────────────────────────
-export function DashboardPage({ status, loading, network, wallets, totalBalance, totalStaked, totalDelegated }: DashboardPageProps) {
+export function DashboardPage({ status, loading: _loading, network, wallets, totalBalance, totalStaked, totalDelegated }: DashboardPageProps) {
   const [health, setHealth] = useState<HealthData | null>(null);
   const [recentRounds, setRecentRounds] = useState<RoundData[]>([]);
   const [vertexHistory, setVertexHistory] = useState<number[]>([]);
@@ -266,7 +266,7 @@ export function DashboardPage({ status, loading, network, wallets, totalBalance,
   const accounts = st?.account_count ?? 0;
   const mempoolCount = mp?.transaction_count ?? 0;
   const vertices = dag?.vertex_count ?? 0;
-  const memoryMB = (status?.memory_bytes ?? 0) / 1048576;
+  const memoryMB = (status?.memory_usage_bytes ?? 0) / 1048576;
   const uptime = status?.uptime_seconds ? formatUptime(status.uptime_seconds) : '-';
   const portfolioTotal = (totalBalance ?? 0) / SATS;
   const portfolioAvailable = portfolioTotal - (totalStaked ?? 0) / SATS - (totalDelegated ?? 0) / SATS;

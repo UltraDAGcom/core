@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { formatUdag, shortAddr, fullAddr } from '../lib/api';
+import { shortAddr, fullAddr } from '../lib/api';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
 import { CreateKeystoreModal } from '../components/wallet/CreateKeystoreModal';
 import { AddWalletModal } from '../components/wallet/AddWalletModal';

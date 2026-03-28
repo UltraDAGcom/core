@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { postTx, postFaucet, formatUdag, shortAddr, fullAddr, prettyAddr, isValidAddress, normalizeAddress, getNodeUrl } from '../lib/api';
 import { getPasskeyInfo, signAndSubmitWithPasskey } from '../lib/webauthn-sign';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
-import { VerifiedAddressInput } from '../components/shared/VerifiedAddressInput';
 import { CopyButton } from '../components/shared/CopyButton';
 import { QrCode } from '../components/shared/QrCode';
 import { QrScanner } from '../components/shared/QrScanner';

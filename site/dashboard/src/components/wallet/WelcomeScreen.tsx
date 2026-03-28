@@ -685,7 +685,7 @@ export function WelcomeScreen({
                   borderActive: 'border-dag-green bg-dag-green/5 shadow-lg shadow-dag-green/5',
                   iconActive: 'bg-dag-green/15', iconColor: 'text-dag-green',
                   checkBg: 'bg-dag-green/20', checkColor: 'text-dag-green' },
-              ] as const).map(({ net, icon: Icon, label, badge, desc, borderActive, iconActive, iconColor, checkBg, checkColor, badgeCls }) => (
+              ] as { net: 'testnet' | 'mainnet'; icon: typeof TestTube; label: string; badge?: string; desc: string; borderActive: string; iconActive: string; iconColor: string; checkBg: string; checkColor: string; badgeCls?: string }[]).map(({ net, icon: Icon, label, badge, desc, borderActive, iconActive, iconColor, checkBg, checkColor, badgeCls }) => (
                 <button key={net} onClick={() => onSwitchNetwork(net)}
                   className={`w-full text-left p-5 rounded-xl border-2 transition-all ${
                     network === net ? borderActive : 'border-slate-700 bg-slate-800/30 hover:border-slate-600'
