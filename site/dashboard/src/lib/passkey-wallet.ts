@@ -32,6 +32,17 @@ let sessionUnlocked = false;
 // Check sessionStorage for unlock state (survives page refresh within tab)
 if (typeof window !== 'undefined') {
   sessionUnlocked = sessionStorage.getItem(SESSION_KEY) === 'true';
+  // Auto-fix old passkey wallets with 64-char addresses (should be 40)
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const w = JSON.parse(raw);
+      if (w.address && w.address.replace(/^0x/, '').length > 40) {
+        w.address = w.address.replace(/^0x/, '').toLowerCase().slice(0, 40);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(w));
+      }
+    }
+  } catch { /* ignore */ }
 }
 
 // ── Core API ─────────────────────────────────────────────────────────────
