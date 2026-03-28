@@ -179,11 +179,7 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-        const msg = err.error || `Server error: ${res.status}`;
-        if (msg.includes('relay disabled') || msg.includes('mainnet')) {
-          throw new Error('Account creation is only available on testnet. Switch to testnet in the sidebar to create your wallet.');
-        }
-        throw new Error(msg);
+        throw new Error(err.error || `Server error: ${res.status}`);
       }
 
       const data = await res.json();

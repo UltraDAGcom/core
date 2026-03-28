@@ -1537,16 +1537,7 @@ ultradag_banned_ips {ban_count}
         // TESTNET ONLY: creates a SmartAccount on behalf of a new passkey user.
         // Sends a small initial balance from the faucet and registers the P256 key + optional name.
         (&Method::POST, ["relay", "create-account"]) => {
-            #[cfg(feature = "mainnet")]
-            {
-                return Ok(error_response(StatusCode::GONE, "relay disabled on mainnet"));
-            }
-            #[cfg(not(feature = "mainnet"))]
-            if !server.testnet_mode {
-                return Ok(error_response(StatusCode::GONE, "relay disabled on mainnet"));
-            }
-            #[cfg(not(feature = "mainnet"))] {
-            // Relay has its own generous rate limit (5/min) — separate from faucet
+            // Rate limit: 5/min per IP
             if !rate_limiter.check_rate_limit(client_ip, limits::STAKE) {
                 return Ok(error_response(StatusCode::TOO_MANY_REQUESTS, "rate limit exceeded"));
             }
@@ -1558,9 +1549,7 @@ ultradag_banned_ips {ban_count}
 
             #[derive(Deserialize)]
             struct RelayCreateRequest {
-                /// P256 public key (hex-encoded compressed SEC1, 33 bytes = 66 hex chars)
                 p256_pubkey: String,
-                /// Optional: human-readable name to register
                 name: Option<String>,
             }
 
@@ -1582,12 +1571,7 @@ ultradag_banned_ips {ban_count}
                 }
             }
 
-            // Use faucet keypair as the relay sponsor
-            let faucet_sk = ultradag_coin::faucet_keypair();
-            let faucet_addr = faucet_sk.address();
-
-            // Create a new address for the user: derive from P256 pubkey
-            // Address = blake3("smart_account_p256" || p256_pubkey)[..20]
+            // Derive user address from P256 pubkey
             let user_addr = {
                 let mut hasher = blake3::Hasher::new();
                 hasher.update(b"smart_account_p256");
@@ -1598,23 +1582,13 @@ ultradag_banned_ips {ban_count}
                 Address(addr)
             };
 
-            // Fund the new account with 10 UDAG (enough for name registration + some transfers)
-            let fund_amount: u64 = 10 * ultradag_coin::COIN;
-            let fee = ultradag_coin::constants::MIN_FEE_SATS;
-
-            let mut txs_to_broadcast: Vec<Transaction> = Vec::new();
+            // Compute the key_id
+            let key_id = ultradag_coin::tx::smart_account::AuthorizedKey::compute_key_id(
+                ultradag_coin::KeyType::P256, &p256_bytes,
+            );
 
             {
-                let state = read_lock_or_503!(server.state);
-                let mut mp = write_lock_or_503!(server.mempool);
-
-                // Check faucet balance
-                let faucet_balance = state.balance(&faucet_addr);
-                let pending = pending_cost(&mp, &faucet_addr);
-                let total_needed = pending.saturating_add(fund_amount).saturating_add(fee);
-                if faucet_balance < total_needed {
-                    return Ok(error_response(StatusCode::BAD_REQUEST, "relay fund insufficient"));
-                }
+                let mut state = write_lock_or_503!(server.state);
 
                 // Check if name is available
                 if let Some(ref name) = relay_req.name {
@@ -1624,51 +1598,56 @@ ultradag_banned_ips {ban_count}
                     }
                 }
 
-                // 1. Fund transfer: faucet → user_addr
-                let mut nonce = next_nonce(&state, &mp, &faucet_addr);
-                let mut transfer = TransferTx {
-                    from: faucet_addr,
-                    to: user_addr,
-                    amount: fund_amount,
-                    fee,
-                    nonce,
-                    pub_key: faucet_sk.verifying_key().to_bytes(),
-                    signature: ultradag_coin::Signature([0u8; 64]),
-                    memo: None,
-                };
-                transfer.signature = faucet_sk.sign(&transfer.signable_bytes());
-                let tx = Transaction::Transfer(transfer);
-                let _ = mp.insert(tx.clone());
-                txs_to_broadcast.push(tx);
-                nonce += 1;
+                // Directly create SmartAccount with P256 key (no tx fee needed)
+                state.ensure_smart_account(&user_addr);
+                if let Err(e) = state.auto_register_key(&user_addr, ultradag_coin::KeyType::P256, p256_bytes.clone()) {
+                    return Ok(error_response(StatusCode::BAD_REQUEST, &format!("key registration failed: {}", e)));
+                }
 
-                // Name registration is handled client-side after the account is funded.
-                // The relay just returns the name in the response for the client to store locally.
-                // On-chain name registration can be done later via RegisterNameTx when the user
-                // has an active SmartAccount with a registered key.
+                // Register name directly if provided (free for 6+ chars)
+                if let Some(ref name) = relay_req.name {
+                    let current_round = state.last_finalized_round().unwrap_or(0);
+                    if let Err(e) = state.register_name_direct(name, &user_addr, current_round) {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, &format!("name registration failed: {}", e)));
+                    }
+                }
             }
 
-            // Broadcast funded transactions
-            for tx in &txs_to_broadcast {
-                server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
-                let _ = server.tx_tx.send(tx.clone());
-            }
+            // On testnet, also fund with 10 UDAG from faucet (bonus, not required)
+            #[cfg(not(feature = "mainnet"))]
+            if server.testnet_mode {
+                let faucet_sk = ultradag_coin::faucet_keypair();
+                let faucet_addr = faucet_sk.address();
+                let fund_amount: u64 = 10 * ultradag_coin::COIN;
+                let fee = ultradag_coin::constants::MIN_FEE_SATS;
 
-            // Compute the key_id for the P256 key
-            let key_id = ultradag_coin::tx::smart_account::AuthorizedKey::compute_key_id(
-                ultradag_coin::KeyType::P256, &p256_bytes,
-            );
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
+                let faucet_balance = state.balance(&faucet_addr);
+                let pending = pending_cost(&mp, &faucet_addr);
+                if faucet_balance >= pending.saturating_add(fund_amount).saturating_add(fee) {
+                    let nonce = next_nonce(&state, &mp, &faucet_addr);
+                    let mut transfer = TransferTx {
+                        from: faucet_addr, to: user_addr, amount: fund_amount, fee, nonce,
+                        pub_key: faucet_sk.verifying_key().to_bytes(),
+                        signature: ultradag_coin::Signature([0u8; 64]),
+                        memo: None,
+                    };
+                    transfer.signature = faucet_sk.sign(&transfer.signable_bytes());
+                    let tx = Transaction::Transfer(transfer);
+                    let _ = mp.insert(tx.clone());
+                    drop(mp); drop(state);
+                    server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+                    let _ = server.tx_tx.send(tx);
+                }
+            }
 
             json_response(StatusCode::OK, &serde_json::json!({
                 "address": user_addr.to_hex(),
                 "address_bech32": user_addr.to_bech32(),
-                "funded_amount": fund_amount,
-                "funded_udag": fund_amount as f64 / ultradag_coin::SATS_PER_UDAG as f64,
                 "p256_key_id": hex_encode(&key_id),
                 "name": relay_req.name,
-                "note": "Account funded. Submit AddKeyTx to register your P256 key, then RegisterNameTx to claim your name.",
             }))
-            } // end #[cfg(not(feature = "mainnet"))]
         }
 
         (&Method::GET, ["peers"]) => {

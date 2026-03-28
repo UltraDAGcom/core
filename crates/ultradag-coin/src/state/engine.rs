@@ -2289,7 +2289,7 @@ impl StateEngine {
 
     /// Ensure a SmartAccount exists for the given address.
     /// Called on first outgoing transaction to auto-register the signing key.
-    fn ensure_smart_account(&mut self, addr: &Address, round: u64) {
+    fn ensure_smart_account_at_round(&mut self, addr: &Address, round: u64) {
         if !self.smart_accounts.contains_key(addr) {
             self.smart_accounts.insert(*addr, crate::tx::smart_account::SmartAccountConfig::new(round));
         }
@@ -2297,9 +2297,9 @@ impl StateEngine {
 
     /// Auto-register an Ed25519 key as the first authorized key on a SmartAccount.
     /// Called when a legacy account sends its first transaction after SmartAccount creation.
-    fn auto_register_key(&mut self, addr: &Address, pub_key: &[u8; 32], round: u64) {
+    fn auto_register_ed25519_key(&mut self, addr: &Address, pub_key: &[u8; 32], round: u64) {
         use crate::tx::smart_account::{AuthorizedKey, KeyType};
-        self.ensure_smart_account(addr, round);
+        self.ensure_smart_account_at_round(addr, round);
         if let Some(config) = self.smart_accounts.get_mut(addr) {
             if config.authorized_keys.is_empty() {
                 let key_id = AuthorizedKey::compute_key_id(KeyType::Ed25519, pub_key);
@@ -2348,8 +2348,8 @@ impl StateEngine {
         let round = self.last_finalized_round.unwrap_or(0);
 
         // Ensure SmartAccount exists and auto-register signer if needed
-        self.ensure_smart_account(&tx.from, round);
-        self.auto_register_key(&tx.from, &tx.pub_key, round);
+        self.ensure_smart_account_at_round(&tx.from, round);
+        self.auto_register_ed25519_key(&tx.from, &tx.pub_key, round);
 
         // Verify signer is authorized
         if !self.is_key_authorized(&tx.from, &tx.pub_key) {
@@ -2397,8 +2397,8 @@ impl StateEngine {
         let round = self.last_finalized_round.unwrap_or(0);
 
         // Ensure SmartAccount exists and auto-register signer if needed
-        self.ensure_smart_account(&tx.from, round);
-        self.auto_register_key(&tx.from, &tx.pub_key, round);
+        self.ensure_smart_account_at_round(&tx.from, round);
+        self.auto_register_ed25519_key(&tx.from, &tx.pub_key, round);
 
         // Verify signer is authorized
         if !self.is_key_authorized(&tx.from, &tx.pub_key) {
@@ -2505,6 +2505,59 @@ impl StateEngine {
     /// Get name profile.
     pub fn name_profile(&self, name: &str) -> Option<&crate::tx::name_registry::NameProfile> {
         self.name_profiles.get(name)
+    }
+
+    /// Public: ensure a SmartAccount exists for an address (creates if missing).
+    /// Used by the relay endpoint to create accounts without transactions.
+    pub fn ensure_smart_account(&mut self, addr: &Address) {
+        let round = self.last_finalized_round.unwrap_or(0);
+        if !self.smart_accounts.contains_key(addr) {
+            self.smart_accounts.insert(*addr, crate::tx::smart_account::SmartAccountConfig::new(round));
+        }
+    }
+
+    /// Public: register a P256 or Ed25519 key on a SmartAccount.
+    /// Used by the relay endpoint. Creates the SmartAccount if it doesn't exist.
+    pub fn auto_register_key(&mut self, addr: &Address, key_type: crate::tx::smart_account::KeyType, pubkey: Vec<u8>) -> Result<(), CoinError> {
+        use crate::tx::smart_account::AuthorizedKey;
+        self.ensure_smart_account(addr);
+        let config = self.smart_accounts.get_mut(addr)
+            .ok_or_else(|| CoinError::ValidationError("smart account not found".into()))?;
+        let key_id = AuthorizedKey::compute_key_id(key_type.clone(), &pubkey);
+        // Don't add duplicate keys
+        if config.authorized_keys.iter().any(|k| k.key_id == key_id) {
+            return Ok(());
+        }
+        config.authorized_keys.push(AuthorizedKey {
+            key_id,
+            key_type,
+            pubkey,
+            label: "default".to_string(),
+            daily_limit: None,
+            daily_spent: (0, 0),
+        });
+        Ok(())
+    }
+
+    /// Public: register a name directly (no transaction needed).
+    /// Used by the relay endpoint. Only works for free names (6+ chars).
+    pub fn register_name_direct(&mut self, name: &str, addr: &Address, current_round: u64) -> Result<(), CoinError> {
+        use crate::tx::name_registry::*;
+        validate_name(name).map_err(|e| CoinError::ValidationError(e.to_string()))?;
+        if self.name_to_address.contains_key(name) {
+            return Err(CoinError::ValidationError("name already taken".into()));
+        }
+        // Only free names (6+ chars) allowed via relay
+        let fee = name_annual_fee(name);
+        if fee > 0 {
+            return Err(CoinError::ValidationError("premium names (3-5 chars) require payment — use RegisterNameTx".into()));
+        }
+        let expiry = current_round.saturating_add(ROUNDS_PER_YEAR);
+        self.name_to_address.insert(name.to_string(), *addr);
+        self.address_to_name.insert(*addr, name.to_string());
+        self.name_expiry.insert(name.to_string(), expiry);
+        self.name_created_at.insert(name.to_string(), current_round);
+        Ok(())
     }
 
     /// Register a name.
@@ -2937,8 +2990,8 @@ impl StateEngine {
         use crate::tx::smart_account::*;
 
         let round = self.last_finalized_round.unwrap_or(0);
-        self.ensure_smart_account(&tx.from, round);
-        self.auto_register_key(&tx.from, &tx.pub_key, round);
+        self.ensure_smart_account_at_round(&tx.from, round);
+        self.auto_register_ed25519_key(&tx.from, &tx.pub_key, round);
 
         if !self.is_key_authorized(&tx.from, &tx.pub_key) {
             return Err(CoinError::ValidationError("signing key not authorized".into()));
@@ -2984,8 +3037,8 @@ impl StateEngine {
     /// Execute a time-locked vault transfer.
     pub fn apply_execute_vault_tx(&mut self, tx: &crate::tx::smart_account::ExecuteVaultTx, current_round: u64) -> Result<(), CoinError> {
         let round = self.last_finalized_round.unwrap_or(0);
-        self.ensure_smart_account(&tx.from, round);
-        self.auto_register_key(&tx.from, &tx.pub_key, round);
+        self.ensure_smart_account_at_round(&tx.from, round);
+        self.auto_register_ed25519_key(&tx.from, &tx.pub_key, round);
 
         if !self.is_key_authorized(&tx.from, &tx.pub_key) {
             return Err(CoinError::ValidationError("signing key not authorized".into()));
@@ -3030,8 +3083,8 @@ impl StateEngine {
     /// Cancel a pending vault transfer and refund the sender.
     pub fn apply_cancel_vault_tx(&mut self, tx: &crate::tx::smart_account::CancelVaultTx) -> Result<(), CoinError> {
         let round = self.last_finalized_round.unwrap_or(0);
-        self.ensure_smart_account(&tx.from, round);
-        self.auto_register_key(&tx.from, &tx.pub_key, round);
+        self.ensure_smart_account_at_round(&tx.from, round);
+        self.auto_register_ed25519_key(&tx.from, &tx.pub_key, round);
 
         if !self.is_key_authorized(&tx.from, &tx.pub_key) {
             return Err(CoinError::ValidationError("signing key not authorized".into()));
@@ -3191,8 +3244,8 @@ impl StateEngine {
         use crate::tx::smart_account::*;
 
         let round = self.last_finalized_round.unwrap_or(0);
-        self.ensure_smart_account(&tx.from, round);
-        self.auto_register_key(&tx.from, &tx.pub_key, round);
+        self.ensure_smart_account_at_round(&tx.from, round);
+        self.auto_register_ed25519_key(&tx.from, &tx.pub_key, round);
 
         if !self.is_key_authorized(&tx.from, &tx.pub_key) {
             return Err(CoinError::ValidationError("signing key not authorized".into()));
@@ -3343,8 +3396,8 @@ impl StateEngine {
     /// Cancel a pending recovery. Must be signed by an authorized key of the account.
     pub fn apply_cancel_recovery_tx(&mut self, tx: &crate::tx::smart_account::CancelRecoveryTx) -> Result<(), CoinError> {
         let round = self.last_finalized_round.unwrap_or(0);
-        self.ensure_smart_account(&tx.from, round);
-        self.auto_register_key(&tx.from, &tx.pub_key, round);
+        self.ensure_smart_account_at_round(&tx.from, round);
+        self.auto_register_ed25519_key(&tx.from, &tx.pub_key, round);
 
         if !self.is_key_authorized(&tx.from, &tx.pub_key) {
             return Err(CoinError::ValidationError("signing key not authorized".into()));
@@ -3724,7 +3777,7 @@ impl StateEngine {
     /// Test helper: ensure a SmartAccount exists for an address.
     #[cfg(any(test, feature = "unsafe-dag-insert"))]
     pub fn ensure_smart_account_for_test(&mut self, addr: &Address, round: u64) {
-        self.ensure_smart_account(addr, round);
+        self.ensure_smart_account_at_round(addr, round);
     }
 
     /// Test helper: get mutable access to a SmartAccount config.
@@ -4051,7 +4104,7 @@ impl StateEngine {
         // from birth — recovery, spending policies, multi-device support available from day one.
         if !self.accounts.contains_key(address) {
             let round = self.last_finalized_round.unwrap_or(0);
-            self.ensure_smart_account(address, round);
+            self.ensure_smart_account_at_round(address, round);
         }
 
         let account = self.accounts.entry(*address).or_default();

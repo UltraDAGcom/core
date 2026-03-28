@@ -52,6 +52,7 @@ impl Mempool {
             | Transaction::Undelegate(_)
             | Transaction::SetCommission(_)
             | Transaction::BridgeRelease(_)
+            | Transaction::AddKey(_) // Account setup — fee-exempt
             | Transaction::RemoveKey(_)
             | Transaction::RecoverAccount(_)
             | Transaction::CancelRecovery(_)
