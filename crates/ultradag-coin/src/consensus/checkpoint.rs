@@ -446,6 +446,7 @@ pub fn compute_state_root(snapshot: &StateSnapshot) -> [u8; 32] {
         hasher.update(&stream.start_round.to_le_bytes());
         hasher.update(&stream.deposited.to_le_bytes());
         hasher.update(&stream.withdrawn.to_le_bytes());
+        hasher.update(&stream.cliff_rounds.to_le_bytes());
         match stream.cancelled_at_round {
             Some(r) => {
                 hasher.update(&[1u8]);

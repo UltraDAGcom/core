@@ -930,7 +930,7 @@ pub enum SmartOpType {
     /// Transfer a name to a new owner.
     TransferName { name: String, new_owner: Address },
     /// Create a streaming payment.
-    StreamCreate { recipient: Address, rate_sats_per_round: u64, deposit: u64 },
+    StreamCreate { recipient: Address, rate_sats_per_round: u64, deposit: u64, #[serde(default)] cliff_rounds: u64 },
     /// Withdraw accrued funds from a stream.
     StreamWithdraw { stream_id: [u8; 32] },
     /// Cancel a stream.
@@ -1016,11 +1016,12 @@ impl SmartOpTx {
                 buf.extend_from_slice(name.as_bytes());
                 buf.extend_from_slice(&new_owner.0);
             }
-            SmartOpType::StreamCreate { recipient, rate_sats_per_round, deposit } => {
+            SmartOpType::StreamCreate { recipient, rate_sats_per_round, deposit, cliff_rounds } => {
                 buf.push(10);
                 buf.extend_from_slice(&recipient.0);
                 buf.extend_from_slice(&rate_sats_per_round.to_le_bytes());
                 buf.extend_from_slice(&deposit.to_le_bytes());
+                buf.extend_from_slice(&cliff_rounds.to_le_bytes());
             }
             SmartOpType::StreamWithdraw { stream_id } => {
                 buf.push(11);

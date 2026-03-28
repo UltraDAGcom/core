@@ -21,6 +21,11 @@ pub struct Stream {
     pub deposited: u64,
     /// Total UDAG already withdrawn by the recipient.
     pub withdrawn: u64,
+    /// Number of rounds after start_round before any funds accrue (vesting cliff).
+    /// During the cliff period, accrued_at() returns 0. After the cliff, full accrual
+    /// from start_round is unlocked at once (standard vesting behavior).
+    #[serde(default)]
+    pub cliff_rounds: u64,
     /// If cancelled, the round at which cancellation occurred.
     pub cancelled_at_round: Option<u64>,
     /// Whether the recipient has been credited their accrued amount on cancellation.
@@ -29,9 +34,16 @@ pub struct Stream {
 
 impl Stream {
     /// Compute the total amount accrued to the recipient at a given round.
+    /// During the cliff period (round < start_round + cliff_rounds), returns 0.
+    /// After the cliff, full accrual from start_round is unlocked (standard vesting cliff).
     /// Returns min(rate * elapsed_rounds, deposited).
     pub fn accrued_at(&self, round: u64) -> u64 {
         let effective_end = self.cancelled_at_round.unwrap_or(round);
+        let cliff_end = self.start_round.saturating_add(self.cliff_rounds);
+        if effective_end < cliff_end {
+            return 0; // Still in cliff period
+        }
+        // After cliff: full accrual from start_round (not from cliff_end)
         let elapsed = effective_end.saturating_sub(self.start_round);
         let total_accrued = self.rate_sats_per_round.saturating_mul(elapsed);
         std::cmp::min(total_accrued, self.deposited)
@@ -69,6 +81,9 @@ pub struct CreateStreamTx {
     pub recipient: Address,
     pub rate_sats_per_round: u64,
     pub deposit: u64,
+    /// Number of rounds after stream start before any funds accrue (vesting cliff).
+    #[serde(default)]
+    pub cliff_rounds: u64,
     pub fee: u64,
     pub nonce: u64,
     pub pub_key: [u8; 32],
@@ -84,6 +99,7 @@ impl CreateStreamTx {
         buf.extend_from_slice(&self.recipient.0);
         buf.extend_from_slice(&self.rate_sats_per_round.to_le_bytes());
         buf.extend_from_slice(&self.deposit.to_le_bytes());
+        buf.extend_from_slice(&self.cliff_rounds.to_le_bytes());
         buf.extend_from_slice(&self.fee.to_le_bytes());
         buf.extend_from_slice(&self.nonce.to_le_bytes());
         buf
@@ -96,6 +112,7 @@ impl CreateStreamTx {
         hasher.update(&self.recipient.0);
         hasher.update(&self.rate_sats_per_round.to_le_bytes());
         hasher.update(&self.deposit.to_le_bytes());
+        hasher.update(&self.cliff_rounds.to_le_bytes());
         hasher.update(&self.fee.to_le_bytes());
         hasher.update(&self.nonce.to_le_bytes());
         *hasher.finalize().as_bytes()
@@ -232,11 +249,24 @@ mod tests {
         fee: u64,
         nonce: u64,
     ) -> CreateStreamTx {
+        make_create_stream_tx_with_cliff(sk, recipient, rate, deposit, 0, fee, nonce)
+    }
+
+    fn make_create_stream_tx_with_cliff(
+        sk: &SecretKey,
+        recipient: Address,
+        rate: u64,
+        deposit: u64,
+        cliff_rounds: u64,
+        fee: u64,
+        nonce: u64,
+    ) -> CreateStreamTx {
         let mut tx = CreateStreamTx {
             from: sk.address(),
             recipient,
             rate_sats_per_round: rate,
             deposit,
+            cliff_rounds,
             fee,
             nonce,
             pub_key: sk.verifying_key().to_bytes(),
@@ -292,6 +322,7 @@ mod tests {
             start_round: 10,
             deposited: 1000,
             withdrawn: 0,
+            cliff_rounds: 0,
             cancelled_at_round: None,
             cancel_recipient_credited: false,
         };
@@ -311,6 +342,7 @@ mod tests {
             start_round: 10,
             deposited: 1000,
             withdrawn: 0,
+            cliff_rounds: 0,
             cancelled_at_round: Some(15),
             cancel_recipient_credited: false,
         };
@@ -330,6 +362,7 @@ mod tests {
             start_round: 10,
             deposited: 1000,
             withdrawn: 300,
+            cliff_rounds: 0,
             cancelled_at_round: None,
             cancel_recipient_credited: false,
         };
@@ -347,6 +380,7 @@ mod tests {
             start_round: 10,
             deposited: 1000,
             withdrawn: 0,
+            cliff_rounds: 0,
             cancelled_at_round: None,
             cancel_recipient_credited: false,
         };
@@ -365,6 +399,7 @@ mod tests {
             start_round: 10,
             deposited: 1000,
             withdrawn: 0,
+            cliff_rounds: 0,
             cancelled_at_round: None,
             cancel_recipient_credited: false,
         };
@@ -381,6 +416,7 @@ mod tests {
             start_round: 10,
             deposited: 1000,
             withdrawn: 0,
+            cliff_rounds: 0,
             cancelled_at_round: None,
             cancel_recipient_credited: false,
         };
@@ -397,6 +433,7 @@ mod tests {
             start_round: 10,
             deposited: 1000,
             withdrawn: 0,
+            cliff_rounds: 0,
             cancelled_at_round: None,
             cancel_recipient_credited: false,
         };
@@ -496,10 +533,151 @@ mod tests {
             start_round: 0,
             deposited: 1000,
             withdrawn: 0,
+            cliff_rounds: 0,
             cancelled_at_round: None,
             cancel_recipient_credited: false,
         };
         // saturating_mul(u64::MAX, 10) = u64::MAX, but capped at deposited=1000
         assert_eq!(stream.accrued_at(10), 1000);
+    }
+
+    #[test]
+    fn stream_cliff_no_accrual_during_cliff() {
+        let stream = Stream {
+            id: [0u8; 32],
+            sender: Address::ZERO,
+            recipient: Address::ZERO,
+            rate_sats_per_round: 100,
+            start_round: 10,
+            deposited: 1000,
+            withdrawn: 0,
+            cliff_rounds: 5,
+            cancelled_at_round: None,
+            cancel_recipient_credited: false,
+        };
+        // Cliff ends at round 15. Before that, nothing accrues.
+        assert_eq!(stream.accrued_at(10), 0);
+        assert_eq!(stream.accrued_at(12), 0);
+        assert_eq!(stream.accrued_at(14), 0);
+    }
+
+    #[test]
+    fn stream_cliff_unlocks_full_accrual_after_cliff() {
+        let stream = Stream {
+            id: [0u8; 32],
+            sender: Address::ZERO,
+            recipient: Address::ZERO,
+            rate_sats_per_round: 100,
+            start_round: 10,
+            deposited: 1000,
+            withdrawn: 0,
+            cliff_rounds: 5,
+            cancelled_at_round: None,
+            cancel_recipient_credited: false,
+        };
+        // Cliff ends at round 15. At round 15: rate * (15-10) = 500
+        assert_eq!(stream.accrued_at(15), 500);
+        // At round 18: rate * (18-10) = 800
+        assert_eq!(stream.accrued_at(18), 800);
+        // At round 20: rate * (20-10) = 1000 (capped at deposited)
+        assert_eq!(stream.accrued_at(20), 1000);
+        assert_eq!(stream.accrued_at(25), 1000); // still capped
+    }
+
+    #[test]
+    fn stream_cliff_cancelled_during_cliff() {
+        let stream = Stream {
+            id: [0u8; 32],
+            sender: Address::ZERO,
+            recipient: Address::ZERO,
+            rate_sats_per_round: 100,
+            start_round: 10,
+            deposited: 1000,
+            withdrawn: 0,
+            cliff_rounds: 5,
+            cancelled_at_round: Some(13), // cancelled before cliff ends
+            cancel_recipient_credited: false,
+        };
+        // Cancelled at round 13, cliff ends at 15 — nothing accrued ever
+        assert_eq!(stream.accrued_at(13), 0);
+        assert_eq!(stream.accrued_at(20), 0);
+        assert_eq!(stream.accrued_at(100), 0);
+    }
+
+    #[test]
+    fn stream_cliff_cancelled_after_cliff() {
+        let stream = Stream {
+            id: [0u8; 32],
+            sender: Address::ZERO,
+            recipient: Address::ZERO,
+            rate_sats_per_round: 100,
+            start_round: 10,
+            deposited: 1000,
+            withdrawn: 0,
+            cliff_rounds: 5,
+            cancelled_at_round: Some(18), // cancelled after cliff
+            cancel_recipient_credited: false,
+        };
+        // Cancelled at round 18, cliff ends at 15. Accrued = 100 * (18-10) = 800
+        assert_eq!(stream.accrued_at(18), 800);
+        assert_eq!(stream.accrued_at(25), 800); // frozen at cancellation
+    }
+
+    #[test]
+    fn stream_cliff_withdrawable_after_cliff() {
+        let stream = Stream {
+            id: [0u8; 32],
+            sender: Address::ZERO,
+            recipient: Address::ZERO,
+            rate_sats_per_round: 100,
+            start_round: 10,
+            deposited: 1000,
+            withdrawn: 0,
+            cliff_rounds: 5,
+            cancelled_at_round: None,
+            cancel_recipient_credited: false,
+        };
+        // During cliff: nothing withdrawable
+        assert_eq!(stream.withdrawable_at(12), 0);
+        // After cliff: full accrual available
+        assert_eq!(stream.withdrawable_at(15), 500);
+    }
+
+    #[test]
+    fn stream_cliff_zero_means_no_cliff() {
+        // cliff_rounds=0 should behave identically to the old behavior
+        let stream = Stream {
+            id: [0u8; 32],
+            sender: Address::ZERO,
+            recipient: Address::ZERO,
+            rate_sats_per_round: 100,
+            start_round: 10,
+            deposited: 1000,
+            withdrawn: 0,
+            cliff_rounds: 0,
+            cancelled_at_round: None,
+            cancel_recipient_credited: false,
+        };
+        assert_eq!(stream.accrued_at(10), 0);
+        assert_eq!(stream.accrued_at(15), 500);
+        assert_eq!(stream.accrued_at(20), 1000);
+    }
+
+    #[test]
+    fn create_stream_tx_with_cliff_signature_valid() {
+        let sk = SecretKey::generate();
+        let recipient = SecretKey::generate().address();
+        let tx = make_create_stream_tx_with_cliff(&sk, recipient, 100, 1000, 50, 10000, 0);
+        assert!(tx.verify_signature());
+        assert_eq!(tx.cliff_rounds, 50);
+    }
+
+    #[test]
+    fn create_stream_tx_cliff_changes_hash() {
+        let sk = SecretKey::generate();
+        let recipient = SecretKey::generate().address();
+        let tx_no_cliff = make_create_stream_tx_with_cliff(&sk, recipient, 100, 1000, 0, 10000, 0);
+        let tx_with_cliff = make_create_stream_tx_with_cliff(&sk, recipient, 100, 1000, 50, 10000, 0);
+        assert_ne!(tx_no_cliff.hash(), tx_with_cliff.hash());
     }
 }

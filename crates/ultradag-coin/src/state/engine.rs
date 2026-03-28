@@ -2841,6 +2841,7 @@ impl StateEngine {
             start_round: current_round,
             deposited: tx.deposit,
             withdrawn: 0,
+            cliff_rounds: tx.cliff_rounds,
             cancelled_at_round: None,
             cancel_recipient_credited: false,
         };
@@ -3556,52 +3557,39 @@ impl StateEngine {
                 self.address_to_name.remove(&tx.from);
                 self.address_to_name.insert(*new_owner, name.clone());
             }
-            SmartOpType::StreamCreate { recipient, rate_sats_per_round, deposit } => {
-                // Build a synthetic CreateStreamTx to reuse validation logic
-                let synthetic = crate::tx::stream::CreateStreamTx {
-                    from: tx.from,
-                    recipient: *recipient,
-                    rate_sats_per_round: *rate_sats_per_round,
-                    deposit: *deposit,
-                    fee: 0, // fee already debited above
-                    nonce: tx.nonce,
-                    pub_key: [0u8; 32],
-                    signature: crate::address::Signature([0u8; 64]),
-                };
-                // apply_create_stream_tx debits deposit+fee and increments nonce.
-                // Since we already debited fee and incremented nonce above, we need to
-                // credit back the fee and decrement nonce first, or call the inner logic directly.
-                // Simpler: inline the core logic.
-                if synthetic.deposit == 0 {
+            SmartOpType::StreamCreate { recipient, rate_sats_per_round, deposit, cliff_rounds } => {
+                // Inline the core logic (fee/nonce already handled by SmartOp handler above).
+                if *deposit == 0 {
                     return Err(CoinError::ValidationError("stream deposit must be greater than 0".into()));
                 }
-                if synthetic.rate_sats_per_round == 0 {
+                if *rate_sats_per_round == 0 {
                     return Err(CoinError::ValidationError("stream rate must be greater than 0".into()));
                 }
-                if synthetic.deposit < synthetic.rate_sats_per_round {
+                if *deposit < *rate_sats_per_round {
                     return Err(CoinError::ValidationError("stream deposit must be at least one round of rate".into()));
                 }
-                if tx.from == synthetic.recipient {
+                if tx.from == *recipient {
                     return Err(CoinError::ValidationError("cannot stream to self".into()));
                 }
                 let mut hasher = blake3::Hasher::new();
                 hasher.update(&tx.from.0);
-                hasher.update(&synthetic.recipient.0);
+                hasher.update(&recipient.0);
                 hasher.update(&tx.nonce.to_le_bytes());
                 let stream_id = *hasher.finalize().as_bytes();
                 if self.streams.contains_key(&stream_id) {
                     return Err(CoinError::ValidationError("stream ID already exists".into()));
                 }
                 // Debit the deposit (fee already debited by SmartOp handler above)
-                self.debit(&tx.from, synthetic.deposit)?;
+                self.debit(&tx.from, *deposit)?;
                 let stream = crate::tx::stream::Stream {
                     id: stream_id,
                     sender: tx.from,
-                    recipient: synthetic.recipient,
-                    rate_sats_per_round: synthetic.rate_sats_per_round,
+                    recipient: *recipient,
+                    rate_sats_per_round: *rate_sats_per_round,
                     start_round: current_round,
-                    deposited: synthetic.deposit,
+                    deposited: *deposit,
                     withdrawn: 0,
+                    cliff_rounds: *cliff_rounds,
                     cancelled_at_round: None,
                     cancel_recipient_credited: false,
                 };

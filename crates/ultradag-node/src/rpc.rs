@@ -150,6 +150,8 @@ fn stream_to_json(id_hex: &str, s: &ultradag_coin::tx::stream::Stream, current_r
     let remaining = if is_active { end_round.saturating_sub(current_round) } else { 0 };
     // 720 rounds per hour at 5s rounds
     let rate_udag_per_hour = s.rate_sats_per_round as f64 * 720.0 / ultradag_coin::SATS_PER_UDAG as f64;
+    let cliff_end_round = s.start_round.saturating_add(s.cliff_rounds);
+    let in_cliff = current_round < cliff_end_round;
     serde_json::json!({
         "id": id_hex,
         "sender": s.sender.to_hex(),
@@ -170,6 +172,9 @@ fn stream_to_json(id_hex: &str, s: &ultradag_coin::tx::stream::Stream, current_r
         "end_round": end_round,
         "elapsed_rounds": elapsed,
         "remaining_rounds": remaining,
+        "cliff_rounds": s.cliff_rounds,
+        "cliff_end_round": cliff_end_round,
+        "in_cliff": in_cliff,
     })
 }
 
