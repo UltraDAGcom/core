@@ -154,14 +154,15 @@ pub fn verify_webauthn(
     // 3. Compute clientDataHash = SHA-256(clientDataJSON)
     let client_data_hash = Sha256::digest(&webauthn.client_data_json);
 
-    // 4. Compute signed message = SHA-256(authenticatorData || clientDataHash)
+    // 4. Build signed data = authenticatorData || clientDataHash
+    // WebAuthn spec: the signature is over this raw concatenation.
+    // P256 ECDSA internally applies SHA-256 during verification.
     let mut signed_data = Vec::with_capacity(webauthn.authenticator_data.len() + 32);
     signed_data.extend_from_slice(&webauthn.authenticator_data);
     signed_data.extend_from_slice(&client_data_hash);
-    let signed_message = Sha256::digest(&signed_data);
 
-    // 5. Verify P256 signature over the signed message
-    verify_p256(pubkey, &webauthn.signature, &signed_message)
+    // 5. Verify P256 signature over authenticatorData || clientDataHash
+    verify_p256(pubkey, &webauthn.signature, &signed_data)
 }
 
 /// Base64url encode (no padding) — for WebAuthn challenge comparison.
