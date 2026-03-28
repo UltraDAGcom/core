@@ -144,10 +144,17 @@ export async function signAndSubmitWithPasskey(
  * If 20 bytes, use as-is.
  */
 function hexToAddress(hex: string): number[] {
-  const bytes = hexToBytes(hex);
-  if (bytes.length === 20) return Array.from(bytes);
-  if (bytes.length === 32) return Array.from(bytes.slice(0, 20)); // truncate to Address size
-  throw new Error(`Invalid address length: ${bytes.length} bytes (expected 20 or 32)`);
+  // Strip 0x prefix if present
+  let clean = hex.startsWith('0x') ? hex.slice(2) : hex;
+  // Pad to even length
+  if (clean.length % 2 !== 0) clean = '0' + clean;
+  const bytes = hexToBytes(clean);
+  // Always return exactly 20 bytes (Address size in Rust)
+  if (bytes.length >= 20) return Array.from(bytes.slice(0, 20));
+  // Pad short addresses with leading zeros
+  const padded = new Uint8Array(20);
+  padded.set(bytes, 20 - bytes.length);
+  return Array.from(padded);
 }
 
 function serializeOperation(op: Record<string, unknown>): Record<string, unknown> {

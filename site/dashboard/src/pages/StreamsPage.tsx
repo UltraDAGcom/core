@@ -199,13 +199,29 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
     setFormError(false);
     setSubmitting(true);
     try {
+      // Resolve recipient to a hex address (handles names, bech32m, hex)
+      let resolvedRecipient = recipient.trim();
+      if (!/^[0-9a-f]{40}$/i.test(resolvedRecipient)) {
+        // Not a 40-char hex — try resolving via balance endpoint (which handles names/bech32m)
+        const resolveRes = await fetch(`${getNodeUrl()}/balance/${encodeURIComponent(resolvedRecipient)}`, { signal: AbortSignal.timeout(5000) });
+        if (resolveRes.ok) {
+          const resolveData = await resolveRes.json();
+          resolvedRecipient = resolveData.address ?? resolvedRecipient;
+        }
+        // If still not 40-char hex, try stripping to first 40 chars
+        resolvedRecipient = resolvedRecipient.replace(/^0x/, '');
+        if (resolvedRecipient.length > 40 && /^[0-9a-f]+$/i.test(resolvedRecipient)) {
+          resolvedRecipient = resolvedRecipient.slice(0, 40);
+        }
+      }
+
       if (passkey) {
         // Passkey wallet: use WebAuthn SmartOp signing
         const balRes = await fetch(`${getNodeUrl()}/balance/${passkey.address}`, { signal: AbortSignal.timeout(5000) });
         const balData = await balRes.json();
         const nonce = balData.nonce ?? 0;
         await signAndSubmitSmartOp(
-          { StreamCreate: { recipient, rate_sats_per_round: satsPerRound, deposit: depositSats, cliff_rounds: cliffRoundsNum } },
+          { StreamCreate: { recipient: resolvedRecipient, rate_sats_per_round: satsPerRound, deposit: depositSats, cliff_rounds: cliffRoundsNum } },
           MIN_FEE,
           nonce,
         );
