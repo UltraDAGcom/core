@@ -32,12 +32,14 @@ if [ "$CLEAN" = true ]; then
     done
 fi
 
-echo "==> Deploying mainnet nodes (source build with --features mainnet)..."
+GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+echo "==> Deploying mainnet nodes (pre-built binary, git: $GIT_SHA)..."
 for i in $NODES; do
     echo "  Deploying ultradag-mainnet-$i..."
     fly deploy -c "$SCRIPT_DIR/fly-mainnet-$i.toml" \
-        --dockerfile Dockerfile.mainnet \
-        --build-arg FEATURES=mainnet \
+        --dockerfile Dockerfile \
+        --build-arg VARIANT=-mainnet \
+        --build-arg CACHEBUST="$GIT_SHA" \
         --wait-timeout 300 \
         --strategy rolling \
         2>&1 | tail -3
