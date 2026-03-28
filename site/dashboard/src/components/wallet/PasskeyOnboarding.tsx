@@ -144,14 +144,15 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
           setNameError('This name is taken');
         } else {
           setNameFee(data.annual_fee_udag > 0 ? `${data.annual_fee_udag} UDAG/year` : 'Free');
-          // Show phishing similarity warning if present
           if (data.similar_warning) {
             setNameError(data.similar_warning);
           }
         }
+      } else if (res.status === 404) {
+        setNameError('Name service not available on this network yet. Please switch to testnet or try again later.');
       }
     } catch {
-      setNameError('Could not check availability');
+      setNameError('Could not reach the network. Check your connection.');
     } finally {
       setChecking(false);
     }
@@ -285,17 +286,15 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced }: PasskeyO
             {nameAvailable && nameFee && <p style={{ fontSize: 10.5, color: '#00E0C4', marginTop: 4 }}>{username} is available! ({nameFee})</p>}
           </div>
 
-          <button onClick={handleCreate} disabled={creating} style={{
+          <button onClick={handleCreate} disabled={creating || !(username.length >= 3 && nameAvailable)} style={{
             width: '100%', padding: '13px 0', borderRadius: 12,
-            background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
-            color: 'var(--dag-text)', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
-            opacity: creating ? 0.5 : 1, boxShadow: '0 4px 20px rgba(0,224,196,0.2)',
+            background: (username.length >= 3 && nameAvailable) ? 'linear-gradient(135deg, #00E0C4, #0066FF)' : 'var(--dag-border)',
+            color: (username.length >= 3 && nameAvailable) ? '#fff' : 'var(--dag-text-faint)',
+            fontSize: 14, fontWeight: 700, cursor: (username.length >= 3 && nameAvailable) ? 'pointer' : 'not-allowed', border: 'none',
+            opacity: creating ? 0.5 : 1, boxShadow: (username.length >= 3 && nameAvailable) ? '0 4px 20px rgba(0,224,196,0.2)' : 'none',
+            transition: 'all 0.2s',
           }}>
-            {username.length >= 3 && nameAvailable ? `Create Wallet as ${username}` : 'Create Wallet'}
-          </button>
-
-          <button onClick={() => handleCreate()} style={{ display: 'block', margin: '14px auto 0', background: 'none', border: 'none', color: 'var(--dag-text-faint)', fontSize: 11, cursor: 'pointer' }}>
-            Skip username for now
+            {username.length >= 3 && nameAvailable ? `Create Wallet as ${username}` : 'Choose a username to continue'}
           </button>
 
           {error && <div style={{ marginTop: 12, fontSize: 11, color: '#EF4444', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 8, padding: '8px 12px' }}>{error}</div>}
