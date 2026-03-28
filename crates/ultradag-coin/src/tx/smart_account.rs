@@ -78,6 +78,29 @@ pub fn verify_p256(pubkey: &[u8], sig_bytes: &[u8], message: &[u8]) -> bool {
     false
 }
 
+/// Verify P256 with a pre-hashed message (for WebAuthn where the message is already
+/// the hash that ECDSA should verify against, without the library hashing it again).
+/// Verify P256 with a pre-hashed message digest (32 bytes).
+/// Used for WebAuthn where the signature is over SHA-256(authenticatorData || clientDataHash)
+/// and the p256 crate's `verify()` would double-hash.
+pub fn verify_p256_prehashed(pubkey: &[u8], sig_bytes: &[u8], prehash: &[u8]) -> bool {
+    use p256::ecdsa::{Signature as P256Sig, VerifyingKey};
+    use p256::ecdsa::signature::hazmat::PrehashVerifier;
+
+    let vk = match VerifyingKey::from_sec1_bytes(pubkey) {
+        Ok(k) => k,
+        Err(_) => return false,
+    };
+
+    if let Ok(sig) = P256Sig::try_from(sig_bytes) {
+        return vk.verify_prehash(prehash, &sig).is_ok();
+    }
+    if let Ok(sig) = P256Sig::from_der(sig_bytes) {
+        return vk.verify_prehash(prehash, &sig).is_ok();
+    }
+    false
+}
+
 /// Verify an Ed25519 signature over a message.
 /// Used by SmartAccount verification dispatch (same as existing verify_strict).
 pub fn verify_ed25519(pubkey: &[u8], sig_bytes: &[u8], message: &[u8]) -> bool {
@@ -165,7 +188,20 @@ pub fn verify_webauthn(
     // 5. Verify P256 signature over authenticatorData || clientDataHash
     let result = verify_p256(pubkey, &webauthn.signature, &signed_data);
     if !result {
-        tracing::warn!("WebAuthn P256 verify failed: pubkey_len={} sig_len={} auth_data_len={} client_data_len={}", pubkey.len(), webauthn.signature.len(), webauthn.authenticator_data.len(), webauthn.client_data_json.len());
+        let pubkey_hex: String = pubkey.iter().map(|b| format!("{b:02x}")).collect();
+        let sig_hex: String = webauthn.signature.iter().map(|b| format!("{b:02x}")).collect();
+        let msg_hex: String = signed_data.iter().take(32).map(|b| format!("{b:02x}")).collect();
+        tracing::warn!("WebAuthn P256 verify FAILED: pubkey={} sig={} signed_data_prefix={} signed_data_len={}", pubkey_hex, sig_hex, msg_hex, signed_data.len());
+        // Try with prehashed verification (browser may have already hashed)
+        let prehash_result = {
+            use sha2::{Sha256, Digest as _};
+            let hashed = Sha256::digest(&signed_data);
+            verify_p256_prehashed(pubkey, &webauthn.signature, &hashed)
+        };
+        if prehash_result {
+            tracing::warn!("WebAuthn P256: prehashed verification SUCCEEDED — browser double-hashes");
+            return true;
+        }
     }
     result
 }
