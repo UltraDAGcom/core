@@ -262,7 +262,7 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
   const finalized = fin?.last_finalized_round ?? status?.last_finalized_round ?? 0;
   const supplyUdag = (st?.total_supply ?? status?.total_supply ?? 0) / SATS;
   const supplyPct = Math.min((supplyUdag / MAX_SUPPLY) * 100, 100);
-  const validators = st?.active_validators ?? fin?.validator_count ?? 0;
+  const validators = (st?.active_validators || 0) > 0 ? st!.active_validators : (fin?.validator_count ?? 0);
   const peers = net?.peer_count ?? 0;
   const treasuryUdag = (status?.treasury_balance ?? 0) / SATS;
   const accounts = st?.account_count ?? 0;
