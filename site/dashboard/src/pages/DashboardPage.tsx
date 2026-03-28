@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { getHealthDetailed, getRound } from '../lib/api';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
+import { useIsMobile } from '../hooks/useIsMobile';
 import type { NodeStatus } from '../hooks/useNode';
 
 interface DashboardPageProps {
@@ -208,6 +209,7 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
   const [health, setHealth] = useState<HealthData | null>(null);
   const [recentRounds, setRecentRounds] = useState<RoundData[]>([]);
   const [vertexHistory, setVertexHistory] = useState<number[]>([]);
+  const m = useIsMobile();
 
   const pw = getPasskeyWallet();
   const userName = pw?.name || wallets?.[0]?.name || 'Wallet';
@@ -275,7 +277,7 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
   const healthScore = health?.status === 'healthy' ? 98 : health?.status === 'degraded' ? 75 : 50;
 
   return (
-    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+    <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
@@ -283,24 +285,24 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
       `}</style>
 
       {/* Top bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: m ? 'flex-start' : 'center', marginBottom: m ? 16 : 22, animation: 'slideUp 0.3s ease', flexDirection: m ? 'column' : 'row', gap: m ? 10 : 0 }}>
         <div>
-          <h1 style={{ fontSize: 21, fontWeight: 700, letterSpacing: -0.3, color: 'var(--dag-text)' }}>Dashboard</h1>
+          <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, letterSpacing: -0.3, color: 'var(--dag-text)' }}>Dashboard</h1>
           <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>Real-time network overview</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: m ? 8 : 12, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#00E0C4', boxShadow: '0 0 8px #00E0C4', animation: 'pulse 2s ease-in-out infinite' }} />
             <span style={{ fontSize: 12, fontWeight: 600, color: '#00E0C4' }}>HEALTHY</span>
             <span style={{ fontSize: 11, color: 'var(--dag-subheading)' }}>{healthScore}%</span>
           </div>
-          <div style={{ padding: '5px 13px', borderRadius: 18, background: 'rgba(0,224,196,0.06)', border: '1px solid rgba(0,224,196,0.12)', fontSize: 10.5, fontWeight: 600, color: '#00E0C4', letterSpacing: 1, textTransform: 'uppercase' }}>{network}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 13px', borderRadius: 18, background: 'var(--dag-card)', border: '1px solid var(--dag-border)' }}>
+          {!m && <div style={{ padding: '5px 13px', borderRadius: 18, background: 'rgba(0,224,196,0.06)', border: '1px solid rgba(0,224,196,0.12)', fontSize: 10.5, fontWeight: 600, color: '#00E0C4', letterSpacing: 1, textTransform: 'uppercase' }}>{network}</div>}
+          {!m && <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 13px', borderRadius: 18, background: 'var(--dag-card)', border: '1px solid var(--dag-border)' }}>
             <div style={{ width: 18, height: 18, borderRadius: 5, background: 'linear-gradient(135deg,#00E0C4,#0066FF)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: '#fff' }}>{userName[0]?.toUpperCase()}</div>
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)' }}>{userName}</span>
             <span style={{ color: 'var(--dag-text-faint)' }}>|</span>
             <span style={{ fontSize: 12, color: '#00E0C4', fontWeight: 600 }}>{portfolioTotal.toFixed(2)} UDAG</span>
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -314,7 +316,7 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
           <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--dag-text-muted)', letterSpacing: 2 }}>YOUR PORTFOLIO</span>
           <Link to="/wallet" style={{ fontSize: 11, color: 'var(--dag-subheading)', textDecoration: 'none' }}>Manage Wallets →</Link>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: m ? 12 : 20 }}>
           {[
             { l: 'Total Value', v: portfolioTotal, c: '#fff' },
             { l: 'Available', v: portfolioAvailable, c: '#00E0C4' },
@@ -323,7 +325,7 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
           ].map((p, i) => (
             <div key={i}>
               <div style={{ fontSize: 10.5, color: 'var(--dag-text-muted)', marginBottom: 5, letterSpacing: 0.5 }}>{p.l}</div>
-              <div style={{ fontSize: 23, fontWeight: 700, color: p.c }}><AnimCounter target={p.v} decimals={2} /></div>
+              <div style={{ fontSize: m ? 18 : 23, fontWeight: 700, color: p.c }}><AnimCounter target={p.v} decimals={2} /></div>
               <div style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginTop: 2 }}>UDAG</div>
             </div>
           ))}
@@ -331,7 +333,7 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
       </div>
 
       {/* Primary Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16, animation: 'slideUp 0.5s ease' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: m ? 10 : 12, marginBottom: 16, animation: 'slideUp 0.5s ease' }}>
         <Card label="Round" icon="◈" accent="#00E0C4" spark={vertexHistory.length > 1 ? vertexHistory : [3, 4, 5, 4, 5]}
           value={<><AnimCounter target={round} /> <span style={{ fontSize: 11, color: 'var(--dag-text-faint)', fontWeight: 400 }}>~5s</span></>}
           sub={`Finalized: ${finalized}`}
@@ -355,7 +357,7 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
       </div>
 
       {/* DAG + Emission */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 12, marginBottom: 16, animation: 'slideUp 0.6s ease' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '1.4fr 1fr', gap: 12, marginBottom: 16, animation: 'slideUp 0.6s ease' }}>
         <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '16px 18px', overflow: 'hidden' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Live DAG Topology</span>
@@ -390,7 +392,7 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
       {/* Network Vitals */}
       <div style={{ marginBottom: 16, animation: 'slideUp 0.7s ease' }}>
         <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--dag-text-faint)', letterSpacing: 2, marginBottom: 10 }}>NETWORK VITALS</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(6,1fr)', gap: 10 }}>
           {[
             { l: 'Accounts', v: accounts, a: '#00E0C4' },
             { l: 'Mempool', v: mempoolCount, a: '#00E0C4' },
@@ -408,7 +410,7 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
       </div>
 
       {/* Bottom: Checkpoints + DAG Status + Recent Rounds */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr', gap: 12, animation: 'slideUp 0.8s ease' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '1fr 1fr 1.5fr', gap: 12, animation: 'slideUp 0.8s ease' }}>
         <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '16px 18px' }}>
           <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--dag-text-secondary)', marginBottom: 12 }}>◈ Checkpoints</div>
           {[

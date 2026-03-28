@@ -3,6 +3,7 @@ import { getValidators, getDelegation, shortAddr, postDelegate, postUndelegate, 
 import { useKeystore } from '../hooks/useKeystore';
 import { hasPasskeyWallet, getPasskeyWallet } from '../lib/passkey-wallet';
 import { signAndSubmitSmartOp } from '../lib/webauthn-sign';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const SATS = 100_000_000;
 const fmt = (s: number) => (s / SATS).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -28,6 +29,7 @@ const S = {
 
 export function StakingPage() {
   const { wallets, unlocked } = useKeystore();
+  const m = useIsMobile();
   const [validators, setValidators] = useState<ValidatorInfo[]>([]);
   const [totalStaked, setTotalStaked] = useState(0);
   const [totalDelegated, setTotalDelegated] = useState(0);
@@ -104,16 +106,16 @@ export function StakingPage() {
   };
 
   return (
-    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+    <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} input:focus,select:focus{border-color:rgba(0,224,196,0.3)!important}`}</style>
 
-      <div style={{ marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
-        <h1 style={{ fontSize: 21, fontWeight: 700, color: 'var(--dag-text)' }}>Staking</h1>
+      <div style={{ marginBottom: m ? 16 : 22, animation: 'slideUp 0.3s ease' }}>
+        <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, color: 'var(--dag-text)' }}>Staking</h1>
         <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>Stake UDAG to earn passive rewards — no node required</p>
       </div>
 
       {/* Stats Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 18, animation: 'slideUp 0.4s ease' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(3,1fr)', gap: m ? 10 : 12, marginBottom: 18, animation: 'slideUp 0.4s ease' }}>
         {[
           { l: 'TOTAL STAKED', v: fmt(totalStaked) + ' UDAG', c: '#00E0C4', i: '⬡' },
           { l: 'TOTAL DELEGATED', v: fmt(totalDelegated) + ' UDAG', c: '#0066FF', i: '◎' },
@@ -129,7 +131,7 @@ export function StakingPage() {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: 16, animation: 'slideUp 0.5s ease' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '2fr 3fr', gap: m ? 14 : 16, animation: 'slideUp 0.5s ease' }}>
         {/* ── Stake Form ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{
@@ -256,15 +258,15 @@ export function StakingPage() {
                 {loading ? <p style={{ fontSize: 12, color: 'var(--dag-subheading)', padding: '16px 0', textAlign: 'center' }}>Loading...</p> : validators.length === 0 ? (
                   <p style={{ fontSize: 12, color: 'var(--dag-subheading)', padding: '16px 0', textAlign: 'center' }}>No validators yet.</p>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                     {/* Header */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, padding: '0 4px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, padding: '0 4px', minWidth: m ? 500 : undefined }}>
                       {['ADDRESS', 'STAKE', 'DELEGATORS', 'FEE', ''].map((h, i) => (
                         <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'var(--dag-text-faint)', letterSpacing: 1.5 }}>{h}</div>
                       ))}
                     </div>
                     {validators.map(v => (
-                      <div key={v.address} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'center', padding: '8px 4px', borderTop: '1px solid var(--dag-row-border)' }}>
+                      <div key={v.address} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'center', padding: '8px 4px', borderTop: '1px solid var(--dag-row-border)', minWidth: m ? 500 : undefined }}>
                         <div style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono }}>{shortAddr(v.address)}</div>
                         <div style={{ fontSize: 11, color: 'var(--dag-cell-text)' }}>{fmt(v.effective_stake)}</div>
                         <div style={{ fontSize: 11, color: 'var(--dag-cell-text)' }}>{v.delegator_count}</div>

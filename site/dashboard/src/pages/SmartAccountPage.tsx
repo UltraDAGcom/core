@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
 import { VerifiedAddressInput } from '../components/shared/VerifiedAddressInput';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 interface AuthorizedKey { key_id: string; key_type: string; label: string; daily_limit: number | null }
 interface SmartAccountInfo {
@@ -41,6 +42,7 @@ function Section({ icon, color, title, action, children }: { icon: string; color
 }
 
 export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: string; nodeUrl: string }) {
+  const m = useIsMobile();
   const [info, setInfo] = useState<SmartAccountInfo | null>(null);
   const [nameInfo, setNameInfo] = useState<NameInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,12 +101,12 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
   if (loading) return <div style={{ padding: '18px 26px', color: 'var(--dag-text-muted)', fontSize: 13, fontFamily: "'DM Sans',sans-serif", animation: 'pulse 1.5s infinite' }}>Loading SmartAccount...</div>;
 
   return (
-    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+    <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}} input:focus,select:focus{border-color:rgba(0,224,196,0.3)!important}`}</style>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: m ? 'flex-start' : 'center', marginBottom: m ? 16 : 22, animation: 'slideUp 0.3s ease', flexDirection: m ? 'column' : 'row', gap: m ? 8 : 0 }}>
         <div>
-          <h1 style={{ fontSize: 21, fontWeight: 700, color: 'var(--dag-text)' }}>SmartAccount</h1>
+          <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, color: 'var(--dag-text)' }}>SmartAccount</h1>
           <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>Keys, recovery, spending limits, and name</p>
         </div>
         <button onClick={fetchInfo} style={S.btn()}>↻ Refresh</button>
@@ -112,7 +114,7 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
 
       {error && <div style={{ fontSize: 11, color: '#EF4444', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 8, padding: '8px 12px', marginBottom: 14 }}>{error}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, animation: 'slideUp 0.4s ease' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '1fr 1fr', gap: 14, animation: 'slideUp 0.4s ease' }}>
 
         {/* ── Name ── */}
         <Section icon="◎" color="#00E0C4" title="Your Name"

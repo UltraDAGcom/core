@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getNodeUrl } from '../lib/api';
+import { useIsMobile } from '../hooks/useIsMobile';
 import type { NetworkType } from '../lib/api';
 
 const SATS = 100_000_000;
@@ -74,6 +75,7 @@ function ProgressBar({ value, max }: { value: number; max: number }) {
 }
 
 export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
+  const m = useIsMobile();
   const [loading, setLoading] = useState(true);
   const [allStreams, setAllStreams] = useState<Stream[]>([]);
   const [, setTick] = useState(0);
@@ -228,7 +230,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
   const rates = ratePerSecond > 0 ? rateBreakdown() : null;
 
   return (
-    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+    <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <style>{`
         @keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
         @keyframes streamPulse{0%,100%{opacity:1;text-shadow:0 0 6px rgba(0,224,196,0.2)}50%{opacity:0.75;text-shadow:0 0 12px rgba(0,224,196,0.4)}}
@@ -239,8 +241,8 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
       `}</style>
 
       {/* Header */}
-      <div style={{ marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
-        <h1 style={{ fontSize: 21, fontWeight: 700, color: 'var(--dag-text)', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ marginBottom: m ? 16 : 22, animation: 'slideUp 0.3s ease' }}>
+        <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, color: 'var(--dag-text)', display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ background: 'linear-gradient(135deg, #00E0C4, #0066FF)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: 24 }}>≋</span>
           Streaming Payments
         </h1>
@@ -250,7 +252,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
       </div>
 
       {/* Stats Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 18, animation: 'slideUp 0.4s ease' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: m ? 10 : 12, marginBottom: 18, animation: 'slideUp 0.4s ease' }}>
         {[
           { l: 'ACTIVE', v: loading ? '—' : String(activeCount), c: '#00E0C4', i: '≋' },
           { l: 'LOCKED IN STREAMS', v: loading ? '—' : fmtUdag(totalStreaming) + ' UDAG', c: '#0066FF', i: '◈' },
@@ -289,14 +291,14 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
 
       {/* CREATE TAB */}
       {tab === 'create' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, animation: 'slideUp 0.5s ease' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '1fr 1fr', gap: m ? 14 : 16, animation: 'slideUp 0.5s ease' }}>
           {/* Left: Form */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
             {/* Stream Type Selector */}
             <div style={S.card}>
               <span style={S.label}>Stream Type</span>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginTop: 4 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 8, marginTop: 4 }}>
                 {(Object.entries(STREAM_TYPE_INFO) as [StreamType, typeof STREAM_TYPE_INFO[StreamType]][]).map(([key, info]) => (
                   <button key={key} onClick={() => { setStreamType(key); setFormMsg(''); }} style={{
                     padding: '10px 8px', borderRadius: 10, border: streamType === key ? '1px solid rgba(0,224,196,0.3)' : '1px solid var(--dag-border)',
@@ -537,14 +539,14 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                 <button onClick={() => setTab('create')} style={{ ...S.btn(), marginTop: 12 }}>+ Create Stream</button>
               </div>
             ) : (
-              <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 2fr 1fr 1fr auto', gap: 8, padding: '0 4px', marginBottom: 8 }}>
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 2fr 1fr 1fr auto', gap: 8, padding: '0 4px', marginBottom: 8, minWidth: m ? 650 : undefined }}>
                   {['RECIPIENT', 'RATE', 'PROGRESS', 'ACCRUED', 'STATUS', ''].map((h, i) => (
                     <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'var(--dag-text-faint)', letterSpacing: 1.5 }}>{h}</div>
                   ))}
                 </div>
                 {outgoing.map(s => (
-                  <div key={s.id} className="stream-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 2fr 1fr 1fr auto', gap: 8, alignItems: 'center', padding: '10px 4px', borderTop: '1px solid var(--dag-row-border)', borderRadius: 6, transition: 'background 0.15s' }}>
+                  <div key={s.id} className="stream-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 2fr 1fr 1fr auto', gap: 8, alignItems: 'center', padding: '10px 4px', borderTop: '1px solid var(--dag-row-border)', borderRadius: 6, transition: 'background 0.15s', minWidth: m ? 650 : undefined }}>
                     <div style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono }}>{shortAddr(s.recipient)}</div>
                     <div style={{ fontSize: 11, color: 'var(--dag-cell-text)' }}>{s.rate_udag_per_hour?.toFixed(4) ?? '—'}/hr</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -591,14 +593,14 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                 <p style={{ fontSize: 11, color: 'var(--dag-text-faint)', marginTop: 4 }}>Share your address to receive continuous payments</p>
               </div>
             ) : (
-              <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1.5fr 1fr auto', gap: 8, padding: '0 4px', marginBottom: 8 }}>
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1.5fr 1fr auto', gap: 8, padding: '0 4px', marginBottom: 8, minWidth: m ? 650 : undefined }}>
                   {['SENDER', 'RATE', 'ACCRUED', 'WITHDRAWABLE', 'STATUS', ''].map((h, i) => (
                     <div key={i} style={{ fontSize: 8.5, fontWeight: 600, color: 'var(--dag-text-faint)', letterSpacing: 1.5 }}>{h}</div>
                   ))}
                 </div>
                 {incoming.map(s => (
-                  <div key={s.id} className="stream-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1.5fr 1fr auto', gap: 8, alignItems: 'center', padding: '10px 4px', borderTop: '1px solid var(--dag-row-border)', borderRadius: 6, transition: 'background 0.15s' }}>
+                  <div key={s.id} className="stream-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1.5fr 1fr auto', gap: 8, alignItems: 'center', padding: '10px 4px', borderTop: '1px solid var(--dag-row-border)', borderRadius: 6, transition: 'background 0.15s', minWidth: m ? 650 : undefined }}>
                     <div style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono }}>{shortAddr(s.sender)}</div>
                     <div style={{ fontSize: 11, color: 'var(--dag-cell-text)' }}>{s.rate_udag_per_hour?.toFixed(4) ?? '—'}/hr</div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dag-text)', ...S.mono }}>{fmtUdag(s.accrued)}</div>

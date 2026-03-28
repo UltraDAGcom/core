@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { getStatus, getRound, connectToNode, isConnected } from '../lib/api';
 import { SearchBar } from '../components/explorer/SearchBar';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const PAGE_SIZE = 10;
 const SATS = 100_000_000;
@@ -20,6 +21,7 @@ interface RoundData {
 }
 
 export function ExplorerPage() {
+  const m = useIsMobile();
   const [rounds, setRounds] = useState<RoundData[]>([]);
   const [dagRound, setDagRound] = useState(0);
   const [finalized, setFinalized] = useState(0);
@@ -67,12 +69,12 @@ export function ExplorerPage() {
   const lag = dagRound - finalized;
 
   return (
-    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+    <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: m ? 16 : 22, animation: 'slideUp 0.3s ease' }}>
         <div>
-          <h1 style={{ fontSize: 21, fontWeight: 700, color: 'var(--dag-text)' }}>Explorer</h1>
+          <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, color: 'var(--dag-text)' }}>Explorer</h1>
           <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>Search and browse the DAG</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -87,7 +89,7 @@ export function ExplorerPage() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16, animation: 'slideUp 0.4s ease' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: m ? 10 : 12, marginBottom: 16, animation: 'slideUp 0.4s ease' }}>
         {[
           { l: 'DAG ROUND', v: dagRound.toLocaleString(), c: '#fff', i: '◈' },
           { l: 'FINALIZED', v: finalized.toLocaleString(), c: '#00E0C4', i: '✓' },
@@ -128,7 +130,8 @@ export function ExplorerPage() {
           <p style={{ fontSize: 12, color: 'var(--dag-text-faint)', textAlign: 'center', padding: '30px 0' }}>No rounds yet.</p>
         ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr 1fr 1fr', gap: '0 16px' }}>
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr 1fr 1fr', gap: '0 16px', minWidth: m ? 500 : undefined }}>
               {['ROUND', 'VERTICES', 'TXS', 'PARENTS', 'STATUS'].map((h, i) => (
                 <div key={i} style={S.th}>{h}</div>
               ))}
@@ -147,6 +150,7 @@ export function ExplorerPage() {
                   </div>,
                 ];
               }).flat()}
+            </div>
             </div>
             {/* Pagination */}
             <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 14 }}>

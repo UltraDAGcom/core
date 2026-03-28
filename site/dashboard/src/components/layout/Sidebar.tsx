@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { fonts } from '../../lib/theme';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import type { NetworkType } from '../../lib/api';
 import type { Theme } from '../../hooks/useTheme';
 
@@ -41,19 +42,21 @@ export function Sidebar({ open, onClose, network = 'testnet', onSwitchNetwork, o
   const mins = Math.floor((sessionSecondsLeft ?? 0) / 60);
   const secs = (sessionSecondsLeft ?? 0) % 60;
   const isMainnet = network === 'mainnet';
+  const m = useIsMobile();
 
   return (
     <>
       {open && <div style={{ position: 'fixed', inset: 0, background: 'var(--dag-overlay)', zIndex: 40 }} onClick={onClose} />}
 
       <aside style={{
-        width: 216, padding: '18px 10px',
+        width: m ? 260 : 216, padding: '18px 10px',
         background: 'var(--dag-sidebar-bg)',
         borderRight: '1px solid var(--dag-sidebar-border)',
-        display: 'flex', flexDirection: 'column',
-        position: 'sticky', top: 0, height: '100vh', overflowY: 'auto',
+        display: m && !open ? 'none' : 'flex', flexDirection: 'column',
+        position: m ? 'fixed' : 'sticky', top: 0, left: 0, height: '100vh', overflowY: 'auto',
         fontFamily: fonts.sans,
-        zIndex: open ? 50 : 'auto',
+        zIndex: m ? 50 : (open ? 50 : 'auto'),
+        transition: 'transform 0.2s ease',
       }}>
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2px 8px', marginBottom: 20 }}>

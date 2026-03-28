@@ -6,6 +6,7 @@ import { CreateKeystoreModal } from '../components/wallet/CreateKeystoreModal';
 import { AddWalletModal } from '../components/wallet/AddWalletModal';
 import { changePassword } from '../lib/keystore';
 import { CopyButton } from '../components/shared/CopyButton';
+import { useIsMobile } from '../hooks/useIsMobile';
 import type { Wallet } from '../lib/keystore';
 import type { WalletBalance } from '../hooks/useWalletBalances';
 
@@ -81,6 +82,7 @@ export function WalletPage({
   const [sel, setSel] = useState<number | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const pw = getPasskeyWallet();
+  const m = useIsMobile();
 
   if (!unlocked) {
     return (
@@ -113,16 +115,16 @@ export function WalletPage({
   for (const w of wallets) { const b = balances.get(w.address); if (b) { totalBal += b.balance; totalStaked += b.staked; totalDelegated += b.delegated; } }
 
   return (
-    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+    <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, animation: 'slideUp 0.3s ease' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: m ? 'flex-start' : 'center', marginBottom: 18, animation: 'slideUp 0.3s ease', flexDirection: m ? 'column' : 'row', gap: m ? 10 : 0 }}>
         <div>
-          <h1 style={{ fontSize: 21, fontWeight: 700, color: 'var(--dag-text)' }}>Wallets</h1>
+          <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, color: 'var(--dag-text)' }}>Wallets</h1>
           <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>{wallets.length} wallet{wallets.length !== 1 ? 's' : ''} managed</p>
         </div>
-        <div style={{ display: 'flex', gap: 7 }}>
+        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
           {webauthnAvailable && onEnrollWebAuthn && onRemoveWebAuthn && (
             <button onClick={async () => { webauthnEnrolled ? onRemoveWebAuthn() : await onEnrollWebAuthn?.(); }} style={S.btn(webauthnEnrolled ? '#00E0C4' : 'var(--dag-text-muted)')}>
               ◎ {webauthnEnrolled ? 'Biometrics On' : 'Biometrics'}
@@ -141,7 +143,7 @@ export function WalletPage({
         animation: 'slideUp 0.4s ease',
       }}>
         <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--dag-subheading)', letterSpacing: 1.8, marginBottom: 10 }}>TOTAL PORTFOLIO</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: m ? 10 : 16 }}>
           {[
             { l: 'Total', v: totalBal + totalStaked + totalDelegated, c: '#fff' },
             { l: 'Available', v: totalBal, c: '#00E0C4' },
@@ -150,7 +152,7 @@ export function WalletPage({
           ].map((p, i) => (
             <div key={i}>
               <div style={{ fontSize: 10, color: 'var(--dag-subheading)', marginBottom: 3 }}>{p.l}</div>
-              <div style={{ fontSize: 21, fontWeight: 700, color: p.c, ...S.mono }}>{fmt(p.v)}</div>
+              <div style={{ fontSize: m ? 16 : 21, fontWeight: 700, color: p.c, ...S.mono }}>{fmt(p.v)}</div>
               <div style={{ fontSize: 9.5, color: 'var(--dag-text-faint)' }}>UDAG</div>
             </div>
           ))}
@@ -164,7 +166,7 @@ export function WalletPage({
           <button onClick={() => setShowAddModal(true)} style={S.btnSolid}>Add Wallet</button>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 14, animation: 'slideUp 0.5s ease' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '1.2fr 1fr', gap: 14, animation: 'slideUp 0.5s ease' }}>
           {/* Wallet List */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {wallets.map((w, i) => {

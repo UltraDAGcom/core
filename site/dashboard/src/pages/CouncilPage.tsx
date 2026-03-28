@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { getCouncil, getGovernanceConfig, shortAddr } from '../lib/api';
 import { CopyButton } from '../components/shared/CopyButton';
 import { CouncilSeatGrid } from '../components/governance/CouncilSeatGrid';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 interface CouncilMember { address: string; category: string }
 interface SeatInfo { available: number; filled: number; max: number }
@@ -23,6 +24,7 @@ const catColor: Record<string, string> = {
 };
 
 export function CouncilPage() {
+  const m = useIsMobile();
   const [council, setCouncil] = useState<CouncilData | null>(null);
   const [govConfig, setGovConfig] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,16 +54,16 @@ export function CouncilPage() {
   const emissionPercent = council?.emission_percent ?? 10;
 
   return (
-    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+    <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
-      <div style={{ marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
-        <h1 style={{ fontSize: 21, fontWeight: 700, color: 'var(--dag-text)' }}>Council of 21</h1>
+      <div style={{ marginBottom: m ? 16 : 22, animation: 'slideUp 0.3s ease' }}>
+        <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, color: 'var(--dag-text)' }}>Council of 21</h1>
         <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>The elected governance body that guides UltraDAG</p>
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 18, animation: 'slideUp 0.4s ease' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: m ? 10 : 12, marginBottom: 18, animation: 'slideUp 0.4s ease' }}>
         {[
           { l: 'MEMBERS', v: `${memberCount}/${maxMembers}`, c: '#A855F7', i: '♛' },
           { l: 'OPEN SEATS', v: String(openSeats), c: openSeats > 0 ? '#00E0C4' : 'var(--dag-text-muted)', i: '◇' },
@@ -78,7 +80,7 @@ export function CouncilPage() {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, animation: 'slideUp 0.5s ease' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '1fr 1fr', gap: m ? 14 : 16, animation: 'slideUp 0.5s ease' }}>
         {/* Seat Categories */}
         <div style={S.card}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>

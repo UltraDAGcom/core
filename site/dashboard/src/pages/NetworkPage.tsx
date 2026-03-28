@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getStatus, getPeers, getMempool, getMetrics, getHealthDetailed, connectToNode, isConnected, getNodeUrl } from '../lib/api';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const S = {
   card: { background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '18px 20px' } as React.CSSProperties,
@@ -12,6 +13,7 @@ const S = {
 const healthColor: Record<string, string> = { healthy: '#00E0C4', warning: '#FFB800', unhealthy: '#EF4444', degraded: '#FFB800' };
 
 export function NetworkPage() {
+  const m = useIsMobile();
   const [status, setStatus] = useState<Record<string, unknown> | null>(null);
   const [peers, setPeers] = useState<string[]>([]);
   const [bootstrap, setBootstrap] = useState<Array<{ addr: string; connected: boolean }>>([]);
@@ -43,12 +45,12 @@ export function NetworkPage() {
   const components = health?.components ? Object.entries(health.components) : [];
 
   return (
-    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+    <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: m ? 'flex-start' : 'center', marginBottom: m ? 16 : 22, animation: 'slideUp 0.3s ease', flexDirection: m ? 'column' : 'row', gap: m ? 8 : 0 }}>
         <div>
-          <h1 style={{ fontSize: 21, fontWeight: 700, color: 'var(--dag-text)' }}>Node Status</h1>
+          <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, color: 'var(--dag-text)' }}>Node Status</h1>
           <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>
             Connected to <span style={S.mono}>{getNodeUrl()}</span>
           </p>
@@ -80,7 +82,7 @@ export function NetworkPage() {
 
       {/* Status Grid */}
       {status && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 14, animation: 'slideUp 0.5s ease' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 10, marginBottom: 14, animation: 'slideUp 0.5s ease' }}>
           {[
             { l: 'DAG ROUND', v: String(status.dag_round ?? 0), c: '#00E0C4' },
             { l: 'FINALIZED', v: String(status.last_finalized_round ?? 0), c: '#0066FF' },
@@ -99,7 +101,7 @@ export function NetworkPage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, animation: 'slideUp 0.6s ease' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '1fr 1fr', gap: 14, animation: 'slideUp 0.6s ease' }}>
         {/* Peers */}
         <div style={S.card}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
@@ -163,7 +165,7 @@ export function NetworkPage() {
             <span style={{ color: '#0066FF', fontSize: 14 }}>◉</span>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Metrics</span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: 8 }}>
             {Object.entries(metrics).flatMap(([section, data]) => {
               if (!data || typeof data !== 'object') return [];
               return Object.entries(data as Record<string, unknown>).map(([key, value]) => (

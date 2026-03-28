@@ -18,6 +18,7 @@ import {
 import { formatUnits } from 'ethers';
 import { useKeystore } from '../hooks/useKeystore.ts';
 import { useEthWallet } from '../hooks/useEthWallet.ts';
+import { useIsMobile } from '../hooks/useIsMobile.ts';
 import type { DiscoveredWallet } from '../hooks/useEthWallet.ts';
 import { useToast } from '../hooks/useToast.tsx';
 import { normalizeAddress, isValidAddress, formatUdag, formatUdagBigint, getBridgeNonce, getBridgeAttestation, getBridgeReserve, postBridgeDeposit, isConnected } from '../lib/api.ts';
@@ -143,6 +144,7 @@ export function BridgePage() {
   const { wallets } = useKeystore();
   const eth = useEthWallet();
   const { toast } = useToast();
+  const m = useIsMobile();
 
   const [direction, setDirection] = useState<'to-native' | 'to-arbitrum'>('to-native');
   const [amount, setAmount] = useState('');
@@ -474,7 +476,7 @@ export function BridgePage() {
   };
 
   return (
-    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif", animation: 'slideUp 0.3s ease' }}>
+    <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif", animation: 'slideUp 0.3s ease' }}>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
       {/* Wallet Picker Modal */}
       {showWalletPicker && (
