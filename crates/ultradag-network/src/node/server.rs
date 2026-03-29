@@ -2251,31 +2251,29 @@ async fn handle_peer(
                         checkpoint_metrics.record_fast_sync_failure();
                         continue;
                     }
-                    // Cross-check against local finality tracker's known validators.
-                    // If --validator-key was used, the allowlist populates the validator set.
+                    // Cross-check against validator allowlist (--validator-key).
+                    // On fresh nodes, validator_set().len() is 0 (no DAG yet), but
+                    // the allowlist is loaded. Use is_allowed() which checks the allowlist.
                     let fin_r = finality.read().await;
-                    let known_count = fin_r.validator_set().len();
-                    if known_count > 0 {
+                    let has_allowlist = fin_r.validator_set().has_allowlist();
+                    if has_allowlist {
                         let known_signers = signers.iter()
-                            .filter(|s| fin_r.validator_set().contains(s))
+                            .filter(|s| fin_r.validator_set().is_allowed(s))
                             .count();
                         drop(fin_r);
                         if known_signers < 2 {
-                            warn!("CheckpointSync: only {}/{} signers are known validators (need ≥2)",
+                            warn!("CheckpointSync: only {}/{} signers are in allowlist (need ≥2)",
                                 known_signers, signers.len());
                             checkpoint_metrics.record_fast_sync_failure();
                             continue;
                         }
                     } else {
                         drop(fin_r);
-                        // No validator allowlist AND no active stakers: checkpoint trust
-                        // is entirely attacker-controlled (signers come from attacker's snapshot).
-                        // Refuse the checkpoint and force the operator to use --validator-key.
+                        // No validator allowlist AND no active stakers: refuse.
                         warn!("REFUSING CheckpointSync from {}: cannot verify checkpoint signer trust \
-                            in pre-staking mode without --validator-key. Disconnecting peer to prevent \
-                            repeated fabricated checkpoint CPU waste.", peer_addr);
+                            in pre-staking mode without --validator-key.", peer_addr);
                         checkpoint_metrics.record_fast_sync_failure();
-                        return Ok(()); // Disconnect — exit handler, closing connection
+                        return Ok(());
                     }
                 } else if !checkpoint.is_accepted(&active, quorum) {
                     warn!("Received CheckpointSync with insufficient signatures ({} valid, need {})",

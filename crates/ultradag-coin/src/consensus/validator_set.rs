@@ -81,6 +81,11 @@ impl ValidatorSet {
         self.validators.len()
     }
 
+    /// Check if a validator allowlist has been configured.
+    pub fn has_allowlist(&self) -> bool {
+        self.allowed_validators.is_some()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.validators.is_empty()
     }
