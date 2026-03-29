@@ -2060,11 +2060,15 @@ async fn handle_peer(
                 let mut checkpoint_chain_incomplete = false;
                 {
                     // Try BFT signature verification (fast, works for any network age).
-                    // For fresh nodes (no local state), accept ANY valid signature from a validator.
-                    // The state_root will be verified when the node produces its own checkpoint.
-                    let our_round = dag.read().await.current_round();
-                    let is_fresh_node = our_round == 0;
-                    let estimated_quorum = if is_fresh_node { 1 } else { 2 };
+                    // Use the checkpoint's own state to determine quorum: the number of
+                    // validators in the snapshot determines expected signature count.
+                    // Require ceil(2*N/3) valid signatures from distinct validators.
+                    let validator_count = state_at_checkpoint.active_validator_set.len().max(
+                        checkpoint.signatures.len() // at minimum, count the signers
+                    );
+                    let estimated_quorum = if validator_count <= 1 { 1 } else {
+                        (validator_count * 2).div_ceil(3)
+                    };
                     
                     match ultradag_coin::consensus::verify_checkpoint_signatures(&checkpoint, estimated_quorum) {
                         Ok(count) => {

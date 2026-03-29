@@ -403,13 +403,29 @@ pub async fn validator_loop(
             return;
         }
 
+        // Save state snapshot at every checkpoint interval — ALL nodes, not just the producer.
+        // This enables co-signing: when a CheckpointProposal arrives, the peer can verify
+        // the state_root against its own saved snapshot for that round.
+        let current_finalized = server.finality.read().await.last_finalized_round();
+        let interval = ultradag_coin::CHECKPOINT_INTERVAL;
+        if current_finalized > 0 && current_finalized >= interval {
+            let snap_round = (current_finalized / interval) * interval;
+            // Only save if we haven't already (check if file exists)
+            if ultradag_coin::persistence::load_checkpoint_state(&data_dir, snap_round).is_none() {
+                let state_r = server.state.read().await;
+                if state_r.last_finalized_round().unwrap_or(0) >= snap_round {
+                    let snapshot = state_r.snapshot();
+                    drop(state_r);
+                    let _ = ultradag_coin::persistence::save_checkpoint_state(&data_dir, snap_round, &snapshot);
+                }
+            }
+        }
+
         // Checkpoint generation: runs independently of finality block above.
         // P2P handler may finalize vertices before validator loop, making all_finalized empty.
         // We check last_finalized_round directly from the finality tracker.
         // Iterate all crossed multiples of CHECKPOINT_INTERVAL between last_checkpoint_round
         // and current_finalized, so we don't miss boundaries when finality jumps (e.g., 198→201).
-        let current_finalized = server.finality.read().await.last_finalized_round();
-        let interval = ultradag_coin::CHECKPOINT_INTERVAL;
         let first_crossed = ((last_checkpoint_round / interval) + 1) * interval;
         let mut cp_round = first_crossed;
         if current_finalized >= first_crossed && current_finalized >= interval {
