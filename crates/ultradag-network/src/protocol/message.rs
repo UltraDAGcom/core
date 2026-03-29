@@ -16,9 +16,6 @@ pub enum Message {
         listen_port: u16,
         #[serde(default)]
         network_id: String,
-        /// Pruning floor: this node has pruned all rounds < this value.
-        #[serde(default)]
-        pruning_floor: u64,
     },
 
     /// Response to Hello.
@@ -27,9 +24,6 @@ pub enum Message {
         height: u64,
         #[serde(default)]
         network_id: String,
-        /// Pruning floor: this node has pruned all rounds < this value.
-        #[serde(default)]
-        pruning_floor: u64,
     },
 
     /// Announce a new block.
