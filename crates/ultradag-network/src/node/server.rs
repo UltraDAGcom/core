@@ -1944,22 +1944,28 @@ async fn handle_peer(
                 last_get_checkpoint = Some(now);
 
                 // Use try_read to avoid blocking if locks are contended.
-                let checkpoint = match ultradag_coin::persistence::load_latest_checkpoint(data_dir) {
-                    Some(cp) if cp.round >= min_round => {
-                        checkpoint_metrics.record_checkpoint_load_success();
-                        Some(cp)
+                // Prefer pending checkpoints (have co-signatures) over disk (may have only 1 sig).
+                // Disk checkpoints are saved at production time with 1 signature.
+                // Co-signatures accumulate in pending_checkpoints and re-save to disk at quorum.
+                let checkpoint = {
+                    let mut best: Option<ultradag_coin::Checkpoint> = None;
+                    // Check pending first (most signatures)
+                    if let Ok(pending) = pending_checkpoints.try_read() {
+                        best = pending.values()
+                            .filter(|cp| cp.round >= min_round)
+                            .max_by_key(|cp| (cp.signatures.len(), cp.round))
+                            .cloned();
                     }
-                    Some(_) => None, // Checkpoint too old
-                    None => {
-                        // Try pending checkpoints
-                        match pending_checkpoints.try_read() {
-                            Ok(pending) => pending.values()
-                                .filter(|cp| cp.round >= min_round)
-                                .max_by_key(|cp| cp.round)
-                                .cloned(),
-                            Err(_) => None,
+                    // Fall back to disk
+                    if best.is_none() {
+                        if let Some(cp) = ultradag_coin::persistence::load_latest_checkpoint(data_dir) {
+                            if cp.round >= min_round {
+                                checkpoint_metrics.record_checkpoint_load_success();
+                                best = Some(cp);
+                            }
                         }
                     }
+                    best
                 };
 
                 if let Some(checkpoint) = checkpoint {
