@@ -80,6 +80,28 @@ impl Checkpoint {
         matching >= quorum
     }
 
+    /// Verify all signatures cryptographically. Returns the set of validators
+    /// whose signatures are valid Ed25519 signatures over the checkpoint hash.
+    /// 
+    /// This provides cryptographic proof of checkpoint validity without needing
+    /// to verify the entire chain back to genesis. If 2/3+ of validators signed,
+    /// the checkpoint is valid by BFT definition.
+    pub fn verify_all_signatures(&self) -> Vec<Address> {
+        self.signatures.iter()
+            .filter(|s| {
+                // Verify pub_key → address mapping
+                let expected_addr = Address::from_pubkey(&s.pub_key);
+                if expected_addr != s.validator { return false; }
+                // Verify Ed25519 signature
+                let vk = ed25519_dalek::VerifyingKey::from_bytes(&s.pub_key).ok();
+                let sig = ed25519_dalek::Signature::from_bytes(&s.signature.0);
+                vk.map(|k| k.verify_strict(&self.signable_bytes(), &sig).is_ok())
+                  .unwrap_or(false)
+            })
+            .map(|s| s.validator)
+            .collect()
+    }
+
     pub fn verify_signature(&self, sig: &CheckpointSignature) -> bool {
         // Verify pub_key → address mapping
         let expected_addr = Address::from_pubkey(&sig.pub_key);
@@ -684,4 +706,43 @@ where
             return Err("Checkpoint chain too long (>10000 checkpoints)".to_string());
         }
     }
+}
+
+/// Verify a checkpoint using BFT signature verification instead of chain walk.
+/// 
+/// This function verifies that:
+/// 1. All signatures are valid Ed25519 signatures
+/// 2. At least `quorum` distinct validators have signed
+/// 3. Each signer's address matches their public key
+/// 
+/// This provides cryptographic proof of checkpoint validity without needing
+/// to verify the entire chain back to genesis. Used for fast sync in mature
+/// networks where walking the full chain is impractical.
+/// 
+/// Returns Ok(valid_signer_count) if the checkpoint has valid signatures.
+/// Returns Err if signatures are invalid or insufficient.
+pub fn verify_checkpoint_signatures(
+    checkpoint: &Checkpoint,
+    quorum: usize,
+) -> Result<usize, String> {
+    let valid_signers = checkpoint.verify_all_signatures();
+    let signer_count = valid_signers.len();
+    
+    if signer_count < quorum {
+        return Err(format!(
+            "Insufficient checkpoint signatures: {} valid, need {}",
+            signer_count, quorum
+        ));
+    }
+    
+    // Check for distinct signers (prevent same validator signing multiple times)
+    let distinct: std::collections::HashSet<_> = valid_signers.iter().collect();
+    if distinct.len() < quorum {
+        return Err(format!(
+            "Insufficient distinct checkpoint signers: {} distinct, need {}",
+            distinct.len(), quorum
+        ));
+    }
+    
+    Ok(signer_count)
 }

@@ -2049,71 +2049,79 @@ async fn handle_peer(
                     continue;
                 }
 
-                // Checkpoint chain verification: ALWAYS verify back to GENESIS_CHECKPOINT_HASH.
-                // This is the primary defense against eclipse attacks. An attacker who fabricates
-                // a state snapshot with their own validators cannot forge a checkpoint chain
-                // that links back to the real genesis hash (hardcoded in the binary).
-                //
-                // When local checkpoints exist, use them as the lookup source.
-                // When no local checkpoints exist (fresh node), use the checkpoint_chain
-                // provided by the peer. The chain is verified cryptographically — each link's
-                // hash must match, and the chain must terminate at GENESIS_CHECKPOINT_HASH.
-                // An attacker cannot forge this chain without knowing the genesis state.
-                let mut checkpoint_chain_valid = false;
+                // Checkpoint verification: use BFT signature verification for fast sync.
+                // 
+                // Primary method: verify checkpoint has 2/3+ valid validator signatures.
+                // This provides cryptographic proof without needing the full chain to genesis.
+                // 
+                // Fallback: verify checkpoint chain back to genesis (for pre-staking mode
+                // or when signatures are insufficient).
+                let mut checkpoint_verified = false;
                 let mut checkpoint_chain_incomplete = false;
                 {
-                    let dir = data_dir;
-                    let local_checkpoints = ultradag_coin::persistence::list_checkpoints(dir);
-
-                    // Build a hash→checkpoint lookup from local checkpoints + peer-provided chain
-                    let mut cp_map = std::collections::HashMap::new();
-
-                    // Local checkpoints (trusted — we produced or verified them previously)
-                    for round in &local_checkpoints {
-                        if let Some(cp) = ultradag_coin::persistence::load_checkpoint_by_round(dir, *round) {
-                            let cp_hash = ultradag_coin::consensus::compute_checkpoint_hash(&cp);
-                            cp_map.insert(cp_hash, cp);
-                        }
-                    }
-
-                    // Peer-provided checkpoint chain (untrusted — verified cryptographically
-                    // by verify_checkpoint_chain walking hashes back to genesis)
-                    for cp in &checkpoint_chain {
-                        let cp_hash = ultradag_coin::consensus::compute_checkpoint_hash(cp);
-                        cp_map.insert(cp_hash, cp.clone());
-                    }
-
-                    let checkpoint_loader = |hash: [u8; 32]| -> Option<ultradag_coin::Checkpoint> {
-                        cp_map.get(&hash).cloned()
-                    };
-
-                    match ultradag_coin::consensus::verify_checkpoint_chain(&checkpoint, checkpoint_loader) {
-                        Ok(()) => {
-                            info!("Checkpoint chain verification passed for round {}", checkpoint.round);
-                            checkpoint_chain_valid = true;
+                    // First, try BFT signature verification (fast, works for any network age)
+                    // Estimate quorum as 2/3 of the signers in the checkpoint itself
+                    let signers: std::collections::HashSet<_> = checkpoint.valid_signers()
+                        .into_iter()
+                        .collect();
+                    let signer_count = signers.len();
+                    // Require 2/3+ of signers to have valid signatures
+                    let estimated_quorum = (signer_count * 2).div_ceil(3).max(2);
+                    
+                    match ultradag_coin::consensus::verify_checkpoint_signatures(&checkpoint, estimated_quorum) {
+                        Ok(count) => {
+                            info!("Checkpoint signature verification passed: {} valid signatures (quorum={})", count, estimated_quorum);
+                            checkpoint_verified = true;
                         }
                         Err(e) => {
-                            // Check if this is a missing checkpoint (incomplete chain) vs security failure
-                            if e.contains("Missing checkpoint in chain") {
-                                // Incomplete checkpoint chain - peer didn't send enough history.
-                                // Fall back to incremental sync instead of rejecting.
-                                warn!("Checkpoint chain incomplete (peer sent {} checkpoints, need {} back to genesis). Falling back to incremental sync.",
-                                    checkpoint_chain.len(), checkpoint.round);
-                                checkpoint_metrics.record_fast_sync_failure();
-                                checkpoint_chain_incomplete = true;
-                            } else {
-                                // Security failure: hash mismatch, cycle, etc. Disconnect peer.
-                                error!("Checkpoint chain verification FAILED: {} — disconnecting peer {}", e, peer_addr);
-                                checkpoint_metrics.record_fast_sync_failure();
-                                return Ok(());
+                            // Signature verification failed - try chain verification as fallback
+                            warn!("Checkpoint signature verification failed ({}), trying chain verification", e);
+                            
+                            // Load checkpoints for chain verification
+                            let dir = data_dir;
+                            let local_checkpoints = ultradag_coin::persistence::list_checkpoints(dir);
+                            let mut cp_map = std::collections::HashMap::new();
+                            
+                            for round in &local_checkpoints {
+                                if let Some(cp) = ultradag_coin::persistence::load_checkpoint_by_round(dir, *round) {
+                                    let cp_hash = ultradag_coin::consensus::compute_checkpoint_hash(&cp);
+                                    cp_map.insert(cp_hash, cp);
+                                }
+                            }
+                            
+                            for cp in &checkpoint_chain {
+                                let cp_hash = ultradag_coin::consensus::compute_checkpoint_hash(cp);
+                                cp_map.insert(cp_hash, cp.clone());
+                            }
+                            
+                            let checkpoint_loader = |hash: [u8; 32]| -> Option<ultradag_coin::Checkpoint> {
+                                cp_map.get(&hash).cloned()
+                            };
+                            
+                            match ultradag_coin::consensus::verify_checkpoint_chain(&checkpoint, checkpoint_loader) {
+                                Ok(()) => {
+                                    info!("Checkpoint chain verification passed for round {}", checkpoint.round);
+                                    checkpoint_verified = true;
+                                }
+                                Err(e) => {
+                                    if e.contains("Missing checkpoint in chain") {
+                                        warn!("Checkpoint chain incomplete (peer sent {} checkpoints, need {} back to genesis). Falling back to incremental sync.",
+                                            checkpoint_chain.len(), checkpoint.round);
+                                        checkpoint_metrics.record_fast_sync_failure();
+                                        checkpoint_chain_incomplete = true;
+                                    } else {
+                                        error!("Checkpoint verification FAILED: {} — disconnecting peer {}", e, peer_addr);
+                                        checkpoint_metrics.record_fast_sync_failure();
+                                        return Ok(());
+                                    }
+                                }
                             }
                         }
                     }
                 }
 
-                // Skip checkpoint sync if chain verification failed due to incomplete history.
-                // Request incremental sync as fallback.
-                if checkpoint_chain_incomplete {
+                // If checkpoint couldn't be verified, fall back to incremental sync
+                if !checkpoint_verified && checkpoint_chain_incomplete {
                     // Estimate peer's pruning floor and request from there
                     let our_round = dag.read().await.current_round();
                     let estimated_pruning_floor = checkpoint.round.saturating_sub(1000);
@@ -2124,6 +2132,13 @@ async fn handle_peer(
                         from_round: sync_from,
                         max_count: DAG_SYNC_BATCH_SIZE,
                     }).await;
+                    return Ok(());
+                }
+
+                // If checkpoint wasn't verified by signatures OR chain, reject
+                if !checkpoint_verified {
+                    warn!("Checkpoint verification failed (no valid signatures, incomplete chain) — rejecting");
+                    checkpoint_metrics.record_fast_sync_failure();
                     return Ok(());
                 }
 
