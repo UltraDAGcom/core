@@ -2042,6 +2042,8 @@ async fn handle_peer(
                 // provided by the peer. The chain is verified cryptographically — each link's
                 // hash must match, and the chain must terminate at GENESIS_CHECKPOINT_HASH.
                 // An attacker cannot forge this chain without knowing the genesis state.
+                let mut checkpoint_chain_valid = false;
+                let mut checkpoint_chain_incomplete = false;
                 {
                     let dir = data_dir;
                     let local_checkpoints = ultradag_coin::persistence::list_checkpoints(dir);
@@ -2071,15 +2073,34 @@ async fn handle_peer(
                     match ultradag_coin::consensus::verify_checkpoint_chain(&checkpoint, checkpoint_loader) {
                         Ok(()) => {
                             info!("Checkpoint chain verification passed for round {}", checkpoint.round);
+                            checkpoint_chain_valid = true;
                         }
                         Err(e) => {
-                            error!("Checkpoint chain verification FAILED: {} — disconnecting peer {}", e, peer_addr);
-                            checkpoint_metrics.record_fast_sync_failure();
-                            return Ok(());
+                            // Check if this is a missing checkpoint (incomplete chain) vs security failure
+                            if e.contains("Missing checkpoint in chain") {
+                                // Incomplete checkpoint chain - peer didn't send enough history.
+                                // Fall back to incremental sync instead of rejecting.
+                                warn!("Checkpoint chain incomplete (peer sent {} checkpoints, need {} back to genesis). Falling back to incremental sync.",
+                                    checkpoint_chain.len(), checkpoint.round);
+                                checkpoint_metrics.record_fast_sync_failure();
+                                checkpoint_chain_incomplete = true;
+                            } else {
+                                // Security failure: hash mismatch, cycle, etc. Disconnect peer.
+                                error!("Checkpoint chain verification FAILED: {} — disconnecting peer {}", e, peer_addr);
+                                checkpoint_metrics.record_fast_sync_failure();
+                                return Ok(());
+                            }
                         }
                     }
                 }
-                
+
+                // Skip checkpoint sync if chain verification failed due to incomplete history.
+                // Incremental sync will handle catching up from current round.
+                if checkpoint_chain_incomplete {
+                    info!("Skipping checkpoint sync due to incomplete chain, using incremental sync only");
+                    return Ok(());
+                }
+
                 // Validate snapshot size before processing to prevent OOM from
                 // malicious peers sending fabricated snapshots with millions of entries.
                 if state_at_checkpoint.accounts.len() > MAX_SNAPSHOT_ACCOUNTS {
