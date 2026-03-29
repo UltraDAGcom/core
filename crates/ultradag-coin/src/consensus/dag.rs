@@ -546,6 +546,13 @@ impl BlockDag {
         self.current_round
     }
 
+    /// Set the current round (used after fast-sync to jump to the checkpoint round).
+    pub fn set_current_round(&mut self, round: u64) {
+        if round > self.current_round {
+            self.current_round = round;
+        }
+    }
+
     /// Get all unique validator addresses from vertices in the DAG.
     pub fn all_validators(&self) -> HashSet<Address> {
         self.vertices.values().map(|v| v.validator).collect()

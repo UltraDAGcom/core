@@ -2327,8 +2327,9 @@ async fn handle_peer(
                 let mut skipped = 0;
                 {
                     let mut dag_w = dag.write().await;
-                    // Set pruning floor to checkpoint round
+                    // Set pruning floor and current round to checkpoint round
                     dag_w.set_pruning_floor(checkpoint.round);
+                    dag_w.set_current_round(checkpoint.round);
                     for vertex in suffix_vertices {
                         if !vertex.verify_signature() {
                             warn!("CheckpointSync: skipping suffix vertex with invalid signature (round {})", vertex.round);
