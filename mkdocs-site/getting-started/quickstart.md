@@ -8,7 +8,46 @@ Get an UltraDAG node running in under 5 minutes. This guide covers building from
 
 ---
 
-## Prerequisites
+## Download Pre-Built Binary
+
+The fastest way to get started. Pre-built binaries are available for Linux and macOS.
+
+### Linux (x86_64)
+
+```bash
+curl -L https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-linux-x86_64.tar.gz | tar xz
+chmod +x ultradag-node-linux-x86_64
+./ultradag-node-linux-x86_64 --port 9333
+```
+
+### macOS (Apple Silicon)
+
+```bash
+curl -L https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-macos-arm64.tar.gz | tar xz
+chmod +x ultradag-node-macos-arm64
+./ultradag-node-macos-arm64 --port 9333
+```
+
+### macOS (Intel)
+
+```bash
+curl -L https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-macos-x86_64.tar.gz | tar xz
+chmod +x ultradag-node-macos-x86_64
+./ultradag-node-macos-x86_64 --port 9333
+```
+
+To validate (produce blocks and earn UDAG):
+
+```bash
+./ultradag-node-linux-x86_64 --port 9333 --validate
+```
+
+!!! tip "No download needed? Build from source"
+    If you prefer to compile yourself or need a different target, see the build instructions below.
+
+---
+
+## Prerequisites (for building from source)
 
 You need a working Rust toolchain (1.75+):
 

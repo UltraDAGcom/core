@@ -459,13 +459,13 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
 <span class="kw">curl</span> -L https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-linux-x86_64.tar.gz | <span class="kw">tar</span> xz
 
 <span class="cm"># Run node (auto-connects to testnet bootstrap nodes)</span>
-<span class="kw">./ultradag-node-linux-x86_64</span> --validate
+<span class="kw">./ultradag-node-linux-x86_64</span> --port 9333
+
+<span class="cm"># To validate (produce blocks and earn UDAG):</span>
+<span class="kw">./ultradag-node-linux-x86_64</span> --port 9333 --validate
 
 <span class="cm"># Check status (RPC defaults to P2P port + 1000 = 10333)</span>
-<span class="kw">curl</span> <span class="str">http://localhost:10333/status</span>
-
-<span class="cm"># Generate a keypair for transactions</span>
-<span class="kw">curl</span> <span class="str">http://localhost:10333/keygen</span></pre>
+<span class="kw">curl</span> <span class="str">http://localhost:10333/status</span></pre>
       </div>
 
       <!-- macOS Instructions -->
@@ -476,15 +476,17 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
         </div>
         <pre><span class="cm"># Download and extract (Apple Silicon)</span>
 <span class="kw">curl</span> -L https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-macos-arm64.tar.gz | <span class="kw">tar</span> xz
+<span class="kw">./ultradag-node-macos-arm64</span> --port 9333
 
-<span class="cm"># Run node (auto-connects to testnet bootstrap nodes)</span>
-<span class="kw">./ultradag-node-macos-arm64</span> --validate
+<span class="cm"># Or for Intel Macs:</span>
+<span class="kw">curl</span> -L https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-macos-x86_64.tar.gz | <span class="kw">tar</span> xz
+<span class="kw">./ultradag-node-macos-x86_64</span> --port 9333
+
+<span class="cm"># To validate (produce blocks and earn UDAG):</span>
+<span class="kw">./ultradag-node-macos-arm64</span> --port 9333 --validate
 
 <span class="cm"># Check status (RPC defaults to P2P port + 1000 = 10333)</span>
-<span class="kw">curl</span> <span class="str">http://localhost:10333/status</span>
-
-<span class="cm"># Generate a keypair for transactions</span>
-<span class="kw">curl</span> <span class="str">http://localhost:10333/keygen</span></pre>
+<span class="kw">curl</span> <span class="str">http://localhost:10333/status</span></pre>
       </div>
 
       <!-- Additional Info -->
