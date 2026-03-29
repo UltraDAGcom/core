@@ -1,0 +1,140 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="UltraDAG Whitepaper v1.1">
+  <link rel="stylesheet" href="/src/styles/whitepaper.css">
+  <div class="wp-progress" id="wp-progress"></div>
+  <main class="wp-main">
+    <section id="wp-hero">
+      <div class="wp-hero">
+        <div class="wp-badges">
+          <span class="wp-badge wp-badge-accent">Whitepaper</span>
+          <span class="wp-badge">v1.1</span>
+          <span class="wp-badge">March 2026</span>
+          <a href="/docs/technical/ultradag-whitepaper.pdf" class="wp-badge wp-badge-download">Download PDF</a>
+        </div>
+        <h1>UltraDAG: A Leaderless DAG-BFT Cryptocurrency</h1>
+        <p class="wp-hero-sub">Minimal correct consensus - 1,100 lines of Rust</p>
+        <div class="wp-stats">
+          <div class="wp-stat"><div class="wp-stat-value">1,100</div><div class="wp-stat-label">Lines of code</div></div>
+          <div class="wp-stat"><div class="wp-stat-value">373</div><div class="wp-stat-label">Tests passing</div></div>
+          <div class="wp-stat"><div class="wp-stat-value">27x</div><div class="wp-stat-label">Smaller than Shoal++</div></div>
+          <div class="wp-stat"><div class="wp-stat-value">3</div><div class="wp-stat-label">Core sentences</div></div>
+        </div>
+      </div>
+    </section>
+    <div class="wp-content">
+      <section class="wp-section" id="s1">
+        <div class="wp-section-header"><span class="wp-section-num">01</span><h2>Introduction</h2></div>
+        <h3>1.1 Motivation</h3>
+        <p>Traditional BFT consensus protocols - PBFT, Tendermint, HotStuff - operate in a leader-based paradigm, creating limitations in throughput and complexity. DAG-based protocols address these by allowing all validators to produce blocks concurrently.</p>
+        <h3>1.2 Contribution</h3>
+        <p>UltraDAG implements a complete cryptocurrency using a custom leaderless DAG-BFT protocol with descendant coverage finality, implicit voting, and permanent equivocation banning.</p>
+      </section>
+      <section class="wp-section" id="s2">
+        <div class="wp-section-header"><span class="wp-section-num">02</span><h2>Design Philosophy</h2></div>
+        <h3>2.1 The Protocol in Three Sentences</h3>
+        <div class="callout-primary">
+          <div class="callout-label">The Complete Consensus Rule</div>
+          <ol><li>Every validator produces one signed vertex per round referencing all known DAG tips.</li><li>A vertex is final when 2n/3 distinct validators have built upon it and all its parents are final.</li><li>Equivocating validators are permanently banned.</li></ol>
+        </div>
+        <h3>2.2 Consensus Core Size</h3>
+        <p>The complete consensus implementation is contained in five files totaling 1,887 lines of Rust, of which 1,100 lines are production code.</p>
+        <div class="table-wrap"><table><thead><tr><th>File</th><th>Production</th><th>Tests</th><th>Total</th></tr></thead><tbody><tr><td>vertex.rs</td><td>90</td><td>142</td><td>232</td></tr><tr><td>dag.rs</td><td>609</td><td>288</td><td>897</td></tr><tr><td>finality.rs</td><td>212</td><td>163</td><td>375</td></tr><tr><td>ordering.rs</td><td>69</td><td>98</td><td>167</td></tr><tr><td>validator_set.rs</td><td>120</td><td>96</td><td>216</td></tr><tr class="td-total"><td class="td-fg">Total</td><td class="td-accent">1,100</td><td>787</td><td class="td-fg">1,887</td></tr></tbody></table></div>
+        <h3>2.3 What Was Deliberately Omitted</h3>
+        <p><strong>No separate mempool layer.</strong> UltraDAG bundles transactions directly into vertices. <strong>No leader or anchor selection.</strong> UltraDAG replaces this with a single descendant-coverage check. <strong>No wave structure.</strong> Every round is identical. <strong>No reputation system.</strong> Stall recovery in 8 lines.</p>
+        <h3>2.4 The Minimalism Claim</h3>
+        <div class="claim-block"><p><em>UltraDAG is not optimized for maximum throughput. It is optimized for minimum correct implementation.</em></p></div>
+      </section>
+      <section class="wp-section" id="s3">
+        <div class="wp-section-header"><span class="wp-section-num">03</span><h2>System Model</h2></div>
+        <h3>3.1 Participants</h3>
+        <p>Let V be the set of n validators. Each validator holds an Ed25519 keypair. We assume at most f validators are Byzantine, where n >= 3f + 1.</p>
+        <h3>3.2 Network Model</h3>
+        <p>The protocol assumes partial synchrony: there exists an unknown GST after which all messages are delivered within a bounded delay.</p>
+        <h3>3.3 Cryptographic Primitives</h3>
+        <div class="table-wrap"><table><thead><tr><th>Primitive</th><th>Algorithm</th><th>Purpose</th></tr></thead><tbody><tr><td>Digital Signatures</td><td>Ed25519</td><td>Authentication</td></tr><tr><td>Hashing</td><td>Blake3</td><td>Address derivation</td></tr><tr><td>Replay Prevention</td><td>NETWORK_ID prefix</td><td>Cross-network isolation</td></tr></tbody></table></div>
+      </section>
+      <section class="wp-section" id="s4">
+        <div class="wp-section-header"><span class="wp-section-num">04</span><h2>Protocol Description</h2></div>
+        <h3>4.1 DAG Structure</h3>
+        <p>The core data structure is a directed acyclic graph where each vertex references its parents.</p>
+        <h3>4.2 Vertex Production</h3>
+        <p>Each honest validator produces exactly one vertex per round using optimistic responsiveness: tokio::select! between round timer and quorum notification.</p>
+        <h3>4.3 Vertex Acceptance</h3>
+        <p>A vertex is accepted if: no duplicate exists, signature is valid, all parents exist, round is valid, no equivocation detected, validator not Byzantine.</p>
+        <h3>4.4 Recursive Parent Fetch</h3>
+        <p>When a vertex fails insertion due to missing parents, the node buffers it and sends a GetParents request. Each received parent is verified and inserted, recursing for missing grandparents.</p>
+      </section>
+      <section class="wp-section" id="s5">
+        <div class="wp-section-header"><span class="wp-section-num">05</span><h2>Finality</h2></div>
+        <h3>5.1 Descendant-Coverage Finality Rule</h3>
+        <p>A vertex is finalized when 2n/3 distinct validators have built on top of it, and all its parents are already finalized.</p>
+        <h3>5.2 Incremental Descendant Tracking</h3>
+        <p>UltraDAG maintains a precomputed map of descendant validators with early-termination BFS on insertion. This gives O(1) finality lookups. Benchmark: 10,000 vertices in 21ms - a 2,238x improvement.</p>
+        <h3>5.3 Parent Finality Guarantee</h3>
+        <p>A vertex may only be finalized if all its parents are already finalized, ensuring correct causal ordering.</p>
+      </section>
+      <section class="wp-section" id="s6">
+        <div class="wp-section-header"><span class="wp-section-num">06</span><h2>Safety</h2></div>
+        <h3>6.1 No Conflicting Finality</h3>
+        <p>Two equivocating vertices cannot both be finalized. Equivocation detection ensures at most one vertex per validator per round exists.</p>
+        <h3>6.2 Quorum Intersection Argument</h3>
+        <p>If conflicting vertices are finalized at different nodes, their intersection must contain an honest validator - triggering equivocation detection, a contradiction.</p>
+        <div class="callout-primary"><div class="callout-label">Formal Verification</div><p>Machine-checked via TLA+. TLC explored 32.6 million states and verified six invariants with zero violations.</p></div>
+      </section>
+      <section class="wp-section" id="s7">
+        <div class="wp-section-header"><span class="wp-section-num">07</span><h2>Liveness</h2></div>
+        <p>If at least 2n/3 validators are honest after GST, the protocol makes progress within 2-3 rounds. The stall recovery mechanism (8 lines) ensures liveness during bootstrap.</p>
+      </section>
+      <section class="wp-section" id="s8">
+        <div class="wp-section-header"><span class="wp-section-num">08</span><h2>Equivocation Handling</h2></div>
+        <p>When a validator produces two vertices with the same round but different hashes: evidence is stored, validator is permanently banned, insertion rejected, evidence broadcast, all future vertices rejected.</p>
+      </section>
+      <section class="wp-section" id="s9">
+        <div class="wp-section-header"><span class="wp-section-num">09</span><h2>State Machine</h2></div>
+        <h3>9.1 Account-Based Ledger</h3>
+        <p>UltraDAG uses an account-based model with balance (1 UDAG = 10^8 satoshis) and nonce per address.</p>
+        <h3>9.2 Transaction Validation</h3>
+        <p>Transactions validated against: Blake3(pub_key) == from, valid signature, sufficient balance, correct nonce.</p>
+        <h3>9.3 Deterministic Ordering</h3>
+        <p>Finalized vertices ordered by: round (ascending), ancestor count (ascending), H(v) lexicographic (tiebreaker).</p>
+      </section>
+      <section class="wp-section" id="s10">
+        <div class="wp-section-header"><span class="wp-section-num">10</span><h2>Tokenomics</h2></div>
+        <h3>10.1 Supply Parameters</h3>
+        <div class="table-wrap"><table><thead><tr><th>Parameter</th><th>Value</th></tr></thead><tbody><tr><td>Maximum supply</td><td class="td-accent">21,000,000 UDAG</td></tr><tr><td>Initial reward</td><td>1 UDAG per round</td></tr><tr><td>Halving interval</td><td>10,500,000 rounds (~1.66 years)</td></tr></tbody></table></div>
+        <h3>10.2 Emission-Only Distribution</h3>
+        <p><strong>Zero pre-mine.</strong> 75% to validators/stakers, 10% to DAO treasury, 10% to Council of 21, 5% to founder.</p>
+        <h3>10.3 Validator Staking</h3>
+        <div class="table-wrap"><table><thead><tr><th>Parameter</th><th>Value</th></tr></thead><tbody><tr><td>Minimum stake</td><td>10,000 UDAG</td></tr><tr><td>Unstaking cooldown</td><td>2,016 rounds (~2.8 hours)</td></tr><tr><td>Slashing</td><td class="td-accent">50% on equivocation</td></tr><tr><td>Max validators</td><td>21</td></tr></tbody></table></div>
+        <h3>10.4 Emission Model</h3>
+        <p>Reward distributed per round. Coinbase contains only transaction fees. Reward = 0 after 64 halvings. Slashed stake burned.</p>
+      </section>
+      <section class="wp-section" id="s11">
+        <div class="wp-section-header"><span class="wp-section-num">11</span><h2>Network Protocol</h2></div>
+        <p>TCP-based P2P with length-prefixed JSON messages (max 4 MB). Messages: Hello, DagProposal, GetDagVertices, DagVertices, NewTx, GetPeers/Peers, GetParents/ParentVertices, EquivocationEvidence, CheckpointProposal, CheckpointSync, Ping/Pong.</p>
+      </section>
+      <section class="wp-section" id="s12">
+        <div class="wp-section-header"><span class="wp-section-num">12</span><h2>Implementation</h2></div>
+        <h3>12.1 Architecture</h3>
+        <p>Three crates: ultradag-coin (consensus), ultradag-network (P2P), ultradag-node (binary).</p>
+        <h3>12.2 Concurrency</h3>
+        <p>Tokio-based async runtime with channels.</p>
+      </section>
+      <section class="wp-section" id="s13">
+        <div class="wp-section-header"><span class="wp-section-num">13</span><h2>Evaluation</h2></div>
+        <p>Live testnet on Fly.io with 4 validators, 1800+ rounds, zero safety violations. All 373 tests passing.</p>
+      </section>
+      <section class="wp-section" id="s14">
+        <div class="wp-section-header"><span class="wp-section-num">14</span><h2>Related Work</h2></div>
+        <p>PBFT, Tendermint, HotStuff (leader-based BFT). DAG-Rider, Tusk, Bullshark, Shoal++ (DAG-BFT). IOTA, Byteball (DAG).</p>
+      </section>
+      <section class="wp-section" id="s15">
+        <div class="wp-section-header"><span class="wp-section-num">15</span><h2>Conclusion</h2></div>
+        <p>UltraDAG demonstrates that a complete cryptocurrency can be built with radical simplicity. The 27x reduction in code reduces audit surface and increases confidence.</p>
+      </section>
+    </div>
+  </main>
+</BaseLayout>

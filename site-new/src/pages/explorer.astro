@@ -1,0 +1,55 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Explorer — UltraDAG">
+  <link rel="stylesheet" href="/src/styles/explorer.css">
+  <script client:load src="/src/scripts/explorer.js"></script>
+  
+  <div class="main">
+    <!-- Search -->
+    <div class="search-section">
+      <div class="net-switch">
+        <button class="net-btn active" id="btn-mainnet">Mainnet</button>
+        <button class="net-btn" id="btn-testnet">Testnet</button>
+      </div>
+      <h1 class="search-title">Block Explorer</h1>
+      <p class="search-sub">Search by round, transaction hash, vertex hash, or address</p>
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="Search by round, transaction, address, or vertex hash..." autocomplete="off" spellcheck="false">
+        <button id="search-btn">Search</button>
+      </div>
+      <div class="search-error" id="search-error"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card"><div class="stat-label">DAG Round</div><div class="stat-value" id="s-round">--</div></div>
+      <div class="stat-card"><div class="stat-label">Finalized Round</div><div class="stat-value" id="s-finalized">--</div><div class="stat-extra" id="s-lag"></div></div>
+      <div class="stat-card"><div class="stat-label">Total Supply</div><div class="stat-value" id="s-supply">--</div><div class="stat-extra" id="s-supply-pct"></div></div>
+      <div class="stat-card"><div class="stat-label">Active Validators</div><div class="stat-value" id="s-validators">--</div></div>
+      <div class="stat-card"><div class="stat-label">Peers</div><div class="stat-value" id="s-peers">--</div></div>
+      <div class="stat-card"><div class="stat-label">Mempool</div><div class="stat-value" id="s-mempool">--</div><div class="stat-extra">pending txs</div></div>
+      <div class="stat-card"><div class="stat-label">Accounts</div><div class="stat-value" id="s-accounts">--</div></div>
+      <div class="stat-card"><div class="stat-label">Total Staked</div><div class="stat-value" id="s-staked">--</div></div>
+    </div>
+
+    <!-- Detail Panel -->
+    <div class="detail-panel" id="detail-panel">
+      <div class="detail-header">
+        <div class="detail-title" id="detail-title"></div>
+        <button class="detail-close" id="detail-close">Close</button>
+      </div>
+      <div id="detail-body"></div>
+    </div>
+
+    <!-- Recent Rounds -->
+    <div class="section-title">Recent Finalized Rounds</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Round</th><th>Vertices</th><th>Validators</th><th>Status</th></tr></thead>
+        <tbody id="rounds-body"><tr><td colspan="4" style="text-align:center;color:var(--muted)">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</BaseLayout>

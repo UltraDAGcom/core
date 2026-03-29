@@ -8,10 +8,10 @@ Pre-built binaries for Linux and macOS are available for download.
 
 ```bash
 # Download
-curl -L https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-linux-x86_64.tar.gz -o ultradag-node.tar.gz
+curl -L https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-linux-x86_64.tar.gz -o ultradag-node.tar.gz
 
 # Verify checksum (optional but recommended)
-curl -L https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-linux-x86_64.tar.gz.sha256 -o ultradag-node.tar.gz.sha256
+curl -L https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-linux-x86_64.tar.gz.sha256 -o ultradag-node.tar.gz.sha256
 sha256sum -c ultradag-node.tar.gz.sha256
 
 # Extract
@@ -28,10 +28,10 @@ chmod +x ultradag-node-linux-x86_64
 
 ```bash
 # Download
-curl -L https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-macos-x86_64.tar.gz -o ultradag-node.tar.gz
+curl -L https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-macos-x86_64.tar.gz -o ultradag-node.tar.gz
 
 # Verify checksum (optional but recommended)
-curl -L https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-macos-x86_64.tar.gz.sha256 -o ultradag-node.tar.gz.sha256
+curl -L https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-macos-x86_64.tar.gz.sha256 -o ultradag-node.tar.gz.sha256
 shasum -a 256 -c ultradag-node-macos-x86_64.tar.gz.sha256
 
 # Extract
@@ -48,10 +48,10 @@ chmod +x ultradag-node-macos-x86_64
 
 ```bash
 # Download
-curl -L https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-macos-arm64.tar.gz -o ultradag-node.tar.gz
+curl -L https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-macos-arm64.tar.gz -o ultradag-node.tar.gz
 
 # Verify checksum (optional but recommended)
-curl -L https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-macos-arm64.tar.gz.sha256 -o ultradag-node.tar.gz.sha256
+curl -L https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-macos-arm64.tar.gz.sha256 -o ultradag-node.tar.gz.sha256
 shasum -a 256 -c ultradag-node-macos-arm64.tar.gz.sha256
 
 # Extract

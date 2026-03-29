@@ -15,10 +15,11 @@ This guide covers installing, configuring, and operating an UltraDAG node in pro
 Download the latest release binary from GitHub:
 
 ```bash
-curl -L -o ultradag-node \
-  https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-linux-amd64
-chmod +x ultradag-node
-mv ultradag-node /usr/local/bin/
+curl -L -o ultradag-node.tar.gz \
+  https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-linux-x86_64.tar.gz
+tar -xzf ultradag-node.tar.gz
+chmod +x ultradag-node-linux-x86_64
+mv ultradag-node-linux-x86_64 /usr/local/bin/ultradag-node
 ```
 
 The binary is under 2 MB and has zero runtime dependencies.
@@ -201,13 +202,14 @@ Binary upgrades follow a simple swap-and-restart pattern:
 
 ```bash
 # Download new binary
-curl -L -o /tmp/ultradag-node-new \
-  https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-linux-amd64
-chmod +x /tmp/ultradag-node-new
+curl -L -o /tmp/ultradag-node.tar.gz \
+  https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-linux-x86_64.tar.gz
+tar -xzf /tmp/ultradag-node.tar.gz -C /tmp/
+chmod +x /tmp/ultradag-node-linux-x86_64
 
 # Swap and restart
 systemctl stop ultradag
-cp /tmp/ultradag-node-new /usr/local/bin/ultradag-node
+cp /tmp/ultradag-node-linux-x86_64 /usr/local/bin/ultradag-node
 systemctl start ultradag
 ```
 

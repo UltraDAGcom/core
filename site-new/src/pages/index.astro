@@ -1,0 +1,581 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import '../styles/homepage.css';
+
+const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
+---
+
+<BaseLayout title="UltraDAG ($UDAG) — Machine-to-Machine Micropayments">
+  
+  <canvas id="scene"></canvas>
+
+  <!-- HERO -->
+  <div class="hero">
+    <p class="hero-eyebrow">DAG-BFT Consensus for the Machine Economy</p>
+    <h1>Blockchain finality<br /><em>10 seconds.</em><br />Built for <em>machines.</em></h1>
+    <p class="hero-subtitle">DAG-BFT consensus for IoT, sensors, and autonomous agents. Live on testnet.</p>
+    
+    <div class="hero-actions">
+      <a href="/network" class="btn-primary">Watch it live →</a>
+      <a href="/whitepaper" class="btn-secondary">Read the whitepaper →</a>
+    </div>
+
+    <!-- Email capture -->
+    <div class="hero-email">
+      <form onsubmit="return handleEmailSubmit(event)" class="email-form-inline">
+        <input type="hidden" name="u" value="7c006c449bd3dc3a523bce11d" />
+        <input type="hidden" name="id" value="daf1702c98" />
+        <input type="email" name="EMAIL" placeholder="your@email.com" required autocomplete="email" class="email-input-inline" />
+        <div class="email-hp"><input type="text" name="b_7c006c449bd3dc3a523bce11d_daf1702c98" tabindex="-1" value="" /></div>
+        <button type="submit" class="email-btn-inline">Get Early Access</button>
+      </form>
+    </div>
+
+    <!-- Countdown -->
+    <div class="hero-launch">
+      <div class="countdown-inline">
+        <span class="countdown-num" id="cd-hero-days">--</span>d
+        <span class="countdown-num" id="cd-hero-hours">--</span>h
+        <span class="countdown-num" id="cd-hero-mins">--</span>m
+        <span class="countdown-label-inline">until token launch</span>
+      </div>
+    </div>
+
+    <!-- Social links -->
+    <div class="hero-social">
+      <a href="https://t.me/ultradagcom" target="_blank" class="social-pill social-telegram">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+        Join Telegram
+      </a>
+      <a href="https://x.com/ultradagcom" target="_blank" class="social-pill social-x">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l11.733 16h4.267l-11.733 -16z"></path><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772"></path></svg>
+        Follow on X
+      </a>
+    </div>
+
+    <!-- Live network bar -->
+    <div class="live-bar" id="live-bar">
+      <div class="live-bar-inner">
+        <div class="live-indicator live" id="live-status">
+          <span class="live-dot"></span>
+          <span id="live-label">LIVE</span>
+        </div>
+        <div class="live-sep"></div>
+        <div class="live-metric">
+          <span class="live-metric-value" id="live-round">--</span>
+          <span class="live-metric-label">Round</span>
+        </div>
+        <div class="live-sep"></div>
+        <div class="live-metric">
+          <span class="live-metric-value" id="live-lag">--</span>
+          <span class="live-metric-label">Finality lag</span>
+        </div>
+        <div class="live-sep"></div>
+        <div class="live-metric">
+          <span class="live-metric-value" id="live-nodes">--<span class="live-metric-label">/5</span></span>
+          <span class="live-metric-label">Nodes</span>
+        </div>
+        <div class="live-sep"></div>
+        <div class="live-metric">
+          <span class="live-metric-value" id="live-supply">--</span>
+          <span class="live-metric-label">Supply</span>
+          <span class="live-supply-pct" id="live-supply-pct"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats Bar -->
+  <div class="stats-bar">
+    <div class="stats-inner">
+      <div class="stat">
+        <div class="stat-value">21<span>M max</span></div>
+        <div class="stat-label">Total supply cap</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">DAG<span>-BFT</span></div>
+        <div class="stat-label">Consensus protocol</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">5<span>s</span></div>
+        <div class="stat-label">Default round time</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">&lt;2<span>MB</span></div>
+        <div class="stat-label">Binary size</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Token Launch Section -->
+  <div class="launch-section" id="launch">
+    <div class="launch-inner">
+      <div class="launch-badge">TOKEN LAUNCH</div>
+      <h2 class="launch-title">UDAG Token Launch</h2>
+      <p class="launch-subtitle">Be the first to know. Join the waitlist for priority access.</p>
+
+      <!-- Countdown -->
+      <div class="countdown" id="countdown">
+        <div class="countdown-block">
+          <span class="countdown-num" id="cd-days">--</span>
+          <span class="countdown-label">Days</span>
+        </div>
+        <div class="countdown-sep">:</div>
+        <div class="countdown-block">
+          <span class="countdown-num" id="cd-hours">--</span>
+          <span class="countdown-label">Hours</span>
+        </div>
+        <div class="countdown-sep">:</div>
+        <div class="countdown-block">
+          <span class="countdown-num" id="cd-mins">--</span>
+          <span class="countdown-label">Minutes</span>
+        </div>
+        <div class="countdown-sep">:</div>
+        <div class="countdown-block">
+          <span class="countdown-num" id="cd-secs">--</span>
+          <span class="countdown-label">Seconds</span>
+        </div>
+      </div>
+
+      <!-- Email Form -->
+      <form class="email-form" id="email-form" onsubmit="return handleEmailSubmit(event)">
+        <input type="hidden" name="u" value="7c006c449bd3dc3a523bce11d" />
+        <input type="hidden" name="id" value="daf1702c98" />
+        <div class="email-input-wrap">
+          <input type="email" name="EMAIL" id="email-input" placeholder="your@email.com" required autocomplete="email" class="email-input" />
+          <div class="email-hp"><input type="text" name="b_7c006c449bd3dc3a523bce11d_daf1702c98" tabindex="-1" value="" /></div>
+          <button type="submit" class="email-btn" id="email-btn">
+            <span id="email-btn-text">Get Early Access</span>
+            <svg id="email-btn-check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </button>
+        </div>
+        <p class="email-note">No spam. Only launch updates and early access.</p>
+      </form>
+
+      <!-- Social -->
+      <div class="launch-social">
+        <span class="launch-social-label">Join the community</span>
+        <div class="launch-social-links">
+          <a href="https://t.me/ultradagcom" target="_blank" class="launch-social-btn telegram">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            Telegram
+          </a>
+          <a href="https://x.com/ultradagcom" target="_blank" class="launch-social-btn x-twitter">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l11.733 16h4.267l-11.733 -16z"></path><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772"></path></svg>
+            X / Twitter
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step Indicator -->
+  <div id="step">
+    <div class="step-line">
+      <div class="step-dot" id="sd1"></div>
+      <div class="step-txt" id="st1">click to place source</div>
+    </div>
+    <div class="step-line">
+      <div class="step-dot" id="sd2"></div>
+      <div class="step-txt" id="st2">click to place destination</div>
+    </div>
+  </div>
+
+  <!-- Finalized Overlay -->
+  <div id="fin">
+    <div class="fin-card">
+      <div class="fin-eyebrow">DAG-BFT</div>
+      <div class="fin-title">Transaction <em>Finalized</em></div>
+      <div class="fin-meta">Successfully routed through the network</div>
+      <div class="fin-stats">
+        <div class="fin-stat">
+          <span class="fin-stat-val" id="fin-ms">—</span>
+          <span class="fin-stat-label">milliseconds</span>
+        </div>
+        <div class="fin-stat">
+          <span class="fin-stat-val" id="fin-hops">—</span>
+          <span class="fin-stat-label">hops</span>
+        </div>
+        <div class="fin-stat">
+          <span class="fin-stat-val" id="fin-round">—</span>
+          <span class="fin-stat-label">round</span>
+        </div>
+      </div>
+      <button class="fin-btn" id="fin-btn">Route another →</button>
+    </div>
+  </div>
+
+  <!-- Playground -->
+  <section id="playground">
+    <div class="playground-inner">
+      <div class="playground-header">
+        <p class="playground-tag">Try It Live</p>
+        <h2 class="playground-title">Run code against <em>testnet</em></h2>
+        <p class="playground-subtitle">Execute real transactions in your browser. No installation, no wallet, no signup required.</p>
+      </div>
+
+      <div class="playground-container">
+        <div class="playground-editor">
+          <div class="playground-panel-header">
+            <span class="playground-panel-title">Code Editor</span>
+            <select id="example-select" class="example-select">
+              <option value="">Select an example...</option>
+            </select>
+          </div>
+          <textarea id="code-editor" class="code-editor" spellcheck="false"></textarea>
+          <div class="playground-controls">
+            <button id="run-code" class="run-btn">Run Code</button>
+          </div>
+        </div>
+
+        <div class="playground-output">
+          <div class="playground-panel-header">
+            <span class="playground-panel-title">Output</span>
+          </div>
+          <div class="output-content">
+            <div id="output"></div>
+            <div id="result"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Consensus Section -->
+  <section id="consensus">
+    <div class="section-inner">
+      <p class="section-tag reveal">Why UltraDAG</p>
+      <h2 class="reveal">Built for<br /><em>machines.</em></h2>
+      <p class="section-lead reveal">While IOTA, Helium, and IoTeX claimed "built for IoT", UltraDAG is the first to actually deliver: minimal binary, bounded storage, predictable finality, and runs on real embedded devices.</p>
+
+      <div class="features-grid">
+        <div class="feature reveal">
+          <div class="feature-icon">Storage</div>
+          <h3>Bounded Storage</h3>
+          <p>Automatic pruning keeps only last 1000 rounds (configurable). Memory usage stays constant after sync. Unlike IOTA/Byteball's unbounded growth, UltraDAG works on IoT devices with limited flash/RAM.</p>
+        </div>
+        <div class="feature reveal reveal-delay-1">
+          <div class="feature-icon">Finality</div>
+          <h3>Predictable Fast Finality</h3>
+          <p>BFT finality in 3 rounds (~5-15 seconds). No centralized coordinator like IOTA. No slow block times like IoTeX. Sensors can confirm payments in &lt;10 seconds without human intervention.</p>
+        </div>
+        <div class="feature reveal reveal-delay-2">
+          <div class="feature-icon">Binary Size</div>
+          <h3>Minimal Footprint</h3>
+          <p>&lt;2 MB release binary, ~900-1500 LOC consensus core. Fits on ESP32, Raspberry Pi Zero, industrial sensors. EVM chains require 100+ MB binaries—too large for embedded devices.</p>
+        </div>
+        <div class="feature reveal">
+          <div class="feature-icon">Throughput</div>
+          <h3>Leaderless Parallel Production</h3>
+          <p>No leader election overhead. All validators produce in parallel. 3-4x throughput vs single-leader chains (4 validators → 4 vertices per round). Perfect for high-frequency sensor data.</p>
+        </div>
+        <div class="feature reveal reveal-delay-1">
+          <div class="feature-icon">Cryptography</div>
+          <h3>Ed25519 Signatures</h3>
+          <p>Real asymmetric cryptography via ed25519-dalek. Transactions and DAG vertices are Ed25519-signed. On-chain verification: blake3(pubkey) == address.</p>
+        </div>
+        <div class="feature reveal reveal-delay-2">
+          <div class="feature-icon">Economics</div>
+          <h3>Bitcoin-Style Tokenomics</h3>
+          <p>21M max supply, halving every 10.5M rounds (~1.66 years), stake-proportional rewards. Delegate to validators for passive earnings, no node required. Deflationary slashing for Byzantine behavior.</p>
+        </div>
+        <div class="feature reveal">
+          <div class="feature-icon">Verified</div>
+          <h3>TLA+ Formally Verified</h3>
+          <p>Consensus safety verified by TLC model checker across 32.6 million states. Six invariants proven with zero violations: no conflicting finalization, no honest equivocation, parent consistency. Not just tested—mathematically checked.</p>
+        </div>
+        <div class="feature reveal reveal-delay-1">
+          <div class="feature-icon">Fast-Sync</div>
+          <h3>Checkpoint Fast-Sync</h3>
+          <p>New nodes sync in minutes via BFT-signed checkpoints instead of replaying full history. Quorum-verified state snapshots with cryptographic chain linking to genesis. No trust-on-first-use vulnerability.</p>
+        </div>
+        <div class="feature reveal reveal-delay-2">
+          <div class="feature-icon">Governance</div>
+          <h3>On-Chain Governance</h3>
+          <p>Council of 21 governance with 1 vote per seat. Six expertise categories, no stake requirement. 10% quorum, 66% supermajority, execution delay for safety. No hard forks needed—council members vote on proposals, changes apply automatically when passed.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tokenomics Section -->
+  <section class="token-section" id="tokenomics">
+    <div class="section-inner">
+      <p class="section-tag reveal">Tokenomics</p>
+      <h2 class="reveal">Bitcoin-model<br /><em>supply.</em></h2>
+      <p class="section-lead reveal">Fixed supply, halving schedule, 100% emission-based distribution. No pre-mine. No VC funding. No presale.</p>
+
+      <div class="token-grid">
+        <div class="token-card reveal">
+          <div class="token-value">21M</div>
+          <div class="token-label">Max supply cap</div>
+        </div>
+        <div class="token-card reveal reveal-delay-1">
+          <div class="token-value">1 UDAG</div>
+          <div class="token-label">Per round reward</div>
+        </div>
+        <div class="token-card reveal reveal-delay-2">
+          <div class="token-value">10.5M</div>
+          <div class="token-label">Halving interval (~1.66yr)</div>
+        </div>
+        <div class="token-card reveal">
+          <div class="token-value">0</div>
+          <div class="token-label">Genesis pre-mine</div>
+        </div>
+        <div class="token-card reveal reveal-delay-1">
+          <div class="token-value">10,000</div>
+          <div class="token-label">Min stake (UDAG)</div>
+        </div>
+        <div class="token-card reveal reveal-delay-2">
+          <div class="token-value">~2.8h</div>
+          <div class="token-label">Unstake cooldown</div>
+        </div>
+        <div class="token-card reveal">
+          <div class="token-value">100</div>
+          <div class="token-label">Min delegation (UDAG)</div>
+        </div>
+        <div class="token-card reveal reveal-delay-1">
+          <div class="token-value">10%</div>
+          <div class="token-label">Default commission</div>
+        </div>
+      </div>
+
+      <!-- Emission Model -->
+      <div class="emission-disclosure">
+        <div class="emission-tag">Emission Model — Zero Pre-Mine</div>
+        <p class="emission-text">
+          <strong>Every UDAG is earned through emission.</strong> No genesis allocation. No VC funding. No presale. The founder earns the same way validators do — by running the network.
+        </p>
+        <p class="emission-text-bottom">
+          <strong>Per-round emission split:</strong> 75% to validators &amp; stakers (proportional to stake), 10% to DAO treasury (council-controlled), 10% to Council of 21 members, 5% to founder. All shares are governable — the council can adjust percentages via governance proposals.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Use Case Section -->
+  <section id="usecase">
+    <div class="section-inner">
+      <p class="section-tag reveal">Real-World Use Case</p>
+      <h2 class="reveal">Sensor-to-sensor<br /><em>micropayments.</em></h2>
+      <p class="section-lead reveal">Weather sensor sells data to autonomous drone for navigation. No human intervention. Finality in ~10 seconds.</p>
+
+      <div class="terminal reveal">
+        <div class="terminal-header">
+          <div class="terminal-dots"><div class="terminal-dot"></div><div class="terminal-dot"></div><div class="terminal-dot"></div></div>
+          <span class="terminal-title">sensor-node-a — bash</span>
+        </div>
+        <pre><span class="cm"># Weather sensor (Node A) sells data to drone (Node B)</span>
+
+<span class="prompt">sensor-a $</span> ultradag-node <span class="flag">--status</span>
+<span class="output">  Round: 14,208  Finalized: 14,206  Peers: 4/4  Lag: 2</span>
+
+<span class="prompt">sensor-a $</span> ultradag-sdk send \
+    <span class="flag">--to</span> <span class="val">b7f3a1...drone-node-b</span> \
+    <span class="flag">--amount</span> <span class="val">0.001</span> \
+    <span class="flag">--memo</span> <span class="str">"temp:22.4C hum:61% pres:1013hPa"</span>
+<span class="output">  tx: 9a2f08...c4e1  broadcast to 4 peers</span>
+<span class="output">  included in vertex round 14,209 (0.8s)</span>
+<span class="output">  finalized at round 14,211 (6.2s) ✓</span>
+
+<span class="prompt">sensor-a $</span> ultradag-sdk balance
+<span class="output">  Balance: 847.2391 UDAG  Nonce: 1,847</span></pre>
+      </div>
+
+      <!-- Competitor Comparison -->
+      <div class="competitor-section reveal">
+        <div class="comp-header">
+          <span class="comp-tag">Why This Scenario Fails on Other Chains</span>
+        </div>
+        <div class="competitor-grid">
+          <div class="comp-row comp-header-row">
+            <div>Chain</div>
+            <div>The Problem</div>
+            <div>UltraDAG Advantage</div>
+          </div>
+          <div class="comp-row">
+            <div class="comp-name">IOTA <span class="comp-badge slow">Delayed</span></div>
+            <div class="comp-fail"><strong>No predictable finality.</strong> Coordinator still centralized. Sensors can't confirm payments autonomously.</div>
+            <div class="comp-win"><strong>3-round finality (~10s).</strong> Fully leaderless. No coordinator needed.</div>
+          </div>
+          <div class="comp-row">
+            <div class="comp-name">Helium <span class="comp-badge niche">Niche</span></div>
+            <div class="comp-fail"><strong>LoRa-only network.</strong> Can't handle general-purpose micropayments between arbitrary devices.</div>
+            <div class="comp-win"><strong>General-purpose L1.</strong> Any device, any payment type. TCP P2P.</div>
+          </div>
+          <div class="comp-row">
+            <div class="comp-name">IoTeX <span class="comp-badge slow">Slow</span></div>
+            <div class="comp-fail"><strong>15s+ block time</strong> plus confirmations. 100+ MB binary. Higher fees for micro-tx.</div>
+            <div class="comp-win"><strong>&lt;2 MB binary.</strong> Fee &lt;0.0001 UDAG. Fits on ESP32.</div>
+          </div>
+          <div class="comp-row">
+            <div class="comp-name">Ethereum L2 <span class="comp-badge slow">Complex</span></div>
+            <div class="comp-fail"><strong>Requires bridge</strong>, smart contracts, gas estimation. Far too complex for embedded firmware.</div>
+            <div class="comp-win"><strong>Native L1.</strong> Simple signed transactions. No bridge, no VM, no gas.</div>
+          </div>
+          <div class="comp-row">
+            <div class="comp-name">Byteball <span class="comp-badge dead">Dead</span></div>
+            <div class="comp-fail"><strong>Unbounded storage.</strong> DAG grows forever. Impossible for IoT devices with limited flash.</div>
+            <div class="comp-win"><strong>Bounded storage.</strong> Automatic pruning. Runs indefinitely on constrained hardware.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Run a Node Section -->
+  <section id="run">
+    <div class="section-inner">
+      <p class="section-tag reveal">Run a Node</p>
+      <h2 class="reveal">Download &amp; run<br /><em>in 60 seconds.</em></h2>
+      <p class="section-lead reveal">Pre-built binaries for Linux and macOS. One command to start validating.</p>
+
+      <!-- Download Buttons -->
+      <div class="download-buttons reveal">
+        <a href="https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-linux-x86_64.tar.gz" class="download-btn">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path></svg>
+          <span class="download-os">Linux</span>
+          <span class="download-arch">x86_64</span>
+        </a>
+        <a href="https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-macos-arm64.tar.gz" class="download-btn">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path></svg>
+          <span class="download-os">macOS</span>
+          <span class="download-arch">Apple Silicon</span>
+        </a>
+        <a href="https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-macos-x86_64.tar.gz" class="download-btn">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path></svg>
+          <span class="download-os">macOS</span>
+          <span class="download-arch">Intel</span>
+        </a>
+      </div>
+
+      <!-- Linux Instructions -->
+      <div class="code-section reveal">
+        <div class="code-header">
+          <div class="code-dots"><div class="code-dot"></div><div class="code-dot"></div><div class="code-dot"></div></div>
+          <span class="code-label">Linux Installation</span>
+        </div>
+        <pre><span class="cm"># Download and extract</span>
+<span class="kw">curl</span> -L https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-linux-x86_64.tar.gz | <span class="kw">tar</span> xz
+
+<span class="cm"># Run node (auto-connects to testnet bootstrap nodes)</span>
+<span class="kw">./ultradag-node-linux-x86_64</span> --validate
+
+<span class="cm"># Check status (RPC defaults to P2P port + 1000 = 10333)</span>
+<span class="kw">curl</span> <span class="str">http://localhost:10333/status</span>
+
+<span class="cm"># Generate a keypair for transactions</span>
+<span class="kw">curl</span> <span class="str">http://localhost:10333/keygen</span></pre>
+      </div>
+
+      <!-- macOS Instructions -->
+      <div class="code-section reveal">
+        <div class="code-header">
+          <div class="code-dots"><div class="code-dot"></div><div class="code-dot"></div><div class="code-dot"></div></div>
+          <span class="code-label">macOS Installation</span>
+        </div>
+        <pre><span class="cm"># Download and extract (Apple Silicon)</span>
+<span class="kw">curl</span> -L https://github.com/UltraDAGcom/core/releases/latest/download/ultradag-node-macos-arm64.tar.gz | <span class="kw">tar</span> xz
+
+<span class="cm"># Run node (auto-connects to testnet bootstrap nodes)</span>
+<span class="kw">./ultradag-node-macos-arm64</span> --validate
+
+<span class="cm"># Check status (RPC defaults to P2P port + 1000 = 10333)</span>
+<span class="kw">curl</span> <span class="str">http://localhost:10333/status</span>
+
+<span class="cm"># Generate a keypair for transactions</span>
+<span class="kw">curl</span> <span class="str">http://localhost:10333/keygen</span></pre>
+      </div>
+
+      <!-- Additional Info -->
+      <div class="node-info reveal">
+        <div class="node-info-tag">What You Get</div>
+        <div class="node-info-grid">
+          <div>
+            <p>
+              ✓ <strong>Automatic sync</strong> from testnet<br />
+              ✓ <strong>Start earning</strong> block rewards immediately<br />
+              ✓ <strong>HTTP RPC</strong> on port 10333<br />
+              ✓ <strong>Bounded storage</strong> (~100MB after sync)
+            </p>
+          </div>
+          <div>
+            <p>
+              ✓ <strong>No configuration</strong> files needed<br />
+              ✓ <strong>Automatic peer</strong> discovery<br />
+              ✓ <strong>Fast finality</strong> in ~10 seconds<br />
+              ✓ <strong>Production ready</strong> for mainnet
+            </p>
+          </div>
+        </div>
+        <p class="node-info-source">
+          <strong>Build from source:</strong> <span class="kw">git clone</span> https://github.com/UltraDAGcom/core &amp;&amp; <span class="kw">cargo build --release</span>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SDKs Section -->
+  <section id="sdks">
+    <div class="section-inner">
+      <p class="section-tag reveal">Developer Tools</p>
+      <h2 class="reveal">Official <em>SDKs.</em></h2>
+      <p class="section-lead reveal">Integrate UltraDAG into your application in minutes. Four official SDKs with local Ed25519 keygen, typed responses, and full test coverage.</p>
+
+      <div class="sdks-grid">
+        <div class="feature reveal">
+          <div class="feature-icon">Python</div>
+          <h3>Python SDK</h3>
+          <p>pip install ultradag. Uses PyNaCl + blake3. Ideal for IoT automation, scripting, and data pipelines.</p>
+          <code>pip install -e sdk/python/</code>
+        </div>
+        <div class="feature reveal reveal-delay-1">
+          <div class="feature-icon">JavaScript / TypeScript</div>
+          <h3>JS/TS SDK</h3>
+          <p>npm install ultradag. Uses @noble/ed25519 + blake3. Works in Node.js 18+ and browsers.</p>
+          <code>npm install ultradag</code>
+        </div>
+        <div class="feature reveal reveal-delay-2">
+          <div class="feature-icon">Rust</div>
+          <h3>Rust SDK</h3>
+          <p>Lightweight client crate. Uses reqwest + ed25519-dalek + blake3. Not the full node, just the client.</p>
+          <code>cargo add ultradag-sdk</code>
+        </div>
+        <div class="feature reveal reveal-delay-3">
+          <div class="feature-icon">Go</div>
+          <h3>Go SDK</h3>
+          <p>Standard net/http + blake3. Zero external HTTP dependencies. Perfect for infrastructure tooling.</p>
+          <code>go get github.com/ultradag/sdk-go</code>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Bottom CTA -->
+  <div class="launch-section bottom-cta">
+    <div class="launch-inner">
+      <h2 class="launch-title">Don't miss the launch</h2>
+      <p class="launch-subtitle">Join the waitlist and follow us for priority access to UDAG.</p>
+      <form class="email-form" onsubmit="return handleEmailSubmit(event)">
+        <input type="hidden" name="u" value="7c006c449bd3dc3a523bce11d" />
+        <input type="hidden" name="id" value="daf1702c98" />
+        <div class="email-input-wrap">
+          <input type="email" name="EMAIL" placeholder="your@email.com" required autocomplete="email" class="email-input" />
+          <div class="email-hp"><input type="text" name="b_7c006c449bd3dc3a523bce11d_daf1702c98" tabindex="-1" value="" /></div>
+          <button type="submit" class="email-btn">Get Early Access</button>
+        </div>
+      </form>
+      <div class="launch-social-links">
+        <a href="https://t.me/ultradagcom" target="_blank" class="launch-social-btn telegram">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          Telegram
+        </a>
+        <a href="https://x.com/ultradagcom" target="_blank" class="launch-social-btn x-twitter">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l11.733 16h4.267l-11.733 -16z"></path><path d="M4 20l6.768 -6.768m2.46 -2.46l6.772 -6.772"></path></svg>
+          X / Twitter
+        </a>
+      </div>
+    </div>
+  </div>
+
+</BaseLayout>
