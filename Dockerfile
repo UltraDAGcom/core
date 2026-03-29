@@ -10,9 +10,12 @@ ARG VERSION=latest
 ARG VARIANT=""
 ARG CACHEBUST=0
 RUN echo "cache-bust: ${CACHEBUST} variant: ${VARIANT}" && \
-    curl -fL "https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/ultradag-node${VARIANT}-linux-x86_64" \
-    -o /usr/local/bin/ultradag-node && \
-    chmod +x /usr/local/bin/ultradag-node
+    curl -fL "https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/ultradag-node${VARIANT}-linux-x86_64.tar.gz" \
+    -o /tmp/node.tar.gz && \
+    tar -xzf /tmp/node.tar.gz -C /usr/local/bin/ && \
+    mv /usr/local/bin/ultradag-node${VARIANT}-linux-x86_64 /usr/local/bin/ultradag-node && \
+    chmod +x /usr/local/bin/ultradag-node && \
+    rm /tmp/node.tar.gz
 
 COPY tools/operations/utilities/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
