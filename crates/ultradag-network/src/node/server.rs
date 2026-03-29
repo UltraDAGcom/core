@@ -684,14 +684,18 @@ impl NodeServer {
         let (reader, writer) = split_connection(stream, addr_str.clone(), noise_transport);
         self.peers.add_writer(addr_str.clone(), writer).await;
 
-        // Send hello with current DAG round
-        let current_round = self.dag.read().await.current_round();
+        // Send hello with current DAG round and pruning floor
+        let dag_r = self.dag.read().await;
+        let current_round = dag_r.current_round();
+        let pruning_floor = dag_r.pruning_floor();
+        drop(dag_r);
         self.peers
             .send_to(&addr_str, &Message::Hello {
                 version: 1,
                 height: current_round,
                 listen_port: self.port,
                 network_id: String::from_utf8_lossy(ultradag_coin::constants::NETWORK_ID).to_string(),
+                pruning_floor,
             })
             .await?;
 
@@ -938,13 +942,17 @@ async fn try_connect_peer(
             peers.add_writer(addr.clone(), writer).await;
 
             // Send hello so the remote knows our listen port
-            let current_round = dag.read().await.current_round();
+            let dag_r = dag.read().await;
+            let current_round = dag_r.current_round();
+            let pruning_floor = dag_r.pruning_floor();
+            drop(dag_r);
             let _ = peers
                 .send_to(&addr, &Message::Hello {
                     version: 1,
                     height: current_round,
                     listen_port,
                     network_id: String::from_utf8_lossy(ultradag_coin::constants::NETWORK_ID).to_string(),
+                    pruning_floor,
                 })
                 .await;
 
@@ -1082,7 +1090,7 @@ async fn handle_peer(
         tokio::task::yield_now().await;
 
         match msg {
-            Message::Hello { version, height, listen_port, network_id } => {
+            Message::Hello { version, height, listen_port, network_id, pruning_floor } => {
                 if version != PROTOCOL_VERSION {
                     warn!("Peer {} sent Hello with unsupported protocol version {} (expected {}), disconnecting and banning",
                         peer_addr, version, PROTOCOL_VERSION);
@@ -1106,6 +1114,7 @@ async fn handle_peer(
                         version: 1,
                         height: our_round,
                         network_id: String::from_utf8_lossy(ultradag_coin::constants::NETWORK_ID).to_string(),
+                        pruning_floor,
                     })
                     .await?;
 
@@ -1118,17 +1127,24 @@ async fn handle_peer(
                 // If peer is ahead, sync from them
                 if height > our_round {
                     let gap = height - our_round;
-                    if gap > FAST_SYNC_GAP_THRESHOLD {
+                    // Use peer's pruning_floor to determine sync start point
+                    let sync_from_round = our_round.max(pruning_floor);
+                    let effective_gap = height.saturating_sub(sync_from_round);
+                    
+                    if effective_gap > FAST_SYNC_GAP_THRESHOLD {
                         // Large gap — try checkpoint AND incremental sync in parallel.
                         // Checkpoint may fail (no quorum-accepted checkpoints), so
                         // incremental sync provides fallback.
-                        info!("Large gap ({} rounds behind peer {}), requesting checkpoint + incremental sync", gap, peer_addr);
+                        info!("Large gap ({} rounds behind peer {}, peer pruning_floor={}), requesting checkpoint + incremental sync from round {}", 
+                            gap, peer_addr, pruning_floor, sync_from_round);
                         peers.send_to(&peer_addr, &Message::GetCheckpoint { min_round: our_round }).await?;
                     }
                     // Always request incremental DAG vertices (works even when checkpoint fails)
+                    // Start from max(our_round+1, peer's pruning_floor) to avoid requesting pruned rounds
+                    let sync_from = (our_round + 1).max(pruning_floor);
                     peers
                         .send_to(&peer_addr, &Message::GetDagVertices {
-                            from_round: our_round + 1,
+                            from_round: sync_from,
                             max_count: DAG_SYNC_BATCH_SIZE,
                         })
                         .await?;
@@ -1169,7 +1185,7 @@ async fn handle_peer(
                 let _ = peers.send_to(&peer_addr, &Message::GetPeers).await;
             }
 
-            Message::HelloAck { version, height, network_id } => {
+            Message::HelloAck { version, height, network_id, pruning_floor } => {
                 if version != PROTOCOL_VERSION {
                     warn!("Peer {} sent HelloAck with unsupported protocol version {} (expected {}), disconnecting and banning",
                         peer_addr, version, PROTOCOL_VERSION);
@@ -1193,13 +1209,21 @@ async fn handle_peer(
                 let our_round = dag.read().await.current_round();
                 if height > our_round {
                     let gap = height - our_round;
-                    if gap > FAST_SYNC_GAP_THRESHOLD {
-                        info!("Large gap ({} rounds behind peer {}), requesting checkpoint + incremental sync", gap, peer_addr);
+                    // Use peer's pruning_floor to determine sync start point
+                    let sync_from_round = our_round.max(pruning_floor);
+                    let effective_gap = height.saturating_sub(sync_from_round);
+                    
+                    if effective_gap > FAST_SYNC_GAP_THRESHOLD {
+                        info!("Large gap ({} rounds behind peer {}, peer pruning_floor={}), requesting checkpoint + incremental sync from round {}", 
+                            gap, peer_addr, pruning_floor, sync_from_round);
                         peers.send_to(&peer_addr, &Message::GetCheckpoint { min_round: our_round }).await?;
                     }
+                    // Always request incremental DAG vertices (works even when checkpoint fails)
+                    // Start from max(our_round+1, peer's pruning_floor) to avoid requesting pruned rounds
+                    let sync_from = (our_round + 1).max(pruning_floor);
                     peers
                         .send_to(&peer_addr, &Message::GetDagVertices {
-                            from_round: our_round + 1,
+                            from_round: sync_from,
                             max_count: DAG_SYNC_BATCH_SIZE,
                         })
                         .await?;
