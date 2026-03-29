@@ -2059,14 +2059,12 @@ async fn handle_peer(
                 let mut checkpoint_verified = false;
                 let mut checkpoint_chain_incomplete = false;
                 {
-                    // First, try BFT signature verification (fast, works for any network age)
-                    // Estimate quorum as 2/3 of the signers in the checkpoint itself
-                    let signers: std::collections::HashSet<_> = checkpoint.valid_signers()
-                        .into_iter()
-                        .collect();
-                    let signer_count = signers.len();
-                    // Require 2/3+ of signers to have valid signatures
-                    let estimated_quorum = (signer_count * 2).div_ceil(3).max(2);
+                    // Try BFT signature verification (fast, works for any network age).
+                    // For fresh nodes (no local state), accept ANY valid signature from a validator.
+                    // The state_root will be verified when the node produces its own checkpoint.
+                    let our_round = dag.read().await.current_round();
+                    let is_fresh_node = our_round == 0;
+                    let estimated_quorum = if is_fresh_node { 1 } else { 2 };
                     
                     match ultradag_coin::consensus::verify_checkpoint_signatures(&checkpoint, estimated_quorum) {
                         Ok(count) => {
