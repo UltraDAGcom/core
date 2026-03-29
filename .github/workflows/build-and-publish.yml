@@ -41,14 +41,25 @@ jobs:
           cp target/release/ultradag-node release/ultradag-node-mainnet-linux-x86_64
           chmod +x release/ultradag-node-mainnet-linux-x86_64
 
+      - name: Create tarballs and checksums
+        run: |
+          cd release
+          tar -czf ultradag-node-linux-x86_64.tar.gz ultradag-node-linux-x86_64
+          sha256sum ultradag-node-linux-x86_64.tar.gz > ultradag-node-linux-x86_64.tar.gz.sha256
+          
+          tar -czf ultradag-node-mainnet-linux-x86_64.tar.gz ultradag-node-mainnet-linux-x86_64
+          sha256sum ultradag-node-mainnet-linux-x86_64.tar.gz > ultradag-node-mainnet-linux-x86_64.tar.gz.sha256
+
       - name: Upload to latest release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: latest
           name: Latest Build
           files: |
-            release/ultradag-node-linux-x86_64
-            release/ultradag-node-mainnet-linux-x86_64
+            release/ultradag-node-linux-x86_64.tar.gz
+            release/ultradag-node-linux-x86_64.tar.gz.sha256
+            release/ultradag-node-mainnet-linux-x86_64.tar.gz
+            release/ultradag-node-mainnet-linux-x86_64.tar.gz.sha256
           draft: false
           prerelease: true
           generate_release_notes: false
@@ -58,5 +69,89 @@ jobs:
 
             **ultradag-node-linux-x86_64** — Testnet binary (includes faucet)
             **ultradag-node-mainnet-linux-x86_64** — Mainnet binary (no faucet, emission-only genesis)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-macos:
+    name: Build macOS Binaries
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build testnet binary
+        run: |
+          mkdir -p release
+
+          # Testnet binary
+          cargo build --release --target ${{ matrix.target }} -p ultradag-node
+          
+          # Set artifact name based on target
+          if [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
+            ARTIFACT_NAME="ultradag-node-macos-x86_64"
+          else
+            ARTIFACT_NAME="ultradag-node-macos-arm64"
+          fi
+          
+          cp target/${{ matrix.target }}/release/ultradag-node release/$ARTIFACT_NAME
+          chmod +x release/$ARTIFACT_NAME
+
+      - name: Build mainnet binary
+        run: |
+          # Mainnet binary
+          cargo build --release --target ${{ matrix.target }} --features mainnet -p ultradag-node
+          
+          # Set artifact name based on target
+          if [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
+            ARTIFACT_NAME="ultradag-node-mainnet-macos-x86_64"
+          else
+            ARTIFACT_NAME="ultradag-node-mainnet-macos-arm64"
+          fi
+          
+          cp target/${{ matrix.target }}/release/ultradag-node release/$ARTIFACT_NAME
+          chmod +x release/$ARTIFACT_NAME
+
+      - name: Create tarballs and checksums
+        run: |
+          cd release
+          
+          # Testnet tarball
+          if [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
+            tar -czf ultradag-node-macos-x86_64.tar.gz ultradag-node-macos-x86_64
+            sha256sum ultradag-node-macos-x86_64.tar.gz > ultradag-node-macos-x86_64.tar.gz.sha256
+            
+            tar -czf ultradag-node-mainnet-macos-x86_64.tar.gz ultradag-node-mainnet-macos-x86_64
+            sha256sum ultradag-node-mainnet-macos-x86_64.tar.gz > ultradag-node-mainnet-macos-x86_64.tar.gz.sha256
+          else
+            tar -czf ultradag-node-macos-arm64.tar.gz ultradag-node-macos-arm64
+            sha256sum ultradag-node-macos-arm64.tar.gz > ultradag-node-macos-arm64.tar.gz.sha256
+            
+            tar -czf ultradag-node-mainnet-macos-arm64.tar.gz ultradag-node-mainnet-macos-arm64
+            sha256sum ultradag-node-mainnet-macos-arm64.tar.gz > ultradag-node-mainnet-macos-arm64.tar.gz.sha256
+          fi
+
+      - name: Upload to latest release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: latest
+          name: Latest Build
+          files: |
+            release/ultradag-node-macos-${{ matrix.target == 'x86_64-apple-darwin' && 'x86_64' || 'arm64' }}.tar.gz
+            release/ultradag-node-macos-${{ matrix.target == 'x86_64-apple-darwin' && 'x86_64' || 'arm64' }}.tar.gz.sha256
+            release/ultradag-node-mainnet-macos-${{ matrix.target == 'x86_64-apple-darwin' && 'x86_64' || 'arm64' }}.tar.gz
+            release/ultradag-node-mainnet-macos-${{ matrix.target == 'x86_64-apple-darwin' && 'x86_64' || 'arm64' }}.tar.gz.sha256
+          draft: false
+          prerelease: true
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
