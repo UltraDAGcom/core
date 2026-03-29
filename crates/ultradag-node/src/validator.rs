@@ -403,23 +403,10 @@ pub async fn validator_loop(
             return;
         }
 
-        // Save state snapshot at every checkpoint interval — ALL nodes, not just the producer.
-        // This enables co-signing: when a CheckpointProposal arrives, the peer can verify
-        // the state_root against its own saved snapshot for that round.
+        // Checkpoint state is saved in apply_finality_and_state() while holding
+        // the state write lock, ensuring deterministic snapshots across all nodes.
         let current_finalized = server.finality.read().await.last_finalized_round();
         let interval = ultradag_coin::CHECKPOINT_INTERVAL;
-        if current_finalized > 0 && current_finalized >= interval {
-            let snap_round = (current_finalized / interval) * interval;
-            // Only save if we haven't already (check if file exists)
-            if ultradag_coin::persistence::load_checkpoint_state(&data_dir, snap_round).is_none() {
-                let state_r = server.state.read().await;
-                if state_r.last_finalized_round().unwrap_or(0) >= snap_round {
-                    let snapshot = state_r.snapshot();
-                    drop(state_r);
-                    let _ = ultradag_coin::persistence::save_checkpoint_state(&data_dir, snap_round, &snapshot);
-                }
-            }
-        }
 
         // Checkpoint generation: runs independently of finality block above.
         // P2P handler may finalize vertices before validator loop, making all_finalized empty.
@@ -437,25 +424,28 @@ pub async fn validator_loop(
 
             let checkpoint_start = tokio::time::Instant::now();
 
-            let state_r = server.state.read().await;
-            // The state may have advanced past checkpoint_round due to concurrent
-            // P2P handlers. We produce the checkpoint at the CURRENT state, not at
-            // the exact checkpoint_round. The state_root reflects the current finalized
-            // state, which includes all rounds up to and including checkpoint_round.
-            // This is safe because:
-            // 1. All nodes will eventually reach the same state at the same round
-            // 2. The checkpoint's state_root is what peers verify during co-signing
-            // 3. The round field identifies which checkpoint interval this covers
-            let state_fin = state_r.last_finalized_round().unwrap_or(0);
-            if state_fin < checkpoint_round {
-                // State hasn't caught up to the checkpoint round yet — skip for now
-                drop(state_r);
-                continue;
-            }
-            let state_snapshot = state_r.snapshot();
+            // Use the SAVED checkpoint state snapshot (from the interval save above).
+            // This is critical for co-signing: all nodes must use the same state for
+            // the same checkpoint round. The current state may have advanced past
+            // checkpoint_round, causing state_root mismatch with peers.
+            let state_snapshot = match ultradag_coin::persistence::load_checkpoint_state(&data_dir, checkpoint_round) {
+                Some(snap) => snap,
+                None => {
+                    // No saved state for this round — try to save it now
+                    let state_r = server.state.read().await;
+                    let state_fin = state_r.last_finalized_round().unwrap_or(0);
+                    if state_fin < checkpoint_round {
+                        drop(state_r);
+                        continue; // State hasn't caught up yet
+                    }
+                    let snap = state_r.snapshot();
+                    drop(state_r);
+                    let _ = ultradag_coin::persistence::save_checkpoint_state(&data_dir, checkpoint_round, &snap);
+                    snap
+                }
+            };
             let state_root = ultradag_coin::consensus::compute_state_root(&state_snapshot);
-            let total_supply = state_r.total_supply();
-            drop(state_r);
+            let total_supply = state_snapshot.total_supply;
 
             let dag_r = server.dag.read().await;
             let dag_tip = dag_r.tips().first().copied().unwrap_or([0u8; 32]);

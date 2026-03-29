@@ -6,7 +6,7 @@ use tokio::sync::{broadcast, Mutex, Notify, RwLock};
 use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use ultradag_coin::{Address, BlockDag, DagVertex, FinalityTracker, Mempool, SecretKey, StateEngine, Transaction, sync_epoch_validators};
 use ultradag_coin::consensus::dag::{DagInsertError, MAX_PARENTS};
@@ -187,6 +187,7 @@ async fn apply_finality_and_state(
     mempool: &Arc<RwLock<Mempool>>,
     fatal_shutdown: &Arc<std::sync::atomic::AtomicBool>,
     fatal_exit_code: &Arc<std::sync::atomic::AtomicI32>,
+    data_dir: &Path,
 ) -> (Vec<DagVertex>, u64) {
     // Phase 1: Register validators and find newly-finalized vertices.
     // Hold finality+dag locks, then drop both before touching state.
@@ -240,6 +241,26 @@ async fn apply_finality_and_state(
         }
         epoch_changed = state_w.epoch_just_changed(prev_round);
         last_fin_round = state_w.last_finalized_round().unwrap_or(0);
+
+        // Save checkpoint state at interval boundaries — MUST happen while
+        // holding state write lock to prevent concurrent state advances.
+        // This ensures all nodes capture the same deterministic state for
+        // the same checkpoint boundary, enabling co-signing.
+        let prev_fin = prev_round.unwrap_or(0);
+        let interval = ultradag_coin::CHECKPOINT_INTERVAL;
+        if last_fin_round >= interval {
+            // Check if we crossed a checkpoint boundary in this batch
+            let prev_cp = (prev_fin / interval) * interval;
+            let curr_cp = (last_fin_round / interval) * interval;
+            if curr_cp > prev_cp || (prev_fin < interval && last_fin_round >= interval) {
+                // Crossed a boundary — save snapshot now (under write lock = deterministic)
+                let snap_round = curr_cp;
+                let snapshot = state_w.snapshot();
+                // Save asynchronously after dropping lock would race — save synchronously
+                let _ = ultradag_coin::persistence::save_checkpoint_state(data_dir, snap_round, &snapshot);
+                tracing::debug!("Saved checkpoint state at round {} (fin={})", snap_round, last_fin_round);
+            }
+        }
 
         // Remove finalized transactions from mempool
         let mut mp = mempool.write().await;
@@ -756,6 +777,7 @@ async fn resolve_orphans(
     _round_notify: &Arc<Notify>,
     fatal_shutdown: &Arc<std::sync::atomic::AtomicBool>,
     fatal_exit_code: &Arc<std::sync::atomic::AtomicI32>,
+    data_dir: &Path,
 ) {
     let mut resolved = true;
     let mut passes = 0;
@@ -781,7 +803,7 @@ async fn resolve_orphans(
                     let validator = vertex.validator;
                     apply_finality_and_state(
                         &[validator], dag, finality, state, mempool,
-                        fatal_shutdown, fatal_exit_code,
+                        fatal_shutdown, fatal_exit_code, data_dir,
                     ).await;
                     peers.broadcast(&Message::DagProposal(vertex), peer_addr).await;
                 }
@@ -1378,13 +1400,13 @@ async fn handle_peer(
 
                     apply_finality_and_state(
                         &[validator], dag, finality, state, mempool,
-                        fatal_shutdown, fatal_exit_code,
+                        fatal_shutdown, fatal_exit_code, data_dir,
                     ).await;
 
                     peers.broadcast(&Message::DagProposal(vertex), &peer_addr).await;
 
                     // Try to resolve orphaned vertices now that a new vertex was inserted
-                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify, fatal_shutdown, fatal_exit_code).await;
+                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify, fatal_shutdown, fatal_exit_code, data_dir).await;
                 }
             }
 
@@ -1574,9 +1596,9 @@ async fn handle_peer(
                     // Don't notify here — DagVertices is bulk sync context.
                     apply_finality_and_state(
                         &new_validators, dag, finality, state, mempool,
-                        fatal_shutdown, fatal_exit_code,
+                        fatal_shutdown, fatal_exit_code, data_dir,
                     ).await;
-                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify, fatal_shutdown, fatal_exit_code).await;
+                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify, fatal_shutdown, fatal_exit_code, data_dir).await;
                 }
 
                 // Sync continuation: if we received new vertices, request the next batch.
@@ -1713,9 +1735,9 @@ async fn handle_peer(
                     // Don't notify here — ParentVertices is bulk sync context.
                     apply_finality_and_state(
                         &new_validators, dag, finality, state, mempool,
-                        fatal_shutdown, fatal_exit_code,
+                        fatal_shutdown, fatal_exit_code, data_dir,
                     ).await;
-                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify, fatal_shutdown, fatal_exit_code).await;
+                    resolve_orphans(orphans, dag, finality, state, mempool, peers, &peer_addr, round_notify, fatal_shutdown, fatal_exit_code, data_dir).await;
                 }
             }
 
@@ -1836,28 +1858,19 @@ async fn handle_peer(
             }
 
             Message::CheckpointSignatureMsg { round, checkpoint_hash, signature } => {
-                // Verify signer is an active validator first
-                let active = {
-                    let state_r = state.read().await;
-                    state_r.active_validators().to_vec()
-                };
-                if !active.contains(&signature.validator) {
-                    continue;
-                }
-                
                 // Find the pending checkpoint for this round
                 let mut pending = pending_checkpoints.write().await;
                 let checkpoint = match pending.get_mut(&round) {
                     Some(cp) => cp,
-                    None => continue, // No pending checkpoint for this round
+                    None => continue,
                 };
-                
+
                 // Verify the hash matches
                 if checkpoint.checkpoint_hash() != checkpoint_hash {
                     warn!("CheckpointSignature has wrong hash for round {}", round);
                     continue;
                 }
-                
+
                 // Verify the signature is valid before storing
                 if !checkpoint.verify_signature(&signature) {
                     warn!("CheckpointSignature from {:?} has invalid signature", &signature.pub_key[..4]);
@@ -1870,14 +1883,20 @@ async fn handle_peer(
                 if !already_signed {
                     checkpoint.signatures.push(signature);
                 }
-                
-                // Check if we have quorum
-                let quorum = if active.is_empty() {
-                    2 // Minimum for testing
-                } else {
-                    (active.len() * 2).div_ceil(3) // ceil(2n/3)
+
+                // Check quorum using the checkpoint's own signers as the validator set.
+                // In pre-staking mode, all vertex producers are validators.
+                // Use configured_validators if set, otherwise count the signers.
+                let configured = {
+                    let state_r = state.read().await;
+                    state_r.configured_validator_count()
                 };
-                
+                let validator_count = configured.unwrap_or(checkpoint.signatures.len() as u64) as usize;
+                let quorum = (validator_count * 2).div_ceil(3).max(2);
+                let active: Vec<ultradag_coin::Address> = checkpoint.signatures.iter()
+                    .map(|s| s.validator)
+                    .collect();
+
                 if checkpoint.is_accepted(&active, quorum) {
                     // Checkpoint accepted — save to disk
                     let accepted = checkpoint.clone();
