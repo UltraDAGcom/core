@@ -1123,17 +1123,21 @@ async fn handle_peer(
                     let effective_gap = height.saturating_sub(sync_from_round);
                     
                     if effective_gap > FAST_SYNC_GAP_THRESHOLD {
-                        info!("Large gap ({} rounds behind peer {}, est. pruning_floor={}), requesting checkpoint + incremental sync from round {}", 
-                            gap, peer_addr, estimated_pruning_floor, sync_from_round);
+                        // For large gaps, request checkpoint sync first.
+                        // If checkpoint sync fails (incomplete chain), we'll request incremental sync
+                        // in the CheckpointSync message handler as a fallback.
+                        info!("Large gap ({} rounds behind peer {}, est. pruning_floor={}), requesting checkpoint sync", 
+                            gap, peer_addr, estimated_pruning_floor);
                         peers.send_to(&peer_addr, &Message::GetCheckpoint { min_round: our_round }).await?;
+                    } else {
+                        // Small gap — just request incremental sync
+                        peers
+                            .send_to(&peer_addr, &Message::GetDagVertices {
+                                from_round: sync_from_round,
+                                max_count: DAG_SYNC_BATCH_SIZE,
+                            })
+                            .await?;
                     }
-                    // Request incremental DAG vertices starting from peer's estimated pruning floor
-                    peers
-                        .send_to(&peer_addr, &Message::GetDagVertices {
-                            from_round: sync_from_round,
-                            max_count: DAG_SYNC_BATCH_SIZE,
-                        })
-                        .await?;
                 }
 
                 // Validate listen_port: reject port 0 (invalid) and privileged ports
@@ -1202,17 +1206,20 @@ async fn handle_peer(
                     let effective_gap = height.saturating_sub(sync_from_round);
                     
                     if effective_gap > FAST_SYNC_GAP_THRESHOLD {
-                        info!("Large gap ({} rounds behind peer {}, est. pruning_floor={}), requesting checkpoint + incremental sync from round {}", 
-                            gap, peer_addr, estimated_pruning_floor, sync_from_round);
+                        // For large gaps, request checkpoint sync first.
+                        // If checkpoint sync fails, we'll request incremental sync as fallback.
+                        info!("Large gap ({} rounds behind peer {}, est. pruning_floor={}), requesting checkpoint sync", 
+                            gap, peer_addr, estimated_pruning_floor);
                         peers.send_to(&peer_addr, &Message::GetCheckpoint { min_round: our_round }).await?;
+                    } else {
+                        // Small gap — just request incremental sync
+                        peers
+                            .send_to(&peer_addr, &Message::GetDagVertices {
+                                from_round: sync_from_round,
+                                max_count: DAG_SYNC_BATCH_SIZE,
+                            })
+                            .await?;
                     }
-                    // Request incremental DAG vertices starting from peer's estimated pruning floor
-                    peers
-                        .send_to(&peer_addr, &Message::GetDagVertices {
-                            from_round: sync_from_round,
-                            max_count: DAG_SYNC_BATCH_SIZE,
-                        })
-                        .await?;
                 }
                 // Request peer list for mesh discovery
                 let _ = peers.send_to(&peer_addr, &Message::GetPeers).await;
@@ -2105,9 +2112,18 @@ async fn handle_peer(
                 }
 
                 // Skip checkpoint sync if chain verification failed due to incomplete history.
-                // Incremental sync will handle catching up from current round.
+                // Request incremental sync as fallback.
                 if checkpoint_chain_incomplete {
-                    info!("Skipping checkpoint sync due to incomplete chain, using incremental sync only");
+                    // Estimate peer's pruning floor and request from there
+                    let our_round = dag.read().await.current_round();
+                    let estimated_pruning_floor = checkpoint.round.saturating_sub(1000);
+                    let sync_from = (our_round + 1).max(estimated_pruning_floor);
+                    info!("Skipping checkpoint sync due to incomplete chain, requesting incremental sync from round {}", sync_from);
+                    // Request incremental sync from peer's pruning floor (they have these vertices)
+                    let _ = peers.send_to(&peer_addr, &Message::GetDagVertices {
+                        from_round: sync_from,
+                        max_count: DAG_SYNC_BATCH_SIZE,
+                    }).await;
                     return Ok(());
                 }
 
