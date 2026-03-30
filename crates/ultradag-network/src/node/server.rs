@@ -2373,18 +2373,17 @@ async fn handle_peer(
                     sync_duration_ms,
                     bytes_downloaded
                 );
-                sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
-                info!("Sync complete — validator production enabled");
-
-                // Request vertices from checkpoint round to fill the gap.
-                // After fast-sync, the DAG is empty between checkpoint.round and
-                // the current network round. Peers send new vertices via DagProposal
-                // but they reference parents the node doesn't have (orphans).
-                // Request historical vertices to fill the gap.
-                peers.send_to(&peer_addr, &Message::GetDagVertices {
+                // Request vertices from ALL peers to fill the gap between checkpoint
+                // and current network round. Do this BEFORE enabling production so
+                // the gap-fill completes before we start producing.
+                info!("Requesting gap-fill vertices from round {} from all peers", checkpoint.round);
+                peers.broadcast(&Message::GetDagVertices {
                     from_round: checkpoint.round,
                     max_count: 500,
-                }).await?;
+                }, "").await;
+
+                sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
+                info!("Sync complete — validator production enabled");
             }
         }
     }
