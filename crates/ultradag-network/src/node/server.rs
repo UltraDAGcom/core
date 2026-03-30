@@ -2373,19 +2373,24 @@ async fn handle_peer(
                     sync_duration_ms,
                     bytes_downloaded
                 );
-                // DON'T enable sync_complete yet — we need to fill the DAG gap first.
-                // Request vertices from the checkpoint round onward from all peers.
-                // Only enable production AFTER receiving some vertices.
-                info!("Fast-sync state loaded at round {}. Requesting DAG vertices to fill gap...", checkpoint.round);
-                for _ in 0..3 {
+                // Request vertices to fill the DAG gap, then wait for them.
+                // Don't enable production until we have recent peer vertices.
+                info!("Fast-sync state loaded at round {}. Filling DAG gap...", checkpoint.round);
+                for attempt in 0..10 {
                     peers.broadcast(&Message::GetDagVertices {
-                        from_round: checkpoint.round,
+                        from_round: checkpoint.round.saturating_add(attempt * 50),
                         max_count: 500,
                     }, "").await;
-                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+                    let dag_round = dag.read().await.current_round();
+                    if dag_round > checkpoint.round + 5 {
+                        info!("DAG caught up to round {} (checkpoint was {}). Enabling production.", dag_round, checkpoint.round);
+                        break;
+                    }
                 }
                 sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
-                info!("Sync complete — validator production enabled (DAG round: {})", dag.read().await.current_round());
+                let final_dag_round = dag.read().await.current_round();
+                info!("Sync complete — validator production enabled (DAG round: {})", final_dag_round);
             }
         }
     }
