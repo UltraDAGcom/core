@@ -250,7 +250,6 @@ impl BlockDag {
         // We do NOT truncate here because the vertex hash was already computed from
         // the original parents — truncating would store different parents than the hash
         // implies, breaking the DAG's hash integrity invariant.
-        let mut vertex = vertex;
 
         // CRITICAL: Verify all parents exist before inserting.
         // The zero hash [0u8; 32] is the sentinel genesis parent for round-1 vertices.
@@ -282,6 +281,16 @@ impl BlockDag {
         if vertex.round > self.current_round + MAX_FUTURE_ROUNDS {
             return false;
         }
+
+        self.do_insert(vertex, hash)
+    }
+
+    /// Core DAG bookkeeping: compute topo_level, update parent/child edges,
+    /// tips, rounds, descendant validators, and secondary indices.
+    /// Caller must ensure the vertex hash is not already present and all
+    /// admission checks have passed.
+    fn do_insert(&mut self, vertex: DagVertex, hash: [u8; 32]) -> bool {
+        let mut vertex = vertex;
 
         // Compute topo_level: max(parent.topo_level) + 1
         let mut max_parent_level: u64 = 0;
@@ -467,6 +476,88 @@ impl BlockDag {
 
         // All checks passed — insert
         Ok(self.insert_internal(vertex))
+    }
+
+    /// Insert a vertex received during checkpoint fast-sync.
+    ///
+    /// Performs all safety checks from `try_insert()` (signature, equivocation,
+    /// Byzantine, coinbase, merkle root, size) EXCEPT `MissingParents`. During
+    /// checkpoint sync, suffix vertices may reference parents from before the
+    /// checkpoint that don't exist in the syncing node's DAG. The state snapshot
+    /// provides the trust anchor, not the parent chain.
+    ///
+    /// Returns:
+    /// - `Ok(true)` if inserted successfully
+    /// - `Ok(false)` if duplicate or from Byzantine validator
+    /// - `Err(reason)` if any safety check fails
+    pub fn insert_checkpoint_suffix(&mut self, vertex: DagVertex) -> Result<bool, DagInsertError> {
+        // Verify Ed25519 signature before any other processing
+        if !vertex.verify_signature() {
+            return Err(DagInsertError::InvalidSignature);
+        }
+
+        let hash = vertex.hash();
+
+        if self.vertices.contains_key(&hash) {
+            return Ok(false);
+        }
+
+        // Reject vertices with too many parents
+        if vertex.parent_hashes.len() > MAX_PARENTS {
+            return Err(DagInsertError::TooManyParents);
+        }
+
+        // Reject oversized vertices
+        let vertex_size = postcard::to_allocvec(&vertex)
+            .map(|v| v.len())
+            .unwrap_or(0);
+        if vertex_size > crate::constants::MAX_VERTEX_BYTES {
+            return Err(DagInsertError::TooLarge);
+        }
+
+        // Equivocation detection (same validator, same round, different vertex)
+        if let Some(&existing_hash) = self.validator_round_vertex.get(&(vertex.validator, vertex.round)) {
+            self.equivocation_vertices.insert(hash, vertex.clone());
+            self.store_equivocation_evidence(
+                vertex.validator,
+                vertex.round,
+                existing_hash,
+                hash,
+            );
+            self.mark_byzantine(vertex.validator);
+            return Err(DagInsertError::Equivocation {
+                validator: vertex.validator,
+                round: vertex.round,
+            });
+        }
+
+        // Reject vertices from Byzantine validators
+        if self.is_byzantine(&vertex.validator) {
+            return Ok(false);
+        }
+
+        // Reject vertices with non-zero coinbase
+        if vertex.block.coinbase.amount != 0 {
+            return Err(DagInsertError::InvalidCoinbase);
+        }
+
+        // Verify merkle root
+        let computed_root = vertex.block.compute_merkle_root();
+        if computed_root != vertex.block.header.merkle_root {
+            return Err(DagInsertError::InvalidMerkleRoot);
+        }
+
+        // NOTE: MissingParents and FutureRound checks are intentionally SKIPPED.
+        // During checkpoint sync, suffix vertices reference parents from before
+        // the checkpoint that don't exist in this DAG. The state snapshot is the
+        // trust anchor, not the parent chain. FutureRound is also skipped because
+        // suffix vertices may be many rounds ahead of the checkpoint round (the
+        // current_round is set to checkpoint.round before insertion begins).
+        // We call do_insert() directly to bypass these checks while still
+        // performing all DAG bookkeeping (topo_level, parent/child edges, tips,
+        // rounds, descendant validators, secondary indices).
+
+        Ok(self.do_insert(vertex, hash))
     }
 
     /// Get a vertex by hash.

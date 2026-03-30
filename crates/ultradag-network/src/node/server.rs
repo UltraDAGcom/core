@@ -1969,9 +1969,18 @@ async fn handle_peer(
                 };
 
                 if let Some(checkpoint) = checkpoint {
-                    let Some(dag_r) = dag.try_read().ok() else {
-                        warn!("GetCheckpoint: DAG lock contended, skipping for {}", peer_addr);
-                        continue;
+                    // Use a timeout-based read instead of try_read() to avoid
+                    // silently sending 0 suffix vertices when the DAG lock is
+                    // momentarily contended. 2s timeout prevents deadlocks.
+                    let dag_r = match tokio::time::timeout(
+                        std::time::Duration::from_secs(2),
+                        dag.read()
+                    ).await {
+                        Ok(guard) => guard,
+                        Err(_) => {
+                            warn!("GetCheckpoint: DAG lock timed out after 2s, skipping for {}", peer_addr);
+                            continue;
+                        }
                     };
                     let current_round = dag_r.current_round();
                     let mut suffix_vertices = Vec::new();
@@ -2322,27 +2331,44 @@ async fn handle_peer(
                     }
                 }
 
-                // Fix 3: Insert suffix vertices with signature verification
+                // Insert suffix vertices using insert_checkpoint_suffix() which
+                // skips MissingParents checks. During checkpoint sync, suffix vertices
+                // reference parents from before the checkpoint that don't exist in our
+                // DAG. The state snapshot is the trust anchor, not the parent chain.
+                // Vertices at or before checkpoint.round are tracked so we can mark
+                // them as finalized (their effects are already in the snapshot).
                 let mut inserted = 0;
                 let mut skipped = 0;
+                let mut pre_checkpoint_hashes: Vec<[u8; 32]> = Vec::new();
                 {
                     let mut dag_w = dag.write().await;
-                    // Set pruning floor and current round to checkpoint round
+                    // Set pruning floor and current round to checkpoint round.
+                    // pruning_floor lets insert_internal accept missing parents near the floor.
+                    // current_round prevents FutureRound rejection for suffix vertices.
                     dag_w.set_pruning_floor(checkpoint.round);
                     dag_w.set_current_round(checkpoint.round);
                     for vertex in suffix_vertices {
-                        if !vertex.verify_signature() {
-                            warn!("CheckpointSync: skipping suffix vertex with invalid signature (round {})", vertex.round);
-                            skipped += 1;
-                            continue;
-                        }
-                        if dag_w.try_insert(vertex).is_ok() {
-                            inserted += 1;
+                        let round = vertex.round;
+                        let hash = vertex.hash();
+                        match dag_w.insert_checkpoint_suffix(vertex) {
+                            Ok(true) => {
+                                inserted += 1;
+                                if round <= checkpoint.round {
+                                    pre_checkpoint_hashes.push(hash);
+                                }
+                            }
+                            Ok(false) => {} // duplicate or Byzantine — skip
+                            Err(e) => {
+                                warn!("CheckpointSync: skipping suffix vertex at round {}: {:?}", round, e);
+                                skipped += 1;
+                            }
                         }
                     }
                 }
 
-                // Fix 2: Reset FinalityTracker to reflect synced state
+                // Reset FinalityTracker to reflect synced state, then mark
+                // pre-checkpoint vertices as finalized to prevent double-application
+                // (their effects are already captured in the state snapshot).
                 {
                     let mut fin = finality.write().await;
                     fin.reset_to_checkpoint(checkpoint.round);
@@ -2354,6 +2380,11 @@ async fn handle_peer(
                     let dag_r = dag.read().await;
                     for addr in dag_r.all_validators() {
                         fin.register_validator(addr);
+                    }
+                    // Mark pre-checkpoint suffix vertices as finalized so they are
+                    // not re-applied when finality advances past the checkpoint round.
+                    for hash in &pre_checkpoint_hashes {
+                        fin.mark_as_finalized(*hash);
                     }
                 }
 
