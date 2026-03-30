@@ -1969,7 +1969,10 @@ async fn handle_peer(
                 };
 
                 if let Some(checkpoint) = checkpoint {
-                    let dag_r = dag.read().await;
+                    let Some(dag_r) = dag.try_read().ok() else {
+                        warn!("GetCheckpoint: DAG lock contended, skipping for {}", peer_addr);
+                        continue;
+                    };
                     let current_round = dag_r.current_round();
                     let mut suffix_vertices = Vec::new();
                     'outer: for r in checkpoint.round..=current_round {
@@ -2370,17 +2373,19 @@ async fn handle_peer(
                     sync_duration_ms,
                     bytes_downloaded
                 );
-                // Request vertices from ALL peers to fill the gap between checkpoint
-                // and current network round. Do this BEFORE enabling production so
-                // the gap-fill completes before we start producing.
-                info!("Requesting gap-fill vertices from round {} from all peers", checkpoint.round);
-                peers.broadcast(&Message::GetDagVertices {
-                    from_round: checkpoint.round,
-                    max_count: 500,
-                }, "").await;
-
+                // DON'T enable sync_complete yet — we need to fill the DAG gap first.
+                // Request vertices from the checkpoint round onward from all peers.
+                // Only enable production AFTER receiving some vertices.
+                info!("Fast-sync state loaded at round {}. Requesting DAG vertices to fill gap...", checkpoint.round);
+                for _ in 0..3 {
+                    peers.broadcast(&Message::GetDagVertices {
+                        from_round: checkpoint.round,
+                        max_count: 500,
+                    }, "").await;
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
                 sync_complete.store(true, std::sync::atomic::Ordering::Relaxed);
-                info!("Sync complete — validator production enabled");
+                info!("Sync complete — validator production enabled (DAG round: {})", dag.read().await.current_round());
             }
         }
     }
