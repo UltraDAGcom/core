@@ -105,7 +105,9 @@ fn is_self_addr(addr: &str, port: u16) -> bool {
 }
 
 /// Round gap threshold to trigger fast-sync instead of incremental sync.
-const FAST_SYNC_GAP_THRESHOLD: u64 = 100;
+/// Minimum gap before attempting checkpoint sync instead of incremental.
+/// Fresh nodes (round 0) always attempt checkpoint sync regardless of gap.
+const FAST_SYNC_GAP_THRESHOLD: u64 = 50;
 
 /// Compute the serialized byte size of a DagVertex for orphan buffer accounting.
 /// Uses postcard serialization for exact sizing (handles variable-length governance txs correctly).
@@ -1144,12 +1146,10 @@ async fn handle_peer(
                     let sync_from_round = (our_round + 1).max(estimated_pruning_floor);
                     let effective_gap = height.saturating_sub(sync_from_round);
                     
-                    if effective_gap > FAST_SYNC_GAP_THRESHOLD {
-                        // For large gaps, request checkpoint sync first.
-                        // If checkpoint sync fails (incomplete chain), we'll request incremental sync
-                        // in the CheckpointSync message handler as a fallback.
-                        info!("Large gap ({} rounds behind peer {}, est. pruning_floor={}), requesting checkpoint sync", 
-                            gap, peer_addr, estimated_pruning_floor);
+                    if our_round == 0 || effective_gap > FAST_SYNC_GAP_THRESHOLD {
+                        // Fresh nodes or large gaps: request checkpoint sync first.
+                        info!("Gap {} rounds (fresh={}) behind peer {}, requesting checkpoint sync",
+                            gap, our_round == 0, peer_addr);
                         peers.send_to(&peer_addr, &Message::GetCheckpoint { min_round: our_round }).await?;
                     } else {
                         // Small gap — just request incremental sync
@@ -1227,11 +1227,10 @@ async fn handle_peer(
                     let sync_from_round = (our_round + 1).max(estimated_pruning_floor);
                     let effective_gap = height.saturating_sub(sync_from_round);
                     
-                    if effective_gap > FAST_SYNC_GAP_THRESHOLD {
-                        // For large gaps, request checkpoint sync first.
-                        // If checkpoint sync fails, we'll request incremental sync as fallback.
-                        info!("Large gap ({} rounds behind peer {}, est. pruning_floor={}), requesting checkpoint sync", 
-                            gap, peer_addr, estimated_pruning_floor);
+                    if our_round == 0 || effective_gap > FAST_SYNC_GAP_THRESHOLD {
+                        // Fresh nodes or large gaps: request checkpoint sync first.
+                        info!("Gap {} rounds (fresh={}) behind peer {}, requesting checkpoint sync",
+                            gap, our_round == 0, peer_addr);
                         peers.send_to(&peer_addr, &Message::GetCheckpoint { min_round: our_round }).await?;
                     } else {
                         // Small gap — just request incremental sync

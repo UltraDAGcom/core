@@ -622,8 +622,9 @@ async fn main() {
                     break;
                 }
 
-                // Request vertices — try checkpoint first for large gaps (max 3 attempts)
-                if gap > 100 && checkpoint_attempts < 3 {
+                // Request vertices — try checkpoint first for fresh nodes or large gaps
+                // Fresh nodes (round 0) ALWAYS try checkpoint sync — they need state
+                if (our_round == 0 || gap > 100) && checkpoint_attempts < 3 {
                     checkpoint_attempts += 1;
                     info!("Sync: our_round={} network={} gap={} — requesting checkpoint (attempt {})",
                         our_round, network_round, gap, checkpoint_attempts);
