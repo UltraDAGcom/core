@@ -1969,12 +1969,7 @@ async fn handle_peer(
                 };
 
                 if let Some(checkpoint) = checkpoint {
-                    // Use try_read to avoid blocking — if locks are held, skip this request.
-                    // The peer will retry and eventually get served.
-                    let Some(dag_r) = dag.try_read().ok() else {
-                        warn!("GetCheckpoint: DAG lock contended, skipping for {}", peer_addr);
-                        continue;
-                    };
+                    let dag_r = dag.read().await;
                     let current_round = dag_r.current_round();
                     let mut suffix_vertices = Vec::new();
                     'outer: for r in checkpoint.round..=current_round {
@@ -1986,6 +1981,8 @@ async fn handle_peer(
                         }
                     }
                     drop(dag_r);
+                    info!("GetCheckpoint: serving checkpoint round {} with {} suffix vertices (rounds {}..={})",
+                        checkpoint.round, suffix_vertices.len(), checkpoint.round, current_round);
 
                     // Load the state snapshot saved at checkpoint production time.
                     // Using current state would be wrong — it has advanced past the checkpoint round,
