@@ -1,6 +1,7 @@
 mod rpc;
 mod validator;
 mod rate_limit;
+mod tui;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -91,6 +92,12 @@ struct Args {
     /// When disabled (mainnet), only /tx/submit (pre-signed) is accepted.
     #[arg(long, default_value = "true")]
     testnet: bool,
+
+    /// Enable stunning TUI (Terminal User Interface) with real-time metrics,
+    /// ASCII art visualizations, and interactive log panel.
+    /// Press 'Q' to quit, 'L' to toggle logs, '↑/↓' to scroll logs.
+    #[arg(long)]
+    tui: bool,
 }
 
 fn default_data_dir() -> String {
@@ -235,15 +242,6 @@ async fn connect_with_retry(server: &Arc<NodeServer>, addr: &str, max_retries: u
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("ultradag=info".parse().unwrap_or_else(|_| {
-                    tracing::Level::INFO.into()
-                })),
-        )
-        .init();
-
     let args = Args::parse();
 
     // Verify genesis checkpoint hash (panics on mainnet builds with placeholder hash)
@@ -268,6 +266,33 @@ async fn main() {
         error!("Failed to create data directory {:?}: {}", data_dir, e);
         std::process::exit(1);
     }
+
+    // Initialize tracing
+    let tui_log_rx = if args.tui {
+        // TUI mode: capture tracing events into the TUI log panel
+        use tracing_subscriber::layer::SubscriberExt;
+        use tracing_subscriber::util::SubscriberInitExt;
+        let (tui_layer, rx) = tui::create_tui_tracing();
+        tracing_subscriber::registry()
+            .with(tui_layer)
+            .with(tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive("ultradag=info".parse().unwrap_or_else(|_| {
+                    tracing::Level::INFO.into()
+                })))
+            .init();
+        Some(rx)
+    } else {
+        // Normal mode: print to stdout
+        tracing_subscriber::fmt()
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::from_default_env()
+                    .add_directive("ultradag=info".parse().unwrap_or_else(|_| {
+                        tracing::Level::INFO.into()
+                    })),
+            )
+            .init();
+        None
+    };
 
     // Load validator keypair: --pkey flag > disk > generate new
     let key_path = data_dir.join("validator.key");
@@ -841,6 +866,27 @@ async fn main() {
 
     // Heartbeat: detect and remove dead TCP connections every 30 seconds
     server.start_heartbeat();
+
+    // Launch TUI if enabled
+    if args.tui {
+        info!("Launching TUI...");
+        let tui_server = server.clone();
+        tokio::spawn(async move {
+            if let Err(e) = tui::run_tui(tui_server, tui_log_rx).await {
+                eprintln!("TUI error: {}", e);
+            }
+        });
+    } else {
+        // Print startup banner in non-TUI mode
+        println!();
+        println!("  ╔═╗ ┬ ┬┌─┐┌┐┌┌┬┐┬ ┬  ╔═╗┌─┐┌─┐┌┬┐┌─┐┌┬┐  ");
+        println!("  ╠═╝ ├─┤├─┤│││ │ ├─┤  ║  ├─┤├─┘ │ ├─┤│││  ");
+        println!("  ╩   ┴ ┴┴ ┴┘└┘ ┴ ┴ ┴  ╚═╝┴ ┴┴  ┴ ┴ ┴┴ ┴  ");
+        println!();
+        println!("  UltraDAG Node v1.0 | Port: {} | RPC: http://127.0.0.1:{}", args.port, rpc_port);
+        println!("  Round: {}ms | Data: {}", args.round_ms, data_dir.display());
+        println!();
+    }
 
     if let Err(e) = server.listen().await {
         error!("Server error: {}", e);
