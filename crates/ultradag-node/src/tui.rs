@@ -226,19 +226,31 @@ impl TuiState {
         };
         let (total_supply, total_staked, total_delegated, treasury_balance, epoch, active_count, configured) =
             match server.state.try_read() {
-                Ok(st) => (
-                    st.total_supply(),
-                    st.total_staked(),
-                    st.total_delegated(),
-                    st.treasury_balance(),
-                    st.current_epoch(),
-                    st.active_validators().len(),
-                    st.configured_validator_count(),
-                ),
+                Ok(st) => {
+                    let staked_active = st.active_validators().len();
+                    (
+                        st.total_supply(),
+                        st.total_staked(),
+                        st.total_delegated(),
+                        st.treasury_balance(),
+                        st.current_epoch(),
+                        staked_active,
+                        st.configured_validator_count(),
+                    )
+                }
                 Err(_) => {
                     return;
                 }
             };
+        // Use vertex-producing validators from finality tracker when no stakers
+        let active_count = if active_count > 0 {
+            active_count
+        } else {
+            match server.finality.try_read() {
+                Ok(fin) => fin.validator_set().len(),
+                Err(_) => active_count,
+            }
+        };
         let mempool_size = match server.mempool.try_read() {
             Ok(mp) => mp.len(),
             Err(_) => 0,
@@ -535,12 +547,9 @@ fn render_stats(f: &mut Frame, area: Rect, snap: &NodeSnapshot) {
     // Format supply values
     let fmt_udag = |sats: u64| -> String {
         let whole = sats / COIN;
-        let frac = (sats % COIN) / (COIN / 100); // 2 decimal places
+        let frac = (sats % COIN) / (COIN / 100);
         if frac > 0 {
-            format!("{},{:03}.{:02}", whole / 1000, whole % 1000, frac)
-                .trim_start_matches("0,")
-                .replace(",000", ",000")
-                .to_string()
+            format!("{}.{:02}", format_num(whole), frac)
         } else {
             format_num(whole)
         }
