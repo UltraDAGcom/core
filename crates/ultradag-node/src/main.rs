@@ -1,6 +1,7 @@
 mod rpc;
 mod validator;
 mod rate_limit;
+#[cfg(feature = "tui")]
 mod tui;
 
 use std::path::PathBuf;
