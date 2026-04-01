@@ -1,0 +1,314 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import '../styles/global.css';
+---
+
+<BaseLayout title="Council of 21 — UltraDAG ($UDAG)" description="The Council of 21 — UltraDAG's self-governing body. 21 seats across 7 expertise categories. No stake required. Earn 10% emission rewards.">
+
+<!-- HERO -->
+<section class="council-hero">
+  <div class="council-numeral">XXI</div>
+  <div class="council-eyebrow">The Council of 21</div>
+  <h1 class="council-title">Sovereign <em>Governance</em><br>for a New Protocol</h1>
+  <p class="council-subtitle">Twenty-one seats. Absolute authority over the evolution of UltraDAG. Not a committee. Not a board. A council — governed by the DAO, accountable to the network.</p>
+  <div class="council-divider"></div>
+  <p class="council-decree">Membership is not purchased.<br>It is <strong>earned</strong>, <strong>proposed</strong>, and <strong>voted in</strong>.</p>
+</section>
+
+<!-- SEATS -->
+<section class="seats-section">
+  <div class="seats-inner">
+    <div class="seats-header reveal">
+      <div class="seats-tag">Seat Allocation</div>
+      <h2 class="seats-title"><em>21</em> Seats. Seven Categories.</h2>
+      <p class="seats-lead">Each seat category brings essential expertise. Engineering, Growth, Legal, Research, Community, Operations, and Security — a balanced governing body designed for self-sufficiency.</p>
+    </div>
+    <div class="seats-grid reveal" id="seats-grid"></div>
+    <div class="seats-legend reveal" id="seats-legend"></div>
+  </div>
+</section>
+
+<!-- PRIVILEGES -->
+<section class="privileges-section">
+  <div class="privileges-inner">
+    <div class="seats-tag reveal">Council Authority</div>
+    <h2 class="seats-title reveal">What the Council <em>Controls</em></h2>
+    <p class="seats-lead reveal">Council members are the sole arbiters of protocol governance. Every parameter change, every policy decision flows through this body.</p>
+    <div class="privileges-grid reveal">
+      <div class="privilege">
+        <div class="privilege-num">I</div>
+        <div class="privilege-title">Emission Rewards</div>
+        <div class="privilege-desc">10% of every block reward is distributed equally among seated council members. No staking required — your seat is your compensation. Adjustable via governance (0-30%).</div>
+      </div>
+      <div class="privilege">
+        <div class="privilege-num">II</div>
+        <div class="privilege-title">Equal Voting Power</div>
+        <div class="privilege-desc">One seat, one vote. Every council member has equal governance power regardless of stake or wealth. Submit proposals, cast votes. 66% supermajority to pass.</div>
+      </div>
+      <div class="privilege">
+        <div class="privilege-num">III</div>
+        <div class="privilege-title">Protocol Parameters</div>
+        <div class="privilege-desc">Vote on fee structures, staking minimums, reward distributions, quorum thresholds, emission percentages, and voting periods. Shape the economic foundation.</div>
+      </div>
+      <div class="privilege">
+        <div class="privilege-num">IV</div>
+        <div class="privilege-title">Membership Control</div>
+        <div class="privilege-desc">Add or remove council members through CouncilMembership proposals. The council governs its own composition — fully self-sufficient, no founder required.</div>
+      </div>
+      <div class="privilege">
+        <div class="privilege-num">V</div>
+        <div class="privilege-title">Network Direction</div>
+        <div class="privilege-desc">Guide the strategic evolution of UltraDAG. Prioritize development, approve integrations, set the technical roadmap for the machine economy.</div>
+      </div>
+      <div class="privilege">
+        <div class="privilege-num">VI</div>
+        <div class="privilege-title">Emergency Authority</div>
+        <div class="privilege-desc">In critical situations, the Council can fast-track parameter changes to protect network security. Power comes with the weight of responsibility.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- REQUIREMENTS -->
+<section class="requirements-section">
+  <div class="requirements-inner">
+    <div class="seats-tag reveal">Qualification</div>
+    <h2 class="seats-title reveal">The <em>Threshold</em></h2>
+    <div class="requirements-layout">
+      <div class="requirements-text reveal">
+        <p>The Council is not a popularity contest. It is a <strong>meritocracy</strong>. Each seat category requires domain expertise — not wealth. No UDAG stake is required to serve.</p>
+        <p>New members are proposed and voted in by existing council members via <strong>CouncilMembership proposals</strong>. The same process removes members who no longer serve the protocol's interest.</p>
+        <p>Once the initial council is seated, UltraDAG becomes <strong>fully self-governing</strong>. No founder, no company, no central authority needed.</p>
+      </div>
+      <div class="requirement-cards reveal">
+        <div class="requirement-card">
+          <div class="req-label">Seat Categories</div>
+          <div class="req-value">7 Domains of Expertise</div>
+          <div class="req-detail">Engineering (5 seats), Growth (3), Legal (2), Research (2), Community (4), Operations (3), Security (2). Each category has fixed capacity enforced at protocol level.</div>
+        </div>
+        <div class="requirement-card">
+          <div class="req-label">Selection Process</div>
+          <div class="req-value">DAO Governance</div>
+          <div class="req-detail">Existing council members propose new members via CouncilMembership proposals. Requires 10% quorum and 66% supermajority approval. Fully on-chain and transparent.</div>
+        </div>
+        <div class="requirement-card">
+          <div class="req-label">Compensation</div>
+          <div class="req-value">10% Emission Share</div>
+          <div class="req-detail">Council members earn 10% of every block reward, split equally. No staking required. Your seat is your compensation. The emission percentage is itself governable (0-30%).</div>
+        </div>
+        <div class="requirement-card">
+          <div class="req-label">Seat Availability</div>
+          <div class="req-value">Maximum 21</div>
+          <div class="req-detail">Fixed at protocol level. When all seats in a category are filled, candidates must wait for a vacancy created by a removal proposal.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PHILOSOPHY -->
+<section class="philosophy-section">
+  <div class="philosophy-inner">
+    <div class="reveal">
+      <p class="philosophy-quote">The strength of a protocol is measured not by how many govern, but by the quality of those who do.</p>
+      <p class="philosophy-attr">UltraDAG Design Philosophy</p>
+    </div>
+    <div class="philosophy-pillars reveal">
+      <div>
+        <div class="pillar-title">Expertise Over Wealth</div>
+        <div class="pillar-text">No stake requirement. Council seats go to those with domain expertise, not the largest wallets. Crypto developers, legal specialists, academics, and community leaders — selected for what they know, not what they hold.</div>
+      </div>
+      <div>
+        <div class="pillar-title">Self-Governing DAO</div>
+        <div class="pillar-text">The council governs its own membership through on-chain proposals. No founder, no company, no external authority. Once seated, the Council is the sole governing body — fully autonomous and self-sufficient.</div>
+      </div>
+      <div>
+        <div class="pillar-title">Fixed Scarcity</div>
+        <div class="pillar-text">21 seats mirrors Bitcoin's 21 million cap. A hard constraint enforced at protocol level. Governance power remains concentrated among the most qualified, with per-category seat limits preventing any single domain from dominating.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="cta-inner">
+    <div class="cta-tag reveal">Join the Council</div>
+    <h2 class="cta-title reveal">Claim Your <em>Seat</em></h2>
+    <p class="cta-text reveal">The Council is forming. Early members will shape the governance framework that defines UltraDAG for decades to come. No UDAG stake required — just expertise and commitment.</p>
+    <div class="cta-steps reveal">
+      <div class="cta-step">
+        <div class="cta-step-num">1</div>
+        <div class="cta-step-title">Apply</div>
+        <div class="cta-step-desc">Submit your application with your domain expertise and the seat category you qualify for.</div>
+      </div>
+      <div class="cta-step">
+        <div class="cta-step-num">2</div>
+        <div class="cta-step-title">Get Proposed</div>
+        <div class="cta-step-desc">An existing council member submits a CouncilMembership proposal with your address and category. The council votes (66% supermajority).</div>
+      </div>
+      <div class="cta-step">
+        <div class="cta-step-num">3</div>
+        <div class="cta-step-title">Govern & Earn</div>
+        <div class="cta-step-desc">Once approved, your seat is active. Submit proposals, cast votes, shape the protocol. Earn 10% emission share split equally among all members.</div>
+      </div>
+    </div>
+    <div class="cta-buttons reveal">
+      <a href="/dashboard/" class="btn-gold">Open Dashboard</a>
+      <a href="/docs/tokenomics/governance" class="btn-gold-outline">Read Governance Docs</a>
+    </div>
+  </div>
+</section>
+
+</BaseLayout>
+
+<style>
+  :root{
+    --gold:#c9a84c;--gold2:#e8c85a;--gold-glow:rgba(201,168,76,0.15);--gold-dim:rgba(201,168,76,0.08);
+  }
+
+  /* HERO */
+  .council-hero{position:relative;z-index:1;text-align:center;padding:160px 48px 80px}
+  .council-numeral{font-family:'Cormorant',serif;font-size:clamp(80px,12vw,160px);font-weight:300;color:rgba(201,168,76,.08);line-height:1;margin-bottom:-20px;letter-spacing:.1em}
+  .council-eyebrow{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.25em;text-transform:uppercase;color:var(--gold);margin-bottom:24px}
+  .council-title{font-family:'Cormorant',serif;font-size:clamp(32px,5vw,56px);font-weight:300;color:var(--white);line-height:1.1;margin-bottom:24px}
+  .council-title em{color:var(--gold);font-style:italic}
+  .council-subtitle{font-family:'Syne',sans-serif;font-size:17px;color:var(--subtle);max-width:600px;margin:0 auto 40px;line-height:1.65}
+  .council-divider{width:60px;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);margin:0 auto 40px}
+  .council-decree{font-family:'Cormorant',serif;font-size:20px;font-weight:300;color:var(--muted);line-height:1.6}
+  .council-decree strong{color:var(--white);font-weight:400}
+
+  /* SEATS */
+  .seats-section{position:relative;z-index:1;border-top:1px solid var(--border);background:var(--bg2)}
+  .seats-inner{max-width:900px;margin:0 auto;padding:100px 48px}
+  .seats-header{text-align:center;margin-bottom:56px}
+  .seats-tag{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);margin-bottom:16px}
+  .seats-title{font-family:'Cormorant',serif;font-size:clamp(28px,4vw,40px);font-weight:300;color:var(--white);line-height:1.15;margin-bottom:16px}
+  .seats-title em{color:var(--gold);font-style:italic}
+  .seats-lead{font-family:'Syne',sans-serif;font-size:15px;color:var(--subtle);max-width:560px;margin:0 auto;line-height:1.65}
+
+  .seats-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-bottom:32px}
+  :global(.seat){
+    width:52px;height:52px;display:flex;align-items:center;justify-content:center;
+    border:1px solid var(--border2);border-radius:4px;
+    font-family:'DM Mono',monospace;font-size:11px;font-weight:500;color:var(--muted);
+    background:var(--bg);cursor:default;transition:all .3s;position:relative;
+  }
+  :global(.seat:hover){border-color:var(--gold);color:var(--white);background:var(--gold-dim)}
+
+  .seats-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:20px}
+  :global(.seats-legend-item){display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)}
+  :global(.legend-dot){width:10px;height:10px;border-radius:2px;border:1px solid}
+
+  /* PRIVILEGES */
+  .privileges-section{position:relative;z-index:1;border-top:1px solid var(--border)}
+  .privileges-inner{max-width:1100px;margin:0 auto;padding:100px 48px;text-align:center}
+  .privileges-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin-top:56px;text-align:left}
+  .privilege{background:var(--bg2);border:1px solid var(--border);padding:36px 32px}
+  .privilege-num{font-family:'Cormorant',serif;font-size:40px;font-weight:300;color:rgba(201,168,76,.15);line-height:1;margin-bottom:16px}
+  .privilege-title{font-family:'Cormorant',serif;font-size:22px;font-weight:400;color:var(--white);margin-bottom:12px;line-height:1.2}
+  .privilege-desc{font-size:14px;color:var(--subtle);line-height:1.6}
+
+  /* REQUIREMENTS */
+  .requirements-section{position:relative;z-index:1;border-top:1px solid var(--border);background:var(--bg2)}
+  .requirements-inner{max-width:1100px;margin:0 auto;padding:100px 48px;text-align:center}
+  .requirements-layout{display:grid;grid-template-columns:1fr 1.2fr;gap:80px;align-items:start;margin-top:56px;text-align:left}
+  .requirements-text{font-family:'Cormorant',serif;font-size:20px;font-weight:300;color:var(--subtle);line-height:1.6}
+  .requirements-text p{margin-bottom:24px}
+  .requirements-text strong{color:var(--white);font-weight:400}
+  .requirement-cards{display:flex;flex-direction:column;gap:2px}
+  .requirement-card{background:var(--bg);border:1px solid var(--border);padding:32px 36px;position:relative;transition:border-color .3s}
+  .requirement-card:hover{border-color:var(--border2)}
+  .requirement-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:transparent;transition:background .3s}
+  .requirement-card:hover::before{background:var(--gold)}
+  .req-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
+  .req-value{font-family:'Cormorant',serif;font-size:28px;font-weight:300;color:var(--white);line-height:1.2;margin-bottom:8px}
+  .req-detail{font-size:13px;color:var(--muted);line-height:1.5}
+
+  /* PHILOSOPHY */
+  .philosophy-section{position:relative;z-index:1;border-top:1px solid var(--border)}
+  .philosophy-inner{max-width:800px;margin:0 auto;padding:100px 48px;text-align:center}
+  .philosophy-quote{font-family:'Cormorant',serif;font-size:clamp(24px,3.5vw,38px);font-weight:300;font-style:italic;color:var(--white);line-height:1.45;margin-bottom:24px;position:relative}
+  .philosophy-quote::before{content:'\201C';position:absolute;top:-40px;left:50%;transform:translateX(-50%);font-size:80px;color:rgba(201,168,76,.15);line-height:1}
+  .philosophy-attr{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
+  .philosophy-pillars{display:grid;grid-template-columns:repeat(3,1fr);gap:48px;margin-top:80px;text-align:left}
+  .pillar-title{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+  .pillar-text{font-size:14px;color:var(--subtle);line-height:1.65}
+
+  /* CTA */
+  .cta-section{position:relative;z-index:1;border-top:1px solid var(--border);background:var(--bg2)}
+  .cta-inner{max-width:700px;margin:0 auto;padding:100px 48px;text-align:center}
+  .cta-tag{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.25em;text-transform:uppercase;color:var(--gold);margin-bottom:20px}
+  .cta-title{font-family:'Cormorant',serif;font-size:clamp(32px,4.5vw,48px);font-weight:300;color:var(--white);line-height:1.1;margin-bottom:20px}
+  .cta-title em{font-style:italic;color:var(--gold)}
+  .cta-text{font-family:'Cormorant',serif;font-size:19px;font-weight:300;color:var(--subtle);line-height:1.55;margin-bottom:48px;max-width:480px;margin-left:auto;margin-right:auto}
+  .cta-steps{display:flex;gap:2px;margin-bottom:48px;text-align:left}
+  .cta-step{flex:1;background:var(--bg);border:1px solid var(--border);padding:28px 24px}
+  .cta-step-num{font-family:'Cormorant',serif;font-size:32px;font-weight:300;color:rgba(201,168,76,.2);line-height:1;margin-bottom:10px}
+  .cta-step-title{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--white);margin-bottom:8px}
+  .cta-step-desc{font-size:12px;color:var(--muted);line-height:1.5}
+  .cta-buttons{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+  .btn-gold{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:#0a0e1a;background:var(--gold);padding:15px 36px;border-radius:2px;transition:all .2s}
+  .btn-gold:hover{background:var(--gold2);transform:translateY(-1px);box-shadow:0 6px 24px rgba(201,168,76,.2);color:#0a0e1a}
+  .btn-gold-outline{font-family:'DM Mono',monospace;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);border:1px solid rgba(201,168,76,.25);padding:15px 36px;border-radius:2px;transition:all .2s}
+  .btn-gold-outline:hover{border-color:rgba(201,168,76,.5);color:var(--gold2);transform:translateY(-1px)}
+
+  /* REVEAL */
+  .reveal{opacity:0;transform:translateY(24px);transition:opacity .7s ease,transform .7s ease}
+  :global(.reveal.visible){opacity:1;transform:translateY(0)}
+
+  /* RESPONSIVE */
+  @media(max-width:900px){
+    .council-hero{padding:120px 24px 60px}
+    .seats-inner,.privileges-inner,.requirements-inner,.philosophy-inner,.cta-inner{padding-left:24px;padding-right:24px}
+    .privileges-grid{grid-template-columns:1fr}
+    .requirements-layout{grid-template-columns:1fr;gap:40px}
+    .philosophy-pillars{grid-template-columns:1fr;gap:32px}
+    .cta-steps{flex-direction:column}
+  }
+  @media(max-width:600px){
+    .council-numeral{font-size:80px}
+  }
+</style>
+
+<script>
+  // Seats grid
+  (function(){
+    const grid = document.getElementById('seats-grid');
+    const legend = document.getElementById('seats-legend');
+    if (!grid || !legend) return;
+    const categories = [
+      {name:'Engineering',count:5,color:'#3d9be9'},
+      {name:'Growth',count:3,color:'#34d399'},
+      {name:'Legal',count:2,color:'#fbbf24'},
+      {name:'Research',count:2,color:'#a78bfa'},
+      {name:'Community',count:4,color:'#f87171'},
+      {name:'Operations',count:3,color:'#f97316'},
+      {name:'Security',count:2,color:'#ef4444'}
+    ];
+    let num = 1;
+    categories.forEach(cat => {
+      for (let i = 0; i < cat.count; i++) {
+        const seat = document.createElement('div');
+        seat.className = 'seat';
+        seat.textContent = String(num).padStart(2, '0');
+        seat.title = `Seat ${num} — ${cat.name} — Vacant`;
+        seat.style.borderColor = cat.color + '40';
+        grid.appendChild(seat);
+        num++;
+      }
+    });
+    categories.forEach(cat => {
+      const item = document.createElement('div');
+      item.className = 'seats-legend-item';
+      item.innerHTML = `<div class="legend-dot" style="border-color:${cat.color};background:${cat.color}22"></div> ${cat.name} (${cat.count})`;
+      legend.appendChild(item);
+    });
+  })();
+
+  // Scroll reveal
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>

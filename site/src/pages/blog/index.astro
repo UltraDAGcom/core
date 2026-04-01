@@ -1,0 +1,28 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getCollection } from 'astro:content';
+import '../../styles/global.css';
+import '../../styles/blog.css';
+
+const posts = (await getCollection('blog')).sort((a, b) => b.data.date.localeCompare(a.data.date));
+---
+
+<BaseLayout title="Blog — UltraDAG ($UDAG)" description="Latest news, technical deep dives, and updates from the UltraDAG ($UDAG) project.">
+  <section class="blog-hero">
+    <h1 class="blog-title">Blog</h1>
+    <p class="blog-subtitle">Technical deep dives, protocol updates, and security research.</p>
+  </section>
+
+  <div class="blog-grid">
+    {posts.map(post => (
+      <a href={`/blog/${post.id.replace(/\.md$/, '')}`} class="post-card">
+        <div class="post-meta">
+          <span class="post-category">{post.data.category}</span>
+          <span class="post-date">{post.data.date}</span>
+        </div>
+        <h2 class="post-title">{post.data.title}</h2>
+        <p class="post-summary">{post.data.summary}</p>
+      </a>
+    ))}
+  </div>
+</BaseLayout>

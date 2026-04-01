@@ -1,0 +1,334 @@
+/* ================================================================
+   UltraDAG Documentation Styles
+   ================================================================ */
+
+.docs-wrapper{
+  display:grid;
+  grid-template-columns:280px 1fr;
+  min-height:100vh;
+  padding-top:64px;
+  position:relative;
+  z-index:1;
+}
+
+/* ---- Sidebar ---- */
+.docs-sidebar{
+  position:sticky;
+  top:64px;
+  height:calc(100vh - 64px);
+  overflow-y:auto;
+  border-right:1px solid var(--border);
+  background:rgba(10,14,26,.6);
+  backdrop-filter:blur(12px);
+  padding:24px 0;
+  scrollbar-width:thin;
+  scrollbar-color:var(--dim) transparent;
+}
+.docs-sidebar::-webkit-scrollbar{width:4px}
+.docs-sidebar::-webkit-scrollbar-track{background:transparent}
+.docs-sidebar::-webkit-scrollbar-thumb{background:var(--dim);border-radius:4px}
+
+.sidebar-header{
+  padding:0 24px 16px;
+  border-bottom:1px solid var(--border);
+  margin-bottom:16px;
+}
+.sidebar-home{
+  font-family:'DM Mono',monospace;
+  font-size:11px;
+  font-weight:500;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:var(--accent);
+}
+
+.sidebar-group{margin-bottom:24px}
+.sidebar-group-title{
+  font-family:'DM Mono',monospace;
+  font-size:10px;
+  font-weight:600;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:var(--muted);
+  padding:0 24px;
+  margin-bottom:8px;
+}
+.sidebar-group ul{list-style:none}
+.sidebar-group li a{
+  display:block;
+  padding:10px 24px 10px 32px;
+  font-family:'Syne',sans-serif;
+  font-size:13px;
+  color:var(--subtle);
+  transition:color .2s,background .2s,border-color .2s;
+  border-left:2px solid transparent;
+}
+.sidebar-group li a:hover{
+  color:var(--white);
+  background:var(--glow2);
+}
+.sidebar-group li a.active{
+  color:var(--accent);
+  border-left-color:var(--accent);
+  background:var(--glow2);
+  font-weight:600;
+}
+
+/* Sidebar toggle (mobile only) */
+.sidebar-toggle{
+  display:none;
+  position:fixed;
+  bottom:24px;
+  right:24px;
+  z-index:98;
+  background:var(--accent);
+  color:var(--bg);
+  border:none;
+  border-radius:50px;
+  padding:12px 20px;
+  cursor:pointer;
+  font-family:'DM Mono',monospace;
+  font-size:12px;
+  font-weight:500;
+  gap:8px;
+  align-items:center;
+  box-shadow:0 4px 20px rgba(61,155,233,.3);
+  transition:transform .2s;
+}
+.sidebar-toggle:hover{transform:translateY(-2px)}
+.sidebar-toggle svg{flex-shrink:0}
+
+/* ---- Content ---- */
+.docs-content{
+  max-width:860px;
+  padding:48px 64px 96px;
+}
+.docs-title{
+  font-family:'Syne',sans-serif;
+  font-size:36px;
+  font-weight:700;
+  color:var(--white);
+  margin-bottom:40px;
+  line-height:1.2;
+}
+
+/* Prose styles */
+.docs-body h2{
+  font-family:'Syne',sans-serif;
+  font-size:24px;
+  font-weight:700;
+  color:var(--white);
+  margin:48px 0 16px;
+  padding-bottom:8px;
+  border-bottom:1px solid var(--border);
+}
+.docs-body h3{
+  font-family:'Syne',sans-serif;
+  font-size:18px;
+  font-weight:700;
+  color:var(--bright);
+  margin:32px 0 12px;
+}
+.docs-body h4{
+  font-family:'Syne',sans-serif;
+  font-size:15px;
+  font-weight:700;
+  color:var(--bright);
+  margin:24px 0 8px;
+}
+.docs-body p{
+  margin-bottom:16px;
+  line-height:1.8;
+}
+.docs-body ul,
+.docs-body ol{
+  margin:0 0 16px 24px;
+}
+.docs-body li{
+  margin-bottom:6px;
+  line-height:1.7;
+}
+.docs-body li::marker{
+  color:var(--muted);
+}
+
+/* Inline code */
+.docs-body code{
+  font-family:'DM Mono',monospace;
+  font-size:13px;
+  background:var(--bg3);
+  color:var(--accent);
+  padding:2px 6px;
+  border-radius:3px;
+  border:1px solid var(--border);
+}
+
+/* Code blocks */
+.docs-body pre{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:20px 24px;
+  margin:0 0 24px;
+  overflow-x:auto;
+  line-height:1.6;
+}
+.docs-body pre code{
+  background:none;
+  border:none;
+  padding:0;
+  color:var(--body);
+  font-size:13px;
+}
+
+/* Tables */
+.docs-body table{
+  width:100%;
+  border-collapse:collapse;
+  margin:0 0 24px;
+  font-size:14px;
+}
+.docs-body thead{
+  background:var(--bg3);
+}
+.docs-body th{
+  font-family:'DM Mono',monospace;
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:var(--subtle);
+  padding:10px 16px;
+  text-align:left;
+  border-bottom:1px solid var(--border2);
+}
+.docs-body td{
+  padding:10px 16px;
+  border-bottom:1px solid var(--border);
+  color:var(--body);
+  vertical-align:top;
+}
+.docs-body tr:hover td{
+  background:var(--glow2);
+}
+
+/* Blockquotes / callouts */
+.docs-body blockquote{
+  border-left:3px solid var(--accent);
+  padding:12px 20px;
+  margin:0 0 24px;
+  background:var(--glow2);
+  border-radius:0 6px 6px 0;
+  color:var(--bright);
+}
+.docs-body blockquote p{margin-bottom:0}
+
+/* Callout boxes */
+.callout{
+  border-radius:6px;
+  padding:16px 20px;
+  margin:0 0 24px;
+  border-left:3px solid;
+}
+.callout-info{
+  background:rgba(61,155,233,.06);
+  border-color:var(--accent);
+  color:var(--bright);
+}
+.callout-warning{
+  background:rgba(251,191,36,.06);
+  border-color:var(--warning);
+  color:var(--bright);
+}
+.callout-danger{
+  background:rgba(248,113,113,.06);
+  border-color:var(--danger);
+  color:var(--bright);
+}
+.callout-tip{
+  background:rgba(52,211,153,.06);
+  border-color:var(--success);
+  color:var(--bright);
+}
+.callout-title{
+  font-family:'DM Mono',monospace;
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  margin-bottom:8px;
+}
+.callout-info .callout-title{color:var(--accent)}
+.callout-warning .callout-title{color:var(--warning)}
+.callout-danger .callout-title{color:var(--danger)}
+.callout-tip .callout-title{color:var(--success)}
+
+/* Horizontal rules */
+.docs-body hr{
+  border:none;
+  border-top:1px solid var(--border);
+  margin:40px 0;
+}
+
+/* Images */
+.docs-body img{
+  max-width:100%;
+  border-radius:6px;
+  border:1px solid var(--border);
+  margin:16px 0;
+}
+
+/* Strong / emphasis */
+.docs-body strong{color:var(--bright)}
+.docs-body em{color:var(--subtle);font-style:italic}
+
+/* Definition lists (used in some docs) */
+.docs-body dt{
+  font-weight:600;
+  color:var(--bright);
+  margin-top:16px;
+}
+.docs-body dd{
+  margin-left:24px;
+  margin-bottom:8px;
+}
+
+/* ---- Responsive ---- */
+@media(max-width:1100px){
+  .docs-content{padding:40px 40px 80px}
+}
+@media(max-width:900px){
+  .docs-wrapper{
+    grid-template-columns:1fr;
+    padding-top:56px;
+  }
+  .docs-sidebar{
+    position:fixed;
+    top:56px;
+    left:0;
+    bottom:0;
+    width:300px;
+    z-index:97;
+    transform:translateX(-100%);
+    transition:transform .3s ease;
+  }
+  .docs-sidebar.active{transform:translateX(0)}
+  .sidebar-toggle{display:flex}
+  .docs-content{padding:32px 24px 80px}
+  .docs-title{font-size:28px}
+  .docs-body h2{font-size:20px}
+  .docs-body pre{padding:16px;font-size:12px}
+  .docs-body table{font-size:12px}
+  .docs-body th,.docs-body td{padding:8px 10px}
+}
+@media(max-width:600px){
+  .docs-content{padding:24px 16px 80px}
+  .docs-title{font-size:24px}
+  .docs-body h2{font-size:18px;margin:32px 0 12px}
+  .docs-body h3{font-size:16px}
+  .docs-body pre{padding:12px;font-size:11px}
+  .docs-body table{font-size:11px}
+  .docs-body th,.docs-body td{padding:6px 8px}
+  .docs-body ul,.docs-body ol{margin-left:16px}
+  .docs-body blockquote{padding:10px 14px}
+}

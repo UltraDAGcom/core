@@ -1,0 +1,365 @@
+---
+interface Props {
+  logo?: string;
+}
+
+const { logo = '/media/logo/logo_website.png' } = Astro.props;
+---
+
+<nav id="nav">
+  <a href="/" class="nav-logo">
+    <img src={logo} alt="UltraDAG" class="nav-logo-img" />
+  </a>
+  
+  <ul class="nav-links">
+    <li><a href="/">Home</a></li>
+
+    <li>
+      <a href="/whitepaper">Whitepaper</a>
+      <div class="mega-menu">
+        <div class="mega-cols">
+          <div class="mega-col">
+            <div class="mega-heading">Core Concepts</div>
+            <ul>
+              <li><a href="/whitepaper#1-introduction">Introduction</a></li>
+              <li><a href="/whitepaper#4-protocol-description">DAG-BFT Consensus</a></li>
+              <li><a href="/whitepaper#5-finality">BFT Finality</a></li>
+              <li><a href="/whitepaper#9-state-machine">State Machine</a></li>
+            </ul>
+          </div>
+          <div class="mega-col">
+            <div class="mega-heading">Advanced Topics</div>
+            <ul>
+              <li><a href="/whitepaper#103-validator-staking">Staking & Validation</a></li>
+              <li><a href="/whitepaper#6-safety">Safety Proofs</a></li>
+              <li><a href="/whitepaper#124-checkpointing-and-fast-sync">Checkpoints</a></li>
+              <li><a href="/whitepaper#13-security-analysis">Security Analysis</a></li>
+            </ul>
+          </div>
+          <div class="mega-col">
+            <div class="mega-heading">Technical Details</div>
+            <ul>
+              <li><a href="/whitepaper#10-tokenomics">Tokenomics</a></li>
+              <li><a href="/whitepaper#12-implementation">Implementation</a></li>
+              <li><a href="/whitepaper#16-comparison-with-related-work">Comparison</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </li>
+
+    <li>
+      <a href="/docs">Docs</a>
+      <div class="mega-menu">
+        <div class="mega-cols">
+          <div class="mega-col">
+            <div class="mega-heading">Getting Started</div>
+            <ul>
+              <li><a href="/docs/getting-started/quickstart">Quick Start</a></li>
+              <li><a href="/docs/api/rpc">RPC Endpoints</a></li>
+              <li><a href="/docs/getting-started/docker">Docker Guide</a></li>
+            </ul>
+          </div>
+          <div class="mega-col">
+            <div class="mega-heading">Validators</div>
+            <ul>
+              <li><a href="/docs/tokenomics/staking">Staking & Delegation</a></li>
+              <li><a href="/docs/tokenomics/governance">Governance</a></li>
+              <li><a href="/docs/operations/monitoring">Monitoring</a></li>
+            </ul>
+          </div>
+          <div class="mega-col">
+            <div class="mega-heading">Reference</div>
+            <ul>
+              <li><a href="/docs/architecture/overview">Architecture</a></li>
+              <li><a href="/docs/api/transactions">Transaction Format</a></li>
+              <li><a href="/docs/technical/checkpoints">Checkpoints</a></li>
+              <li><a href="/docs/security/model">Security Model</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </li>
+
+    <li><a href="/network">Live Network</a></li>
+    <li><a href="/explorer">Explorer</a></li>
+    <li><a href="/council">Council</a></li>
+    <li><a href="https://github.com/UltraDAGcom/core" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+    <li><a href="/dashboard/" class="nav-cta">Dashboard</a></li>
+  </ul>
+
+  <button class="hamburger" id="hamburger" aria-label="Menu">
+    <span></span>
+    <span></span>
+    <span></span>
+  </button>
+</nav>
+
+<div class="mobile-menu" id="mobile-menu">
+  <ul>
+    <li><a href="/">Home</a></li>
+    <li><a href="/whitepaper">Whitepaper</a></li>
+    <li><a href="/docs">Docs</a></li>
+    <li><a href="/network">Live Network</a></li>
+    <li><a href="/explorer">Explorer</a></li>
+    <li><a href="/council">Council</a></li>
+    <li><a href="https://github.com/UltraDAGcom/core" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+    <li><a href="/dashboard/" class="nav-cta">Dashboard</a></li>
+  </ul>
+</div>
+
+<style>
+  nav{
+    position:fixed;
+    top:0;
+    left:0;
+    right:0;
+    z-index:100;
+    padding:0 48px;
+    height:64px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    border-bottom:1px solid transparent;
+    transition:border-color .3s,background .3s;
+    background:rgba(10,14,26,.92);
+    backdrop-filter:blur(16px);
+  }
+  nav.scrolled{border-color:var(--border)}
+  
+  .nav-logo{
+    text-decoration:none;
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .nav-logo:hover{opacity:.85}
+  
+  .nav-logo-img{
+    height:32px;
+    width:auto;
+    display:block;
+  }
+  
+  .nav-links{
+    display:flex;
+    align-items:center;
+    gap:32px;
+    list-style:none;
+  }
+  .nav-links>li{position:relative}
+  
+  .nav-links a{
+    font-family:'DM Mono',monospace;
+    font-size:12px;
+    font-weight:400;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--subtle);
+    text-decoration:none;
+    transition:color .2s;
+    position:relative;
+    padding-bottom:4px;
+    display:block;
+  }
+  .nav-links>li>a{padding:20px 0}
+  
+  .nav-links>li>a::after{
+    content:'';
+    position:absolute;
+    bottom:0;
+    left:0;
+    width:0;
+    height:1px;
+    background:var(--accent);
+    transition:width .3s ease;
+  }
+  .nav-links a:hover{color:var(--white)}
+  .nav-links>li>a:hover::after{width:100%}
+  
+  .nav-cta{
+    color:var(--white)!important;
+    background:rgba(61,155,233,0.08)!important;
+    border:1px solid rgba(61,155,233,0.25)!important;
+    padding:8px 16px!important;
+    border-radius:3px!important;
+    transition:all .2s ease!important;
+    font-weight:500!important;
+    box-shadow:0 0 0 0 rgba(61,155,233,0);
+  }
+  .nav-cta:hover{
+    background:rgba(61,155,233,0.15)!important;
+    border-color:rgba(61,155,233,0.4)!important;
+    box-shadow:0 0 12px rgba(61,155,233,0.15);
+    transform:translateY(-1px);
+  }
+  .nav-cta::after{display:none!important}
+
+  .nav-links>li:has(.nav-cta){margin-left:-16px}
+  .nav-links>li:has(.nav-cta)+li:has(.nav-cta){margin-left:-20px}
+
+  /* Mega Menu */
+  .mega-menu{
+    position:absolute;
+    top:64px;
+    left:50%;
+    transform:translateX(-50%);
+    background:rgba(10,14,26,.98);
+    backdrop-filter:blur(24px);
+    border:1px solid var(--border);
+    border-top:none;
+    border-radius:0 0 8px 8px;
+    padding:32px;
+    min-width:720px;
+    max-width:920px;
+    opacity:0;
+    visibility:hidden;
+    transition:opacity .25s,visibility .25s;
+    box-shadow:0 12px 40px rgba(0,0,0,.4);
+  }
+  .nav-links>li:hover .mega-menu{opacity:1;visibility:visible}
+  
+  .mega-cols{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+    gap:32px;
+  }
+  .mega-col .mega-heading{
+    font-family:'DM Mono',monospace;
+    font-size:10px;
+    font-weight:600;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--accent);
+    margin-bottom:12px;
+    padding-bottom:8px;
+    border-bottom:1px solid var(--border2);
+  }
+  .mega-col ul{
+    list-style:none;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .mega-col a{
+    font-family:'Syne',sans-serif;
+    font-size:13px;
+    color:var(--subtle);
+    padding:6px 0;
+    transition:color .2s,padding-left .2s;
+    letter-spacing:0;
+    text-transform:none;
+  }
+  .mega-col a:hover{color:var(--white);padding-left:8px}
+  .mega-col a::after{display:none!important}
+  .mega-col p{
+    font-size:12px;
+    color:var(--muted);
+    line-height:1.6;
+    margin-top:8px;
+  }
+
+  /* Hamburger */
+  .hamburger{
+    display:none;
+    flex-direction:column;
+    gap:5px;
+    cursor:pointer;
+    padding:8px;
+    background:none;
+    border:none;
+    z-index:101;
+  }
+  .hamburger span{
+    width:24px;
+    height:2px;
+    background:var(--white);
+    transition:all .3s;
+    border-radius:2px;
+  }
+  .hamburger.active span:nth-child(1){transform:rotate(45deg) translate(7px,7px)}
+  .hamburger.active span:nth-child(2){opacity:0}
+  .hamburger.active span:nth-child(3){transform:rotate(-45deg) translate(7px,-7px)}
+  
+  .mobile-menu{
+    position:fixed;
+    top:64px;
+    left:0;
+    right:0;
+    background:rgba(10,14,26,.98);
+    backdrop-filter:blur(16px);
+    border-bottom:1px solid var(--border);
+    padding:0 24px;
+    z-index:99;
+    max-height:0;
+    overflow:hidden;
+    transition:max-height .3s ease,padding .3s ease;
+  }
+  .mobile-menu.active{max-height:500px;padding:24px}
+  .mobile-menu ul{
+    list-style:none;
+    display:flex;
+    flex-direction:column;
+    gap:20px;
+  }
+  .mobile-menu a{
+    font-family:'DM Mono',monospace;
+    font-size:14px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--subtle);
+    text-decoration:none;
+    transition:color .2s;
+    display:block;
+    padding:8px 0;
+  }
+  .mobile-menu a:hover{color:var(--white)}
+  .mobile-menu .nav-cta{display:inline-block;margin-top:8px}
+
+  @media(min-width:901px){.mobile-menu{display:none}}
+
+  @media(max-width:900px){
+    nav{padding:0 24px;height:56px}
+    .nav-logo-img{height:28px}
+    .nav-links{display:none}
+    .hamburger{display:flex}
+    .mobile-menu{display:block;top:56px}
+    .mega-menu{display:none!important}
+  }
+
+  @media(max-width:600px){
+    nav{padding:0 16px}
+    .mobile-menu{padding:0 16px}
+    .mobile-menu.active{padding:20px 16px}
+    .mobile-menu ul{gap:4px}
+    .mobile-menu a{padding:12px 0;font-size:13px}
+  }
+</style>
+
+<script>
+  const hamburger = document.getElementById('hamburger');
+  const mobileMenu = document.getElementById('mobile-menu');
+  const nav = document.getElementById('nav');
+
+  hamburger?.addEventListener('click', () => {
+    hamburger.classList.toggle('active');
+    mobileMenu?.classList.toggle('active');
+  });
+
+  // Close menu on link click
+  mobileMenu?.querySelectorAll('a').forEach(link => {
+    link.addEventListener('click', () => {
+      hamburger?.classList.remove('active');
+      mobileMenu?.classList.remove('active');
+    });
+  });
+
+  // Scroll effect
+  window.addEventListener('scroll', () => {
+    if (window.scrollY > 50) {
+      nav?.classList.add('scrolled');
+    } else {
+      nav?.classList.remove('scrolled');
+    }
+  });
+</script>

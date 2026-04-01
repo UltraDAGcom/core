@@ -1,0 +1,16 @@
+{
+  "name": "UltraDAG ($UDAG)",
+  "short_name": "UltraDAG",
+  "description": "The simplest production-ready DAG chain. Fast BFT finality for machine-to-machine micropayments.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0e1a",
+  "theme_color": "#0a0e1a",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

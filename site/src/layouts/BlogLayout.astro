@@ -1,0 +1,41 @@
+---
+import Head from '../components/Head.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import '../styles/global.css';
+import '../styles/blog.css';
+
+interface Props {
+  title: string;
+  date: string;
+  category: string;
+  summary?: string;
+}
+
+const { title, date, category, summary } = Astro.props;
+const pageTitle = `${title} — UltraDAG ($UDAG) Blog`;
+const description = summary || `${title} — UltraDAG Blog`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <Head title={pageTitle} description={description} type="article" />
+  </head>
+  <body>
+    <div class="grid-bg"></div>
+    <Header />
+    <article class="article-wrapper">
+      <a href="/blog" class="back-link">&larr; Back to Blog</a>
+      <div class="article-meta">
+        <span class="article-category">{category}</span>
+        <span class="article-date">{date}</span>
+      </div>
+      <h1 class="article-title">{title}</h1>
+      <div class="article-body">
+        <slot />
+      </div>
+    </article>
+    <Footer />
+  </body>
+</html>

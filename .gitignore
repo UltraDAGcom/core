@@ -30,3 +30,32 @@ sdk/go/ultradag/testdata/
 formal/states/
 .windsurf/
 config/mainnet-keys.txt
+
+# Bridge build artifacts
+bridge/cache/
+bridge/out/
+bridge/lib/
+
+# Fuzz artifacts
+**/fuzz/target/
+**/fuzz/corpus/
+**/fuzz/artifacts/
+
+# Backup files
+*.bak
+*.old
+*.backup
+
+# Dashboard build artifacts
+site/dashboard/node_modules/
+site/dashboard/dist/
+site/dashboard/.vite/
+
+# Site build artifacts
+site/node_modules/
+site/dist/
+site/.vite/
+site/.astro/
+
+# MkDocs build output
+mkdocs-site/site/

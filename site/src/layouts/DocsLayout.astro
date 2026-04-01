@@ -1,0 +1,57 @@
+---
+import Head from '../components/Head.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import DocsSidebar from '../components/DocsSidebar.astro';
+import '../styles/global.css';
+import '../styles/docs.css';
+
+interface Props {
+  title: string;
+  description?: string;
+  section?: string;
+  slug?: string;
+}
+
+const { title, description = 'UltraDAG Documentation', section, slug } = Astro.props;
+const pageTitle = `${title} — UltraDAG ($UDAG) Docs`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <Head title={pageTitle} description={description} type="article" />
+  </head>
+  <body>
+    <div class="grid-bg"></div>
+    <Header />
+
+    <div class="docs-wrapper">
+      <DocsSidebar section={section} slug={slug} />
+
+      <article class="docs-content">
+        <h1 class="docs-title">{title}</h1>
+        <div class="docs-body">
+          <slot />
+        </div>
+      </article>
+    </div>
+
+    <Footer />
+
+    <script>
+      const toggle = document.getElementById('sidebar-toggle');
+      const sidebar = document.getElementById('docs-sidebar');
+      toggle?.addEventListener('click', () => {
+        sidebar?.classList.toggle('active');
+        toggle.classList.toggle('active');
+      });
+      sidebar?.querySelectorAll('a').forEach(link => {
+        link.addEventListener('click', () => {
+          sidebar?.classList.remove('active');
+          toggle?.classList.remove('active');
+        });
+      });
+    </script>
+  </body>
+</html>

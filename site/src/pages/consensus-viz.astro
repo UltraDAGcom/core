@@ -1,0 +1,516 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import '../styles/global.css';
+---
+
+<BaseLayout title="Consensus Visualization — UltraDAG ($UDAG)" description="Interactive DAG-BFT consensus visualization. Watch vertices propagate, see finality in real-time.">
+
+<div class="viz-page">
+  <div class="header">
+    <p>Accurate simulation of UltraDAG's DAG-BFT protocol — incremental descendant tracking, 2f+1 gate, optimistic responsiveness.</p>
+  </div>
+
+  <div class="viz-container">
+    <div class="toolbar">
+      <div class="status-row">
+        <div class="status-item"><div class="status-dot"></div><span id="stat-round">Round 0</span></div>
+        <div class="status-item"><span style="color:var(--finalized)">&#9632;</span><span id="stat-finalized">0 finalized</span></div>
+        <div class="status-item"><span style="color:var(--muted)">&#9632;</span><span id="stat-pending">0 pending</span></div>
+        <div class="status-item" id="stat-opt" style="color:#34d399;display:none">&#9889; optimistic</div>
+      </div>
+      <div class="controls">
+        <button id="btn-pause">Pause</button>
+        <button id="btn-reset">Reset</button>
+        <div class="control-group">
+          <label>Speed:</label>
+          <select id="speed-select">
+            <option value="2200">Slow</option>
+            <option value="1400" selected>Normal</option>
+            <option value="800">Fast</option>
+            <option value="400">Very Fast</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label>Validators:</label>
+          <select id="validator-select">
+            <option value="3">3 (f=0)</option>
+            <option value="4" selected>4 (f=1)</option>
+            <option value="7">7 (f=2)</option>
+            <option value="10">10 (f=3)</option>
+          </select>
+        </div>
+        <button id="btn-equivocation">Trigger Equivocation</button>
+      </div>
+    </div>
+
+    <div class="canvas-wrap">
+      <canvas id="canvas"></canvas>
+      <div class="phase-banner" id="phase-banner">Initializing...</div>
+      <div class="opt-indicator" id="opt-indicator">timer fallback</div>
+    </div>
+
+    <div class="legend">
+      <span class="legend-label">Validators:</span>
+      <div class="legend-item"><div class="swatch" style="background:var(--v0)"></div>V0 — Alpha</div>
+      <div class="legend-item"><div class="swatch" style="background:var(--v1)"></div>V1 — Beta</div>
+      <div class="legend-item"><div class="swatch" style="background:var(--v2)"></div>V2 — Gamma</div>
+      <div class="legend-item"><div class="swatch" style="background:var(--v3)"></div>V3 — Delta</div>
+      <div class="legend-item"><div class="swatch" style="background:var(--finalized)"></div>Finalized</div>
+      <div class="legend-item"><div class="swatch ring" style="color:var(--muted)"></div>Pending</div>
+      <div class="legend-item"><div class="swatch" style="background:#ef4444"></div>Byzantine (banned)</div>
+    </div>
+
+    <div class="info-row" id="info-row"><span>Waiting for first round...</span></div>
+  </div>
+
+  <div class="description">
+    <h2>Accurate Protocol Simulation</h2>
+
+    <div class="algo-note">
+      <strong>Implementation fidelity</strong>
+      This demo accurately simulates the UltraDAG consensus implementation in Rust.
+      Finality uses O(1) incremental descendant tracking (same as dag.rs).
+      Validators skip rounds that fail the 2f+1 gate (same as validator.rs).
+      Production fires optimistically at quorum before the timer (same as tokio::select! in validator.rs).
+    </div>
+
+    <p><strong>Key Protocol Properties:</strong></p>
+    <ul>
+      <li><strong>Incremental Descendant Tracking:</strong> When vertex V is inserted, all ancestors of V gain V's validator in their <code>descendant_validators</code> set via upward BFS with early termination. Finality check is O(1) — just read the precomputed count.</li>
+      <li><strong>2f+1 Gate:</strong> Before producing round r, each validator checks that &#8968;2n/3&#8969; distinct validators produced vertices in round r-1. If not, the round is skipped (shown as SKIP in the demo). After 3 consecutive skips, stall recovery fires unconditionally.</li>
+      <li><strong>Optimistic Responsiveness:</strong> As soon as quorum vertices from round r-1 arrive, the validator produces immediately — no need to wait for the full timer. The timer is a fallback for slow networks.</li>
+      <li><strong>Byzantine Fault Tolerance:</strong> Up to f = &#8970;(n-1)/3&#8971; Byzantine validators tolerated. Equivocators (two vertices same round) are permanently banned — no unban path exists.</li>
+      <li><strong>Parent Finality Guarantee:</strong> A vertex can only finalize after all its parents are finalized. Finality cascades forward through children.</li>
+    </ul>
+  </div>
+</div>
+
+</BaseLayout>
+
+<style>
+  :root{
+    --surface:#0e1322;
+    --v0:#00d4ff;--v1:#a78bfa;--v2:#34d399;--v3:#fb923c;
+    --finalized:#fbbf24;--pending:#374151;--edge:#1e3a5f;--edge-active:#2563eb;
+  }
+
+  .viz-page{
+    display:flex;flex-direction:column;align-items:center;
+    padding:120px 24px 40px;position:relative;z-index:1;
+  }
+  .header{text-align:center;margin-bottom:48px;max-width:900px}
+  .header p{font-family:'Cormorant',serif;font-size:1.1rem;font-weight:300;font-style:italic;color:var(--subtle);line-height:1.5}
+
+  .viz-container{width:100%;max-width:1100px;background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;position:relative}
+
+  .toolbar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:12px}
+
+  .status-row{display:flex;align-items:center;gap:20px;font-family:'DM Mono',monospace;font-size:.7rem;letter-spacing:.04em}
+  .status-item{display:flex;align-items:center;gap:6px}
+  .status-dot{width:6px;height:6px;border-radius:50%;background:#22c55e;animation:statusPulse 2s infinite}
+  @keyframes statusPulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+  .controls{display:flex;gap:8px;flex-wrap:wrap}
+  .control-group{display:flex;align-items:center;gap:8px}
+  .control-group label{font-family:'DM Mono',monospace;font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+
+  select{background:var(--surface);border:1px solid var(--border2);color:var(--bright);font-family:'DM Mono',monospace;font-size:.7rem;letter-spacing:.04em;padding:8px 12px;border-radius:2px;cursor:pointer;transition:all .15s}
+  select:hover{border-color:var(--subtle)}
+  select:focus{outline:none;border-color:var(--accent)}
+
+  .viz-page button{background:transparent;border:1px solid var(--border2);color:var(--bright);font-family:'DM Mono',monospace;font-size:.7rem;font-weight:400;letter-spacing:.06em;text-transform:uppercase;padding:8px 16px;border-radius:2px;cursor:pointer;transition:all .15s}
+  .viz-page button:hover{border-color:var(--subtle);color:var(--white);transform:translateY(-1px)}
+  .viz-page button.active{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+
+  .canvas-wrap{position:relative;width:100%;height:480px}
+  canvas{width:100%;height:100%}
+
+  .phase-banner{position:absolute;top:16px;left:50%;transform:translateX(-50%);font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;pointer-events:none;white-space:nowrap}
+
+  .opt-indicator{position:absolute;top:16px;right:20px;font-family:'DM Mono',monospace;font-size:.65rem;color:var(--muted);letter-spacing:.06em;pointer-events:none;transition:all .3s}
+  .opt-indicator.firing{color:#34d399;text-shadow:0 0 8px rgba(52,211,153,.6)}
+
+  .legend{padding:16px 20px;border-top:1px solid var(--border);display:flex;gap:24px;flex-wrap:wrap;align-items:center}
+  .legend-label{font-family:'DM Mono',monospace;font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-right:8px}
+  .legend-item{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:.7rem;letter-spacing:.04em;color:var(--body)}
+  .swatch{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .swatch.ring{background:transparent;border:2px solid currentColor;width:11px;height:11px}
+
+  .info-row{padding:16px 20px;border-top:1px solid var(--border);font-family:'Cormorant',serif;font-size:.95rem;font-weight:300;color:var(--subtle);line-height:1.6;min-height:56px}
+  .info-row :global(span){color:var(--white);font-weight:400}
+
+  .description{max-width:900px;margin:40px auto 0;padding:0 24px}
+  .description h2{font-family:'Cormorant',serif;font-size:2.5rem;font-weight:300;line-height:1.05;margin-bottom:20px;color:var(--white)}
+  .description p{font-family:'Cormorant',serif;font-size:1.05rem;font-weight:300;color:var(--subtle);line-height:1.6;margin-bottom:16px}
+  .description ul{list-style:none;margin:16px 0;padding:0}
+  .description li{font-family:'Cormorant',serif;font-size:1.05rem;font-weight:300;color:var(--subtle);line-height:1.7;margin-bottom:10px;padding-left:24px;position:relative}
+  .description li:before{content:"\2192";position:absolute;left:0;color:var(--accent);font-size:1.1rem}
+  .description strong{color:var(--bright)}
+  .description code{font-family:'DM Mono',monospace;background:var(--bg3);border:1px solid var(--border);padding:3px 8px;border-radius:2px;font-size:.85rem;color:var(--accent)}
+
+  .algo-note{background:var(--bg3);border:1px solid var(--border);border-left:3px solid var(--accent);padding:12px 16px;margin:16px 0;font-family:'DM Mono',monospace;font-size:.72rem;color:var(--subtle);line-height:1.7;letter-spacing:.02em}
+  .algo-note strong{color:var(--bright);display:block;margin-bottom:6px;font-size:.68rem;letter-spacing:.1em;text-transform:uppercase}
+
+  @media(max-width:900px){
+    .viz-page{padding:80px 16px 40px}
+    .canvas-wrap{height:400px}
+    .toolbar{padding:12px 16px}
+    .status-row{font-size:.65rem;gap:12px}
+    .controls{width:100%;justify-content:flex-start}
+    .viz-page button{font-size:.65rem;padding:7px 12px}
+    select{font-size:.65rem;padding:7px 10px}
+    .legend{padding:12px 16px;gap:12px}
+    .legend-item{font-size:.65rem}
+    .info-row{padding:12px 16px;font-size:.9rem}
+    .description h2{font-size:2rem}
+    .description p,.description li{font-size:1rem}
+  }
+  @media(max-width:600px){
+    .viz-page{padding:72px 12px 32px}
+    .canvas-wrap{height:320px}
+    .toolbar{flex-direction:column;align-items:flex-start}
+    .controls{gap:6px;flex-direction:column;align-items:stretch}
+    .control-group{width:100%;justify-content:space-between}
+    .viz-page button{font-size:.6rem;padding:8px 12px;width:100%}
+    select{font-size:.6rem;padding:8px 10px;width:100%}
+  }
+</style>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+let VALIDATORS = 4;
+let QUORUM = Math.ceil(2 * VALIDATORS / 3);
+const COLORS = ['#00d4ff','#a78bfa','#34d399','#fb923c','#f472b6','#fbbf24','#22d3ee','#fb7185','#86efac','#c084fc'];
+const V_LABELS = ['Alpha','Beta','Gamma','Delta','Epsilon','Zeta','Eta','Theta','Iota','Kappa'];
+const FINALIZED_COLOR = '#fbbf24';
+const BYZANTINE_COLOR = '#ef4444';
+const STARTUP_GRACE = 2;
+const MAX_CONSECUTIVE_SKIPS = 3;
+
+let paused = false;
+let vertices = [];
+let edges = [];
+let currentRound = 0;
+let animFrame;
+let lastTick = 0;
+let tickInterval = 1400;
+let consecutiveSkips = [];
+let bannedValidators = new Set();
+let lastRoundOptimistic = false;
+
+const PADDING_LEFT = 90, PADDING_RIGHT = 30, PADDING_TOP = 60, PADDING_BOTTOM = 30;
+const NODE_R = 14, MAX_VISIBLE_ROUNDS = 7;
+
+function resize() {
+  const wrap = canvas.parentElement;
+  canvas.width = wrap.clientWidth * devicePixelRatio;
+  canvas.height = wrap.clientHeight * devicePixelRatio;
+  canvas.style.width = wrap.clientWidth + 'px';
+  canvas.style.height = wrap.clientHeight + 'px';
+}
+
+function getPos(relRound, validator) {
+  const W = canvas.width / devicePixelRatio;
+  const H = canvas.height / devicePixelRatio;
+  const usableW = W - PADDING_LEFT - PADDING_RIGHT;
+  const usableH = H - PADDING_TOP - PADDING_BOTTOM;
+  const x = PADDING_LEFT + (relRound / (MAX_VISIBLE_ROUNDS - 1)) * usableW;
+  const effectiveV = VALIDATORS === 1 ? 0 : validator / (VALIDATORS - 1);
+  const y = PADDING_TOP + effectiveV * usableH;
+  return { x, y };
+}
+
+function makeVertex(round, validator, parents, isByzantine = false, isGhost = false) {
+  return { id: `v${round}_${validator}`, round, validator, parents, x: 0, y: 0, finalized: false, byzantine: isByzantine, ghost: isGhost, alpha: 0, descendantValidators: new Set(), finalizedAt: null };
+}
+
+function updateDescendantCounts(newVertex) {
+  if (newVertex.ghost || newVertex.byzantine) return;
+  const validator = newVertex.validator;
+  const visited = new Set();
+  const queue = [...newVertex.parents];
+  while (queue.length) {
+    const parentId = queue.shift();
+    if (visited.has(parentId)) continue;
+    visited.add(parentId);
+    const parent = vertices.find(v => v.id === parentId);
+    if (!parent || parent.ghost) continue;
+    if (parent.descendantValidators.has(validator)) continue;
+    parent.descendantValidators.add(validator);
+    parent.parents.forEach(pid => { if (!visited.has(pid)) queue.push(pid); });
+  }
+}
+
+function checkFinality() {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const sorted = [...vertices].sort((a, b) => a.round - b.round || a.id.localeCompare(b.id));
+    sorted.forEach(vtx => {
+      if (vtx.finalized || vtx.byzantine || vtx.ghost) return;
+      if (vtx.round === 0) { vtx.finalized = true; vtx.finalizedAt = 0; changed = true; return; }
+      const parentsOk = vtx.parents.every(pid => { const p = vertices.find(v => v.id === pid); return !p || p.finalized; });
+      if (!parentsOk) return;
+      if (vtx.descendantValidators.size >= QUORUM) { vtx.finalized = true; vtx.finalizedAt = currentRound; changed = true; }
+    });
+  }
+}
+
+function shouldProduce(validatorIdx, round) {
+  if (bannedValidators.has(validatorIdx)) return false;
+  if (round <= STARTUP_GRACE) return true;
+  const prevRoundVerts = vertices.filter(v => v.round === round - 1 && !v.ghost && !v.byzantine);
+  const distinctValidators = new Set(prevRoundVerts.map(v => v.validator));
+  bannedValidators.forEach(b => distinctValidators.delete(b));
+  if (distinctValidators.size >= QUORUM) { consecutiveSkips[validatorIdx] = 0; return true; }
+  consecutiveSkips[validatorIdx] = (consecutiveSkips[validatorIdx] || 0) + 1;
+  if (consecutiveSkips[validatorIdx] >= MAX_CONSECUTIVE_SKIPS) { consecutiveSkips[validatorIdx] = 0; return true; }
+  return false;
+}
+
+function quorumAlreadyPresent(round) {
+  if (round <= 1) return false;
+  const prevVerts = vertices.filter(v => v.round === round - 1 && !v.ghost && !v.byzantine);
+  const distinct = new Set(prevVerts.map(v => v.validator));
+  bannedValidators.forEach(b => distinct.delete(b));
+  return distinct.size >= QUORUM;
+}
+
+function computeTips() {
+  const hasChild = new Set();
+  edges.forEach(e => hasChild.add(e.from));
+  return vertices.filter(v => !v.ghost && !v.byzantine && !hasChild.has(v.id)).map(v => v.id);
+}
+
+function buildRound(round) {
+  const tipIds = computeTips();
+  let anyProduced = false;
+  lastRoundOptimistic = quorumAlreadyPresent(round);
+  for (let v = 0; v < VALIDATORS; v++) {
+    if (bannedValidators.has(v)) { vertices.push(makeVertex(round, v, [], false, true)); continue; }
+    if (shouldProduce(v, round)) {
+      const vtx = makeVertex(round, v, tipIds);
+      vertices.push(vtx);
+      updateDescendantCounts(vtx);
+      tipIds.forEach(tid => edges.push({ from: tid, to: vtx.id, alpha: 0 }));
+      anyProduced = true;
+    } else { vertices.push(makeVertex(round, v, [], false, true)); }
+  }
+  return anyProduced;
+}
+
+function initGenesis() {
+  vertices = []; edges = []; currentRound = 0; bannedValidators = new Set();
+  consecutiveSkips = new Array(VALIDATORS).fill(0);
+  for (let v = 0; v < VALIDATORS; v++) {
+    const vtx = makeVertex(0, v, []); vtx.alpha = 1; vtx.finalized = true; vtx.finalizedAt = 0;
+    vertices.push(vtx);
+  }
+}
+
+function repositionAll() {
+  const maxRound = Math.max(...vertices.map(v => v.round));
+  const minRound = Math.max(0, maxRound - (MAX_VISIBLE_ROUNDS - 1));
+  vertices.forEach(v => { const rel = v.round - minRound; const pos = getPos(rel, v.validator); v.x = pos.x; v.y = pos.y; });
+}
+
+function setInfo(html) { document.getElementById('info-row').innerHTML = html; }
+
+let step = 'idle';
+
+function advance() {
+  if (step !== 'idle') return;
+  if (currentRound < 12) {
+    currentRound++;
+    const produced = buildRound(currentRound);
+    repositionAll();
+    vertices.filter(v => v.round === currentRound && !v.ghost).forEach(v => { v.alpha = 0.01; });
+
+    const optEl = document.getElementById('opt-indicator');
+    optEl.textContent = lastRoundOptimistic ? '\u26A1 optimistic \u2014 quorum seen before timer' : 'timer fallback';
+    optEl.className = lastRoundOptimistic ? 'opt-indicator firing' : 'opt-indicator';
+    const statOpt = document.getElementById('stat-opt');
+    if (lastRoundOptimistic) { statOpt.style.display = 'flex'; setTimeout(() => { statOpt.style.display = 'none'; }, 1200); }
+
+    const nonGhost = vertices.filter(v => v.round === currentRound && !v.ghost && !v.byzantine).map(v => `V${v.validator}`).join(', ');
+    const skippers = vertices.filter(v => v.round === currentRound && v.ghost).map(v => `V${v.validator}`);
+    let msg = `Round ${currentRound}: `;
+    if (nonGhost) { msg += `${nonGhost} produced vertices`; if (lastRoundOptimistic) msg += ` <span style="color:#34d399">(optimistic)</span>`; }
+    if (skippers.length) msg += `. ${skippers.join(', ')} skipped (2f+1 gate)`;
+    setInfo(msg);
+    document.getElementById('phase-banner').textContent = `Round ${currentRound} \u2014 ${produced ? 'vertices propagating' : 'all validators skipped (stall)'}`;
+
+    setTimeout(() => {
+      edges.forEach(e => { const toVtx = vertices.find(v => v.id === e.to); if (toVtx && toVtx.round === currentRound) e.alpha = 0.01; });
+      setTimeout(() => {
+        checkFinality();
+        const justFin = vertices.filter(v => v.finalizedAt === currentRound - 1 || v.finalizedAt === currentRound);
+        if (justFin.length > 0) {
+          document.getElementById('phase-banner').textContent = `Round ${currentRound} \u2014 ${justFin.length} vertex/vertices finalized`;
+          setInfo(`<span style="color:#fbbf24">Finality:</span> ${justFin.length} vertex/vertices achieved \u2265${QUORUM} distinct validator descendants (O(1) lookup) and all parents finalized.`);
+        }
+        updateStats();
+      }, tickInterval * 0.3);
+    }, tickInterval * 0.4);
+  } else {
+    step = 'resetting';
+    document.getElementById('phase-banner').textContent = 'Consensus loop complete \u2014 restarting\u2026';
+    setTimeout(reset, 2200);
+  }
+}
+
+function triggerEquivocation() {
+  const candidates = vertices.filter(v => v.round === currentRound && !v.finalized && !v.byzantine && !v.ghost);
+  if (!candidates.length) return;
+  const target = candidates[Math.floor(Math.random() * candidates.length)];
+  target.byzantine = true; bannedValidators.add(target.validator); consecutiveSkips[target.validator] = 0;
+  setInfo(`\u26A0 <span>Equivocation detected!</span> V${target.validator} (${V_LABELS[target.validator]}) produced two conflicting vertices. Permanently banned. Quorum recalculates: \u2308 2\u00D7${VALIDATORS - bannedValidators.size}/3\u2309 = ${Math.ceil(2*(VALIDATORS - bannedValidators.size)/3)}.`);
+  document.getElementById('phase-banner').textContent = `Equivocation \u2014 V${target.validator} permanently banned`;
+}
+
+function updateStats() {
+  document.getElementById('stat-round').textContent = `Round ${currentRound}`;
+  document.getElementById('stat-finalized').textContent = `${vertices.filter(v => v.finalized).length} finalized`;
+  document.getElementById('stat-pending').textContent = `${vertices.filter(v => !v.finalized && !v.byzantine && !v.ghost).length} pending`;
+}
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function render() {
+  const W = canvas.width, H = canvas.height, dpr = devicePixelRatio;
+  ctx.clearRect(0, 0, W, H);
+
+  for (let v = 0; v < VALIDATORS; v++) {
+    const isBanned = bannedValidators.has(v);
+    const pos = getPos(0, v);
+    ctx.strokeStyle = isBanned ? 'rgba(239,68,68,0.15)' : 'rgba(30,42,56,0.4)';
+    ctx.lineWidth = 1; ctx.beginPath(); ctx.setLineDash([4, 8]);
+    ctx.moveTo(0, pos.y * dpr); ctx.lineTo(W, pos.y * dpr); ctx.stroke(); ctx.setLineDash([]);
+    ctx.font = `${11 * dpr}px 'DM Mono', monospace`;
+    ctx.fillStyle = isBanned ? '#ef4444' : COLORS[v];
+    ctx.globalAlpha = isBanned ? 0.5 : 0.8;
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(isBanned ? `V${v} ${V_LABELS[v]} [BANNED]` : `V${v} ${V_LABELS[v]}`, 8 * dpr, (pos.y - 4) * dpr);
+    ctx.globalAlpha = 1;
+  }
+
+  edges.forEach(e => {
+    if (e.alpha <= 0) return;
+    const fromVtx = vertices.find(v => v.id === e.from), toVtx = vertices.find(v => v.id === e.to);
+    if (!fromVtx || !toVtx || fromVtx.ghost || toVtx.ghost) return;
+    const finalized = fromVtx.finalized && toVtx.finalized;
+    ctx.save(); ctx.globalAlpha = e.alpha * 0.55;
+    ctx.strokeStyle = finalized ? 'rgba(251,191,36,0.5)' : 'rgba(37,99,235,0.6)';
+    ctx.lineWidth = (finalized ? 1.5 : 1) * dpr;
+    ctx.setLineDash(finalized ? [] : [3 * dpr, 4 * dpr]);
+    const fx = fromVtx.x * dpr, fy = fromVtx.y * dpr, tx = toVtx.x * dpr, ty = toVtx.y * dpr;
+    ctx.beginPath(); ctx.moveTo(fx, fy);
+    ctx.bezierCurveTo(fx + (tx - fx) * 0.5, fy, fx + (tx - fx) * 0.5, ty, tx, ty);
+    ctx.stroke(); ctx.restore();
+  });
+
+  vertices.forEach(vtx => { if (vtx.alpha <= 0 && !vtx.ghost) return; drawVertex(vtx); });
+
+  vertices.forEach(vtx => {
+    if (vtx.finalized || vtx.byzantine || vtx.ghost || vtx.alpha < 0.5 || vtx.round === 0) return;
+    const dv = vtx.descendantValidators.size;
+    if (dv === 0) return;
+    const x = vtx.x * dpr, y = vtx.y * dpr;
+    ctx.save(); ctx.globalAlpha = vtx.alpha * 0.9;
+    ctx.fillStyle = dv >= QUORUM ? 'rgba(52,211,153,0.25)' : '#1e3a5f';
+    ctx.strokeStyle = dv >= QUORUM ? '#34d399' : 'transparent';
+    ctx.lineWidth = 1; ctx.beginPath();
+    ctx.arc(x + 10 * dpr, y - 10 * dpr, 7 * dpr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = dv >= QUORUM ? '#34d399' : '#93c5fd';
+    ctx.font = `bold ${9 * dpr}px 'DM Mono', monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(`${dv}`, x + 10 * dpr, y - 10 * dpr); ctx.restore();
+  });
+
+  updateStats();
+}
+
+function drawVertex(vtx) {
+  const x = vtx.x * devicePixelRatio, y = vtx.y * devicePixelRatio;
+  const r = NODE_R * devicePixelRatio, dpr = devicePixelRatio;
+  ctx.save();
+
+  if (vtx.ghost) {
+    ctx.globalAlpha = 0.3; ctx.strokeStyle = COLORS[vtx.validator];
+    ctx.lineWidth = 1.5 * dpr; ctx.setLineDash([3 * dpr, 3 * dpr]);
+    ctx.beginPath(); ctx.arc(x, y, r * 0.4, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = COLORS[vtx.validator]; ctx.font = `${8 * dpr}px 'DM Mono', monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('SKIP', x, y);
+    ctx.restore(); return;
+  }
+
+  ctx.globalAlpha = vtx.alpha;
+
+  if (vtx.byzantine) {
+    ctx.strokeStyle = BYZANTINE_COLOR; ctx.lineWidth = 2 * dpr;
+    ctx.fillStyle = 'rgba(239,68,68,0.15)'; ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    const d = r * 0.5; ctx.strokeStyle = BYZANTINE_COLOR; ctx.lineWidth = 2.5 * dpr; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x - d, y - d); ctx.lineTo(x + d, y + d);
+    ctx.moveTo(x + d, y - d); ctx.lineTo(x - d, y + d); ctx.stroke();
+  } else if (vtx.finalized) {
+    const grd = ctx.createRadialGradient(x - r*0.3, y - r*0.3, r*0.1, x, y, r);
+    grd.addColorStop(0, '#fde68a'); grd.addColorStop(1, FINALIZED_COLOR);
+    ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#78350f'; ctx.lineWidth = 2 * dpr; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(x - r*0.45, y); ctx.lineTo(x - r*0.1, y + r*0.38); ctx.lineTo(x + r*0.45, y - r*0.35); ctx.stroke();
+  } else if (vtx.round === 0) {
+    ctx.fillStyle = 'rgba(55,65,81,0.6)'; ctx.strokeStyle = COLORS[vtx.validator]; ctx.lineWidth = 1.5 * dpr;
+    ctx.beginPath(); ctx.arc(x, y, r * 0.7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  } else {
+    const col = COLORS[vtx.validator];
+    ctx.fillStyle = hexToRgba(col, 0.12); ctx.strokeStyle = col; ctx.lineWidth = 2 * dpr;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = hexToRgba(col, 0.6); ctx.beginPath(); ctx.arc(x, y, r * 0.35, 0, Math.PI * 2); ctx.fill();
+    const maxRound = Math.max(...vertices.map(v => v.round));
+    if (vtx.round === maxRound) {
+      const pulse = 0.4 + 0.3 * Math.sin(Date.now() / 500);
+      ctx.strokeStyle = hexToRgba(col, pulse); ctx.lineWidth = 1 * dpr;
+      ctx.beginPath(); ctx.arc(x, y, r * 1.6, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function animLoop(ts) {
+  if (!paused && step !== 'resetting' && ts - lastTick > tickInterval) { lastTick = ts; advance(); }
+  render();
+  vertices.forEach(v => { if (v.alpha < 1 && v.alpha > 0) v.alpha = Math.min(1, v.alpha + 0.055); });
+  edges.forEach(e => { if (e.alpha < 1 && e.alpha > 0) e.alpha = Math.min(1, e.alpha + 0.045); });
+  animFrame = requestAnimationFrame(animLoop);
+}
+
+function reset() {
+  if (animFrame) cancelAnimationFrame(animFrame);
+  paused = false;
+  document.getElementById('btn-pause').textContent = 'Pause';
+  document.getElementById('btn-pause').classList.remove('active');
+  step = 'idle'; QUORUM = Math.ceil(2 * VALIDATORS / 3);
+  initGenesis(); repositionAll();
+  document.getElementById('phase-banner').textContent = 'Round 0 \u2014 Genesis';
+  document.getElementById('opt-indicator').textContent = 'timer fallback';
+  document.getElementById('opt-indicator').className = 'opt-indicator';
+  setInfo(`Genesis: ${VALIDATORS} validators initialized. Quorum \u2308 2\u00D7${VALIDATORS}/3\u2309 = <span>${QUORUM}</span>. Badges show precomputed descendant-validator count (O(1) lookup). Green badge = quorum reached.`);
+  updateStats(); lastTick = 0; animFrame = requestAnimationFrame(animLoop);
+}
+
+document.getElementById('btn-pause').addEventListener('click', function() { paused = !paused; this.textContent = paused ? 'Resume' : 'Pause'; this.classList.toggle('active', paused); });
+document.getElementById('btn-reset').addEventListener('click', reset);
+document.getElementById('btn-equivocation').addEventListener('click', () => { if (currentRound >= 1) triggerEquivocation(); });
+document.getElementById('speed-select').addEventListener('change', e => { tickInterval = parseInt(e.target.value); });
+document.getElementById('validator-select').addEventListener('change', e => { VALIDATORS = parseInt(e.target.value); reset(); });
+
+resize();
+window.addEventListener('resize', () => { resize(); repositionAll(); render(); });
+reset();
+</script>

@@ -1,0 +1,200 @@
+---
+interface Props {
+  activeSection?: string;
+}
+
+const { activeSection } = Astro.props;
+
+const nav = [
+  {
+    title: '1. Introduction',
+    id: '1-introduction',
+    items: [
+      { title: '1.1 Motivation', id: '11-motivation' },
+      { title: '1.2 Contribution', id: '12-contribution' },
+    ],
+  },
+  {
+    title: '2. Design Philosophy',
+    id: '2-design-philosophy-minimal-correct-dag-bft',
+    items: [
+      { title: '2.1 The Protocol in Three Sentences', id: '21-the-protocol-in-three-sentences' },
+      { title: '2.2 Consensus Core Size', id: '22-consensus-core-size' },
+      { title: '2.3 What Was Deliberately Omitted', id: '23-what-was-deliberately-omitted' },
+      { title: '2.4 The Minimalism Claim', id: '24-the-minimalism-claim' },
+    ],
+  },
+  {
+    title: '3. System Model',
+    id: '3-system-model',
+    items: [
+      { title: '3.1 Participants', id: '31-participants' },
+      { title: '3.2 Network Model', id: '32-network-model' },
+      { title: '3.3 Cryptographic Primitives', id: '33-cryptographic-primitives' },
+    ],
+  },
+  {
+    title: '4. Protocol Description',
+    id: '4-protocol-description',
+    items: [
+      { title: '4.1 DAG Structure', id: '41-dag-structure' },
+      { title: '4.2 Vertex Production', id: '42-vertex-production-optimistic-responsiveness' },
+      { title: '4.3 Vertex Acceptance', id: '43-vertex-acceptance' },
+      { title: '4.4 Recursive Parent Fetch', id: '44-recursive-parent-fetch' },
+    ],
+  },
+  {
+    title: '5. Finality',
+    id: '5-finality',
+    items: [
+      { title: '5.1 Descendant-Coverage Rule', id: '51-descendant-coverage-finality-rule' },
+      { title: '5.2 Incremental Tracking', id: '52-incremental-descendant-tracking' },
+      { title: '5.3 Parent Finality Guarantee', id: '53-parent-finality-guarantee' },
+    ],
+  },
+  {
+    title: '6. Safety',
+    id: '6-safety',
+    items: [
+      { title: '6.1 No Conflicting Finality', id: '61-no-conflicting-finality' },
+      { title: '6.2 Quorum Intersection', id: '62-quorum-intersection-argument' },
+    ],
+  },
+  {
+    title: '7. Liveness',
+    id: '7-liveness',
+    items: [],
+  },
+  {
+    title: '8. Equivocation Handling',
+    id: '8-equivocation-handling',
+    items: [],
+  },
+  {
+    title: '9. State Machine',
+    id: '9-state-machine',
+    items: [
+      { title: '9.1 Account-Based Ledger', id: '91-account-based-ledger' },
+      { title: '9.2 Transaction Validation', id: '92-transaction-validation' },
+      { title: '9.3 Deterministic Ordering', id: '93-deterministic-ordering' },
+    ],
+  },
+  {
+    title: '10. Tokenomics',
+    id: '10-tokenomics',
+    items: [
+      { title: '10.1 Supply Parameters', id: '101-supply-parameters' },
+      { title: '10.2 Emission-Only Distribution', id: '102-emission-only-distribution' },
+      { title: '10.3 Validator Staking', id: '103-validator-staking' },
+      { title: '10.4 Emission Model', id: '104-emission-model' },
+    ],
+  },
+  {
+    title: '11. Network Protocol',
+    id: '11-network-protocol',
+    items: [],
+  },
+  {
+    title: '12. Implementation',
+    id: '12-implementation',
+    items: [
+      { title: '12.1 Architecture', id: '121-architecture' },
+      { title: '12.2 Concurrency', id: '122-concurrency' },
+      { title: '12.3 Persistence', id: '123-persistence' },
+      { title: '12.4 Checkpointing & Fast-Sync', id: '124-checkpointing-and-fast-sync' },
+    ],
+  },
+  {
+    title: '13. Security Analysis',
+    id: '13-security-analysis',
+    items: [],
+  },
+  {
+    title: '14. Testnet Results',
+    id: '14-testnet-results',
+    items: [],
+  },
+  {
+    title: '15. Minimalism vs. Throughput',
+    id: '15-minimalism-vs-throughput',
+    items: [
+      { title: '15.1 What Minimalism Costs', id: '151-what-minimalism-costs' },
+      { title: '15.2 Why Acceptable', id: '152-why-these-tradeoffs-are-acceptable' },
+    ],
+  },
+  {
+    title: '16. Comparison',
+    id: '16-comparison-with-related-work',
+    items: [],
+  },
+  {
+    title: '17. Future Work',
+    id: '17-future-work',
+    items: [],
+  },
+  {
+    title: '18. Conclusion',
+    id: '18-conclusion',
+    items: [],
+  },
+  {
+    title: 'References',
+    id: 'references',
+    items: [],
+  },
+];
+---
+
+<button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle whitepaper menu">
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  <span>Contents</span>
+</button>
+
+<aside id="docs-sidebar" class="docs-sidebar whitepaper-sidebar">
+  <div class="sidebar-header">
+    <a href="/whitepaper" class="sidebar-home">Whitepaper v1.1</a>
+  </div>
+  <nav class="sidebar-nav">
+    {nav.map(group => (
+      <div class="sidebar-group">
+        <a href={`#${group.id}`} class="sidebar-group-title sidebar-link">{group.title}</a>
+        {group.items.length > 0 && (
+          <ul>
+            {group.items.map(item => (
+              <li>
+                <a href={`#${item.id}`} class="sidebar-sublink">
+                  {item.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    ))}
+  </nav>
+</aside>
+
+<style>
+  .whitepaper-sidebar .sidebar-group-title.sidebar-link {
+    cursor: pointer;
+    text-decoration: none;
+    color: var(--text-secondary, #8a8f98);
+    transition: color 0.2s;
+    display: block;
+  }
+  .whitepaper-sidebar .sidebar-group-title.sidebar-link:hover {
+    color: var(--accent, #3d9be9);
+  }
+  .whitepaper-sidebar .sidebar-group-title.sidebar-link.active {
+    color: var(--accent, #3d9be9);
+  }
+  .whitepaper-sidebar .sidebar-sublink {
+    font-size: 0.8rem;
+  }
+  .whitepaper-sidebar .sidebar-group {
+    margin-bottom: 0.25rem;
+  }
+  .whitepaper-sidebar .sidebar-group ul {
+    margin-bottom: 0.25rem;
+  }
+</style>

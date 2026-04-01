@@ -1,0 +1,531 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import '../styles/global.css';
+---
+
+<BaseLayout title="Testnet Hub — UltraDAG ($UDAG)" description="Join the UltraDAG ($UDAG) public testnet. Monitor node status, get test tokens, and run a validator.">
+
+  <section class="testnet-hero">
+    <div class="hero-inner">
+      <div class="live-indicator" id="live-indicator">
+        <div class="live-dot"></div>
+        <span class="live-text">LIVE</span>
+        <span class="live-sep">&bull;</span>
+        <span class="live-updated" id="live-updated">Updated 0s ago</span>
+      </div>
+      <h1 class="hero-title">Testnet Hub</h1>
+      <p class="hero-subtitle">Monitor real-time network health across all validator nodes. Join the public testnet, get test tokens, and help stress-test UltraDAG consensus.</p>
+    </div>
+  </section>
+
+  <div id="error-container"></div>
+
+  <section class="stats-section">
+    <div class="stats-inner">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Network Health</div>
+          <div class="stat-value" id="network-health">&mdash;</div>
+          <div class="stat-sub" id="network-health-sub">&mdash;</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Current Round</div>
+          <div class="stat-value" id="current-round">&mdash;</div>
+          <div class="stat-sub" id="current-round-sub">Consensus round number</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Finalized Round</div>
+          <div class="stat-value" id="finalized-round">&mdash;</div>
+          <div class="stat-sub" id="finality-lag-sub">&mdash;</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Supply</div>
+          <div class="stat-value" id="total-supply">&mdash;</div>
+          <div class="stat-sub" id="total-supply-udag">&mdash; UDAG</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Validators</div>
+          <div class="stat-value" id="validator-count">&mdash;</div>
+          <div class="stat-sub">Participating in consensus</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">DAG Vertices</div>
+          <div class="stat-value" id="dag-vertices">&mdash;</div>
+          <div class="stat-sub" id="dag-vertices-sub">&mdash;</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="nodes-section">
+    <div class="nodes-inner">
+      <h2 class="section-title">Validator Nodes</h2>
+      <div class="nodes-grid" id="nodes-grid">
+        <!-- Populated by JavaScript -->
+      </div>
+    </div>
+  </section>
+
+</BaseLayout>
+
+<style>
+  /* HERO */
+  .testnet-hero {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    padding: 140px 48px 48px;
+  }
+  .hero-inner {
+    max-width: 700px;
+    margin: 0 auto;
+  }
+  .hero-title {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(44px, 6vw, 72px);
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--white);
+    margin-bottom: 16px;
+  }
+  .hero-subtitle {
+    font-family: 'Syne', sans-serif;
+    font-size: 16px;
+    color: var(--subtle);
+    line-height: 1.7;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  /* LIVE INDICATOR */
+  .live-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 24px;
+    padding: 8px 16px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+  .live-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--success);
+    border-radius: 50%;
+    box-shadow: 0 0 6px var(--success);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+  .live-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--success);
+    letter-spacing: 0.1em;
+  }
+  .live-sep {
+    color: var(--dim);
+    margin: 0 4px;
+  }
+  .live-updated {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--subtle);
+  }
+
+  /* ERROR */
+  .error-message {
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    color: var(--danger);
+    padding: 16px;
+    border-radius: 6px;
+    margin: 0 auto 24px;
+    max-width: 1200px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* STATS */
+  .stats-section {
+    position: relative;
+    z-index: 1;
+  }
+  .stats-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 48px 48px;
+  }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+  .stat-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    transition: border-color 0.3s;
+  }
+  .stat-card:hover {
+    border-color: var(--border2);
+  }
+  .stat-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .stat-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--white);
+    margin-bottom: 4px;
+  }
+  .stat-sub {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--subtle);
+  }
+
+  /* NODES */
+  .nodes-section {
+    position: relative;
+    z-index: 1;
+  }
+  .nodes-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 48px 80px;
+  }
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--white);
+    margin-bottom: 24px;
+  }
+  .nodes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+  }
+
+  /* NODE CARDS */
+  :global(.node-card) {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    position: relative;
+    transition: border-color 0.3s;
+  }
+  :global(.node-card.online) {
+    border-color: var(--success);
+  }
+  :global(.node-card.offline) {
+    border-color: var(--danger);
+    opacity: 0.6;
+  }
+  :global(.node-header) {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  :global(.node-name) {
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--white);
+  }
+  :global(.node-status) {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  :global(.node-status.online) {
+    background: rgba(52, 211, 153, 0.15);
+    color: var(--success);
+    border: 1px solid rgba(52, 211, 153, 0.3);
+  }
+  :global(.node-status.offline) {
+    background: rgba(248, 113, 113, 0.15);
+    color: var(--danger);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+  }
+  :global(.node-metrics) {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+  }
+  :global(.node-metric) {
+    display: flex;
+    flex-direction: column;
+  }
+  :global(.node-metric-label) {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+  :global(.node-metric-value) {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--bright);
+  }
+  :global(.node-url) {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--subtle);
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* RESPONSIVE */
+  @media (max-width: 900px) {
+    .testnet-hero { padding: 120px 24px 32px; }
+    .stats-inner, .nodes-inner { padding-left: 24px; padding-right: 24px; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .stat-card { padding: 20px; }
+    .stat-value { font-size: 28px; }
+    .stat-sub { font-size: 11px; }
+    .nodes-grid { grid-template-columns: 1fr; gap: 16px; }
+    .section-title { font-size: 20px; margin-bottom: 20px; }
+  }
+  @media (max-width: 600px) {
+    .testnet-hero { padding: 100px 16px 24px; }
+    .hero-title { font-size: clamp(28px, 10vw, 36px); }
+    .hero-subtitle { font-size: 14px; }
+    .stats-inner, .nodes-inner { padding-left: 16px; padding-right: 16px; }
+    .stats-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+    .stat-card { padding: 16px; }
+    .stat-label { font-size: 10px; }
+    .stat-value { font-size: 24px; }
+    .stat-sub { font-size: 10px; }
+    .section-title { font-size: 18px; }
+    .live-indicator { font-size: 11px; padding: 6px 12px; }
+    :global(.node-metrics) { grid-template-columns: 1fr 1fr; }
+  }
+
+  @media (max-width: 420px) {
+    .stats-grid { grid-template-columns: 1fr; }
+    :global(.node-metrics) { grid-template-columns: 1fr; }
+  }
+</style>
+
+<script>
+  const NODES = [
+    { name: 'Node 1', region: 'Amsterdam', url: 'https://ultradag-node-1.fly.dev' },
+    { name: 'Node 2', region: 'Amsterdam', url: 'https://ultradag-node-2.fly.dev' },
+    { name: 'Node 3', region: 'Amsterdam', url: 'https://ultradag-node-3.fly.dev' },
+    { name: 'Node 4', region: 'Amsterdam', url: 'https://ultradag-node-4.fly.dev' },
+    { name: 'Node 5', region: 'Amsterdam', url: 'https://ultradag-node-5.fly.dev' },
+  ];
+
+  let nodeData: Record<string, any> = {};
+  let lastUpdate: Date | null = null;
+
+  async function fetchNodeStatus(node: { name: string; region: string; url: string }) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    const t0 = performance.now();
+    try {
+      const response = await fetch(node.url + '/status', { signal: controller.signal });
+      clearTimeout(timer);
+      const latency = Math.round(performance.now() - t0);
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const d = await response.json();
+      const round = d.dag_round || 0;
+      const finRound = d.last_finalized_round;
+      const lag = finRound != null ? round - finRound : null;
+      return {
+        online: true, stale: false, latency, round, finRound, lag,
+        supply: d.total_supply || 0,
+        validators: d.validator_count || 0,
+        peers: d.peer_count || 0,
+        vertices: d.dag_vertices || 0,
+        finalized: d.finalized_count || 0,
+        mempool: d.mempool_size || 0,
+      };
+    } catch {
+      clearTimeout(timer);
+      const prev = nodeData[node.name];
+      if (prev && prev.online) {
+        return { ...prev, stale: true, latency: null };
+      }
+      return { online: false, error: 'unreachable' };
+    }
+  }
+
+  async function updateAllNodes() {
+    await Promise.all(NODES.map(async (node) => {
+      const status = await fetchNodeStatus(node);
+      nodeData[node.name] = { ...node, ...status };
+    }));
+    lastUpdate = new Date();
+    renderNodes();
+    updateGlobalStats();
+  }
+
+  function lagColor(lag: number | null): string {
+    if (lag == null) return 'var(--muted)';
+    if (lag <= 3) return 'var(--success)';
+    if (lag <= 10) return 'var(--warning)';
+    return 'var(--danger)';
+  }
+
+  function renderNodes() {
+    const grid = document.getElementById('nodes-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    NODES.forEach(node => {
+      const d = nodeData[node.name];
+      if (!d) return;
+      const on = d.online;
+      const stale = d.stale;
+      const card = document.createElement('div');
+      card.className = 'node-card ' + (on ? 'online' : 'offline');
+
+      const lagDisplay = d.lag != null ? d.lag : '\u2014';
+      const lagStyle = on ? ' style="color:' + lagColor(d.lag) + '"' : '';
+      const statusLabel = !on ? 'Offline' : stale ? 'Stale' : 'Online';
+      const statusClass = !on ? 'offline' : 'online';
+
+      card.innerHTML =
+        '<div class="node-header">' +
+          '<div class="node-name">' + node.name + ' <span style="font-size:10px;color:var(--muted);font-weight:400">' + node.region + '</span></div>' +
+          '<div class="node-status ' + statusClass + '">' + statusLabel + '</div>' +
+        '</div>' +
+        '<div class="node-metrics">' +
+          '<div class="node-metric">' +
+            '<div class="node-metric-label">Round</div>' +
+            '<div class="node-metric-value">' + (on ? d.round.toLocaleString() : '\u2014') + '</div>' +
+          '</div>' +
+          '<div class="node-metric">' +
+            '<div class="node-metric-label">Finality Lag</div>' +
+            '<div class="node-metric-value"' + lagStyle + '>' + (on ? lagDisplay : '\u2014') + '</div>' +
+          '</div>' +
+          '<div class="node-metric">' +
+            '<div class="node-metric-label">Vertices</div>' +
+            '<div class="node-metric-value">' + (on ? d.vertices.toLocaleString() : '\u2014') + '</div>' +
+          '</div>' +
+          '<div class="node-metric">' +
+            '<div class="node-metric-label">Peers</div>' +
+            '<div class="node-metric-value">' + (on ? d.peers : '\u2014') + '</div>' +
+          '</div>' +
+          '<div class="node-metric">' +
+            '<div class="node-metric-label">Finalized</div>' +
+            '<div class="node-metric-value">' + (on ? d.finalized.toLocaleString() : '\u2014') + '</div>' +
+          '</div>' +
+          '<div class="node-metric">' +
+            '<div class="node-metric-label">Latency</div>' +
+            '<div class="node-metric-value">' + (on && d.latency != null ? d.latency + 'ms' : '\u2014') + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="node-url">' + node.url.replace('https://', '') + (on && d.mempool > 0 ? ' \u00b7 mempool: ' + d.mempool : '') + '</div>';
+
+      grid.appendChild(card);
+    });
+  }
+
+  function updateGlobalStats() {
+    const online = Object.values(nodeData).filter((n: any) => n.online);
+    const total = NODES.length;
+
+    const healthEl = document.getElementById('network-health');
+    const healthSub = document.getElementById('network-health-sub');
+    if (healthEl && healthSub) {
+      healthEl.textContent = online.length + '/' + total;
+      if (online.length === total) {
+        healthEl.style.color = 'var(--success)';
+        healthSub.textContent = 'All nodes operational';
+      } else if (online.length > 0) {
+        healthEl.style.color = 'var(--warning)';
+        healthSub.textContent = (total - online.length) + ' node(s) unreachable';
+      } else {
+        healthEl.style.color = 'var(--danger)';
+        healthSub.textContent = 'Network offline';
+        showError('All nodes are currently unreachable. Retrying...');
+        return;
+      }
+    }
+    hideError();
+
+    if (online.length === 0) return;
+    const best = online.reduce((a: any, b: any) => a.round > b.round ? a : b);
+
+    const roundEl = document.getElementById('current-round');
+    if (roundEl) roundEl.textContent = best.round.toLocaleString();
+    const roundsPerDay = 86400 / 5;
+    const uptimeDays = (best.round / roundsPerDay).toFixed(1);
+    const roundSub = document.getElementById('current-round-sub');
+    if (roundSub) roundSub.textContent = '~' + uptimeDays + ' days of uptime';
+
+    const finEl = document.getElementById('finalized-round');
+    if (finEl) finEl.textContent = best.finRound != null ? best.finRound.toLocaleString() : '\u2014';
+    if (best.lag != null) {
+      const lagSub = document.getElementById('finality-lag-sub');
+      if (lagSub) {
+        lagSub.textContent = 'Lag: ' + best.lag + ' rounds (~' + (best.lag * 5) + 's)';
+        lagSub.style.color = lagColor(best.lag);
+      }
+    } else {
+      const lagSub = document.getElementById('finality-lag-sub');
+      if (lagSub) lagSub.textContent = 'Not yet finalizing';
+    }
+
+    const supplySats = best.supply;
+    const supplyUdag = supplySats / 100_000_000;
+    const supplyEl = document.getElementById('total-supply');
+    if (supplyEl) supplyEl.textContent = supplyUdag.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' UDAG';
+    const pct = ((supplyUdag / 21_000_000) * 100).toFixed(3);
+    const supplySubEl = document.getElementById('total-supply-udag');
+    if (supplySubEl) supplySubEl.textContent = pct + '% of 21M max supply minted';
+
+    const vertEl = document.getElementById('dag-vertices');
+    if (vertEl) vertEl.textContent = best.vertices.toLocaleString();
+    const vpr = best.round > 0 ? (best.vertices / best.round).toFixed(1) : '\u2014';
+    const vertSub = document.getElementById('dag-vertices-sub');
+    if (vertSub) vertSub.textContent = vpr + ' vertices/round avg';
+
+    const valEl = document.getElementById('validator-count');
+    if (valEl) valEl.textContent = best.validators;
+  }
+
+  function showError(msg: string) {
+    const el = document.getElementById('error-container');
+    if (el) el.innerHTML = '<div class="error-message">' + msg + '</div>';
+  }
+  function hideError() {
+    const el = document.getElementById('error-container');
+    if (el) el.innerHTML = '';
+  }
+
+  function updateTimestamp() {
+    if (!lastUpdate) return;
+    const ago = Math.round((Date.now() - lastUpdate.getTime()) / 1000);
+    const el = document.getElementById('live-updated');
+    if (el) el.textContent = 'Updated ' + ago + 's ago';
+  }
+
+  updateAllNodes();
+  setInterval(updateAllNodes, 5000);
+  setInterval(updateTimestamp, 1000);
+</script>

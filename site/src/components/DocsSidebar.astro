@@ -1,0 +1,113 @@
+---
+interface Props {
+  section?: string;
+  slug?: string;
+}
+
+const { section, slug } = Astro.props;
+
+const nav = [
+  {
+    title: 'Getting Started',
+    key: 'getting-started',
+    items: [
+      { title: 'Quick Start', slug: 'getting-started/quickstart' },
+      { title: 'Run a Validator', slug: 'getting-started/validator' },
+      { title: 'Docker Guide', slug: 'getting-started/docker' },
+    ],
+  },
+  {
+    title: 'Architecture',
+    key: 'architecture',
+    items: [
+      { title: 'Overview', slug: 'architecture/overview' },
+      { title: 'DAG-BFT Consensus', slug: 'architecture/consensus' },
+      { title: 'P2P Network', slug: 'architecture/network' },
+      { title: 'State Engine', slug: 'architecture/state-engine' },
+    ],
+  },
+  {
+    title: 'API Reference',
+    key: 'api',
+    items: [
+      { title: 'RPC Endpoints', slug: 'api/rpc' },
+      { title: 'Transaction Format', slug: 'api/transactions' },
+      { title: 'SDKs', slug: 'api/sdks' },
+    ],
+  },
+  {
+    title: 'Node Operations',
+    key: 'operations',
+    items: [
+      { title: 'Node Operator Guide', slug: 'operations/node-guide' },
+      { title: 'Validator Handbook', slug: 'operations/validator-handbook' },
+      { title: 'Monitoring', slug: 'operations/monitoring' },
+      { title: 'CLI Reference', slug: 'operations/cli' },
+    ],
+  },
+  {
+    title: 'Tokenomics',
+    key: 'tokenomics',
+    items: [
+      { title: 'Supply & Emission', slug: 'tokenomics/supply' },
+      { title: 'Staking & Delegation', slug: 'tokenomics/staking' },
+      { title: 'Governance', slug: 'tokenomics/governance' },
+    ],
+  },
+  {
+    title: 'Security',
+    key: 'security',
+    items: [
+      { title: 'Security Model', slug: 'security/model' },
+      { title: 'Audit Reports', slug: 'security/audits' },
+      { title: 'Bug Bounty', slug: 'security/bug-bounty' },
+    ],
+  },
+  {
+    title: 'Technical Deep Dives',
+    key: 'technical',
+    items: [
+      { title: 'Formal Verification', slug: 'technical/formal-verification' },
+      { title: 'Checkpoint Protocol', slug: 'technical/checkpoints' },
+      { title: 'Noise Encryption', slug: 'technical/noise-protocol' },
+      { title: 'Simulation Harness', slug: 'technical/simulation' },
+    ],
+  },
+];
+---
+
+<button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle docs menu">
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  <span>Menu</span>
+</button>
+
+<aside id="docs-sidebar" class="docs-sidebar">
+  <div class="sidebar-header">
+    <a href="/docs" class="sidebar-home">Documentation</a>
+  </div>
+  <nav class="sidebar-nav">
+    {nav.map(group => (
+      <div class={`sidebar-group ${section === group.key ? 'active' : ''}`}>
+        <div class="sidebar-group-title">{group.title}</div>
+        <ul>
+          {group.items.map(item => (
+            <li>
+              <a
+                href={`/docs/${item.slug}`}
+                class={slug === item.slug ? 'active' : ''}
+              >
+                {item.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))}
+    <div class="sidebar-group">
+      <div class="sidebar-group-title">Other</div>
+      <ul>
+        <li><a href="/docs/faq" class={slug === 'faq' ? 'active' : ''}>FAQ</a></li>
+      </ul>
+    </div>
+  </nav>
+</aside>
