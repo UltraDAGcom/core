@@ -1,0 +1,3 @@
+# Handle dashboard directory - SPA routing
+/dashboard/* /dashboard/index.html 200
+/dashboard /dashboard/index.html 200

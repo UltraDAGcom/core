@@ -1,0 +1,11 @@
+[build]
+  command = "npm install && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[redirects]]
+  from = "/dashboard/*"
+  to = "/dashboard/index.html"
+  status = 200
