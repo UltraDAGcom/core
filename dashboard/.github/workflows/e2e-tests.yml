@@ -1,0 +1,97 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'site/dashboard/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'site/dashboard/**'
+
+jobs:
+  test:
+    name: Playwright Tests
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1/4, 2/4, 3/4, 4/4]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      
+      - name: Install dependencies
+        working-directory: ./site/dashboard
+        run: |
+          npm ci
+          npx playwright install --with-deps
+      
+      - name: Run Playwright tests
+        working-directory: ./site/dashboard
+        run: |
+          npx playwright test --shard=${{ matrix.shard }}
+        env:
+          CI: true
+          BASE_URL: http://localhost:5173
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ strategy.job-index }}
+          path: site/dashboard/playwright-report/
+          retention-days: 30
+      
+      - name: Upload test results JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ strategy.job-index }}
+          path: site/dashboard/test-results.json
+          retention-days: 7
+
+  merge-reports:
+    name: Merge Test Reports
+    needs: test
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      
+      - name: Install dependencies
+        working-directory: ./site/dashboard
+        run: |
+          npm ci
+          npx playwright install --with-deps
+      
+      - name: Download all reports
+        uses: actions/download-artifact@v4
+        with:
+          path: site/dashboard/all-reports
+          pattern: playwright-report-*
+          merge-multiple: true
+      
+      - name: Merge HTML reports
+        working-directory: ./site/dashboard
+        run: |
+          npx playwright merge-reports --reporter html ./all-reports
+      
+      - name: Upload merged report
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-merged
+          path: site/dashboard/playwright-report/
+          retention-days: 30
