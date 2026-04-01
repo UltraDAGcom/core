@@ -1592,8 +1592,9 @@ section h2 em {
 /* Responsive */
 @media (max-width: 900px) {
   .hero {
-    padding: 0 24px;
+    padding: 80px 24px 0;
     max-width: 100%;
+    min-height: calc(100vh - 56px);
   }
 
   h1 {
@@ -1654,10 +1655,54 @@ section h2 em {
 
   .competitor-grid {
     grid-template-columns: 1fr;
+    background: none;
+    border: none;
+    gap: 16px;
+  }
+
+  .comp-row.comp-header-row {
+    display: none;
   }
 
   .comp-row {
     grid-template-columns: 1fr;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    gap: 0;
+  }
+
+  .comp-row > div:nth-child(1) {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .comp-row > div:nth-child(2)::before {
+    content: 'THE PROBLEM';
+    display: block;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--danger);
+    margin-bottom: 6px;
+  }
+
+  .comp-row > div:nth-child(3) {
+    border-top: 1px solid var(--border);
+  }
+
+  .comp-row > div:nth-child(3)::before {
+    content: 'ULTRADAG ADVANTAGE';
+    display: block;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--success);
+    margin-bottom: 6px;
   }
 
   .download-buttons {
@@ -1708,8 +1753,8 @@ section h2 em {
 
 @media (max-width: 600px) {
   .hero {
-    padding: 0 16px;
-    min-height: 90vh;
+    padding: 72px 16px 0;
+    min-height: calc(100vh - 56px);
   }
 
   h1 {
