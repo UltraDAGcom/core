@@ -1,5 +1,5 @@
 ---
-title: "UltraDAG Whitepaper v1.1"
+title: "UltraDAG Whitepaper v1.2"
 description: "A Leaderless DAG-BFT Cryptocurrency — Minimal correct consensus in ~2,800 lines of Rust"
 order: 0
 section: "whitepaper"
@@ -43,7 +43,7 @@ UltraDAG implements a complete, working cryptocurrency using a custom leaderless
 2. A vertex is final when ⌈2n/3⌉ distinct validators have built upon it and all its parents are final.
 3. Equivocating validators are permanently banned.
 
-Everything else in this paper — the round gate, stall recovery, deterministic ordering, state derivation — is implementation detail required to make these three sentences operational.
+Note that sentence 2 encodes two constraints: the quorum threshold (⌈2n/3⌉ descendants) *and* recursive parent finality ("all its parents are final"). The parent finality requirement is what ensures causal ordering and affects finality latency — a vertex in round r cannot finalize until all its ancestors finalize first, which in practice means finality propagates round-by-round. Everything else in this paper — the round gate, stall recovery, deterministic ordering, state derivation — is implementation detail required to make these three sentences operational.
 
 ### 2.2 Consensus Core Size
 
@@ -64,6 +64,8 @@ The complete consensus implementation is contained in five files totaling **2,76
 | Bullshark | ~20,000 |
 | Shoal++ | ~30,000 |
 | **UltraDAG** | **~2,800** |
+
+*Line counts for competing protocols are estimates based on their published reference implementations (consensus modules only, excluding networking, storage, and client code). UltraDAG's count includes both production code and inline tests. These comparisons are approximate — different projects draw module boundaries differently.*
 
 ### 2.3 What Was Deliberately Omitted
 
@@ -87,7 +89,7 @@ The ~10x reduction in consensus code vs Shoal++ directly reduces the attack surf
 
 ### 3.1 Participants
 
-Let **V** = {v1, v2, ..., vn} be the set of **n** validators. Each validator vi holds an Ed25519 keypair (ski, pki) identified by:
+Let **P** = {p1, p2, ..., pn} be the set of **n** validators (participants). Each validator vi holds an Ed25519 keypair (ski, pki) identified by:
 
 ```
 addr_i = Blake3(pk_i)
@@ -138,7 +140,7 @@ Each honest validator produces exactly one vertex per round using **optimistic r
 3. **Active set check.** If not in the active staking set, observe only.
 4. **Equivocation check.** If already produced in round r, skip.
 5. **Collect parents.** Set parents = all current DAG tips.
-6. **Build block.** Include coinbase reward and pending mempool transactions.
+6. **Build block.** Include coinbase (transaction fees only) and pending mempool transactions. Block rewards are distributed per-round by the protocol via `distribute_round_rewards()`, not in the coinbase.
 7. **Sign and broadcast.** Ed25519-sign and broadcast to all peers.
 
 ### 4.3 Vertex Acceptance
@@ -147,7 +149,9 @@ A vertex v is accepted into the DAG if and only if: no duplicate H(v) exists, th
 
 ### 4.4 Recursive Parent Fetch
 
-When a vertex fails insertion due to missing parents, the node buffers it (orphan buffer: 1,000 entries / 50 MB max) and sends a `GetParents` request. Each received parent is verified and inserted, recursing for missing grandparents. After any successful insertion, `resolve_orphans()` re-attempts buffered vertices.
+When a vertex fails insertion due to missing parents, the node buffers it (orphan buffer: 1,000 entries / 50 MB max, with a per-peer cap of 100 entries) and sends a `GetParents` request. Each received parent is verified and inserted, recursing for missing grandparents. After any successful insertion, `resolve_orphans()` re-attempts buffered vertices.
+
+**Buffer overflow behavior:** When the buffer is full, the entry with the lowest round (oldest) is evicted to make room for the new vertex. The node does not halt or diverge — it continues operating and requesting missing parents. Safety is preserved because finality requires ⌈2n/3⌉ *honest* descendants, and honest nodes will re-broadcast vertices. A node that temporarily loses orphans may experience delayed finality but cannot reach an inconsistent state, as every vertex is fully re-verified on insertion regardless of source.
 
 ---
 
@@ -172,7 +176,7 @@ FINALIZED(v)  <=>  |DV(v, G)| >= ceil(2n/3)  AND  (for all p in v.parents : FINA
 
 ### 5.2 Incremental Descendant Tracking
 
-Rather than recomputing DV(v, G) via BFS (O(V) per vertex), UltraDAG maintains a precomputed map `descendant_validators: HashMap<Hash, BitVec>` with early-termination BFS on insertion and a `ValidatorIndex` for bidirectional address-to-index mapping. BitVec provides 256x memory reduction vs HashSet<Address> at scale. This gives **O(1) finality lookups**. Benchmark: 10,000 vertices in **21ms** vs. previously 47,000ms — a **2,238x improvement**.
+Rather than recomputing DV(v, G) via BFS (O(V) per vertex), UltraDAG maintains a precomputed map `descendant_validators: HashMap<Hash, BitVec>` with early-termination BFS on insertion and a `ValidatorIndex` for bidirectional address-to-index mapping. BitVec provides 256x memory reduction vs HashSet<Address> at scale. This gives **O(1) finality lookups**. Benchmark: inserting 10,000 vertices into a synthetic DAG (4 validators, linear chain topology) and checking finality for all vertices — **21ms** with incremental tracking vs. 47,000ms with naive per-vertex BFS, a **2,238x improvement** (measured on Apple M1, single-threaded, `cargo bench`).
 
 ### 5.3 Parent Finality Guarantee
 
@@ -196,7 +200,7 @@ If vertex v is finalized at node A and a conflicting v' at node B, then:
 
 Their intersection must contain at least one honest validator whose DAG would hold both conflicting vertices — triggering equivocation detection, a contradiction.
 
-**Formal Verification:** Machine-checked via TLA+. The TLC model checker exhaustively explored **32.6 million states** (N=4 validators, 1 Byzantine, 2 rounds) and verified six invariants with zero violations: TypeOK, Safety, HonestNoEquivocation, FinalizedParentsConsistency, RoundMonotonicity, and ByzantineBound.
+**Formal Verification:** Machine-checked via TLA+. The TLC model checker exhaustively explored **32.6 million states** (N=4 validators, 1 Byzantine, 2 rounds) and verified six invariants with zero violations: TypeOK, Safety, HonestNoEquivocation, FinalizedParentsConsistency, RoundMonotonicity, and ByzantineBound. Note: at MAX_ROUNDS=2, this covers approximately one finality cycle (finality takes 2-3 rounds). Extending to larger bounds remains future work (see Section 17).
 
 ---
 
@@ -266,6 +270,8 @@ Ordering deliberately does **not** use `topo_level` (ancestor count), because `t
 | Council of 21 | 10% | Equal split among seated council members |
 | Founder | 5% | Protocol development, earned through emission |
 
+**Council vs. Validators:** The Council of 21 is a **governance body** separate from the validator set. Council members are appointed via `CouncilMembership` proposals and do not require UDAG stake — their authority comes from their seat, not their stake. Validators are the top 100 stakers by effective stake. A person may be both a council member and a validator, but the roles are independent.
+
 **No Pre-Mine:** There are no genesis allocations. No developer pre-mine, no VC funding, no presale. All tokens are distributed through per-round emission starting from round 1. The founder earns 5% of each round's reward on the same timeline as validators. Auditable from block 0.
 
 ### 10.3 Validator Staking
@@ -289,7 +295,7 @@ Ordering deliberately does **not** use `topo_level` (ancestor count), because `t
 reward(r) = floor(1 * 10^8 / 2^(r / 10500000))
 ```
 
-Distributed per round by the protocol (not per vertex). 75% to validators/stakers proportional to effective stake, 10% to DAO treasury, 10% to Council of 21, 5% to founder. Coinbase contains only transaction fees. Reward = 0 after 64 halvings. Slashed stake is burned.
+Distributed per round by the protocol (not per vertex). 75% to validators/stakers proportional to effective stake, 10% to DAO treasury, 10% to Council of 21, 5% to founder. Coinbase contains only transaction fees. The reward effectively reaches 0 at **halving 27** (~44.8 years), when `floor(10^8 / 2^27) = 0` satoshis due to integer division. The code guards against shift overflow by returning 0 for halvings >= 64. Slashed stake is burned.
 
 ---
 
@@ -389,11 +395,15 @@ A 5-node Fly.io testnet runs continuously:
 TPS_max = (max_txs_per_vertex * validators_per_round) / round_duration
 ```
 
+These figures assume `MAX_TXS_PER_BLOCK = 10,000` transactions per vertex. At ~150-200 bytes per minimal transaction, a full vertex payload is ~1.5-2 MB, which fits within the 4 MB max message size with room for vertex metadata, parent hashes (up to 32), and the Ed25519 signature.
+
 | Round Duration | Theoretical Max TPS (4 validators) |
 |---|---|
 | 5 seconds | 8,000 |
 | 2 seconds | 20,000 |
 | 1 second | **40,000** |
+
+These are theoretical upper bounds assuming all validators produce full vertices every round, which requires sustained network bandwidth of ~8-16 MB/s per node.
 
 ### 15.2 Why These Tradeoffs Are Acceptable
 
