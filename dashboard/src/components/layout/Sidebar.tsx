@@ -60,13 +60,8 @@ export function Sidebar({ open, onClose, network = 'testnet', onSwitchNetwork, o
       }}>
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2px 8px', marginBottom: 20 }}>
-          <div style={{
-            width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'linear-gradient(135deg,#00E0C4,#0066FF)', fontSize: 14, fontWeight: 800, color: '#fff',
-            boxShadow: '0 0 16px rgba(0,224,196,0.25)',
-          }}>U</div>
+          <img src="/media/logo/logo_website.png" alt="UltraDAG" style={{ height: 30, width: 'auto' }} />
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.2, color: 'var(--dag-text)' }}>ULTRADAG</div>
             <div style={{ fontSize: 8.5, color: isMainnet ? '#00E0C4' : '#FFB800', letterSpacing: 2.5, fontWeight: 600 }}>
               {network.toUpperCase()} v0.1
             </div>
@@ -152,7 +147,7 @@ export function Sidebar({ open, onClose, network = 'testnet', onSwitchNetwork, o
             color: 'var(--dag-sidebar-lock-text)', fontSize: 11, fontWeight: 500, cursor: 'pointer',
             transition: 'all 0.2s',
           }}>
-            \uD83D\uDD12 Lock Wallet
+            {'🔒'} Lock Wallet
           </button>
         )}
 

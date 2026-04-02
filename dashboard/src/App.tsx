@@ -101,8 +101,7 @@ function App() {
             <div style={{ maxWidth: 380, width: '100%', textAlign: 'center', padding: '0 20px', animation: 'slideUp 0.5s ease' }}>
               {/* Logo */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 40, opacity: 0.6 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 7, background: 'linear-gradient(135deg,#00E0C4,#0066FF)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#fff' }}>U</div>
-                <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.5, color: 'var(--dag-text)' }}>ULTRADAG</span>
+                <img src="/media/logo/logo_website.png" alt="UltraDAG" style={{ height: 28, width: 'auto' }} />
               </div>
 
               {/* Biometric icon */}
@@ -159,14 +158,7 @@ function App() {
             borderBottom: '1px solid var(--dag-table-border)',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-              <div style={{
-                width: 28, height: 28, borderRadius: 7,
-                background: 'linear-gradient(135deg,#00E0C4,#0066FF)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 12, fontWeight: 800, color: '#fff',
-                animation: 'glow 4s ease-in-out infinite',
-              }}>U</div>
-              <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.2, color: 'var(--dag-text)' }}>ULTRADAG</span>
+              <img src="/media/logo/logo_website.png" alt="UltraDAG" style={{ height: 28, width: 'auto' }} />
             </div>
           </header>
           <WelcomeScreen

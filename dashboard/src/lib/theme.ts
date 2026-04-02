@@ -117,7 +117,7 @@ export const globalStyles = `
   @keyframes glow{0%,100%{box-shadow:0 0 12px rgba(0,224,196,0.15)}50%{box-shadow:0 0 20px rgba(0,224,196,0.3)}}
 
   :root, [data-theme="dark"] {
-    --dag-bg: #080C14;
+    --dag-bg: #0a0e1a;
     --dag-card: rgba(255,255,255,0.018);
     --dag-card-hover: rgba(255,255,255,0.04);
     --dag-border: rgba(255,255,255,0.055);

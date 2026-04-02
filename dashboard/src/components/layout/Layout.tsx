@@ -51,13 +51,7 @@ export function Layout({ connected: _connected, nodeUrl: _nodeUrl, keystoreUnloc
               background: 'none', border: 'none', color: 'var(--dag-text)', fontSize: 22,
               cursor: 'pointer', padding: '2px 6px', lineHeight: 1,
             }}>&#9776;</button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{
-                width: 24, height: 24, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'linear-gradient(135deg,#00E0C4,#0066FF)', fontSize: 10, fontWeight: 800, color: '#fff',
-              }}>U</div>
-              <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, color: 'var(--dag-text)' }}>ULTRADAG</span>
-            </div>
+            <img src="/media/logo/logo_website.png" alt="UltraDAG" style={{ height: 24, width: 'auto' }} />
             <div style={{
               padding: '3px 10px', borderRadius: 14, fontSize: 9, fontWeight: 600, letterSpacing: 0.8,
               textTransform: 'uppercase',

@@ -7,7 +7,7 @@
   --color-dag-blue: #0066FF;
   --color-dag-accent: #00E0C4;
   --color-dag-purple: #A855F7;
-  --color-dag-bg: #080C14;
+  --color-dag-bg: #0a0e1a;
   --color-dag-slate: #0B1120;
   --color-dag-card: rgba(255, 255, 255, 0.018);
   --color-dag-card-hover: rgba(255, 255, 255, 0.04);
@@ -20,7 +20,7 @@
 
 body {
   margin: 0;
-  background: var(--dag-bg, #080C14);
+  background: var(--dag-bg, #0a0e1a);
   color: var(--dag-text, #e2e8f0);
   font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -37,7 +37,7 @@ body {
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--dag-bg, #080C14);
+  background: var(--dag-bg, #0a0e1a);
 }
 ::-webkit-scrollbar-thumb {
   background: var(--dag-border, #334155);
