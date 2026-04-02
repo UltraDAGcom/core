@@ -1,11 +1,11 @@
 ---
 title: "UltraDAG Whitepaper v1.1"
-description: "A Leaderless DAG-BFT Cryptocurrency — Minimal correct consensus in 1,100 lines of Rust"
+description: "A Leaderless DAG-BFT Cryptocurrency — Minimal correct consensus in ~2,800 lines of Rust"
 order: 0
 section: "whitepaper"
 ---
 
-**UltraDAG is a minimal cryptocurrency built on a leaderless DAG-BFT consensus protocol.** The entire consensus core is 1,100 lines of Rust across five files. The protocol achieves Byzantine fault tolerance through descendant coverage finality — a vertex is finalized when 2f+1 distinct validators have built on top of it. This implicit voting mechanism eliminates leader election, view changes, and explicit vote messages. The system has been validated through 373 automated tests (all passing) and a 4-node Fly.io testnet with 1800+ consensus rounds. UltraDAG demonstrates that a complete, working cryptocurrency with a 21 million supply cap, halving schedule, and validator staking can be built with radical simplicity.
+**UltraDAG is a minimal cryptocurrency built on a leaderless DAG-BFT consensus protocol.** The entire consensus core is five files of Rust. The protocol achieves Byzantine fault tolerance through descendant coverage finality — a vertex is finalized when 2f+1 distinct validators have built on top of it. This implicit voting mechanism eliminates leader election, view changes, and explicit vote messages. The system has been validated through 805+ automated tests (all passing) and a 5-node Fly.io testnet. UltraDAG demonstrates that a complete, working cryptocurrency with a 21 million supply cap, halving schedule, and validator staking can be built with radical simplicity.
 
 ---
 
@@ -47,23 +47,23 @@ Everything else in this paper — the round gate, stall recovery, deterministic 
 
 ### 2.2 Consensus Core Size
 
-The complete consensus implementation is contained in five files totaling **1,887 lines** of Rust, of which **1,100 lines are production code**:
+The complete consensus implementation is contained in five files totaling **2,769 lines** of Rust (production + tests):
 
-| File | Production | Tests | Total |
-|------|-----------|-------|-------|
-| `vertex.rs` | 90 | 142 | 232 |
-| `dag.rs` | 609 | 288 | 897 |
-| `finality.rs` | 212 | 163 | 375 |
-| `ordering.rs` | 69 | 98 | 167 |
-| `validator_set.rs` | 120 | 96 | 216 |
-| **Total** | **1,100** | 787 | **1,887** |
+| File | Lines |
+|------|-------|
+| `vertex.rs` | 358 |
+| `dag.rs` | 1,504 |
+| `finality.rs` | 473 |
+| `ordering.rs` | 180 |
+| `validator_set.rs` | 254 |
+| **Total** | **2,769** |
 
 | System | Approx. Consensus Lines |
 |--------|----------------------|
 | Narwhal/Tusk | ~15,000 |
 | Bullshark | ~20,000 |
 | Shoal++ | ~30,000 |
-| **UltraDAG** | **1,100** |
+| **UltraDAG** | **~2,800** |
 
 ### 2.3 What Was Deliberately Omitted
 
@@ -79,7 +79,7 @@ The complete consensus implementation is contained in five files totaling **1,88
 
 **UltraDAG is not optimized for maximum throughput. It is optimized for minimum correct implementation.**
 
-The 27x reduction in consensus code directly reduces the attack surface. A protocol that can be fully described in three sentences can be fully audited by a single engineer in a single day.
+The ~10x reduction in consensus code vs Shoal++ directly reduces the attack surface. A protocol that can be fully described in three sentences can be fully audited by a single engineer in a single day.
 
 ---
 
@@ -172,7 +172,7 @@ FINALIZED(v)  <=>  |DV(v, G)| >= ceil(2n/3)  AND  (for all p in v.parents : FINA
 
 ### 5.2 Incremental Descendant Tracking
 
-Rather than recomputing DV(v, G) via BFS (O(V) per vertex), UltraDAG maintains a precomputed map `descendant_validators: HashMap<Hash, HashSet<Address>>` with early-termination BFS on insertion. This gives **O(1) finality lookups**. Benchmark: 10,000 vertices in **21ms** vs. previously 47,000ms — a **2,238x improvement**.
+Rather than recomputing DV(v, G) via BFS (O(V) per vertex), UltraDAG maintains a precomputed map `descendant_validators: HashMap<Hash, BitVec>` with early-termination BFS on insertion and a `ValidatorIndex` for bidirectional address-to-index mapping. BitVec provides 256x memory reduction vs HashSet<Address> at scale. This gives **O(1) finality lookups**. Benchmark: 10,000 vertices in **21ms** vs. previously 47,000ms — a **2,238x improvement**.
 
 ### 5.3 Parent Finality Guarantee
 
@@ -236,9 +236,10 @@ UltraDAG uses an account-based model with **balance** (1 UDAG = 10^8 satoshis) a
 ```rust
 order(v1, v2) =
   round (ascending)    -> primary key
-  ancestor count (asc) -> secondary key
   H(v) lexicographic   -> tiebreaker
 ```
+
+Ordering deliberately does **not** use `topo_level` (ancestor count), because `topo_level` is computed locally during insertion and is not part of signed vertex data. If two nodes have different DAG states when inserting, they could compute different `topo_level` values for the same vertex, causing a consensus split. `(round, hash)` is fully deterministic from signed data.
 
 ---
 
@@ -271,12 +272,15 @@ order(v1, v2) =
 
 | Parameter | Value |
 |-----------|-------|
-| Minimum stake | 10,000 UDAG |
+| Minimum stake | 2,000 UDAG |
+| Minimum delegation | 100 UDAG |
+| Default commission | 10% |
 | Unstaking cooldown | 2,016 rounds (~2.8 hours at 5s rounds) |
-| Slashing penalty | **50% on equivocation** |
-| Reward distribution | Proportional to stake |
+| Slashing penalty | **50% on equivocation** (cascades to delegators) |
+| Reward distribution | Proportional to effective stake (own + delegated) |
+| Observer reward | 50% (staked but not in active set) |
 | Epoch length | 210,000 rounds (~12 days at 5s rounds) |
-| Max active validators | 21 (top stakers by amount) |
+| Max active validators | 100 (top stakers by effective stake) |
 
 ### 10.4 Emission Model
 
@@ -291,7 +295,7 @@ Distributed per round by the protocol (not per vertex). 75% to validators/staker
 
 ## 11. Network Protocol
 
-Peers communicate over TCP with 4-byte big-endian length-prefixed JSON messages (max 4 MB).
+Peers communicate over TCP with 4-byte big-endian length-prefixed postcard (binary) messages (max 4 MB). Postcard encoding provides ~40% smaller wire format compared to the original JSON encoding.
 
 | Message | Direction | Description |
 |---------|-----------|-------------|
@@ -326,11 +330,11 @@ Built on Tokio for async I/O. All shared state is protected by `tokio::sync::RwL
 
 ### 12.3 Persistence
 
-State is saved every 10 rounds via atomic file operations. A **write-ahead log (WAL)** records every finalized vertex batch between snapshots — each entry is fsync'd before acknowledgement and replayed on crash recovery.
+State is persisted using **redb**, an embedded ACID database with 7 tables (accounts, stakes, delegations, proposals, votes, metadata, active_validators). Redb's transactional writes replace the earlier JSON snapshots and write-ahead log, providing crash-safe persistence without manual fsync or WAL replay.
 
 ### 12.4 Checkpointing and Fast-Sync
 
-Every 1,000 finalized rounds, validators produce a quorum-signed checkpoint capturing `state_root`, `dag_tip`, and `total_supply`. New nodes fast-sync by requesting the latest checkpoint and inserting only the suffix DAG — reducing sync from O(all history) to O(suffix).
+Every **100 finalized rounds**, validators produce a quorum-signed checkpoint capturing `state_root`, `dag_tip`, and `total_supply`. New nodes fast-sync by requesting the latest checkpoint and inserting only the suffix DAG — reducing sync from O(all history) to O(suffix).
 
 ---
 
@@ -344,7 +348,7 @@ Every 1,000 finalized rounds, validators produce a quorum-signed checkpoint capt
 | **Memory exhaustion (future rounds)** | MAX_FUTURE_ROUNDS = 10; vertices beyond rejected |
 | **Message flooding DoS** | 4 MB max message size; 10K mempool cap with fee eviction |
 | **Nothing-at-stake** | Equivocation detection + permanent ban |
-| **Phantom validator inflation** | `--validators N` fixes quorum denominator |
+| **Phantom validator inflation** | Staking-based active validator set; quorum derived from staked validators |
 | **Orphan buffer exhaustion** | Hard cap: 1,000 entries AND 50 MB byte limit |
 | **Sync poisoning** | Every synced vertex verified identically to live proposals |
 
@@ -356,22 +360,22 @@ Every 1,000 finalized rounds, validators produce a quorum-signed checkpoint capt
 
 **Resolved Optimizations**
 
-- **Finality performance:** O(V^2) to O(1) via incremental descendant tracking (2,238x faster)
+- **Finality performance:** O(V^2) to O(1) via incremental descendant tracking with BitVec (2,238x faster)
 - **Optimistic responsiveness:** Sub-second finality under normal conditions
 - **Epoch-based validator reconfiguration:** Dynamic set transitions every 210,000 rounds (~12 days at 5s rounds)
+- **Per-peer rate limiting:** Orphan buffer tracks source peer with per-peer caps (100 entries per peer)
+- **Checkpoint broadcasting:** Quorum-signed checkpoints every 100 rounds for fast-sync
 
 ---
 
 ## 14. Testnet Results
 
-A 4-node Fly.io testnet (ams region) runs continuously with a permissioned validator set:
+A 5-node Fly.io testnet runs continuously:
 
 | Metric | Value |
 |--------|-------|
-| DAG Rounds | 330+ |
-| Last Finalized Round | 182 |
-| Active Validators | 4 |
-| Tests Passing | 373 |
+| Active Validators | 5 |
+| Tests Passing | 805+ |
 | Avg Round Time | 5.0s |
 | UDAG Supply Cap | 21M |
 
@@ -395,7 +399,7 @@ TPS_max = (max_txs_per_vertex * validators_per_round) / round_duration
 
 **Modest per-node transaction volume.** IoT devices generate transactions at rates measured in single digits per second. A sensor reporting every 5 seconds, a smart meter settling micropayments every minute — these fit comfortably within a single vertex per round.
 
-**Code complexity is attack surface.** The 27x reduction from Shoal++ directly reduces the number of places where a bug could cause a safety violation. For networks where the cost of a consensus bug exceeds the cost of lower throughput, this tradeoff is unambiguously correct.
+**Code complexity is attack surface.** The ~10x reduction from Shoal++ directly reduces the number of places where a bug could cause a safety violation. For networks where the cost of a consensus bug exceeds the cost of lower throughput, this tradeoff is unambiguously correct.
 
 **Round timing is tunable.** The `--round-ms` flag lets operators choose their position on the latency-throughput curve.
 
@@ -409,7 +413,7 @@ TPS_max = (max_txs_per_vertex * validators_per_round) / round_duration
 | Finality | 3 phases | 2 phases | Pipeline | Wave-based | Separate | 2 rounds | 1 round | **Desc. coverage** |
 | Votes | Explicit | Explicit | Threshold | Implicit | Mixed | Implicit | Implicit | **Implicit** |
 | Messages | O(n^2) | O(n^2) | O(n) | O(n) | O(n) | O(n) | O(n) | **O(n)** |
-| Consensus lines | ~5k | ~10k | ~8k | ~10k | ~15k | ~20k | ~30k | **1,100** |
+| Consensus lines | ~5k | ~10k | ~8k | ~10k | ~15k | ~20k | ~30k | **~2,800** |
 | 3-sentence rule | No | No | No | No | No | No | No | **Yes** |
 | Separate mempool | No | No | No | No | Yes | Yes | Yes | **No** |
 | Waves / anchors | N/A | N/A | N/A | 4-round | N/A | 2-round | Pipelined | **None** |
@@ -418,20 +422,18 @@ TPS_max = (max_txs_per_vertex * validators_per_round) / round_duration
 
 ## 17. Future Work
 
-1. **Per-peer rate limiting** — defense against message flooding from individual peers
-2. **Checkpoint broadcasting** — broadcast pruning checkpoints to peers for verification
-3. **State root proofs** — Merkle proofs for light client verification from checkpoints
-4. **Extended formal verification** — liveness checking and larger bounds (N>4, rounds>2)
-5. **Data availability separation** — optional Narwhal-style mode for high-throughput deployments
-6. **Wire protocol versioning** — forward-compatible upgrades
+1. **State root proofs** — Merkle proofs for light client verification from checkpoints
+2. **Extended formal verification** — liveness checking and larger bounds (N>4, rounds>2)
+3. **Data availability separation** — optional Narwhal-style mode for high-throughput deployments
+4. **Wire protocol versioning** — forward-compatible upgrades
 
 ---
 
 ## 18. Conclusion
 
-UltraDAG demonstrates that a complete, working cryptocurrency can be built on a leaderless DAG-BFT consensus protocol with minimal complexity. The entire consensus core — 1,100 lines of Rust across five files — implements DAG construction, BFT finality via descendant coverage, deterministic ordering, validator management, and Ed25519-signed vertices.
+UltraDAG demonstrates that a complete, working cryptocurrency can be built on a leaderless DAG-BFT consensus protocol with minimal complexity. The entire consensus core — five Rust files — implements DAG construction, BFT finality via descendant coverage, deterministic ordering, validator management, and Ed25519-signed vertices.
 
-The protocol's safety relies on the standard BFT quorum intersection property applied to an implicit voting mechanism where DAG topology replaces explicit vote messages. The system has been validated through **373 automated tests** (all passing) and a 4-node Fly.io testnet with 1,800+ consensus rounds.
+The protocol's safety relies on the standard BFT quorum intersection property applied to an implicit voting mechanism where DAG topology replaces explicit vote messages. The system has been validated through **805+ automated tests** (all passing) and a 5-node Fly.io testnet.
 
 **UltraDAG is not the fastest DAG-BFT protocol. It is the simplest correct one.** For networks where auditability, small binary size, and minimal attack surface matter more than maximum throughput — IoT micropayments, embedded systems, resource-constrained validators — this is the right tradeoff.
 
