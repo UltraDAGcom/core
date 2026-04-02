@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { getHealthDetailed, getRound } from '../lib/api';
+import { getHealthDetailed, getRound, getStatus } from '../lib/api';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
 import { useIsMobile } from '../hooks/useIsMobile';
 import type { NodeStatus } from '../hooks/useNode';
@@ -298,35 +298,39 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
   }, [fetchHealth]);
 
   useEffect(() => {
-    const handler = () => { setHealth(null); setRecentRounds([]); setVertexHistory([]); fetchHealth(); };
+    const handler = () => { setHealth(null); setRecentRounds([]); setVertexHistory([]); lastFinRef.current = 0; fetchHealth(); };
     window.addEventListener('ultradag-network-switch', handler);
     return () => window.removeEventListener('ultradag-network-switch', handler);
   }, [fetchHealth]);
 
+  // Live DAG polling — fetches latest 8 rounds every 5s independently
+  const lastFinRef = useRef(0);
   useEffect(() => {
-    if (!health) return;
     let mounted = true;
-    const fin = health.components.finality.last_finalized_round;
-    const fetchRounds = async () => {
-      const rounds: RoundData[] = [];
-      for (let r = fin; r > Math.max(0, fin - 8); r--) {
-        try {
-          const data = await getRound(r);
-          const verts = Array.isArray(data) ? data : data?.vertices ?? [];
-          if (mounted) rounds.push({ round: r, vertices: verts });
-        } catch { break; }
-      }
-      if (mounted) {
-        setRecentRounds(rounds.reverse());
-        setVertexHistory(prev => {
-          const next = [...prev, ...rounds.map(r => r.vertices?.length ?? 0)].slice(-12);
-          return next;
-        });
-      }
+    const fetchDagRounds = async () => {
+      try {
+        const s = await getStatus();
+        const fin = Number(s.last_finalized_round ?? 0);
+        if (fin <= 0 || fin === lastFinRef.current) return;
+        lastFinRef.current = fin;
+        const rounds: RoundData[] = [];
+        for (let r = fin; r > Math.max(0, fin - 8); r--) {
+          try {
+            const data = await getRound(r);
+            const verts = Array.isArray(data) ? data : data?.vertices ?? [];
+            rounds.push({ round: r, vertices: verts });
+          } catch { break; }
+        }
+        if (mounted) {
+          setRecentRounds(rounds.reverse());
+          setVertexHistory(prev => [...prev, ...rounds.map(r => r.vertices?.length ?? 0)].slice(-12));
+        }
+      } catch { /* ignore */ }
     };
-    fetchRounds();
-    return () => { mounted = false; };
-  }, [health?.components.finality.last_finalized_round]);
+    fetchDagRounds();
+    const iv = setInterval(fetchDagRounds, 5_000);
+    return () => { mounted = false; clearInterval(iv); };
+  }, []);
 
   const dag = health?.components.dag;
   const fin = health?.components.finality;
