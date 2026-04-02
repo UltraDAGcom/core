@@ -78,6 +78,15 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Address/hash overflow handling on mobile */
+@media (max-width: 768px) {
+  .font-mono, [style*="DM Mono"] {
+    word-break: break-all;
+  }
+  table { width: 100%; }
+  td, th { word-break: break-all; }
+}
+
 /* Card hover glow */
 .card-glow {
   transition: box-shadow 0.2s ease, border-color 0.2s ease;

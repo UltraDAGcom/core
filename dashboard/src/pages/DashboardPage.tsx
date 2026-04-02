@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { getHealthDetailed, getRound } from '../lib/api';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
@@ -214,18 +214,24 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
   const pw = getPasskeyWallet();
   const userName = pw?.name || wallets?.[0]?.name || 'Wallet';
 
+  const fetchHealth = useCallback(async () => {
+    try {
+      const data = await getHealthDetailed();
+      setHealth(data);
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
-    let mounted = true;
-    const fetchHealth = async () => {
-      try {
-        const data = await getHealthDetailed();
-        if (mounted) setHealth(data);
-      } catch { /* ignore */ }
-    };
     fetchHealth();
     const iv = setInterval(fetchHealth, 10_000);
-    return () => { mounted = false; clearInterval(iv); };
-  }, []);
+    return () => { clearInterval(iv); };
+  }, [fetchHealth]);
+
+  useEffect(() => {
+    const handler = () => { setHealth(null); setRecentRounds([]); setVertexHistory([]); fetchHealth(); };
+    window.addEventListener('ultradag-network-switch', handler);
+    return () => window.removeEventListener('ultradag-network-switch', handler);
+  }, [fetchHealth]);
 
   useEffect(() => {
     if (!health) return;

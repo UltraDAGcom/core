@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { colors, fonts, globalStyles } from '../../lib/theme';
@@ -24,6 +24,14 @@ interface LayoutProps {
 export function Layout({ connected: _connected, nodeUrl: _nodeUrl, keystoreUnlocked, network, walletAddress: _walletAddress, walletBalance: _walletBalance, sessionSecondsLeft, sessionTotalSeconds, onToggleLock, onSwitchNetwork, theme, onToggleTheme }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const m = useIsMobile();
+
+  // Lock body scroll when mobile sidebar is open
+  useEffect(() => {
+    if (m && sidebarOpen) {
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = ''; };
+    }
+  }, [m, sidebarOpen]);
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: colors.bg, fontFamily: fonts.sans, color: colors.textPrimary }}>
