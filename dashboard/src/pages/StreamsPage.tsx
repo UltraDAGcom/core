@@ -606,8 +606,8 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                           const balData = await balRes.json();
                           await signAndSubmitSmartOp({ StreamCancel: { stream_id: s.id } }, MIN_FEE, balData.nonce ?? 0);
                         } else {
-                          const wallet = wallets.find(w => w.secret_key);
-                          if (!wallet) { alert('No wallet available'); return; }
+                          const wallet = wallets.find(w => w.secret_key && w.address.toLowerCase() === s.sender.toLowerCase());
+                          if (!wallet) { alert('No wallet found matching stream sender'); return; }
                           const res = await fetch(`${getNodeUrl()}/stream/cancel`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -673,8 +673,8 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                           const balData = await balRes.json();
                           await signAndSubmitSmartOp({ StreamWithdraw: { stream_id: s.id } }, MIN_FEE, balData.nonce ?? 0);
                         } else {
-                          const wallet = wallets.find(w => w.secret_key);
-                          if (!wallet) { alert('No wallet available'); return; }
+                          const wallet = wallets.find(w => w.secret_key && w.address.toLowerCase() === s.recipient.toLowerCase());
+                          if (!wallet) { alert('No wallet found matching stream recipient'); return; }
                           const res = await fetch(`${getNodeUrl()}/stream/withdraw`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
