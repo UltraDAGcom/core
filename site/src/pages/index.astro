@@ -7,41 +7,43 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
 
 <BaseLayout title="UltraDAG ($UDAG) — Machine-to-Machine Micropayments">
 
-  <script type="application/ld+json" is:inline set:html={JSON.stringify({
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "WebSite",
-        "name": "UltraDAG",
-        "alternateName": "$UDAG",
-        "url": "https://ultradag.com",
-        "description": "The simplest production-ready DAG chain. Fast BFT finality for machine-to-machine micropayments.",
-        "potentialAction": {
-          "@type": "SearchAction",
-          "target": "https://ultradag.com/explorer?q={search_term_string}",
-          "query-input": "required name=search_term_string"
+  <script is:inline type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "name": "UltraDAG",
+          "alternateName": "$UDAG",
+          "url": "https://ultradag.com",
+          "description": "The simplest production-ready DAG chain. Fast BFT finality for machine-to-machine micropayments.",
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": "https://ultradag.com/explorer?q={search_term_string}",
+            "query-input": "required name=search_term_string"
+          }
+        },
+        {
+          "@type": "Organization",
+          "name": "UltraDAG",
+          "url": "https://ultradag.com",
+          "logo": "https://ultradag.com/media/logo/logo_website.png",
+          "sameAs": [
+            "https://github.com/UltraDAGcom/core",
+            "https://x.com/ultradagcom",
+            "https://t.me/ultradagcom"
+          ]
+        },
+        {
+          "@type": "SoftwareApplication",
+          "name": "UltraDAG Node",
+          "applicationCategory": "BlockchainApplication",
+          "operatingSystem": "Linux, macOS",
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
         }
-      },
-      {
-        "@type": "Organization",
-        "name": "UltraDAG",
-        "url": "https://ultradag.com",
-        "logo": "https://ultradag.com/media/logo/logo_website.png",
-        "sameAs": [
-          "https://github.com/UltraDAGcom/core",
-          "https://x.com/ultradagcom",
-          "https://t.me/ultradagcom"
-        ]
-      },
-      {
-        "@type": "SoftwareApplication",
-        "name": "UltraDAG Node",
-        "applicationCategory": "BlockchainApplication",
-        "operatingSystem": "Linux, macOS",
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
-      }
-    ]
-  })} />
+      ]
+    }
+  </script>
 
   <canvas id="scene"></canvas>
 
@@ -501,12 +503,12 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
 
 <span class="cm"># 3. Get testnet UDAG from the faucet (100 UDAG per request, repeat as needed)</span>
 <span class="kw">curl</span> -X POST <span class="str">http://localhost:10333/faucet</span> \
-  -d <span class="str">'{"address": "YOUR_ADDRESS", "amount": 10000000000}'</span>
+  -d <span class="str">'&#123;"address": "YOUR_ADDRESS", "amount": 10000000000&#125;'</span>
 
 <span class="cm"># 4. Stake to become an active validator (min 2,000 UDAG)</span>
 <span class="cm">#    Your secret key is in ~/.ultradag/validator.key</span>
 <span class="kw">curl</span> -X POST <span class="str">http://localhost:10333/stake</span> \
-  -d <span class="str">'{"secret_key": "YOUR_SECRET_KEY", "amount": 200000000000}'</span>
+  -d <span class="str">'&#123;"secret_key": "YOUR_SECRET_KEY", "amount": 200000000000&#125;'</span>
 
 <span class="cm"># 5. Check your node status</span>
 <span class="kw">curl</span> <span class="str">http://localhost:10333/status</span></pre>
@@ -530,12 +532,12 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
 
 <span class="cm"># 3. Get testnet UDAG from the faucet (100 UDAG per request, repeat as needed)</span>
 <span class="kw">curl</span> -X POST <span class="str">http://localhost:10333/faucet</span> \
-  -d <span class="str">'{"address": "YOUR_ADDRESS", "amount": 10000000000}'</span>
+  -d <span class="str">'&#123;"address": "YOUR_ADDRESS", "amount": 10000000000&#125;'</span>
 
 <span class="cm"># 4. Stake to become an active validator (min 2,000 UDAG)</span>
 <span class="cm">#    Your secret key is in ~/.ultradag/validator.key</span>
 <span class="kw">curl</span> -X POST <span class="str">http://localhost:10333/stake</span> \
-  -d <span class="str">'{"secret_key": "YOUR_SECRET_KEY", "amount": 200000000000}'</span>
+  -d <span class="str">'&#123;"secret_key": "YOUR_SECRET_KEY", "amount": 200000000000&#125;'</span>
 
 <span class="cm"># 5. Check your node status</span>
 <span class="kw">curl</span> <span class="str">http://localhost:10333/status</span></pre>
@@ -559,7 +561,7 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
 <span class="cm">#    POST /stake is disabled on mainnet — private keys must never transit the network.</span>
 <span class="cm">#    Use the SDK to sign a StakeTx locally, then submit via /tx/submit:</span>
 <span class="kw">curl</span> -X POST <span class="str">http://localhost:10333/tx/submit</span> \
-  -d <span class="str">'{"transaction": "SIGNED_STAKE_TX_HEX"}'</span>
+  -d <span class="str">'&#123;"transaction": "SIGNED_STAKE_TX_HEX"&#125;'</span>
 
 <span class="cm"># 5. Check your node status</span>
 <span class="kw">curl</span> <span class="str">http://localhost:10333/status</span></pre>
