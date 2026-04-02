@@ -43,7 +43,7 @@ export function Layout({ connected: _connected, nodeUrl: _nodeUrl, keystoreUnloc
         {m && (
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '10px 14px', background: 'var(--dag-sidebar-bg)',
+            padding: '10px 14px', background: 'var(--dag-bg)',
             borderBottom: '1px solid var(--dag-sidebar-border)',
             position: 'sticky', top: 0, zIndex: 30,
           }}>

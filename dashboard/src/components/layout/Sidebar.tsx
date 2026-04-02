@@ -50,7 +50,7 @@ export function Sidebar({ open, onClose, network = 'testnet', onSwitchNetwork, o
 
       <aside style={{
         width: m ? 260 : 216, padding: '18px 10px',
-        background: 'var(--dag-sidebar-bg)',
+        background: m ? 'var(--dag-bg)' : 'var(--dag-sidebar-bg)',
         borderRight: '1px solid var(--dag-sidebar-border)',
         display: m && !open ? 'none' : 'flex', flexDirection: 'column',
         position: m ? 'fixed' : 'sticky', top: 0, left: 0, height: '100vh', overflowY: 'auto',
