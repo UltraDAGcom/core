@@ -312,7 +312,8 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
       for (let r = fin; r > Math.max(0, fin - 8); r--) {
         try {
           const data = await getRound(r);
-          if (mounted) rounds.push(data);
+          const verts = Array.isArray(data) ? data : data?.vertices ?? [];
+          if (mounted) rounds.push({ round: r, vertices: verts });
         } catch { break; }
       }
       if (mounted) {

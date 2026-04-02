@@ -419,6 +419,7 @@ struct VertexResponse {
     reward: u64,
     tx_count: usize,
     parent_count: usize,
+    parent_hashes: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -1067,6 +1068,7 @@ ultradag_banned_ips {ban_count}
                 reward: v.block.coinbase.amount,
                 tx_count: v.block.transactions.len(),
                 parent_count: v.parent_hashes.len(),
+                parent_hashes: v.parent_hashes.iter().map(|h| hex_encode(h)).collect(),
             }).collect();
             json_response(StatusCode::OK, &responses)
         }
@@ -2829,11 +2831,13 @@ ultradag_banned_ips {ban_count}
                     "nonce": tx.nonce(),
                 })
             }).collect();
+            let parent_hashes: Vec<String> = v.parent_hashes.iter().map(|h| hex_encode(h)).collect();
             json_response(StatusCode::OK, &serde_json::json!({
                 "hash": hash_hex,
                 "round": v.round,
                 "validator": v.validator.to_hex(),
                 "parent_count": v.parent_hashes.len(),
+                "parent_hashes": parent_hashes,
                 "coinbase": {
                     "to": v.block.coinbase.to.to_hex(),
                     "amount": v.block.coinbase.amount,
