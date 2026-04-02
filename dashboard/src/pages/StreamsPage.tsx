@@ -170,7 +170,16 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
             const res = await fetch(`${getNodeUrl()}/streams/${role}/${addr}`, { signal: AbortSignal.timeout(5000) });
             if (res.ok) {
               const data = await res.json();
-              for (const s of (data.streams ?? [])) { if (!seen.has(s.id)) { seen.add(s.id); streams.push(s); } }
+              for (const s of (data.streams ?? [])) {
+                if (!seen.has(s.id)) {
+                  seen.add(s.id);
+                  // Derive status if missing from RPC response
+                  if (!s.status) {
+                    s.status = s.cancelled_at_round != null ? 'Cancelled' : (s.accrued >= s.deposited ? 'Depleted' : 'Active');
+                  }
+                  streams.push(s);
+                }
+              }
             }
           } catch { /* endpoint may not exist yet */ }
         }

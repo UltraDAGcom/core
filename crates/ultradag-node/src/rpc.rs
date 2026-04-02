@@ -152,12 +152,20 @@ fn stream_to_json(id_hex: &str, s: &ultradag_coin::tx::stream::Stream, current_r
     let rate_udag_per_hour = s.rate_sats_per_round as f64 * 720.0 / ultradag_coin::SATS_PER_UDAG as f64;
     let cliff_end_round = s.start_round.saturating_add(s.cliff_rounds);
     let in_cliff = current_round < cliff_end_round;
+    let status = if s.cancelled_at_round.is_some() {
+        "Cancelled"
+    } else if s.is_depleted_at(current_round) {
+        "Depleted"
+    } else {
+        "Active"
+    };
     serde_json::json!({
         "id": id_hex,
         "sender": s.sender.to_hex(),
         "recipient": s.recipient.to_hex(),
         "rate_sats_per_round": s.rate_sats_per_round,
         "rate_udag_per_hour": rate_udag_per_hour,
+        "rate_per_round": s.rate_sats_per_round,
         "start_round": s.start_round,
         "deposited": s.deposited,
         "deposited_udag": s.deposited as f64 / ultradag_coin::SATS_PER_UDAG as f64,
@@ -168,6 +176,7 @@ fn stream_to_json(id_hex: &str, s: &ultradag_coin::tx::stream::Stream, current_r
         "withdrawable": withdrawable,
         "withdrawable_udag": withdrawable as f64 / ultradag_coin::SATS_PER_UDAG as f64,
         "cancelled_at_round": s.cancelled_at_round,
+        "status": status,
         "is_active": is_active,
         "end_round": end_round,
         "elapsed_rounds": elapsed,
