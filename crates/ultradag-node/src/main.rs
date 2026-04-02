@@ -507,11 +507,8 @@ async fn main() {
     if args.validator_key.is_none() {
         let state = server.state.read().await;
         if state.total_staked() == 0 {
-            warn!("PRE-STAKING MODE WITHOUT VALIDATOR ALLOWLIST: This node cannot verify \
-                checkpoint signer trust and will refuse CheckpointSync from peers. \
-                Configure --validator-key with trusted validator addresses to enable \
-                checkpoint-based fast-sync. Without this, new nodes joining the network \
-                cannot safely sync state.");
+            info!("Pre-staking mode: checkpoint fast-sync disabled until validators stake UDAG. \
+                Alternatively, configure --validator-key with trusted validator addresses.");
         }
         drop(state);
     }
@@ -880,9 +877,7 @@ async fn main() {
     } else {
         // Print startup banner in non-TUI mode
         println!();
-        println!("  ╔═╗ ┬ ┬┌─┐┌┐┌┌┬┐┬ ┬  ╔═╗┌─┐┌─┐┌┬┐┌─┐┌┬┐  ");
-        println!("  ╠═╝ ├─┤├─┤│││ │ ├─┤  ║  ├─┤├─┘ │ ├─┤│││  ");
-        println!("  ╩   ┴ ┴┴ ┴┘└┘ ┴ ┴ ┴  ╚═╝┴ ┴┴  ┴ ┴ ┴┴ ┴  ");
+        println!("  UltraDAG");
         println!();
         println!("  UltraDAG Node v1.0 | Port: {} | RPC: http://127.0.0.1:{}", args.port, rpc_port);
         println!("  Round: {}ms | Data: {}", args.round_ms, data_dir.display());

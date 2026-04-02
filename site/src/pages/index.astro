@@ -288,7 +288,7 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
         <div class="feature reveal">
           <div class="feature-icon">Storage</div>
           <h3>Bounded Storage</h3>
-          <p>Automatic pruning keeps only last 1000 rounds (configurable). Memory usage stays constant after sync. Unlike IOTA/Byteball's unbounded growth, UltraDAG works on IoT devices with limited flash/RAM.</p>
+          <p>Automatic pruning keeps only last 500 rounds (configurable). Memory usage stays constant after sync. Unlike IOTA/Byteball's unbounded growth, UltraDAG works on IoT devices with limited flash/RAM.</p>
         </div>
         <div class="feature reveal reveal-delay-1">
           <div class="feature-icon">Finality</div>
@@ -359,7 +359,7 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
           <div class="token-label">Genesis pre-mine</div>
         </div>
         <div class="token-card reveal reveal-delay-1">
-          <div class="token-value">10,000</div>
+          <div class="token-value">2,000</div>
           <div class="token-label">Min stake (UDAG)</div>
         </div>
         <div class="token-card reveal reveal-delay-2">
@@ -442,7 +442,7 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
           <div class="comp-row">
             <div class="comp-name">IoTeX <span class="comp-badge slow">Slow</span></div>
             <div class="comp-fail"><strong>15s+ block time</strong> plus confirmations. 100+ MB binary. Higher fees for micro-tx.</div>
-            <div class="comp-win"><strong>&lt;2 MB binary.</strong> Fee &lt;0.0001 UDAG. Fits on ESP32.</div>
+            <div class="comp-win"><strong>&lt;2 MB binary.</strong> Fee 0.0001 UDAG. Fits on ESP32.</div>
           </div>
           <div class="comp-row">
             <div class="comp-name">Ethereum L2 <span class="comp-badge slow">Complex</span></div>
@@ -489,18 +489,26 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
       <div class="code-section reveal">
         <div class="code-header">
           <div class="code-dots"><div class="code-dot"></div><div class="code-dot"></div><div class="code-dot"></div></div>
-          <span class="code-label">Linux Installation</span>
+          <span class="code-label">Linux — Testnet</span>
         </div>
-        <pre><span class="cm"># Download and extract</span>
+        <pre><span class="cm"># 1. Download and extract</span>
 <span class="kw">curl</span> -L https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-linux-x86_64.tar.gz | <span class="kw">tar</span> xz
 
-<span class="cm"># Run node (auto-connects to testnet bootstrap nodes)</span>
-<span class="kw">./ultradag-node-linux-x86_64</span> --port 9333
-
-<span class="cm"># To validate (produce blocks and earn UDAG):</span>
+<span class="cm"># 2. Start your node with --validate to produce blocks</span>
 <span class="kw">./ultradag-node-linux-x86_64</span> --port 9333 --validate
+<span class="cm">#    → Your validator address is printed at startup (saved to ~/.ultradag/validator.key)</span>
+<span class="cm">#    → RPC is available at http://localhost:10333</span>
 
-<span class="cm"># Check status (RPC defaults to P2P port + 1000 = 10333)</span>
+<span class="cm"># 3. Get testnet UDAG from the faucet (100 UDAG per request, repeat as needed)</span>
+<span class="kw">curl</span> -X POST <span class="str">http://localhost:10333/faucet</span> \
+  -d <span class="str">'{"address": "YOUR_ADDRESS", "amount": 10000000000}'</span>
+
+<span class="cm"># 4. Stake to become an active validator (min 2,000 UDAG)</span>
+<span class="cm">#    Your secret key is in ~/.ultradag/validator.key</span>
+<span class="kw">curl</span> -X POST <span class="str">http://localhost:10333/stake</span> \
+  -d <span class="str">'{"secret_key": "YOUR_SECRET_KEY", "amount": 200000000000}'</span>
+
+<span class="cm"># 5. Check your node status</span>
 <span class="kw">curl</span> <span class="str">http://localhost:10333/status</span></pre>
       </div>
 
@@ -508,20 +516,52 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
       <div class="code-section reveal">
         <div class="code-header">
           <div class="code-dots"><div class="code-dot"></div><div class="code-dot"></div><div class="code-dot"></div></div>
-          <span class="code-label">macOS Installation</span>
+          <span class="code-label">macOS — Testnet</span>
         </div>
-        <pre><span class="cm"># Download and extract (Apple Silicon)</span>
+        <pre><span class="cm"># 1. Download and extract (Apple Silicon)</span>
 <span class="kw">curl</span> -L https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-macos-arm64.tar.gz | <span class="kw">tar</span> xz
-<span class="kw">./ultradag-node-macos-arm64</span> --port 9333
-
 <span class="cm"># Or for Intel Macs:</span>
-<span class="kw">curl</span> -L https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-macos-x86_64.tar.gz | <span class="kw">tar</span> xz
-<span class="kw">./ultradag-node-macos-x86_64</span> --port 9333
+<span class="cm"># curl -L https://github.com/UltraDAGcom/core/releases/download/latest/ultradag-node-macos-x86_64.tar.gz | tar xz</span>
 
-<span class="cm"># To validate (produce blocks and earn UDAG):</span>
+<span class="cm"># 2. Start your node with --validate to produce blocks</span>
 <span class="kw">./ultradag-node-macos-arm64</span> --port 9333 --validate
+<span class="cm">#    → Your validator address is printed at startup (saved to ~/.ultradag/validator.key)</span>
+<span class="cm">#    → RPC is available at http://localhost:10333</span>
 
-<span class="cm"># Check status (RPC defaults to P2P port + 1000 = 10333)</span>
+<span class="cm"># 3. Get testnet UDAG from the faucet (100 UDAG per request, repeat as needed)</span>
+<span class="kw">curl</span> -X POST <span class="str">http://localhost:10333/faucet</span> \
+  -d <span class="str">'{"address": "YOUR_ADDRESS", "amount": 10000000000}'</span>
+
+<span class="cm"># 4. Stake to become an active validator (min 2,000 UDAG)</span>
+<span class="cm">#    Your secret key is in ~/.ultradag/validator.key</span>
+<span class="kw">curl</span> -X POST <span class="str">http://localhost:10333/stake</span> \
+  -d <span class="str">'{"secret_key": "YOUR_SECRET_KEY", "amount": 200000000000}'</span>
+
+<span class="cm"># 5. Check your node status</span>
+<span class="kw">curl</span> <span class="str">http://localhost:10333/status</span></pre>
+      </div>
+
+      <!-- Mainnet Instructions -->
+      <div class="code-section reveal">
+        <div class="code-header">
+          <div class="code-dots"><div class="code-dot"></div><div class="code-dot"></div><div class="code-dot"></div></div>
+          <span class="code-label">Mainnet Validator Setup</span>
+        </div>
+        <pre><span class="cm"># 1. Generate keys OFFLINE using the SDK (never expose private keys to a server)</span>
+<span class="cm">#    Use the Python, JavaScript, Rust, or Go SDK to generate an Ed25519 keypair locally.</span>
+
+<span class="cm"># 2. Start your node with your private key</span>
+<span class="kw">./ultradag-node</span> --port 9333 --validate --pkey <span class="str">YOUR_PRIVATE_KEY_HEX</span>
+
+<span class="cm"># 3. Fund your address with at least 2,000 UDAG (acquire via exchange or transfer)</span>
+
+<span class="cm"># 4. Stake by submitting a pre-signed StakeTx via the SDK</span>
+<span class="cm">#    POST /stake is disabled on mainnet — private keys must never transit the network.</span>
+<span class="cm">#    Use the SDK to sign a StakeTx locally, then submit via /tx/submit:</span>
+<span class="kw">curl</span> -X POST <span class="str">http://localhost:10333/tx/submit</span> \
+  -d <span class="str">'{"transaction": "SIGNED_STAKE_TX_HEX"}'</span>
+
+<span class="cm"># 5. Check your node status</span>
 <span class="kw">curl</span> <span class="str">http://localhost:10333/status</span></pre>
       </div>
 
@@ -531,8 +571,8 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
         <div class="node-info-grid">
           <div>
             <p>
-              ✓ <strong>Automatic sync</strong> from testnet<br />
-              ✓ <strong>Start earning</strong> block rewards immediately<br />
+              ✓ <strong>Automatic sync</strong> from bootstrap nodes<br />
+              ✓ <strong>Earn rewards</strong> proportional to your stake<br />
               ✓ <strong>HTTP RPC</strong> on port 10333<br />
               ✓ <strong>Bounded storage</strong> (~100MB after sync)
             </p>
@@ -542,7 +582,7 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
               ✓ <strong>No configuration</strong> files needed<br />
               ✓ <strong>Automatic peer</strong> discovery<br />
               ✓ <strong>Fast finality</strong> in ~10 seconds<br />
-              ✓ <strong>Production ready</strong> for mainnet
+              ✓ <strong>Passive staking</strong> earns without running a node
             </p>
           </div>
         </div>

@@ -2278,7 +2278,7 @@ async fn handle_peer(
                     } else {
                         drop(fin_r);
                         // No validator allowlist AND no active stakers: refuse.
-                        warn!("REFUSING CheckpointSync from {}: cannot verify checkpoint signer trust \
+                        info!("Skipping CheckpointSync from {}: cannot verify checkpoint signer trust \
                             in pre-staking mode without --validator-key.", peer_addr);
                         checkpoint_metrics.record_fast_sync_failure();
                         return Ok(());
