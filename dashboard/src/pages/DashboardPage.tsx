@@ -370,8 +370,8 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
         <div style={{ display: 'flex', alignItems: 'center', gap: m ? 8 : 12, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#00E0C4', boxShadow: '0 0 8px #00E0C4', animation: 'pulse 2s ease-in-out infinite' }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#00E0C4' }}>HEALTHY</span>
-            <span style={{ fontSize: 11, color: 'var(--dag-subheading)' }}>{healthScore}%</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: healthScore >= 90 ? '#00E0C4' : healthScore >= 60 ? '#FFB800' : '#EF4444' }}>{health?.status?.toUpperCase() ?? 'CONNECTING'}</span>
+            <span style={{ fontSize: 11, color: 'var(--dag-subheading)' }}>{health ? `${healthScore}%` : ''}</span>
           </div>
           {!m && <div style={{ padding: '5px 13px', borderRadius: 18, background: 'rgba(0,224,196,0.06)', border: '1px solid rgba(0,224,196,0.12)', fontSize: 10.5, fontWeight: 600, color: '#00E0C4', letterSpacing: 1, textTransform: 'uppercase' }}>{network}</div>}
           {!m && <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 13px', borderRadius: 18, background: 'var(--dag-card)', border: '1px solid var(--dag-border)' }}>
@@ -411,7 +411,7 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
 
       {/* Primary Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: m ? 10 : 12, marginBottom: 16, animation: 'slideUp 0.5s ease' }}>
-        <Card label="Round" icon="◈" accent="#00E0C4" spark={vertexHistory.length > 1 ? vertexHistory : [3, 4, 5, 4, 5]}
+        <Card label="Round" icon="◈" accent="#00E0C4" spark={vertexHistory.length > 1 ? vertexHistory : undefined}
           value={<><AnimCounter target={round} /> <span style={{ fontSize: 11, color: 'var(--dag-text-faint)', fontWeight: 400 }}>~5s</span></>}
           sub={`Finalized: ${finalized}`}
         />
@@ -423,7 +423,7 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
             <div style={{ height: '100%', borderRadius: 2, background: 'linear-gradient(90deg,#0066FF,#00E0C4)', width: `${supplyPct}%`, boxShadow: '0 0 6px rgba(0,102,255,0.3)' }} />
           </div>
         </Card>
-        <Card label="Network" icon="⬡" accent="#A855F7" spark={[5, 5, 5, 4, 5, 5, 5, 5]}
+        <Card label="Network" icon="⬡" accent="#A855F7"
           value={<><AnimCounter target={validators} /> <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--dag-text-muted)' }}>validators</span></>}
           sub={`${peers} peers connected`}
         />
