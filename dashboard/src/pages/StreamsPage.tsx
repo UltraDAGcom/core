@@ -101,6 +101,8 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
   const [tab, setTab] = useState<'create' | 'outgoing' | 'incoming'>('create');
   const [outgoingPage, setOutgoingPage] = useState(1);
   const [incomingPage, setIncomingPage] = useState(1);
+  const [senderIdx, setSenderIdx] = useState(0);
+  const [senderBalance, setSenderBalance] = useState<number | null>(null);
   const STREAM_PAGE_SIZE = 10;
 
   const myAddresses = wallets.map(w => w.address.toLowerCase());
@@ -116,6 +118,22 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
     setFrequency(info.defaultFreq);
     setDurUnit(info.defaultDurUnit);
   }, [streamType]);
+
+  // Fetch selected sender wallet balance
+  useEffect(() => {
+    const wallet = wallets[senderIdx];
+    if (!wallet) { setSenderBalance(null); return; }
+    let mounted = true;
+    const fetchBal = async () => {
+      try {
+        const res = await fetch(`${getNodeUrl()}/balance/${wallet.address}`, { signal: AbortSignal.timeout(5000) });
+        if (res.ok && mounted) { const d = await res.json(); setSenderBalance(d.balance ?? 0); }
+      } catch { /* ignore */ }
+    };
+    fetchBal();
+    const iv = setInterval(fetchBal, 10_000);
+    return () => { mounted = false; clearInterval(iv); };
+  }, [senderIdx, wallets]);
 
   // Computed values
   const rateNum = parseFloat(rateAmount) || 0;
@@ -200,10 +218,16 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
 
     const depositSats = Math.floor(totalDeposit * SATS);
     const passkey = getPasskeyWallet();
-    const wallet = wallets.find(w => w.secret_key) || wallets[0];
+    const wallet = wallets[senderIdx];
 
     if (!passkey && !wallet?.secret_key) {
       setFormMsg('No wallet available. Create or import a wallet first.');
+      setFormError(true);
+      return;
+    }
+
+    if (senderBalance !== null && senderBalance < depositSats + MIN_FEE) {
+      setFormMsg(`Insufficient balance: need ${((depositSats + MIN_FEE) / SATS).toFixed(4)} UDAG, have ${(senderBalance / SATS).toFixed(4)} UDAG`);
       setFormError(true);
       return;
     }
@@ -336,6 +360,26 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
         <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '1fr 1fr', gap: m ? 14 : 16, animation: 'slideUp 0.5s ease' }}>
           {/* Left: Form */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+            {/* Sender Wallet */}
+            {wallets.length > 0 && (
+              <div style={S.card}>
+                <span style={S.label}>From Wallet</span>
+                <select value={senderIdx} onChange={e => setSenderIdx(Number(e.target.value))} style={{ ...S.select, width: '100%' }}>
+                  {wallets.map((w, i) => (
+                    <option key={w.address} value={i} style={{ background: '#0B1120' }}>
+                      {w.name || `Wallet ${i + 1}`} — {shortAddr(w.address)}
+                    </option>
+                  ))}
+                </select>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                  <span style={{ fontSize: 10, color: 'var(--dag-text-faint)' }}>Available balance</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: senderBalance !== null && senderBalance > 0 ? '#00E0C4' : 'var(--dag-text-muted)', ...S.mono }}>
+                    {senderBalance !== null ? (senderBalance / SATS).toFixed(4) : '—'} UDAG
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Stream Type Selector */}
             <div style={S.card}>
@@ -479,7 +523,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
               {/* Visual flow indicator */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 16, padding: '12px 0' }}>
                 <div style={{ padding: '6px 12px', borderRadius: 8, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)', fontSize: 11, color: 'var(--dag-text-muted)' }}>
-                  You
+                  {wallets[senderIdx]?.name || 'You'}
                 </div>
                 <div style={{ position: 'relative', width: 60, height: 2, background: 'var(--dag-border)' }}>
                   {isValid && <div style={{ position: 'absolute', width: 6, height: 6, borderRadius: '50%', background: '#00E0C4', top: -2, animation: 'flowDot 1.5s linear infinite', boxShadow: '0 0 6px #00E0C4' }} />}
