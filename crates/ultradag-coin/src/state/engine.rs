@@ -1068,10 +1068,13 @@ impl StateEngine {
                 continue;
             }
 
-            // Check balance
+            // Check balance — do NOT increment nonce on insufficient balance.
+            // In a DAG, concurrent vertices may spend the sender's balance before this
+            // vertex is applied. Consuming the nonce would grief the sender by forcing
+            // them to resubmit with nonce+1. Instead, skip the tx without side effects;
+            // the sender can reuse this nonce for a new transaction.
             let sender_balance = self.balance(&tx.from());
             if sender_balance < tx.total_cost() {
-                self.increment_nonce(&tx.from());
                 self.record_receipt(tx.hash(), vertex.round, vertex_hash, false,
                     &format!("insufficient balance: need {}, have {}", tx.total_cost(), sender_balance));
                 tracing::warn!(
