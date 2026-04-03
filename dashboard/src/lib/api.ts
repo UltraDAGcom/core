@@ -30,11 +30,14 @@ function loadNetwork(): NetworkType {
 let currentNetwork: NetworkType = loadNetwork();
 let currentNode = (currentNetwork === 'mainnet' ? MAINNET_NODES : TESTNET_NODES)[0];
 let connected = false;
+/** Incremented on every network switch — stale responses check this to self-discard */
+let switchGeneration = 0;
 
 export function getNetwork(): NetworkType { return currentNetwork; }
 export function isMainnet(): boolean { return currentNetwork === 'mainnet'; }
 export function getNodeUrl() { return currentNode; }
 export function isConnected() { return connected; }
+export function getSwitchGeneration() { return switchGeneration; }
 
 export function switchNetwork(network: NetworkType) {
   currentNetwork = network;
@@ -42,15 +45,22 @@ export function switchNetwork(network: NetworkType) {
   const nodes = network === 'mainnet' ? MAINNET_NODES : TESTNET_NODES;
   currentNode = nodes[0];
   connected = false;
+  switchGeneration++;
   // Notify all pages to refetch immediately
   window.dispatchEvent(new CustomEvent('ultradag-network-switch', { detail: network }));
 }
 
 async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
+  // Capture generation before the fetch so we can detect stale responses
+  const gen = switchGeneration;
   const res = await fetch(currentNode + path, {
     ...options,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
   });
+  // If network was switched while this request was in-flight, discard the response
+  if (gen !== switchGeneration) {
+    throw new Error('Network switched — discarding stale response');
+  }
   if (!res.ok) {
     const body = await res.text();
     throw new Error(body || `HTTP ${res.status}`);

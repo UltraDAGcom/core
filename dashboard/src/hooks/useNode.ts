@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { connectToNode, getStatus, getNodeUrl, isConnected } from '../lib/api';
+import { connectToNode, getStatus, getNodeUrl, isConnected, getSwitchGeneration } from '../lib/api';
 
 export interface NodeStatus {
   dag_round: number;
@@ -26,10 +26,14 @@ export function useNode() {
   const [status, setStatus] = useState<NodeStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const genRef = useRef(getSwitchGeneration());
 
   const fetchStatus = useCallback(async () => {
+    const gen = getSwitchGeneration();
     try {
       const s = await getStatus();
+      // Discard if network switched since we started fetching
+      if (gen !== getSwitchGeneration()) return;
       setStatus({
         dag_round: s.dag_round ?? 0,
         last_finalized_round: s.last_finalized_round ?? 0,
@@ -51,8 +55,11 @@ export function useNode() {
       setConnected(true);
       setNodeUrl(getNodeUrl());
     } catch {
-      setConnected(false);
-      setStatus(null);
+      // Only set disconnected if this is still the current generation
+      if (gen === getSwitchGeneration()) {
+        setConnected(false);
+        setStatus(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -60,21 +67,37 @@ export function useNode() {
 
   const connect = useCallback(async () => {
     setLoading(true);
-    setStatus(null); // Clear stale data immediately on reconnect/network switch
+    setStatus(null);
+    // Stop the old polling interval before reconnecting
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    const gen = getSwitchGeneration();
+    genRef.current = gen;
     const ok = await connectToNode();
+    // Discard if network switched while connecting
+    if (gen !== getSwitchGeneration()) return;
     setConnected(ok);
     setNodeUrl(getNodeUrl());
     if (ok) await fetchStatus();
     else setLoading(false);
+    // Restart polling with fresh interval tied to current network
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(fetchStatus, 5_000);
   }, [fetchStatus]);
 
+  // Initial connect only (not on every reconnect — connect handles its own interval)
   useEffect(() => {
     connect();
-    intervalRef.current = setInterval(fetchStatus, 5_000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [connect, fetchStatus]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Listen for network switch and reconnect
+  useEffect(() => {
+    const handler = () => { connect(); };
+    window.addEventListener('ultradag-network-switch', handler);
+    return () => window.removeEventListener('ultradag-network-switch', handler);
+  }, [connect]);
 
   return { connected, nodeUrl, status, loading, reconnect: connect };
 }
