@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { getHealthDetailed, getRound, getStatus } from '../lib/api';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { useGeoLocatedPeers } from '../hooks/useGeoLocatedPeers';
+import { ValidatorMap } from '../components/dashboard/ValidatorMap';
 import type { NodeStatus } from '../hooks/useNode';
 
 interface DashboardPageProps {
@@ -62,134 +64,7 @@ function AnimCounter({ target, decimals = 0, suffix = '' }: { target: number; de
   return <span>{val.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}{suffix}</span>;
 }
 
-// ── DAG Visualization (real data) ────────────────────────────────────────
-
-// Stable color per validator address
-const VALIDATOR_COLORS = ['#00E0C4', '#0066FF', '#A855F7', '#FFB800', '#34d399', '#f472b6', '#60a5fa', '#fbbf24', '#c084fc', '#fb923c'];
-function validatorColor(addr: string): string {
-  let h = 0;
-  for (let i = 0; i < addr.length; i++) h = ((h << 5) - h + addr.charCodeAt(i)) | 0;
-  return VALIDATOR_COLORS[Math.abs(h) % VALIDATOR_COLORS.length];
-}
-
-function DagVis({ roundData }: { roundData: RoundData[] }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const frameRef = useRef<number>(0);
-  const timeRef = useRef(0);
-  const sceneRef = useRef<{ nodes: { x: number; y: number; col: number; ph: number; sz: number; hasTx: boolean; color: string }[]; edges: { from: number; to: number; sp: number }[] }>({ nodes: [], edges: [] });
-
-  // Build scene from round data whenever it changes
-  useEffect(() => {
-    const data = roundData.length > 0 ? roundData : null;
-    if (!data) return;
-
-    const W = 540, H = 260;
-    const rounds = data.length;
-    const nodes: typeof sceneRef.current.nodes = [];
-    const edges: typeof sceneRef.current.edges = [];
-
-    for (let r = 0; r < rounds; r++) {
-      const verts = data[r].vertices;
-      const count = verts.length || 1;
-      for (let i = 0; i < count; i++) {
-        const v = verts[i];
-        const x = 36 + (r / Math.max(rounds - 1, 1)) * (W - 72);
-        const y = (H / (count + 1)) * (i + 1);
-        nodes.push({
-          x, y, col: r, ph: Math.random() * 6.28,
-          sz: v && v.tx_count > 0 ? 5 : 3 + Math.random() * 1.5,
-          hasTx: v ? v.tx_count > 0 : false,
-          color: v ? validatorColor(v.validator) : '#00E0C4',
-        });
-      }
-    }
-
-    // Build edges: each vertex connects to parent_count vertices from the previous round
-    let offset = 0;
-    for (let r = 0; r < rounds; r++) {
-      const count = data[r].vertices.length || 1;
-      if (r > 0) {
-        const prevOffset = offset - (data[r - 1].vertices.length || 1);
-        const prevCount = data[r - 1].vertices.length || 1;
-        for (let i = 0; i < count; i++) {
-          const v = data[r].vertices[i];
-          const parentCount = Math.min(v?.parent_count ?? 2, prevCount);
-          // Deterministic parent selection based on vertex hash
-          const indices = Array.from({ length: prevCount }, (_, k) => k);
-          // Shuffle deterministically using hash chars
-          const hash = v?.hash || '';
-          for (let j = indices.length - 1; j > 0; j--) {
-            const seed = hash.charCodeAt(j % hash.length) || (i * 7 + j * 13);
-            const k = seed % (j + 1);
-            [indices[j], indices[k]] = [indices[k], indices[j]];
-          }
-          for (let p = 0; p < parentCount; p++) {
-            edges.push({ from: prevOffset + indices[p], to: offset + i, sp: 0.3 + (((hash.charCodeAt(p) || 50) % 50) / 100) });
-          }
-        }
-      }
-      offset += count;
-    }
-
-    sceneRef.current = { nodes, edges };
-  }, [roundData]);
-
-  // Animation loop — same visual style as before
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    const W = 540, H = 260;
-    canvas.width = W * 2; canvas.height = H * 2;
-    ctx.scale(2, 2);
-
-    const draw = () => {
-      timeRef.current += 0.016;
-      const t = timeRef.current;
-      const { nodes, edges } = sceneRef.current;
-      ctx.clearRect(0, 0, W, H);
-
-      // Draw edges with flowing particles
-      for (const e of edges) {
-        const from = nodes[e.from], to = nodes[e.to];
-        if (!from || !to) continue;
-        ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y);
-        ctx.strokeStyle = 'rgba(0,224,196,0.07)'; ctx.lineWidth = 1; ctx.stroke();
-        const pr = (t * e.sp) % 1;
-        ctx.beginPath(); ctx.arc(from.x + (to.x - from.x) * pr, from.y + (to.y - from.y) * pr, 1.5, 0, 6.28);
-        ctx.fillStyle = `rgba(0,224,196,${0.6 - pr * 0.4})`; ctx.fill();
-      }
-
-      // Draw nodes with glow
-      const totalCols = nodes.length > 0 ? Math.max(...nodes.map(n => n.col)) + 1 : 1;
-      for (const n of nodes) {
-        const ps = Math.sin(t * 2 + n.ph) * 1.5;
-        const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.sz + 8 + ps);
-        const c = n.color;
-        // Parse hex color for glow
-        const r = parseInt(c.slice(1, 3), 16), gr = parseInt(c.slice(3, 5), 16), b = parseInt(c.slice(5, 7), 16);
-        g.addColorStop(0, `rgba(${r},${gr},${b},0.25)`); g.addColorStop(1, `rgba(${r},${gr},${b},0)`);
-        ctx.beginPath(); ctx.arc(n.x, n.y, n.sz + 8 + ps, 0, 6.28); ctx.fillStyle = g; ctx.fill();
-        ctx.beginPath(); ctx.arc(n.x, n.y, n.sz, 0, 6.28);
-        ctx.fillStyle = n.col >= totalCols - 2 ? c : `rgba(${r},${gr},${b},0.55)`; ctx.fill();
-
-        // Highlight vertices with transactions
-        if (n.hasTx) {
-          ctx.beginPath(); ctx.arc(n.x, n.y, n.sz + 3, 0, 6.28);
-          ctx.strokeStyle = `rgba(255,184,0,${0.4 + Math.sin(t * 3 + n.ph) * 0.2})`;
-          ctx.lineWidth = 1; ctx.stroke();
-        }
-      }
-
-      frameRef.current = requestAnimationFrame(draw);
-    };
-    frameRef.current = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(frameRef.current);
-  }, []);
-
-  return <canvas ref={canvasRef} style={{ width: '100%', height: 260, borderRadius: 12 }} />;
-}
+// ── Visualization ────────────────────────────────────────────────────────
 
 // ── Ring Chart ────────────────────────────────────────────────────────────
 function RingChart({ value, max, size = 120, sw = 8 }: { value: number; max: number; size?: number; sw?: number }) {
@@ -280,6 +155,7 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
   const [recentRounds, setRecentRounds] = useState<RoundData[]>([]);
   const [vertexHistory, setVertexHistory] = useState<number[]>([]);
   const m = useIsMobile();
+  const geo = useGeoLocatedPeers();
 
   const pw = getPasskeyWallet();
   const userName = pw?.name ? `@${pw.name}` : wallets?.[0]?.name || 'Wallet';
@@ -441,13 +317,17 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
       <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '1.4fr 1fr', gap: 12, marginBottom: 16, animation: 'slideUp 0.6s ease' }}>
         <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '16px 18px', overflow: 'hidden' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Live DAG Topology</span>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Validator Network</span>
             <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
-              <span style={{ fontSize: 10.5, color: 'var(--dag-text-faint)', fontFamily: "'DM Mono',monospace" }}>R{recentRounds.length > 0 ? recentRounds[0].round : Math.max(0, round - 7)}–{recentRounds.length > 0 ? recentRounds[recentRounds.length - 1].round : round}</span>
+              {geo.peerCount > 0 && (
+                <span style={{ fontSize: 10.5, color: 'var(--dag-text-faint)', fontFamily: "'DM Mono',monospace" }}>
+                  {geo.peerCount} peers · {geo.countryCount} {geo.countryCount === 1 ? 'country' : 'countries'}
+                </span>
+              )}
               <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#00E0C4', animation: 'pulse 1.5s ease-in-out infinite' }} />
             </div>
           </div>
-          <DagVis roundData={recentRounds} />
+          <ValidatorMap peers={geo.peers} />
         </div>
         <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '16px 18px' }}>
           <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--dag-text-secondary)', marginBottom: 14 }}>Emission Progress</div>
