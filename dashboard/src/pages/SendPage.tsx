@@ -3,7 +3,6 @@ import { postTx, postFaucet, formatUdag, shortAddr, fullAddr, isValidAddress, no
 import { DisplayIdentity } from '../components/shared/DisplayIdentity';
 import { getPasskeyInfo, signAndSubmitWithPasskey } from '../lib/webauthn-sign';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
-import { CopyButton } from '../components/shared/CopyButton';
 import { QrCode } from '../components/shared/QrCode';
 import { QrScanner } from '../components/shared/QrScanner';
 import { useToast } from '../hooks/useToast';

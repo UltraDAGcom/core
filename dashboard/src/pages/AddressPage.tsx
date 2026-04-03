@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ChevronLeft, Wallet, Shield, Users, Crown, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronLeft, Wallet, Shield, Users, Crown } from 'lucide-react';
 import { getBalance, getStake, getDelegation, getCouncil, connectToNode, isConnected, formatUdag } from '../lib/api.ts';
-import { CopyButton } from '../components/shared/CopyButton.tsx';
 import { Badge } from '../components/shared/Badge.tsx';
 import { DisplayIdentity } from '../components/shared/DisplayIdentity.tsx';
 

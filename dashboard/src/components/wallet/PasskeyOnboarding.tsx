@@ -21,7 +21,7 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
   const [nameError, setNameError] = useState('');
   const [nameFee, setNameFee] = useState('');
   const [checking, setChecking] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [, setCreating] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ address: string; name: string | null } | null>(null);
   const [pendingWallet, setPendingWallet] = useState<{ credentialId: string; p256PubkeyHex: string; address: string; keyId: string; name: string | null } | null>(null);

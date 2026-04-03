@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import { CopyButton } from '../shared/CopyButton.tsx';
 import { Badge } from '../shared/Badge.tsx';
 import { DisplayIdentity } from '../shared/DisplayIdentity.tsx';
 
