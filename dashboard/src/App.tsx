@@ -117,7 +117,7 @@ function App() {
               </div>
 
               <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 6 }}>
-                Welcome back{pk.wallet?.name ? `, ${pk.wallet.name}` : ''}
+                Welcome back{pk.wallet?.name ? `, @${pk.wallet.name}` : ''}
               </h1>
               <p style={{ fontSize: 12, color: 'var(--dag-subheading)', marginBottom: 28 }}>
                 Verify your identity to unlock your wallet

@@ -125,7 +125,7 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
           {nameInfo ? (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <span style={{ fontSize: 24, fontWeight: 700, color: '#00E0C4' }}>{nameInfo.name}</span>
+                <span style={{ fontSize: 24, fontWeight: 700, color: '#00E0C4' }}>@{nameInfo.name}</span>
                 <span style={{ fontSize: 8.5, background: 'rgba(0,224,196,0.12)', color: '#00E0C4', padding: '2px 7px', borderRadius: 4, fontWeight: 600 }}>ON-CHAIN</span>
               </div>
               {nameInfo.expiry_round && <p style={{ fontSize: 10.5, color: 'var(--dag-text-faint)' }}>Expires round {nameInfo.expiry_round.toLocaleString()}</p>}
