@@ -458,12 +458,13 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
                       rp: { name: 'UltraDAG Wallet', id: window.location.hostname },
                       user: {
                         id: crypto.getRandomValues(new Uint8Array(16)),
-                        name: 'ultradag-backup',
-                        displayName: 'UltraDAG Backup Key',
+                        name: username ? `ultradag-${username}-backup` : 'ultradag-backup',
+                        displayName: username ? `UltraDAG @${username} (Backup)` : 'UltraDAG Backup Key',
                       },
                       pubKeyCredParams: [{ alg: -7, type: 'public-key' }],
                       authenticatorSelection: {
-                        // Allow cross-platform (security keys, other devices via QR)
+                        // Force cross-platform: security key, phone via QR, or another device
+                        authenticatorAttachment: 'cross-platform',
                         userVerification: 'required',
                         residentKey: 'preferred',
                       },
