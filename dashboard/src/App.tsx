@@ -20,6 +20,7 @@ import { SearchResultPage } from './pages/SearchResultPage';
 import { BridgePage } from './pages/BridgePage';
 import { SmartAccountPage } from './pages/SmartAccountPage';
 import { StreamsPage } from './pages/StreamsPage';
+import { BountyPage } from './pages/BountyPage';
 import { useKeystore } from './hooks/useKeystore';
 import { usePasskeyWallet } from './hooks/usePasskeyWallet';
 import { useNode } from './hooks/useNode';
@@ -284,6 +285,7 @@ function App() {
           <Route path="smart-account" element={<SmartAccountPage walletAddress={primaryAddress} nodeUrl={getNodeUrl()} />} />
           <Route path="staking" element={<StakingPage />} />
           <Route path="governance" element={<GovernancePage />} />
+          <Route path="bounties" element={<BountyPage />} />
           <Route path="council" element={<CouncilPage />} />
           <Route path="explorer" element={<ExplorerPage />} />
           <Route path="network" element={<NetworkPage />} />

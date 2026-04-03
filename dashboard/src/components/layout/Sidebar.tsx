@@ -17,6 +17,7 @@ const sections: { label?: string; items: NavItem[] }[] = [
   { label: 'NETWORK', items: [
     { to: '/staking', icon: '\u2B21', label: 'Staking' },
     { to: '/governance', icon: '\u2699', label: 'Governance' },
+    { to: '/bounties', icon: '\u26A1', label: 'Bounties' },
     { to: '/council', icon: '\u265B', label: 'Council' },
     { to: '/explorer', icon: '\u25C9', label: 'Explorer' },
   ]},
