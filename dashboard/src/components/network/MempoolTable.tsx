@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
-import { shortHash, shortAddr, formatUdag } from '../../lib/api.ts';
+import { shortHash, formatUdag } from '../../lib/api.ts';
 import { CopyButton } from '../shared/CopyButton.tsx';
+import { DisplayIdentity } from '../shared/DisplayIdentity.tsx';
 import { Badge } from '../shared/Badge.tsx';
 import { Pagination } from '../shared/Pagination.tsx';
 import { useState } from 'react';
@@ -68,12 +69,7 @@ export function MempoolTable({ transactions }: MempoolTableProps) {
                 </td>
                 <td className="py-2 px-3">
                   {tx.from ? (
-                    <div className="flex items-center gap-1">
-                      <Link to={`/address/${tx.from}`} className="font-mono text-slate-300 hover:text-blue-400 text-xs">
-                        {shortAddr(tx.from)}
-                      </Link>
-                      <CopyButton text={tx.from} />
-                    </div>
+                    <DisplayIdentity address={tx.from} link size="xs" />
                   ) : (
                     <span className="text-slate-500 text-xs">--</span>
                   )}

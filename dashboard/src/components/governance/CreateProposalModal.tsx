@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { postProposal } from '../../lib/api';
 import type { Wallet } from '../../lib/keystore';
-import { shortAddr, isValidAddress, normalizeAddress } from '../../lib/api';
+import { isValidAddress, normalizeAddress } from '../../lib/api';
 import { X } from 'lucide-react';
 
 const PARAM_OPTIONS = [
@@ -131,7 +131,7 @@ export function CreateProposalModal({ wallets, onClose, onSuccess }: CreatePropo
               className="mt-1 block w-full rounded bg-dag-surface border border-dag-border px-3 py-2 text-sm text-white"
             >
               {wallets.map((w, i) => (
-                <option key={i} value={i}>{w.name} ({shortAddr(w.address)})</option>
+                <option key={i} value={i}>{w.name}</option>
               ))}
             </select>
           </label>

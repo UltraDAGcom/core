@@ -282,7 +282,7 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
   const m = useIsMobile();
 
   const pw = getPasskeyWallet();
-  const userName = pw?.name || wallets?.[0]?.name || 'Wallet';
+  const userName = pw?.name ? `@${pw.name}` : wallets?.[0]?.name || 'Wallet';
 
   const fetchHealth = useCallback(async () => {
     try {

@@ -14,7 +14,7 @@ interface Props {
  * Shows: ✓ green checkmark + balance when found, ⚠ warning when invalid,
  * spinner when checking, and name resolution.
  */
-export function VerifiedAddressInput({ value, onChange, placeholder = 'Address, bech32m, or name', style }: Props) {
+export function VerifiedAddressInput({ value, onChange, placeholder = 'ULTRA ID or address', style }: Props) {
   const status = useAddressVerify(value);
 
   return (
@@ -58,7 +58,7 @@ export function VerifiedAddressInput({ value, onChange, placeholder = 'Address, 
               </span>
               {status.name && (
                 <span style={{ fontSize: 10, color: '#A855F7', fontWeight: 600 }}>
-                  {status.name}
+                  @{status.name}
                 </span>
               )}
               {status.balance != null && (

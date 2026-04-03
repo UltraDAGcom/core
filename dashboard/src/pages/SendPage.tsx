@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { postTx, postFaucet, formatUdag, shortAddr, fullAddr, prettyAddr, isValidAddress, normalizeAddress, getNodeUrl } from '../lib/api';
+import { postTx, postFaucet, formatUdag, shortAddr, fullAddr, isValidAddress, normalizeAddress, getNodeUrl } from '../lib/api';
+import { DisplayIdentity } from '../components/shared/DisplayIdentity';
 import { getPasskeyInfo, signAndSubmitWithPasskey } from '../lib/webauthn-sign';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
 import { CopyButton } from '../components/shared/CopyButton';
@@ -27,7 +28,6 @@ const S = {
 };
 
 function ReceiveAddress({ wallet }: { wallet: Wallet }) {
-  const [showAdvanced, setShowAdvanced] = useState(false);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
       {/* QR Code */}
@@ -35,45 +35,15 @@ function ReceiveAddress({ wallet }: { wallet: Wallet }) {
         <QrCode value={fullAddr(wallet.address)} size={200} />
       </div>
 
-      {/* Primary: just the name */}
+      {/* Primary: ULTRA ID or wallet name */}
       <div style={{ width: '100%', textAlign: 'center' }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 4 }}>{wallet.name}</div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'var(--dag-input-bg)', borderRadius: 8, padding: '6px 14px' }}>
-          <code style={{ fontSize: 12, color: 'var(--dag-text-muted)', ...S.mono }}>{shortAddr(wallet.address)}</code>
-          <CopyButton text={fullAddr(wallet.address)} label="Copy" />
-        </div>
+        <DisplayIdentity address={wallet.address} advanced copyable size="sm" />
       </div>
 
       <p style={{ fontSize: 10.5, color: 'var(--dag-text-faint)', textAlign: 'center' }}>
-        Share your name or scan the QR code to receive UDAG.
+        Share your ULTRA ID or scan the QR code to receive UDAG.
       </p>
-
-      {/* Advanced: full address details */}
-      <button onClick={() => setShowAdvanced(!showAdvanced)} style={{
-        background: 'none', border: 'none', color: 'var(--dag-text-faint)', fontSize: 10,
-        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-      }}>
-        <span style={{ fontSize: 8, transform: showAdvanced ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'inline-block' }}>▶</span>
-        Advanced
-      </button>
-      {showAdvanced && (
-        <div style={{ width: '100%', padding: '10px 12px', background: 'var(--dag-input-bg)', borderRadius: 10 }}>
-          <div style={{ marginBottom: 8 }}>
-            <span style={{ fontSize: 9, color: 'var(--dag-text-faint)', letterSpacing: 1 }}>BECH32M</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-              <code style={{ fontSize: 10.5, color: 'var(--dag-text-muted)', ...S.mono, wordBreak: 'break-all', lineHeight: 1.5 }}>{prettyAddr(wallet.address)}</code>
-              <CopyButton text={fullAddr(wallet.address)} />
-            </div>
-          </div>
-          <div style={{ borderTop: '1px solid var(--dag-border)', paddingTop: 8 }}>
-            <span style={{ fontSize: 9, color: 'var(--dag-text-faint)', letterSpacing: 1 }}>HEX</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-              <code style={{ fontSize: 10.5, color: 'var(--dag-text-muted)', ...S.mono, wordBreak: 'break-all' }}>{wallet.address}</code>
-              <CopyButton text={wallet.address} />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -94,7 +64,7 @@ function SendToInput({ value, onChange, onScanQr }: { value: string; onChange: (
         <div style={{ flex: 1, position: 'relative' }}>
           <input
             type="text" value={value} onChange={e => handleChange(e.target.value)}
-            placeholder={mode === 'name' ? 'Enter username (e.g. alice)' : 'udag1... or hex address'}
+            placeholder={mode === 'name' ? 'Enter ULTRA ID (e.g. alice)' : 'udag1... or tudg1... address'}
             style={{ ...S.input, paddingRight: 40 }}
           />
           {mode === 'name' && (
@@ -112,7 +82,7 @@ function SendToInput({ value, onChange, onScanQr }: { value: string; onChange: (
         cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4,
       }}>
         <span style={{ fontSize: 8, transform: mode === 'address' ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'inline-block' }}>▶</span>
-        {mode === 'name' ? 'Use address instead' : 'Use name instead'}
+        {mode === 'name' ? 'Use address instead' : 'Use ULTRA ID instead'}
       </button>
     </div>
   );

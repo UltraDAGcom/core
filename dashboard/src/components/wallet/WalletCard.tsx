@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Wallet as WalletIcon, Eye, EyeOff, Trash2, Shield, AlertTriangle } from 'lucide-react';
 import { CopyButton } from '../shared/CopyButton.tsx';
-import { formatUdag, shortAddr, fullAddr, prettyAddr } from '../../lib/api.ts';
+import { DisplayIdentity } from '../shared/DisplayIdentity.tsx';
+import { formatUdag } from '../../lib/api.ts';
 import type { WalletBalance } from '../../hooks/useWalletBalances.ts';
 
 interface WalletCardProps {
@@ -33,10 +34,7 @@ export function WalletCard({ name, address, balance, selected, onClick }: Wallet
           </div>
           <div>
             <p className="text-sm font-medium text-slate-200">{name}</p>
-            <div className="flex items-center gap-1 mt-0.5">
-              <p className="text-xs font-mono text-dag-muted">{shortAddr(address)}</p>
-              <CopyButton text={address} />
-            </div>
+            <DisplayIdentity address={address} copyable size="xs" className="mt-0.5" />
           </div>
         </div>
         {balance?.is_active_validator && (
@@ -133,15 +131,8 @@ export function WalletDetail({ name, address, secretKey, balance, onRemove }: Wa
         {/* Address */}
         <div>
           <label className="text-xs text-dag-muted uppercase tracking-wider">Address</label>
-          <div className="mt-1 bg-slate-800 rounded-lg px-3 py-2.5">
-            <code className="text-sm font-mono text-white leading-relaxed tracking-wide block">
-              {prettyAddr(address)}
-            </code>
-            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-700/50">
-              <span className="text-[10px] text-dag-muted uppercase">Hex</span>
-              <code className="text-[10px] font-mono text-dag-muted break-all flex-1">{address}</code>
-              <CopyButton text={fullAddr(address)} />
-            </div>
+          <div className="mt-1">
+            <DisplayIdentity address={address} advanced copyable size="md" />
           </div>
         </div>
 

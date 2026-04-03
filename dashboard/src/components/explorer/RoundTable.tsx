@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
-import { shortAddr } from '../../lib/api.ts';
 import { CopyButton } from '../shared/CopyButton.tsx';
 import { Badge } from '../shared/Badge.tsx';
+import { DisplayIdentity } from '../shared/DisplayIdentity.tsx';
 
 interface Vertex {
   hash: string;
@@ -53,10 +53,7 @@ export function RoundTable({ rounds }: RoundTableProps) {
                   <div className="flex flex-wrap gap-1">
                     {r.vertices.slice(0, 3).map((v) => (
                       <span key={v.hash} className="inline-flex items-center gap-1 text-xs">
-                        <Link to={`/address/${v.validator}`} className="font-mono text-slate-300 hover:text-blue-400">
-                          {shortAddr(v.validator)}
-                        </Link>
-                        <CopyButton text={v.validator} />
+                        <DisplayIdentity address={v.validator} link size="xs" />
                       </span>
                     ))}
                     {r.vertices.length > 3 && (

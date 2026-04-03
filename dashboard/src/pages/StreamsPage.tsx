@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getNodeUrl } from '../lib/api';
+import { getNodeUrl, shortAddr } from '../lib/api';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
 import { signAndSubmitSmartOp } from '../lib/webauthn-sign';
 import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { useToast } from '../hooks/useToast';
+import { DisplayIdentity } from '../components/shared/DisplayIdentity';
 import type { NetworkType } from '../lib/api';
 
 const SATS = 100_000_000;
@@ -43,10 +45,7 @@ function fmtUdag(sats: number): string {
   return u.toLocaleString(undefined, { maximumFractionDigits: 8 });
 }
 
-function shortAddr(addr: string): string {
-  if (!addr) return '';
-  return addr.length > 16 ? addr.slice(0, 8) + '...' + addr.slice(-6) : addr;
-}
+// shortAddr removed — use DisplayIdentity component instead
 
 function statusColor(s: string) { return s === 'Active' ? '#00E0C4' : s === 'Depleted' ? '#FFB800' : '#EF4444'; }
 function statusBg(s: string) { return s === 'Active' ? 'rgba(0,224,196,0.08)' : s === 'Depleted' ? 'rgba(255,184,0,0.08)' : 'rgba(239,68,68,0.08)'; }
@@ -79,6 +78,7 @@ function ProgressBar({ value, max }: { value: number; max: number }) {
 
 export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
   const m = useIsMobile();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [allStreams, setAllStreams] = useState<Stream[]>([]);
   const [, setTick] = useState(0);
@@ -368,7 +368,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                 <select value={senderIdx} onChange={e => setSenderIdx(Number(e.target.value))} style={{ ...S.select, width: '100%' }}>
                   {wallets.map((w, i) => (
                     <option key={w.address} value={i} style={{ background: '#0B1120' }}>
-                      {w.name || `Wallet ${i + 1}`} — {shortAddr(w.address)}
+                      {w.name || `Wallet ${i + 1}`}
                     </option>
                   ))}
                 </select>
@@ -633,7 +633,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                 </div>
                 {outgoing.slice((outgoingPage - 1) * STREAM_PAGE_SIZE, outgoingPage * STREAM_PAGE_SIZE).map(s => (
                   <div key={s.id} className="stream-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 2fr 1fr 1fr auto', gap: 8, alignItems: 'center', padding: '10px 4px', borderTop: '1px solid var(--dag-row-border)', borderRadius: 6, transition: 'background 0.15s', minWidth: m ? 650 : undefined }}>
-                    <div style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono }}>{shortAddr(s.recipient)}</div>
+                    <DisplayIdentity address={s.recipient} link size="xs" />
                     <div style={{ fontSize: 11, color: 'var(--dag-cell-text)' }}>{s.rate_udag_per_hour?.toFixed(4) ?? '—'}/hr</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <ProgressBar value={s.accrued} max={s.deposited} />
@@ -695,7 +695,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                 </div>
                 {incoming.slice((incomingPage - 1) * STREAM_PAGE_SIZE, incomingPage * STREAM_PAGE_SIZE).map(s => (
                   <div key={s.id} className="stream-row" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.5fr 1.5fr 1fr auto', gap: 8, alignItems: 'center', padding: '10px 4px', borderTop: '1px solid var(--dag-row-border)', borderRadius: 6, transition: 'background 0.15s', minWidth: m ? 650 : undefined }}>
-                    <div style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono }}>{shortAddr(s.sender)}</div>
+                    <DisplayIdentity address={s.sender} link size="xs" />
                     <div style={{ fontSize: 11, color: 'var(--dag-cell-text)' }}>{s.rate_udag_per_hour?.toFixed(4) ?? '—'}/hr</div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--dag-text)', ...S.mono }}>{fmtUdag(s.accrued)}</div>
                     <div>
@@ -710,6 +710,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                     <span style={{ fontSize: 9, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: statusBg(s.status), color: statusColor(s.status), display: 'inline-block', textAlign: 'center' }}>{s.status.toUpperCase()}</span>
                     {s.withdrawable > 0 && <button disabled={actionLoading === s.id} onClick={async () => {
                       setActionLoading(s.id);
+                      const withdrawAmount = fmtUdag(s.withdrawable);
                       try {
                         const passkey = getPasskeyWallet();
                         if (passkey) {
@@ -718,7 +719,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                           await signAndSubmitSmartOp({ StreamWithdraw: { stream_id: s.id } }, MIN_FEE, balData.nonce ?? 0);
                         } else {
                           const wallet = wallets.find(w => w.secret_key && w.address.toLowerCase() === s.recipient.toLowerCase());
-                          if (!wallet) { alert('No wallet found matching stream recipient'); return; }
+                          if (!wallet) { toast('No wallet found matching stream recipient', 'error'); return; }
                           const res = await fetch(`${getNodeUrl()}/stream/withdraw`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -726,10 +727,11 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                             signal: AbortSignal.timeout(10000),
                           });
                           const data = await res.json();
-                          if (!res.ok) { alert(data.error || 'Failed'); return; }
+                          if (!res.ok) { toast(data.error || 'Withdraw failed', 'error'); return; }
                         }
+                        toast(`Withdrew ${withdrawAmount} UDAG to your wallet`, 'success');
                         fetchStreams();
-                      } catch (err) { alert(err instanceof Error ? err.message : 'Network error'); }
+                      } catch (err) { toast(err instanceof Error ? err.message : 'Network error', 'error'); }
                       finally { setActionLoading(null); }
                     }} style={S.btn('#00E0C4')}>{actionLoading === s.id ? '...' : 'Withdraw'}</button>}
                   </div>

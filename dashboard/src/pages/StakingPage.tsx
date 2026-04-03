@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getValidators, getDelegation, shortAddr, postDelegate, postUndelegate, getNodeUrl } from '../lib/api';
+import { getValidators, getDelegation, postDelegate, postUndelegate, getNodeUrl } from '../lib/api';
+import { DisplayIdentity } from '../components/shared/DisplayIdentity';
 import { useKeystore } from '../hooks/useKeystore';
 import { hasPasskeyWallet, getPasskeyWallet } from '../lib/passkey-wallet';
 import { signAndSubmitSmartOp } from '../lib/webauthn-sign';
@@ -156,7 +157,7 @@ export function StakingPage() {
                   <div>
                     <span style={S.label}>Wallet</span>
                     <select value={walletIdx} onChange={e => setWalletIdx(Number(e.target.value))} style={{ ...S.input, fontSize: 13, fontFamily: "'DM Sans',sans-serif" }}>
-                      {wallets.map((w, i) => <option key={i} value={i} style={{ background: '#0B1120' }}>{w.name} ({shortAddr(w.address)})</option>)}
+                      {wallets.map((w, i) => <option key={i} value={i} style={{ background: '#0B1120' }}>{w.name}</option>)}
                     </select>
                   </div>
                 )}
@@ -174,7 +175,7 @@ export function StakingPage() {
                   <div style={{ ...S.stat, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <div style={{ fontSize: 9.5, color: 'var(--dag-subheading)', letterSpacing: 1 }}>{customValidator ? 'SELECTED' : 'AUTO-SELECTED'}</div>
-                      <div style={{ fontSize: 12, color: 'var(--dag-text)', ...S.mono, marginTop: 2 }}>{shortAddr(target)}</div>
+                      <div style={{ marginTop: 2 }}><DisplayIdentity address={target} link size="xs" /></div>
                     </div>
                     {best && !customValidator && (
                       <span style={{ fontSize: 10, background: 'rgba(0,224,196,0.1)', color: '#00E0C4', padding: '2px 8px', borderRadius: 4 }}>{best.commission_percent}% fee</span>
@@ -227,7 +228,7 @@ export function StakingPage() {
                           {d.is_undelegating ? 'UNSTAKING' : 'EARNING'}
                         </span>
                       </div>
-                      <div style={{ fontSize: 10.5, color: 'var(--dag-text-faint)', ...S.mono, marginTop: 2 }}>→ {shortAddr(d.validator)}</div>
+                      <div style={{ marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ fontSize: 10.5, color: 'var(--dag-text-faint)' }}>→</span> <DisplayIdentity address={d.validator} link size="xs" /></div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--dag-text)', ...S.mono }}>{fmt(d.delegated)}</div>
@@ -272,7 +273,7 @@ export function StakingPage() {
                     </div>
                     {validators.slice((validatorPage - 1) * STAKING_PAGE_SIZE, validatorPage * STAKING_PAGE_SIZE).map(v => (
                       <div key={v.address} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'center', padding: '8px 4px', borderTop: '1px solid var(--dag-row-border)', minWidth: m ? 500 : undefined }}>
-                        <div style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono }}>{shortAddr(v.address)}</div>
+                        <DisplayIdentity address={v.address} link size="xs" />
                         <div style={{ fontSize: 11, color: 'var(--dag-cell-text)' }}>{fmt(v.effective_stake)}</div>
                         <div style={{ fontSize: 11, color: 'var(--dag-cell-text)' }}>{v.delegator_count}</div>
                         <div style={{ fontSize: 11, color: v.commission_percent <= 10 ? '#00E0C4' : '#FFB800' }}>{v.commission_percent}%</div>

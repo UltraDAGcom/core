@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { shortAddr, fullAddr } from '../lib/api';
+import { fullAddr } from '../lib/api';
+import { DisplayIdentity } from '../components/shared/DisplayIdentity';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
 import { CreateKeystoreModal } from '../components/wallet/CreateKeystoreModal';
 import { AddWalletModal } from '../components/wallet/AddWalletModal';
@@ -783,13 +784,10 @@ export function WalletPage({
                           </div>
                           <div
                             style={{
-                              fontSize: 10,
-                              color: 'var(--dag-text-faint)',
-                              ...S.mono,
                               marginTop: 2,
                             }}
                           >
-                            {shortAddr(w.address)}
+                            <DisplayIdentity address={w.address} size="xs" />
                           </div>
                         </div>
                       </div>
@@ -887,13 +885,10 @@ export function WalletPage({
                     </div>
                     <div
                       style={{
-                        fontSize: 10,
-                        color: 'var(--dag-text-faint)',
-                        ...S.mono,
                         marginTop: 2,
                       }}
                     >
-                      {shortAddr(selected.address)}
+                      <DisplayIdentity address={selected.address} size="xs" />
                     </div>
                   </div>
                   {pw?.address === selected.address && (
@@ -1036,7 +1031,7 @@ export function WalletPage({
                     borderTop: '1px solid var(--dag-table-border)',
                   }}
                 >
-                  <CopyButton text={fullAddr(selected.address)} label="Copy Address" />
+                  <CopyButton text={fullAddr(selected.address)} label="Copy Bech32m Address" />
                   {sel !== null && (
                     <button
                       onClick={e => {

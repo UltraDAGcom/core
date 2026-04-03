@@ -1,5 +1,7 @@
 import { Menu, WifiOff, Lock, Wallet } from 'lucide-react';
 import { SessionBadge } from './SessionTimer';
+import { useName } from '../../contexts/NameCacheContext';
+import { shortAddr } from '../../lib/api';
 import type { NetworkType } from '../../lib/api';
 
 interface TopBarProps {
@@ -8,6 +10,7 @@ interface TopBarProps {
   keystoreUnlocked: boolean;
   network: NetworkType;
   walletAddress?: string;
+  walletName?: string;
   walletBalance?: number;
   sessionSecondsLeft?: number;
   onToggleSidebar: () => void;
@@ -20,6 +23,7 @@ export function TopBar({
   keystoreUnlocked,
   network,
   walletAddress,
+  walletName,
   walletBalance,
   sessionSecondsLeft,
   onToggleSidebar,
@@ -27,9 +31,8 @@ export function TopBar({
   onSwitchNetwork,
 }: TopBarProps) {
   const isMainnet = network === 'mainnet';
-  const shortAddr = walletAddress
-    ? walletAddress.slice(0, 6) + '...' + walletAddress.slice(-4)
-    : '';
+  const { name: ultraId } = useName(walletAddress);
+  const displayName = ultraId ? `@${ultraId}` : walletName || (walletAddress ? shortAddr(walletAddress) : '');
 
   const formatBalance = (sats: number) => {
     const udag = sats / 100_000_000;
@@ -92,7 +95,7 @@ export function TopBar({
           {walletAddress && (
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dag-surface border border-dag-border">
               <Wallet className="w-3.5 h-3.5 text-dag-accent" />
-              <span className="text-xs font-mono text-slate-300">{shortAddr}</span>
+              <span className={`text-xs ${ultraId ? 'font-semibold text-dag-accent' : 'font-mono text-slate-300'}`}>{displayName}</span>
               {walletBalance !== undefined && (
                 <>
                   <span className="text-slate-600">|</span>

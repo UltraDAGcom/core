@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
-import { shortHash, shortAddr, formatUdag } from '../../lib/api.ts';
+import { shortHash, formatUdag } from '../../lib/api.ts';
 import { CopyButton } from '../shared/CopyButton.tsx';
+import { DisplayIdentity } from '../shared/DisplayIdentity.tsx';
 
 interface VertexCardProps {
   hash: string;
@@ -33,12 +34,7 @@ export function VertexCard({ hash, validator, reward, reward_udag, tx_count, par
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div>
           <span className="text-slate-500 text-xs">Validator</span>
-          <div className="flex items-center gap-1">
-            <Link to={`/address/${validator}`} className="font-mono text-slate-300 hover:text-blue-400 text-xs">
-              {shortAddr(validator)}
-            </Link>
-            <CopyButton text={validator} />
-          </div>
+          <DisplayIdentity address={validator} link size="xs" />
         </div>
         <div>
           <span className="text-slate-500 text-xs">Reward</span>

@@ -1,19 +1,19 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { getNodeUrl } from '../../lib/api';
 import type { NetworkType } from '../../lib/api';
-import { savePasskeyWallet } from '../../lib/passkey-wallet';
+// savePasskeyWallet is called by WelcomeScreen after backup step completes
 
 interface PasskeyOnboardingProps {
-  onComplete: (address: string, name: string | null) => void;
+  onComplete: (address: string, name: string | null, pendingWallet: { credentialId: string; p256PubkeyHex: string; address: string; keyId: string; name: string | null }) => void;
   onFallbackToAdvanced: () => void;
   network: NetworkType;
   onSwitchNetwork: (net: NetworkType) => void;
 }
 
-type Step = 'passkey' | 'username' | 'creating' | 'done' | 'backup';
+type Step = 'username' | 'passkey' | 'creating' | 'done' | 'backup';
 
 export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, onSwitchNetwork }: PasskeyOnboardingProps) {
-  const [step, setStep] = useState<Step>('passkey');
+  const [step, setStep] = useState<Step>('username');
   const [p256PubkeyHex, setP256PubkeyHex] = useState('');
   const [credentialId, setCredentialId] = useState('');
   const [username, setUsername] = useState('');
@@ -24,6 +24,7 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ address: string; name: string | null } | null>(null);
+  const [pendingWallet, setPendingWallet] = useState<{ credentialId: string; p256PubkeyHex: string; address: string; keyId: string; name: string | null } | null>(null);
   const [skipConfirm, setSkipConfirm] = useState(false);
   const [addingBackup, setAddingBackup] = useState(false);
   const [backupError, setBackupError] = useState('');
@@ -47,8 +48,8 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
           rp: { name: 'UltraDAG Wallet', id: window.location.hostname },
           user: {
             id: crypto.getRandomValues(new Uint8Array(16)),
-            name: 'ultradag-user',
-            displayName: 'UltraDAG Wallet',
+            name: username ? `ultradag-${username}` : 'ultradag-wallet',
+            displayName: username ? `UltraDAG @${username}` : 'UltraDAG Wallet',
           },
           pubKeyCredParams: [
             { alg: -7, type: 'public-key' },  // ES256 (P-256)
@@ -84,7 +85,8 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
       const hexPubkey = Array.from(compressed).map(b => b.toString(16).padStart(2, '0')).join('');
       setP256PubkeyHex(hexPubkey);
       setCredentialId(credential.id);
-      setStep('username');
+      // Username already chosen — proceed to account creation
+      handleCreateAccount(hexPubkey, credential.id);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
       if (msg.includes('NotAllowed') || msg.includes('cancelled')) {
@@ -161,14 +163,16 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
     }
   }, [network]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Step 3: Create account via relay
-  const handleCreate = useCallback(async () => {
+  // Create account via relay (called after passkey creation)
+  const handleCreateAccount = useCallback(async (pubkey?: string, credId?: string) => {
+    const finalPubkey = pubkey || p256PubkeyHex;
+    const finalCredId = credId || credentialId;
     setCreating(true);
     setError('');
     setStep('creating');
 
     try {
-      const body: Record<string, unknown> = { p256_pubkey: p256PubkeyHex };
+      const body: Record<string, unknown> = { p256_pubkey: finalPubkey };
       if (username.length >= 3 && nameAvailable) body.name = username;
 
       const res = await fetch(`${getNodeUrl()}/relay/create-account`, {
@@ -188,15 +192,17 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
       setResult(resultData);
       setStep('done');
 
-      savePasskeyWallet({
-        credentialId, p256PubkeyHex,
+      // Don't save yet — wait until backup step completes so the app
+      // doesn't detect pk.unlocked and unmount the onboarding flow
+      setPendingWallet({
+        credentialId: finalCredId, p256PubkeyHex: finalPubkey,
         address: data.address,
         keyId: data.p256_key_id,
         name: resultData.name,
       });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Account creation failed');
-      setStep('username');
+      setStep('passkey'); // Go back to passkey step on failure
     } finally {
       setCreating(false);
     }
@@ -237,25 +243,84 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
   return (
     <div style={{ maxWidth: 400, margin: '0 auto', padding: '24px 20px', fontFamily: "'DM Sans',sans-serif" }}>
 
-      {/* Step 1: Create Passkey */}
-      {step === 'passkey' && (
-        <div style={{ textAlign: 'center', animation: 'slideUp 0.4s ease' }}>
-          <div style={{
-            width: 80, height: 80, borderRadius: 20, margin: '0 auto 24px',
-            background: 'linear-gradient(135deg, rgba(0,224,196,0.08), rgba(0,102,255,0.08))',
-            border: '1px solid rgba(0,224,196,0.15)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <span style={{ fontSize: 36 }}>◎</span>
+      {/* Step 1: Choose ULTRA ID */}
+      {step === 'username' && (
+        <div style={{ animation: 'slideUp 0.4s ease' }}>
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <div style={{
+              width: 80, height: 80, borderRadius: 20, margin: '0 auto 24px',
+              background: 'linear-gradient(135deg, rgba(0,224,196,0.08), rgba(0,102,255,0.08))',
+              border: '1px solid rgba(0,224,196,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <span style={{ fontSize: 36 }}>◎</span>
+            </div>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 4 }}>Choose your ULTRA ID</h2>
+            <p style={{ fontSize: 12, color: 'var(--dag-text-muted)' }}>Your ULTRA ID is how people find and pay you.</p>
           </div>
-
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 8 }}>Create Your Wallet</h2>
-          <p style={{ fontSize: 12.5, color: 'var(--dag-text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
-            Use your fingerprint, face, or security key.<br />No seed phrases. No passwords.
-          </p>
 
           {/* Network selector */}
           <NetworkSwitch />
+
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ position: 'relative' }}>
+              <input type="text" value={username}
+                onChange={(e) => handleNameChange(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                placeholder="your-ultra-id" maxLength={20} autoFocus
+                style={{ ...inputStyle, fontSize: 18, padding: '14px 44px 14px 14px', textAlign: 'center' }} />
+              {checking && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--dag-text-faint)', fontSize: 14 }}>...</span>}
+              {!checking && nameAvailable === true && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#00E0C4', fontSize: 18 }}>✓</span>}
+              {!checking && nameAvailable === false && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#EF4444', fontSize: 18 }}>✗</span>}
+            </div>
+            <div style={{ minHeight: 22, marginTop: 6, textAlign: 'center' }}>
+              {username.length > 0 && username.length < 3 && (
+                <span style={{ fontSize: 11, color: 'var(--dag-text-faint)' }}>At least 3 characters</span>
+              )}
+              {nameError && <span style={{ fontSize: 11, color: '#FFB800' }}>{nameError}</span>}
+              {!nameError && nameAvailable && nameFee && (
+                <span style={{ fontSize: 11, color: '#00E0C4' }}>Available {nameFee !== 'Free' ? `· ${nameFee}` : ''}</span>
+              )}
+            </div>
+          </div>
+
+          <button onClick={() => setStep('passkey')} disabled={!(username.length >= 3 && nameAvailable)} style={{
+            width: '100%', padding: '14px 0', borderRadius: 12,
+            background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
+            color: '#fff', fontSize: 14, fontWeight: 700, border: 'none',
+            opacity: !(username.length >= 3 && nameAvailable) ? 0.35 : 1,
+            cursor: !(username.length >= 3 && nameAvailable) ? 'default' : 'pointer',
+            boxShadow: '0 4px 20px rgba(0,224,196,0.2)',
+            transition: 'opacity 0.2s',
+          }}>
+            Continue
+          </button>
+
+          <button onClick={onFallbackToAdvanced} style={{
+            background: 'none', border: 'none', color: 'var(--dag-text-faint)',
+            fontSize: 11.5, cursor: 'pointer', marginTop: 24, display: 'flex', alignItems: 'center', gap: 4, margin: '24px auto 0',
+          }}>
+            ◇ Advanced: Import with seed phrase or key
+          </button>
+        </div>
+      )}
+
+      {/* Step 2: Create Passkey (biometric) */}
+      {step === 'passkey' && (
+        <div style={{ textAlign: 'center', animation: 'slideUp 0.4s ease' }}>
+          <div style={{
+            width: 60, height: 60, borderRadius: 16, margin: '0 auto 16px',
+            background: 'rgba(0,224,196,0.08)', border: '1px solid rgba(0,224,196,0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <span style={{ fontSize: 26, color: '#00E0C4' }}>✓</span>
+          </div>
+
+          <p style={{ fontSize: 11, color: 'var(--dag-text-muted)', marginBottom: 6 }}>Creating wallet for</p>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#00E0C4', marginBottom: 16 }}>@{username}</h2>
+
+          <p style={{ fontSize: 12.5, color: 'var(--dag-text-muted)', marginBottom: 20, lineHeight: 1.6 }}>
+            Use your fingerprint, face, or security key.<br />No seed phrases. No passwords.
+          </p>
 
           <button onClick={handleCreatePasskey} style={{
             width: '100%', padding: '14px 0', borderRadius: 12,
@@ -273,77 +338,12 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
             </div>
           )}
 
-          <button onClick={onFallbackToAdvanced} style={{
+          <button onClick={() => setStep('username')} style={{
             background: 'none', border: 'none', color: 'var(--dag-text-faint)',
-            fontSize: 11.5, cursor: 'pointer', marginTop: 24, display: 'flex', alignItems: 'center', gap: 4, margin: '24px auto 0',
+            fontSize: 11, cursor: 'pointer', marginTop: 16,
           }}>
-            ◇ Advanced: Import with seed phrase or key
+            ← Back
           </button>
-        </div>
-      )}
-
-      {/* Step 2: Choose Username */}
-      {step === 'username' && (
-        <div style={{ animation: 'slideUp 0.4s ease' }}>
-          <div style={{ textAlign: 'center', marginBottom: 20 }}>
-            <div style={{
-              width: 60, height: 60, borderRadius: 16, margin: '0 auto 16px',
-              background: 'rgba(0,224,196,0.08)', border: '1px solid rgba(0,224,196,0.15)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <span style={{ fontSize: 26, color: '#00E0C4' }}>✓</span>
-            </div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 4 }}>Choose a Username</h2>
-            <p style={{ fontSize: 12, color: 'var(--dag-text-muted)' }}>This is how people will find and pay you.</p>
-          </div>
-
-          {/* Network badge */}
-          <div style={{ textAlign: 'center', marginBottom: 14 }}>
-            <span style={{
-              display: 'inline-block', fontSize: 10, fontWeight: 600, letterSpacing: 0.5,
-              padding: '3px 10px', borderRadius: 6,
-              background: isMainnet ? 'rgba(0,224,196,0.08)' : 'rgba(255,184,0,0.08)',
-              color: isMainnet ? '#00E0C4' : '#FFB800',
-              border: `1px solid ${isMainnet ? 'rgba(0,224,196,0.15)' : 'rgba(255,184,0,0.15)'}`,
-            }}>
-              {isMainnet ? '◈ MAINNET' : '◇ TESTNET'}
-            </span>
-          </div>
-
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ position: 'relative' }}>
-              <input type="text" value={username}
-                onChange={(e) => handleNameChange(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                placeholder="your-username" maxLength={20} autoFocus
-                style={{ ...inputStyle, fontSize: 18, padding: '14px 44px 14px 14px', textAlign: 'center' }} />
-              {checking && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--dag-text-faint)', fontSize: 14 }}>...</span>}
-              {!checking && nameAvailable === true && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#00E0C4', fontSize: 18 }}>✓</span>}
-              {!checking && nameAvailable === false && <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: '#EF4444', fontSize: 18 }}>✗</span>}
-            </div>
-            <div style={{ minHeight: 22, marginTop: 6, textAlign: 'center' }}>
-              {username.length > 0 && username.length < 3 && (
-                <span style={{ fontSize: 11, color: 'var(--dag-text-faint)' }}>At least 3 characters</span>
-              )}
-              {nameError && <span style={{ fontSize: 11, color: '#FFB800' }}>{nameError}</span>}
-              {!nameError && nameAvailable && nameFee && (
-                <span style={{ fontSize: 11, color: '#00E0C4' }}>Available {nameFee !== 'Free' ? `· ${nameFee}` : ''}</span>
-              )}
-            </div>
-          </div>
-
-          <button onClick={handleCreate} disabled={creating || !(username.length >= 3 && nameAvailable)} style={{
-            width: '100%', padding: '14px 0', borderRadius: 12,
-            background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
-            color: '#fff', fontSize: 14, fontWeight: 700, border: 'none',
-            opacity: (creating || !(username.length >= 3 && nameAvailable)) ? 0.35 : 1,
-            cursor: (creating || !(username.length >= 3 && nameAvailable)) ? 'default' : 'pointer',
-            boxShadow: '0 4px 20px rgba(0,224,196,0.2)',
-            transition: 'opacity 0.2s',
-          }}>
-            {creating ? 'Creating...' : 'Create Wallet'}
-          </button>
-
-          {error && <div style={{ marginTop: 12, fontSize: 11, color: '#EF4444', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 8, padding: '8px 12px' }}>{error}</div>}
         </div>
       )}
 
@@ -370,7 +370,7 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
 
           <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 6 }}>Wallet Created!</h2>
           {result.name && (
-            <p style={{ fontSize: 17, fontWeight: 600, color: '#00E0C4', marginBottom: 4 }}>Welcome, {result.name}</p>
+            <p style={{ fontSize: 17, fontWeight: 600, color: '#00E0C4', marginBottom: 4 }}>Welcome, @{result.name}</p>
           )}
 
           <div style={{ display: 'inline-block', marginBottom: 16 }}>
@@ -408,7 +408,7 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
             background: 'none', border: 'none', color: 'var(--dag-text-faint)',
             fontSize: 11, cursor: 'pointer', marginTop: 12, display: 'block', width: '100%',
           }}>
-            I'll do this later
+            I'll do this later (skip to wallet)
           </button>
         </div>
       )}
@@ -551,7 +551,7 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
           </div>
 
           {/* Continue button */}
-          <button onClick={() => onComplete(result.address, result.name)} style={{
+          <button onClick={() => onComplete(result.address, result.name, pendingWallet!)} style={{
             width: '100%', padding: '14px 0', borderRadius: 12,
             background: backupSuccess
               ? 'linear-gradient(135deg, #00E0C4, #0066FF)'
@@ -582,7 +582,7 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
                 Without a backup device or recovery guardians, losing this device means <strong style={{ color: '#EF4444' }}>permanent, irreversible loss</strong> of all funds in this wallet. There is no seed phrase, no customer support, and no way to recover.
               </p>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => onComplete(result.address, result.name)} style={{
+                <button onClick={() => onComplete(result.address, result.name, pendingWallet!)} style={{
                   flex: 1, padding: '8px 0', borderRadius: 8, background: 'rgba(239,68,68,0.08)',
                   border: '1px solid rgba(239,68,68,0.2)', color: '#EF4444',
                   fontSize: 11, fontWeight: 600, cursor: 'pointer',

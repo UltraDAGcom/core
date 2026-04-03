@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
-import { getTx, connectToNode, isConnected, shortAddr, shortHash, formatUdag } from '../lib/api.ts';
+import { getTx, connectToNode, isConnected, shortHash, formatUdag } from '../lib/api.ts';
 import { CopyButton } from '../components/shared/CopyButton.tsx';
 import { Badge, StatusBadge } from '../components/shared/Badge.tsx';
+import { DisplayIdentity } from '../components/shared/DisplayIdentity.tsx';
 
 export function TxDetailPage() {
   const { hash } = useParams<{ hash: string }>();
@@ -86,12 +87,7 @@ export function TxDetailPage() {
         )}
         {validator && (
           <InfoRow label="Validator">
-            <div className="flex items-center gap-1">
-              <Link to={`/address/${validator}`} className="font-mono text-blue-400 hover:text-blue-300 text-sm">
-                {shortAddr(validator)}
-              </Link>
-              <CopyButton text={validator} />
-            </div>
+            <DisplayIdentity address={validator} link size="sm" />
           </InfoRow>
         )}
         {(txData.tx_type ?? txData.type) != null && (
@@ -101,22 +97,12 @@ export function TxDetailPage() {
         )}
         {txData.from != null && (
           <InfoRow label="From">
-            <div className="flex items-center gap-1">
-              <Link to={`/address/${String(txData.from)}`} className="font-mono text-blue-400 hover:text-blue-300 text-sm">
-                {shortAddr(String(txData.from))}
-              </Link>
-              <CopyButton text={String(txData.from)} />
-            </div>
+            <DisplayIdentity address={String(txData.from)} link size="sm" />
           </InfoRow>
         )}
         {txData.to != null && (
           <InfoRow label="To">
-            <div className="flex items-center gap-1">
-              <Link to={`/address/${String(txData.to)}`} className="font-mono text-blue-400 hover:text-blue-300 text-sm">
-                {shortAddr(String(txData.to))}
-              </Link>
-              <CopyButton text={String(txData.to)} />
-            </div>
+            <DisplayIdentity address={String(txData.to)} link size="sm" />
           </InfoRow>
         )}
         {txData.amount != null && <InfoRow label="Amount" value={`${formatUdag(Number(txData.amount))} UDAG`} mono />}

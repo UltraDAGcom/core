@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getCouncil, getGovernanceConfig, shortAddr } from '../lib/api';
-import { CopyButton } from '../components/shared/CopyButton';
+import { getCouncil, getGovernanceConfig } from '../lib/api';
+import { DisplayIdentity } from '../components/shared/DisplayIdentity';
+
 import { Pagination } from '../components/shared/Pagination';
 import { CouncilSeatGrid } from '../components/governance/CouncilSeatGrid';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -162,8 +163,7 @@ export function CouncilPage() {
                 return [
                   <div key={`n${idx}`} style={{ fontSize: 11, color: 'var(--dag-text-faint)', padding: '7px 0', borderBottom: '1px solid var(--dag-row-border)' }}>{idx + 1}</div>,
                   <div key={`a${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 0', borderBottom: '1px solid var(--dag-row-border)' }}>
-                    <span style={{ fontSize: 11, color: 'var(--dag-text)', ...S.mono }}>{shortAddr(mb.address)}</span>
-                    <CopyButton text={mb.address} />
+                    <DisplayIdentity address={mb.address} link copyable size="xs" />
                   </div>,
                   <div key={`c${idx}`} style={{ padding: '7px 0', borderBottom: '1px solid var(--dag-row-border)' }}>
                     <span style={{ fontSize: 9.5, padding: '2px 8px', borderRadius: 4, background: (catColor[mb.category] || '#888') + '12', color: catColor[mb.category] || '#888', fontWeight: 600 }}>{mb.category}</span>

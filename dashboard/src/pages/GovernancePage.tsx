@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getProposals, getProposal, shortAddr, formatProposalType } from '../lib/api';
+import { getProposals, getProposal, formatProposalType } from '../lib/api';
+import { DisplayIdentity } from '../components/shared/DisplayIdentity';
 import { useKeystore } from '../hooks/useKeystore';
 import { VoteButton } from '../components/governance/VoteButton';
 import { CreateProposalModal } from '../components/governance/CreateProposalModal';
@@ -140,7 +141,7 @@ export function GovernancePage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
                 {[
-                  { l: 'PROPOSER', v: shortAddr(selected.proposer) },
+                  { l: 'PROPOSER', v: selected.proposer, isAddr: true },
                   { l: 'VOTING ENDS', v: `Round ${selected.voting_ends?.toLocaleString()}` },
                   { l: 'VOTES FOR', v: String(selected.votes_for), c: '#00E0C4' },
                   { l: 'VOTES AGAINST', v: String(selected.votes_against), c: '#EF4444' },
@@ -148,7 +149,11 @@ export function GovernancePage() {
                 ].map((x, i) => (
                   <div key={i} style={{ background: 'var(--dag-card)', borderRadius: 8, padding: '8px 10px' }}>
                     <div style={{ fontSize: 9, color: 'var(--dag-text-faint)', letterSpacing: 1, marginBottom: 2 }}>{x.l}</div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: x.c || '#fff', ...S.mono }}>{x.v}</div>
+                    {'isAddr' in x && x.isAddr ? (
+                      <DisplayIdentity address={x.v} link size="xs" />
+                    ) : (
+                      <div style={{ fontSize: 13, fontWeight: 600, color: x.c || '#fff', ...S.mono }}>{x.v}</div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -167,7 +172,7 @@ export function GovernancePage() {
                   <div style={{ fontSize: 10, color: 'var(--dag-subheading)', letterSpacing: 1, marginBottom: 8 }}>VOTERS ({selected.voters.length})</div>
                   {selected.voters.slice((voterPage - 1) * GOV_PAGE_SIZE, voterPage * GOV_PAGE_SIZE).map(v => (
                     <div key={v.address} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid var(--dag-row-border)' }}>
-                      <span style={{ fontSize: 10.5, color: 'var(--dag-text-muted)', ...S.mono }}>{shortAddr(v.address)}</span>
+                      <DisplayIdentity address={v.address} link size="xs" />
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         {v.category && <span style={{ fontSize: 9, color: 'var(--dag-text-faint)' }}>{v.category}</span>}
                         <span style={{ fontSize: 10, fontWeight: 600, color: v.vote === 'yes' ? '#00E0C4' : '#EF4444' }}>{v.vote === 'yes' ? 'YES' : 'NO'}</span>

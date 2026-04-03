@@ -713,7 +713,7 @@ export function BridgePage() {
                         >
                           {wallets.map((w, i) => (
                             <option key={w.address} value={i}>
-                              {w.name || `Wallet ${i + 1}`} — {w.address.slice(0, 10)}...{w.address.slice(-6)}
+                              {w.name || `Wallet ${i + 1}`}
                             </option>
                           ))}
                         </select>

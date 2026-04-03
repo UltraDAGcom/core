@@ -28,6 +28,7 @@ import { useNotifications } from './hooks/useNotifications';
 import { useTheme } from './hooks/useTheme';
 import { getNodeUrl, getNetwork, switchNetwork, type NetworkType } from './lib/api';
 import { ToastProvider } from './hooks/useToast';
+import { NameCacheProvider } from './contexts/NameCacheContext';
 
 function App() {
   const pk = usePasskeyWallet();
@@ -194,6 +195,7 @@ function App() {
   }
 
   return (
+    <NameCacheProvider>
     <ToastProvider>
       <Routes>
         <Route
@@ -325,6 +327,7 @@ function App() {
         hasExisting={ks.hasStore}
       />
     </ToastProvider>
+    </NameCacheProvider>
   );
 }
 

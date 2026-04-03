@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getBalance } from '../lib/api';
+import { useNameCache } from '../contexts/NameCacheContext';
 import type { Wallet } from '../lib/keystore';
 
 export interface WalletBalance {
@@ -10,6 +11,7 @@ export interface WalletBalance {
   delegated: number;
   is_active_validator: boolean;
   commission_percent: number;
+  name?: string;
   error?: string;
 }
 
@@ -17,11 +19,13 @@ export function useWalletBalances(wallets: Wallet[], connected: boolean) {
   const [balances, setBalances] = useState<Map<string, WalletBalance>>(new Map());
   const [loading, setLoading] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const nameCache = useNameCache();
 
   const fetchAll = useCallback(async () => {
     if (!connected || wallets.length === 0) return;
     setLoading(true);
     const results = new Map<string, WalletBalance>();
+    const nameEntries: Array<{ address: string; name: string | null }> = [];
 
     // Only fetch balance for first 10 wallets to avoid request spam
     const walletsToFetch = wallets.slice(0, 10);
@@ -38,7 +42,11 @@ export function useWalletBalances(wallets: Wallet[], connected: boolean) {
           delegated: bal?.delegated ?? 0,
           is_active_validator: bal?.is_active_validator ?? false,
           commission_percent: bal?.commission_percent ?? 10,
+          name: bal?.name ?? undefined,
         });
+        if (bal?.name !== undefined) {
+          nameEntries.push({ address: w.address, name: bal.name ?? null });
+        }
       } catch {
         results.set(w.address, {
           address: w.address, balance: 0, nonce: 0, staked: 0, delegated: 0,
@@ -48,8 +56,9 @@ export function useWalletBalances(wallets: Wallet[], connected: boolean) {
     }
 
     setBalances(results);
+    if (nameEntries.length > 0) nameCache?.seed(nameEntries);
     setLoading(false);
-  }, [wallets, connected]);
+  }, [wallets, connected, nameCache]);
 
   useEffect(() => {
     fetchAll();

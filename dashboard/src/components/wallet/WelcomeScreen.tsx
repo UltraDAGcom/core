@@ -3,6 +3,8 @@ import { Plus, Key, ChevronRight, Shield, Zap, Globe, ArrowRight, Eye, EyeOff, C
 import { deriveAddress } from '../../lib/keygen';
 import { generateWithMnemonic, mnemonicToKeypair, isValidMnemonic } from '../../lib/mnemonic';
 import { PasskeyOnboarding } from './PasskeyOnboarding';
+import { savePasskeyWallet } from '../../lib/passkey-wallet';
+import { shortAddr } from '../../lib/api';
 import type { NetworkType } from '../../lib/api';
 
 // ─── Props & Types ───────────────────────────────────────────────────────────
@@ -384,9 +386,10 @@ export function WelcomeScreen({
       return (
         <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6">
           <PasskeyOnboarding
-            onComplete={(_address, _name) => {
-              // PasskeyOnboarding already saved to passkey-wallet.ts via savePasskeyWallet().
-              // Just close the onboarding overlay — App.tsx will detect pk.unlocked and show dashboard.
+            onComplete={(_address, _name, pendingWallet) => {
+              // Save wallet now — after backup step is complete.
+              // This triggers pk.unlocked which unmounts onboarding and shows dashboard.
+              savePasskeyWallet(pendingWallet);
               onFinishOnboarding?.();
             }}
             onFallbackToAdvanced={() => setShowAdvancedCreate(true)}
@@ -803,7 +806,7 @@ export function WelcomeScreen({
                   <div className="flex items-center gap-2 bg-slate-800/60 rounded-lg p-2.5">
                     <Wallet className="w-3.5 h-3.5 text-dag-green flex-shrink-0" />
                     <p className="text-xs font-mono text-dag-green flex-1">
-                      {generatedKey?.address ? `${generatedKey.address.slice(0, 8)}...${generatedKey.address.slice(-6)}` : ''}
+                      {generatedKey?.address ? shortAddr(generatedKey.address) : ''}
                     </p>
                     {generatedKey?.address && (
                       <button onClick={() => copyText(generatedKey.address, 'address')}

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
-import { getVertex, connectToNode, isConnected, shortHash, shortAddr, formatUdag } from '../lib/api.ts';
+import { getVertex, connectToNode, isConnected, shortHash, formatUdag } from '../lib/api.ts';
 import { CopyButton } from '../components/shared/CopyButton.tsx';
 import { Badge } from '../components/shared/Badge.tsx';
+import { DisplayIdentity } from '../components/shared/DisplayIdentity.tsx';
 
 export function VertexDetailPage() {
   const { hash } = useParams<{ hash: string }>();
@@ -71,12 +72,7 @@ export function VertexDetailPage() {
           </Link>
         </InfoRow>
         <InfoRow label="Validator">
-          <div className="flex items-center gap-1">
-            <Link to={`/address/${validator}`} className="font-mono text-blue-400 hover:text-blue-300 text-sm">
-              {shortAddr(validator)}
-            </Link>
-            <CopyButton text={validator} />
-          </div>
+          <DisplayIdentity address={validator} link size="sm" />
         </InfoRow>
         <InfoRow label="Reward" value={rewardDisplay} mono />
         <InfoRow label="Parent Count" value={String(parentCount)} mono />
@@ -126,9 +122,7 @@ export function VertexDetailPage() {
                     </td>
                     <td className="py-2 px-3">
                       {tx.from ? (
-                        <Link to={`/address/${String(tx.from)}`} className="font-mono text-xs text-blue-400 hover:text-blue-300">
-                          {shortAddr(String(tx.from))}
-                        </Link>
+                        <DisplayIdentity address={String(tx.from)} link size="xs" />
                       ) : (
                         <span className="text-slate-500 text-xs">--</span>
                       )}
