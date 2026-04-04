@@ -26,6 +26,7 @@ import { CopyButton } from '../components/shared/CopyButton.tsx';
 import { WalletSelector } from '../components/shared/WalletSelector.tsx';
 import { useWalletBalances } from '../hooks/useWalletBalances.ts';
 import { CONTRACTS_DEPLOYED } from '../lib/contracts.ts';
+import { PageHeader } from '../components/shared/PageHeader';
 
 interface BridgeAttestation {
   nonce: number;
@@ -488,59 +489,50 @@ export function BridgePage() {
       )}
 
       {/* Hero Header */}
-      <div style={{ marginBottom: 22 }}>
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 18, color: '#00E0C4' }}>⟷</span>
-              <h1 style={{ fontSize: 21, fontWeight: 700, color: 'var(--dag-text)' }}>UltraDAG Bridge</h1>
-            </div>
-            <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)' }}>
-              Secured by the validator federation — no external relayers
-            </p>
+      <PageHeader
+        title="UltraDAG Bridge"
+        subtitle="Secured by the validator federation — no external relayers"
+        right={<>
+          {/* Bridge status pill */}
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${
+            canBridge
+              ? 'bg-dag-green/10 text-dag-green border-dag-green/20'
+              : bridgePaused
+                ? 'bg-dag-red/10 text-dag-red border-dag-red/20'
+                : 'bg-dag-yellow/10 text-dag-yellow border-dag-yellow/20'
+          }`}>
+            <div className={`w-1.5 h-1.5 rounded-full ${canBridge ? 'bg-dag-green animate-pulse' : bridgePaused ? 'bg-dag-red' : 'bg-dag-yellow'}`} />
+            {canBridge ? 'Bridge Active' : bridgePaused ? 'Bridge Paused' : 'Inactive'}
           </div>
-          <div className="flex items-center gap-3">
-            {/* Bridge status pill */}
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${
-              canBridge
-                ? 'bg-dag-green/10 text-dag-green border-dag-green/20'
-                : bridgePaused
-                  ? 'bg-dag-red/10 text-dag-red border-dag-red/20'
-                  : 'bg-dag-yellow/10 text-dag-yellow border-dag-yellow/20'
-            }`}>
-              <div className={`w-1.5 h-1.5 rounded-full ${canBridge ? 'bg-dag-green animate-pulse' : bridgePaused ? 'bg-dag-red' : 'bg-dag-yellow'}`} />
-              {canBridge ? 'Bridge Active' : bridgePaused ? 'Bridge Paused' : 'Inactive'}
-            </div>
 
-            {/* Connected wallet pill */}
-            {eth.connected && eth.selectedWallet ? (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-dag-surface border border-dag-border">
-                <img src={eth.selectedWallet.icon} alt="" className="w-4 h-4 rounded" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                <span className="text-xs text-white font-mono">{eth.address.slice(0, 6)}...{eth.address.slice(-4)}</span>
-                <button
-                  onClick={eth.disconnect}
-                  className="ml-0.5 p-0.5 rounded text-dag-muted hover:text-dag-red transition-colors"
-                  title="Disconnect"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ) : eth.connected ? (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-dag-surface border border-dag-border">
-                <div className="w-2 h-2 rounded-full bg-dag-green" />
-                <span className="text-xs text-white font-mono">{eth.address.slice(0, 6)}...{eth.address.slice(-4)}</span>
-                <button
-                  onClick={eth.disconnect}
-                  className="ml-0.5 p-0.5 rounded text-dag-muted hover:text-dag-red transition-colors"
-                  title="Disconnect"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
+          {/* Connected wallet pill */}
+          {eth.connected && eth.selectedWallet ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-dag-surface border border-dag-border">
+              <img src={eth.selectedWallet.icon} alt="" className="w-4 h-4 rounded" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <span className="text-xs text-white font-mono">{eth.address.slice(0, 6)}...{eth.address.slice(-4)}</span>
+              <button
+                onClick={eth.disconnect}
+                className="ml-0.5 p-0.5 rounded text-dag-muted hover:text-dag-red transition-colors"
+                title="Disconnect"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ) : eth.connected ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-dag-surface border border-dag-border">
+              <div className="w-2 h-2 rounded-full bg-dag-green" />
+              <span className="text-xs text-white font-mono">{eth.address.slice(0, 6)}...{eth.address.slice(-4)}</span>
+              <button
+                onClick={eth.disconnect}
+                className="ml-0.5 p-0.5 rounded text-dag-muted hover:text-dag-red transition-colors"
+                title="Disconnect"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ) : null}
+        </>}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Left: Bridge Form (3 cols) */}

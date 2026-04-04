@@ -4,6 +4,7 @@ import { getStatus, getRound, connectToNode, isConnected } from '../lib/api';
 import { SearchBar } from '../components/explorer/SearchBar';
 import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { PageHeader } from '../components/shared/PageHeader';
 
 const PAGE_SIZE = 10;
 const SATS = 100_000_000;
@@ -73,12 +74,10 @@ export function ExplorerPage() {
     <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: m ? 16 : 22, animation: 'slideUp 0.3s ease' }}>
-        <div>
-          <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, color: 'var(--dag-text)' }}>Explorer</h1>
-          <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>Search and browse the DAG</p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <PageHeader
+        title="Explorer"
+        subtitle="Search and browse the DAG"
+        right={<>
           {lag <= 3 && <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#00E0C4', boxShadow: '0 0 6px #00E0C4', animation: 'pulse 2s infinite' }} />
             <span style={{ fontSize: 10.5, color: '#00E0C4', fontWeight: 600 }}>LIVE</span>
@@ -86,8 +85,8 @@ export function ExplorerPage() {
           <span style={{ fontSize: 10.5, padding: '3px 10px', borderRadius: 6, background: lag <= 3 ? 'rgba(0,224,196,0.08)' : lag <= 10 ? 'rgba(255,184,0,0.08)' : 'rgba(239,68,68,0.08)', color: lag <= 3 ? '#00E0C4' : lag <= 10 ? '#FFB800' : '#EF4444', fontWeight: 600 }}>
             Lag: {lag}
           </span>
-        </div>
-      </div>
+        </>}
+      />
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: m ? 10 : 12, marginBottom: 16, animation: 'slideUp 0.4s ease' }}>

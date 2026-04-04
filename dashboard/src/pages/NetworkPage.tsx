@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { getStatus, getPeers, getMempool, getMetrics, getHealthDetailed, connectToNode, isConnected, getNodeUrl } from '../lib/api';
 import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { PageHeader } from '../components/shared/PageHeader';
 
 const S = {
   card: { background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '18px 20px' } as React.CSSProperties,
@@ -52,18 +53,16 @@ export function NetworkPage() {
     <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}`}</style>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: m ? 'flex-start' : 'center', marginBottom: m ? 16 : 22, animation: 'slideUp 0.3s ease', flexDirection: m ? 'column' : 'row', gap: m ? 8 : 0 }}>
-        <div>
-          <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, color: 'var(--dag-text)' }}>Node Status</h1>
-          <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>
-            Connected to <span style={S.mono}>{getNodeUrl()}</span>
-          </p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#00E0C4', animation: 'pulse 2s infinite' }} />
-          <span style={{ fontSize: 10.5, color: 'var(--dag-text-faint)' }}>Auto-refresh 5s</span>
-        </div>
-      </div>
+      <PageHeader
+        title="Node Status"
+        subtitle={`Connected to ${getNodeUrl()}`}
+        right={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#00E0C4', animation: 'pulse 2s infinite' }} />
+            <span style={{ fontSize: 10.5, color: 'var(--dag-text-faint)' }}>Auto-refresh 5s</span>
+          </div>
+        }
+      />
 
       {/* Health */}
       <div style={{ ...S.card, marginBottom: 14, animation: 'slideUp 0.4s ease' }}>

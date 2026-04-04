@@ -8,6 +8,7 @@ import { getBalance, normalizeAddress, isValidAddress } from '../lib/api';
 import { UltraIdCard } from '../components/profile/UltraIdCard';
 import { EditProfileModal } from '../components/profile/EditProfileModal';
 import { ProfileActivity } from '../components/profile/ProfileActivity';
+import { PageHeader } from '../components/shared/PageHeader';
 
 export function ProfilePage() {
   const { nameOrAddress } = useParams<{ nameOrAddress: string }>();
@@ -97,6 +98,7 @@ export function ProfilePage() {
 
   return (
     <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif", maxWidth: 700, margin: '0 auto' }}>
+      <PageHeader title="ULTRA ID" subtitle="Your on-chain identity" />
       {/* ID Card */}
       <div style={{ marginBottom: 20 }}>
         <UltraIdCard
@@ -187,10 +189,10 @@ export function ProfilePage() {
       )}
 
       {/* Edit Modal */}
-      {showEdit && profile?.name && editableWallet && (
+      {showEdit && profile && (
         <EditProfileModal
-          name={profile.name}
-          wallet={editableWallet}
+          name={profile.name ?? ''}
+          wallet={editableWallet ?? wallets[0] ?? { name: '', address: resolvedAddress, secret_key: '' }}
           currentBio={profile.bio}
           currentWebsite={profile.website}
           currentGithub={profile.github}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getValidators, getDelegation, postDelegate, postUndelegate, getNodeUrl } from '../lib/api';
 import { DisplayIdentity } from '../components/shared/DisplayIdentity';
+import { PageHeader } from '../components/shared/PageHeader';
 import { useKeystore } from '../hooks/useKeystore';
 import { hasPasskeyWallet, getPasskeyWallet } from '../lib/passkey-wallet';
 import { signAndSubmitSmartOp } from '../lib/webauthn-sign';
@@ -114,10 +115,7 @@ export function StakingPage() {
     <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} input:focus,select:focus{border-color:rgba(0,224,196,0.3)!important}`}</style>
 
-      <div style={{ marginBottom: m ? 16 : 22, animation: 'slideUp 0.3s ease' }}>
-        <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, color: 'var(--dag-text)' }}>Staking</h1>
-        <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>Stake UDAG to earn passive rewards — no node required</p>
-      </div>
+      <PageHeader title="Staking" subtitle="Stake UDAG to earn passive rewards — no node required" />
 
       {/* Stats Row */}
       <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(3,1fr)', gap: m ? 10 : 12, marginBottom: 18, animation: 'slideUp 0.4s ease' }}>

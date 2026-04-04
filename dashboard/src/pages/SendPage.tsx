@@ -7,6 +7,7 @@ import { QrCode } from '../components/shared/QrCode';
 import { QrScanner } from '../components/shared/QrScanner';
 import { useToast } from '../hooks/useToast';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { PageHeader } from '../components/shared/PageHeader';
 import type { Wallet } from '../lib/keystore';
 import type { WalletBalance } from '../hooks/useWalletBalances';
 
@@ -189,10 +190,7 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
     <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} input:focus,select:focus,textarea:focus{border-color:rgba(0,224,196,0.3)!important}`}</style>
 
-      <div style={{ marginBottom: m ? 16 : 22, animation: 'slideUp 0.3s ease' }}>
-        <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, color: 'var(--dag-text)' }}>Send & Receive</h1>
-        <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>Transfer UDAG or receive funds</p>
-      </div>
+      <PageHeader title="Send & Receive" subtitle="Transfer UDAG or receive funds" />
 
       <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '1fr 1fr', gap: m ? 14 : 16, animation: 'slideUp 0.4s ease' }}>
         {/* ── Send ── */}

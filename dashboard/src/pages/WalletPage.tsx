@@ -9,6 +9,7 @@ import { changePassword } from '../lib/keystore';
 import { CopyButton } from '../components/shared/CopyButton';
 import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { PageHeader } from '../components/shared/PageHeader';
 import type { Wallet } from '../lib/keystore';
 import type { WalletBalance } from '../hooks/useWalletBalances';
 
@@ -396,33 +397,7 @@ export function WalletPage({
     return (
       <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
         <style>{CSS}</style>
-        <div style={{ marginBottom: 22, animation: 'slideUp 0.3s ease' }}>
-          <h1
-            style={{
-              fontSize: m ? 18 : 21,
-              fontWeight: 700,
-              color: 'var(--dag-text)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-            }}
-          >
-            <span
-              style={{
-                background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                fontSize: 24,
-              }}
-            >
-              ◇
-            </span>
-            Wallet
-          </h1>
-          <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>
-            Manage your UltraDAG wallets
-          </p>
-        </div>
+        <PageHeader title="Wallet" subtitle="Manage your UltraDAG wallets" />
 
         <div
           style={{
@@ -558,77 +533,38 @@ export function WalletPage({
       <style>{CSS}</style>
 
       {/* ── Header ── */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: m ? 'flex-start' : 'center',
-          marginBottom: 18,
-          animation: 'slideUp 0.3s ease',
-          flexDirection: m ? 'column' : 'row',
-          gap: m ? 10 : 0,
-        }}
-      >
-        <div>
-          <h1
-            style={{
-              fontSize: m ? 18 : 21,
-              fontWeight: 700,
-              color: 'var(--dag-text)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-            }}
-          >
-            <span
-              style={{
-                background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                fontSize: 24,
-              }}
-            >
-              ◇
-            </span>
-            Wallets
-          </h1>
-          <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>
-            {wallets.length} wallet{wallets.length !== 1 ? 's' : ''} managed
-            {grandTotal > 0 && (
-              <span style={{ ...S.mono, color: 'var(--dag-text-muted)', marginLeft: 8 }}>
-                · {fmt(grandTotal)} UDAG total
-              </span>
+      <PageHeader
+        title="Wallets"
+        subtitle={`${wallets.length} wallet${wallets.length !== 1 ? 's' : ''} managed${grandTotal > 0 ? ` · ${fmt(grandTotal)} UDAG total` : ''}`}
+        right={
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+            {webauthnAvailable && onEnrollWebAuthn && onRemoveWebAuthn && (
+              <button
+                className="header-btn"
+                onClick={async () => {
+                  webauthnEnrolled ? onRemoveWebAuthn() : await onEnrollWebAuthn?.();
+                }}
+                style={S.btn(webauthnEnrolled ? '#00E0C4' : 'var(--dag-text-muted)')}
+              >
+                ◎ {webauthnEnrolled ? 'Biometrics On' : 'Biometrics'}
+              </button>
             )}
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-          {webauthnAvailable && onEnrollWebAuthn && onRemoveWebAuthn && (
+            <button className="header-btn" onClick={() => setShowPwModal(true)} style={S.btn('var(--dag-text-muted)')}>
+              ⚿ Password
+            </button>
+            <button className="header-btn" onClick={handleExport} style={S.btn('var(--dag-text-muted)')}>
+              ↓ Export
+            </button>
             <button
               className="header-btn"
-              onClick={async () => {
-                webauthnEnrolled ? onRemoveWebAuthn() : await onEnrollWebAuthn?.();
-              }}
-              style={S.btn(webauthnEnrolled ? '#00E0C4' : 'var(--dag-text-muted)')}
+              onClick={() => setShowAddModal(true)}
+              style={{ ...S.btnSolid, boxShadow: '0 2px 12px rgba(0,224,196,0.12)' }}
             >
-              ◎ {webauthnEnrolled ? 'Biometrics On' : 'Biometrics'}
+              + Add Wallet
             </button>
-          )}
-          <button className="header-btn" onClick={() => setShowPwModal(true)} style={S.btn('var(--dag-text-muted)')}>
-            ⚿ Password
-          </button>
-          <button className="header-btn" onClick={handleExport} style={S.btn('var(--dag-text-muted)')}>
-            ↓ Export
-          </button>
-          <button
-            className="header-btn"
-            onClick={() => setShowAddModal(true)}
-            style={{ ...S.btnSolid, boxShadow: '0 2px 12px rgba(0,224,196,0.12)' }}
-          >
-            + Add Wallet
-          </button>
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       {/* ── Portfolio Summary ── */}
       <div

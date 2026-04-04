@@ -4,6 +4,7 @@ import { getPasskeyWallet } from '../lib/passkey-wallet';
 import { signAndSubmitSmartOp } from '../lib/webauthn-sign';
 import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { PageHeader } from '../components/shared/PageHeader';
 import { useToast } from '../hooks/useToast';
 import { DisplayIdentity } from '../components/shared/DisplayIdentity';
 import type { NetworkType } from '../lib/api';
@@ -307,15 +308,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
       `}</style>
 
       {/* Header */}
-      <div style={{ marginBottom: m ? 16 : 22, animation: 'slideUp 0.3s ease' }}>
-        <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, color: 'var(--dag-text)', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ background: 'linear-gradient(135deg, #00E0C4, #0066FF)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontSize: 24 }}>≋</span>
-          Streaming Payments
-        </h1>
-        <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>
-          Continuous money flow — pay by the second, minute, or month
-        </p>
-      </div>
+      <PageHeader title="Streaming Payments" subtitle="Continuous money flow — pay by the second, minute, or month" />
 
       {/* Stats Row */}
       <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: m ? 10 : 12, marginBottom: 18, animation: 'slideUp 0.4s ease' }}>

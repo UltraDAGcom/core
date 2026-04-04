@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { getHealthDetailed, getRound, getStatus } from '../lib/api';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { PageHeader } from '../components/shared/PageHeader';
 import { useGeoLocatedPeers } from '../hooks/useGeoLocatedPeers';
 import { ValidatorMap } from '../components/dashboard/ValidatorMap';
 import type { NodeStatus } from '../hooks/useNode';
@@ -242,12 +243,10 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
       `}</style>
 
       {/* Top bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: m ? 'flex-start' : 'center', marginBottom: m ? 16 : 22, animation: 'slideUp 0.3s ease', flexDirection: m ? 'column' : 'row', gap: m ? 10 : 0 }}>
-        <div>
-          <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, letterSpacing: -0.3, color: 'var(--dag-text)' }}>Dashboard</h1>
-          <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>Real-time network overview</p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: m ? 8 : 12, flexWrap: 'wrap' }}>
+      <PageHeader
+        title="Dashboard"
+        subtitle="Real-time network overview"
+        right={<>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#00E0C4', boxShadow: '0 0 8px #00E0C4', animation: 'pulse 2s ease-in-out infinite' }} />
             <span style={{ fontSize: 12, fontWeight: 600, color: healthScore >= 90 ? '#00E0C4' : healthScore >= 60 ? '#FFB800' : '#EF4444' }}>{health?.status?.toUpperCase() ?? 'CONNECTING'}</span>
@@ -260,8 +259,8 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
             <span style={{ color: 'var(--dag-text-faint)' }}>|</span>
             <span style={{ fontSize: 12, color: '#00E0C4', fontWeight: 600 }}>{portfolioTotal.toFixed(2)} UDAG</span>
           </div>}
-        </div>
-      </div>
+        </>}
+      />
 
       {/* Portfolio */}
       <div style={{

@@ -6,6 +6,7 @@ import { VoteButton } from '../components/governance/VoteButton';
 import { CreateProposalModal } from '../components/governance/CreateProposalModal';
 import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { PageHeader } from '../components/shared/PageHeader';
 
 const S = {
   card: { background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '18px 20px' } as React.CSSProperties,
@@ -69,15 +70,13 @@ export function GovernancePage() {
     <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: m ? 'flex-start' : 'center', marginBottom: m ? 16 : 22, animation: 'slideUp 0.3s ease', flexDirection: m ? 'column' : 'row', gap: m ? 10 : 0 }}>
-        <div>
-          <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, color: 'var(--dag-text)' }}>Governance</h1>
-          <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>Vote on proposals that shape the network</p>
-        </div>
-        {unlocked && wallets.length > 0 && (
+      <PageHeader
+        title="Governance"
+        subtitle="Vote on proposals that shape the network"
+        right={unlocked && wallets.length > 0 ? (
           <button onClick={() => setShowCreate(true)} style={{ padding: '8px 16px', borderRadius: 10, background: '#0066FF', color: 'var(--dag-text)', fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none' }}>+ New Proposal</button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '2fr 1.2fr', gap: m ? 14 : 16, animation: 'slideUp 0.4s ease' }}>
         {/* Proposal List */}

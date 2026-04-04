@@ -5,6 +5,7 @@ import { DisplayIdentity } from '../components/shared/DisplayIdentity';
 import { Pagination } from '../components/shared/Pagination';
 import { CouncilSeatGrid } from '../components/governance/CouncilSeatGrid';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { PageHeader } from '../components/shared/PageHeader';
 
 interface CouncilMember { address: string; category: string }
 interface SeatInfo { available: number; filled: number; max: number }
@@ -61,10 +62,7 @@ export function CouncilPage() {
     <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
-      <div style={{ marginBottom: m ? 16 : 22, animation: 'slideUp 0.3s ease' }}>
-        <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, color: 'var(--dag-text)' }}>Council of 21</h1>
-        <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>The elected governance body that guides UltraDAG</p>
-      </div>
+      <PageHeader title="Council of 21" subtitle="The elected governance body that guides UltraDAG" />
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: m ? 10 : 12, marginBottom: 18, animation: 'slideUp 0.4s ease' }}>

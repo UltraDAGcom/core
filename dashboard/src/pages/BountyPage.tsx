@@ -7,6 +7,7 @@ import { BountyDetail } from '../components/bounty/BountyDetail';
 import { BountyFilters } from '../components/bounty/BountyFilters';
 import { PayBountyModal } from '../components/bounty/PayBountyModal';
 import { Pagination } from '../components/shared/Pagination';
+import { PageHeader } from '../components/shared/PageHeader';
 import type { ParsedBounty } from '../lib/github';
 
 const PAGE_SIZE = 10;
@@ -46,14 +47,10 @@ export function BountyPage() {
   return (
     <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <div>
-          <h1 style={{ fontSize: 21, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 2 }}>Bug Bounties</h1>
-          <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)' }}>
-            Earn UDAG by finding bugs, reporting issues, and building features
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <PageHeader
+        title="Bug Bounties"
+        subtitle="Earn UDAG by finding bugs, reporting issues, and building features"
+        right={<>
           {totalReward > 0 && (
             <span style={{ fontSize: 12, color: '#00E0C4', fontWeight: 600, ...S.mono }}>
               {totalReward.toLocaleString()} UDAG available
@@ -72,8 +69,8 @@ export function BountyPage() {
           >
             + Post Bounty
           </a>
-        </div>
-      </div>
+        </>}
+      />
 
       {/* Stats bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 16 }}>
