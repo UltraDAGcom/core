@@ -117,36 +117,36 @@ export const globalStyles = `
   @keyframes glow{0%,100%{box-shadow:0 0 12px rgba(0,224,196,0.15)}50%{box-shadow:0 0 20px rgba(0,224,196,0.3)}}
 
   :root, [data-theme="dark"] {
-    --dag-bg: #0a0e1a;
-    --dag-card: rgba(255,255,255,0.018);
-    --dag-card-hover: rgba(255,255,255,0.04);
-    --dag-border: rgba(255,255,255,0.055);
-    --dag-border-hover: rgba(255,255,255,0.12);
-    --dag-text: #fff;
-    --dag-text-secondary: rgba(255,255,255,0.55);
-    --dag-text-muted: rgba(255,255,255,0.32);
-    --dag-text-faint: rgba(255,255,255,0.18);
-    --dag-input-bg: rgba(255,255,255,0.03);
-    --dag-row-border: rgba(255,255,255,0.025);
-    --dag-table-border: rgba(255,255,255,0.03);
-    --dag-cell-text: rgba(255,255,255,0.45);
-    --dag-value-text: rgba(255,255,255,0.65);
-    --dag-subheading: rgba(255,255,255,0.25);
-    --dag-sidebar-bg: rgba(255,255,255,0.008);
-    --dag-sidebar-border: rgba(255,255,255,0.04);
-    --dag-sidebar-section: rgba(255,255,255,0.12);
-    --dag-sidebar-inactive: rgba(255,255,255,0.35);
-    --dag-sidebar-lock-bg: rgba(255,255,255,0.02);
-    --dag-sidebar-lock-border: rgba(255,255,255,0.04);
-    --dag-sidebar-lock-text: rgba(255,255,255,0.3);
-    --dag-sidebar-footer-border: rgba(255,255,255,0.03);
-    --dag-sidebar-footer-text: rgba(255,255,255,0.3);
-    --dag-sidebar-footer-muted: rgba(255,255,255,0.15);
-    --dag-sidebar-footer-faint: rgba(255,255,255,0.12);
+    --dag-bg: #0d1117;
+    --dag-card: rgba(255,255,255,0.035);
+    --dag-card-hover: rgba(255,255,255,0.06);
+    --dag-border: rgba(255,255,255,0.09);
+    --dag-border-hover: rgba(255,255,255,0.18);
+    --dag-text: #f0f2f5;
+    --dag-text-secondary: rgba(255,255,255,0.7);
+    --dag-text-muted: rgba(255,255,255,0.5);
+    --dag-text-faint: rgba(255,255,255,0.3);
+    --dag-input-bg: rgba(255,255,255,0.05);
+    --dag-row-border: rgba(255,255,255,0.05);
+    --dag-table-border: rgba(255,255,255,0.06);
+    --dag-cell-text: rgba(255,255,255,0.6);
+    --dag-value-text: rgba(255,255,255,0.8);
+    --dag-subheading: rgba(255,255,255,0.4);
+    --dag-sidebar-bg: rgba(255,255,255,0.015);
+    --dag-sidebar-border: rgba(255,255,255,0.07);
+    --dag-sidebar-section: rgba(255,255,255,0.2);
+    --dag-sidebar-inactive: rgba(255,255,255,0.5);
+    --dag-sidebar-lock-bg: rgba(255,255,255,0.03);
+    --dag-sidebar-lock-border: rgba(255,255,255,0.07);
+    --dag-sidebar-lock-text: rgba(255,255,255,0.45);
+    --dag-sidebar-footer-border: rgba(255,255,255,0.06);
+    --dag-sidebar-footer-text: rgba(255,255,255,0.45);
+    --dag-sidebar-footer-muted: rgba(255,255,255,0.25);
+    --dag-sidebar-footer-faint: rgba(255,255,255,0.18);
     --dag-overlay: rgba(0,0,0,0.6);
-    --dag-net-inactive: rgba(255,255,255,0.18);
-    --dag-net-switch-bg: rgba(255,255,255,0.02);
-    --dag-net-switch-border: rgba(255,255,255,0.04);
+    --dag-net-inactive: rgba(255,255,255,0.3);
+    --dag-net-switch-bg: rgba(255,255,255,0.03);
+    --dag-net-switch-border: rgba(255,255,255,0.07);
   }
 
   [data-theme="light"] {

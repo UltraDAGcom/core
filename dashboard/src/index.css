@@ -7,21 +7,21 @@
   --color-dag-blue: #0066FF;
   --color-dag-accent: #00E0C4;
   --color-dag-purple: #A855F7;
-  --color-dag-bg: #0a0e1a;
-  --color-dag-slate: #0B1120;
-  --color-dag-card: rgba(255, 255, 255, 0.018);
-  --color-dag-card-hover: rgba(255, 255, 255, 0.04);
-  --color-dag-border: rgba(255, 255, 255, 0.055);
-  --color-dag-surface: #0B1120;
-  --color-dag-muted: rgba(255, 255, 255, 0.45);
-  --color-dag-sidebar: rgba(255, 255, 255, 0.008);
+  --color-dag-bg: #0d1117;
+  --color-dag-slate: #161b22;
+  --color-dag-card: rgba(255, 255, 255, 0.035);
+  --color-dag-card-hover: rgba(255, 255, 255, 0.06);
+  --color-dag-border: rgba(255, 255, 255, 0.09);
+  --color-dag-surface: #161b22;
+  --color-dag-muted: rgba(255, 255, 255, 0.5);
+  --color-dag-sidebar: rgba(255, 255, 255, 0.015);
   --font-family-mono: 'DM Mono', ui-monospace, Consolas, 'Courier New', monospace;
 }
 
 body {
   margin: 0;
-  background: var(--dag-bg, #0a0e1a);
-  color: var(--dag-text, #e2e8f0);
+  background: var(--dag-bg, #0d1117);
+  color: var(--dag-text, #f0f2f5);
   font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

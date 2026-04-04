@@ -59,13 +59,15 @@ export function Sidebar({ open, onClose, network = 'testnet', onSwitchNetwork, o
         zIndex: m ? 50 : (open ? 50 : 'auto'),
         transition: 'transform 0.2s ease',
       }}>
-        {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2px 8px', marginBottom: 20 }}>
-          <img src="/media/logo/logo_website.png" alt="UltraDAG" style={{ height: 30, width: 'auto' }} />
-          <div>
-            <div style={{ fontSize: 8.5, color: isMainnet ? '#00E0C4' : '#FFB800', letterSpacing: 2.5, fontWeight: 600 }}>
-              {network.toUpperCase()} v0.1
-            </div>
+        {/* Logo + network badge */}
+        <div style={{ padding: '2px 8px', marginBottom: 20, textAlign: 'center' }}>
+          <img src="/media/logo/logo_website.png" alt="UltraDAG" style={{ height: 30, width: 'auto', marginBottom: 6 }} />
+          <div style={{
+            fontSize: 8.5, fontWeight: 600, letterSpacing: 2.5,
+            color: isMainnet ? '#00E0C4' : '#FFB800',
+            padding: '2px 0',
+          }}>
+            {network.toUpperCase()} v0.1
           </div>
         </div>
 
