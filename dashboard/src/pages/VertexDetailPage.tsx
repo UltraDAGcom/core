@@ -11,6 +11,13 @@ export function VertexDetailPage() {
   const [vertex, setVertex] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [switchCount, setSwitchCount] = useState(0);
+
+  useEffect(() => {
+    const handler = () => setSwitchCount(n => n + 1);
+    window.addEventListener('ultradag-network-switch', handler);
+    return () => window.removeEventListener('ultradag-network-switch', handler);
+  }, []);
 
   useEffect(() => {
     if (!hash) return;
@@ -30,7 +37,7 @@ export function VertexDetailPage() {
     };
 
     fetchVertex();
-  }, [hash]);
+  }, [hash, switchCount]);
 
   if (loading) return <div className="text-slate-500 py-8 text-center">Loading vertex...</div>;
   if (error) {

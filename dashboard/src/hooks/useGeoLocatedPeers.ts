@@ -42,7 +42,7 @@ function saveCache(cache: Map<string, GeoCache>) {
 
 async function resolveGeoIP(ip: string): Promise<GeoCache | null> {
   try {
-    const res = await fetch(`http://ip-api.com/json/${ip}?fields=status,lat,lon,city,country`, {
+    const res = await fetch(`https://ip-api.com/json/${ip}?fields=status,lat,lon,city,country`, {
       signal: AbortSignal.timeout(4000),
     });
     if (!res.ok) return null;

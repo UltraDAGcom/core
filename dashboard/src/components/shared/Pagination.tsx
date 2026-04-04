@@ -96,7 +96,7 @@ export function Pagination({ page, totalPages, onPageChange, pageSize, onPageSiz
             style={S.select}
           >
             {[10, 25, 50].map(n => (
-              <option key={n} value={n} style={{ background: '#0B1120' }}>{n}/page</option>
+              <option key={n} value={n} style={{ background: 'var(--dag-bg)' }}>{n}/page</option>
             ))}
           </select>
         )}

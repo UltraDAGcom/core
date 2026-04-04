@@ -367,7 +367,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                 <span style={S.label}>From Wallet</span>
                 <select value={senderIdx} onChange={e => setSenderIdx(Number(e.target.value))} style={{ ...S.select, width: '100%' }}>
                   {wallets.map((w, i) => (
-                    <option key={w.address} value={i} style={{ background: '#0B1120' }}>
+                    <option key={w.address} value={i} style={{ background: 'var(--dag-bg)' }}>
                       {w.name || `Wallet ${i + 1}`}
                     </option>
                   ))}

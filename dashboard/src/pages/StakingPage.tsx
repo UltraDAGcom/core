@@ -157,7 +157,7 @@ export function StakingPage() {
                   <div>
                     <span style={S.label}>Wallet</span>
                     <select value={walletIdx} onChange={e => setWalletIdx(Number(e.target.value))} style={{ ...S.input, fontSize: 13, fontFamily: "'DM Sans',sans-serif" }}>
-                      {wallets.map((w, i) => <option key={i} value={i} style={{ background: '#0B1120' }}>{w.name}</option>)}
+                      {wallets.map((w, i) => <option key={i} value={i} style={{ background: 'var(--dag-bg)' }}>{w.name}</option>)}
                     </select>
                   </div>
                 )}

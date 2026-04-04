@@ -8,6 +8,13 @@ export function SearchResultPage() {
   const navigate = useNavigate();
   const [status, setStatus] = useState('Searching...');
   const [error, setError] = useState('');
+  const [switchCount, setSwitchCount] = useState(0);
+
+  useEffect(() => {
+    const handler = () => setSwitchCount(n => n + 1);
+    window.addEventListener('ultradag-network-switch', handler);
+    return () => window.removeEventListener('ultradag-network-switch', handler);
+  }, []);
 
   useEffect(() => {
     if (!query) return;
@@ -59,7 +66,7 @@ export function SearchResultPage() {
     };
 
     search();
-  }, [query, navigate]);
+  }, [query, navigate, switchCount]);
 
   return (
     <div className="space-y-6">

@@ -39,19 +39,32 @@ export function PayBountyModal({ bounty, wallets, onClose, onSuccess }: PayBount
     const sats = Math.floor(parseFloat(amount) * SATS);
     const feeSats = Math.round(fee * SATS);
     if (isNaN(sats) || sats <= 0) { setError('Amount must be positive'); return; }
-    if (!isValidAddress(hunterAddress.trim())) { setError('Invalid hunter address'); return; }
+
+    const input = hunterAddress.trim().replace(/^@/, '');
+    if (!input) { setError('Hunter address is required'); return; }
 
     setLoading(true);
     try {
+      // Resolve ULTRA ID or address via /balance/ endpoint (accepts names, hex, bech32)
+      let resolvedAddr = input;
+      if (!isValidAddress(input)) {
+        const lookupRes = await fetch(`${getNodeUrl()}/balance/${encodeURIComponent(input)}`, { signal: AbortSignal.timeout(5000) });
+        if (!lookupRes.ok) { setError(`Could not resolve "${input}" — not a valid ULTRA ID or address`); setLoading(false); return; }
+        const lookupData = await lookupRes.json();
+        if (!lookupData.address) { setError(`ULTRA ID "${input}" not found`); setLoading(false); return; }
+        resolvedAddr = lookupData.address;
+      }
+      const toAddr = normalizeAddress(resolvedAddr);
+
       const passkey = getPasskeyInfo();
       if (passkey && wallet.address === passkey.address) {
         const balRes = await fetch(`${getNodeUrl()}/balance/${wallet.address}`, { signal: AbortSignal.timeout(5000) });
         const balData = await balRes.json();
-        await signAndSubmitWithPasskey(normalizeAddress(hunterAddress.trim()), sats, feeSats, balData.nonce ?? 0, memo);
+        await signAndSubmitWithPasskey(toAddr, sats, feeSats, balData.nonce ?? 0, memo);
       } else {
         await postTx({
           secret_key: wallet.secret_key,
-          to: normalizeAddress(hunterAddress.trim()),
+          to: toAddr,
           amount: sats, fee: feeSats, memo,
         });
       }
@@ -89,7 +102,7 @@ export function PayBountyModal({ bounty, wallets, onClose, onSuccess }: PayBount
           <div style={{ marginBottom: 12 }}>
             <label style={{ fontSize: 10, color: 'var(--dag-text-faint)', letterSpacing: 1, display: 'block', marginBottom: 4 }}>FROM WALLET</label>
             <select value={walletIdx} onChange={e => setWalletIdx(Number(e.target.value))} style={{ ...inputStyle, cursor: 'pointer' }}>
-              {wallets.map((w, i) => <option key={i} value={i} style={{ background: '#0B1120' }}>{w.name}</option>)}
+              {wallets.map((w, i) => <option key={i} value={i} style={{ background: 'var(--dag-bg)' }}>{w.name}</option>)}
             </select>
           </div>
         )}

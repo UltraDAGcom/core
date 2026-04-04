@@ -12,6 +12,13 @@ export function RoundDetailPage() {
   const [finalized, setFinalized] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [switchCount, setSwitchCount] = useState(0);
+
+  useEffect(() => {
+    const handler = () => setSwitchCount(n => n + 1);
+    window.addEventListener('ultradag-network-switch', handler);
+    return () => window.removeEventListener('ultradag-network-switch', handler);
+  }, []);
 
   useEffect(() => {
     if (isNaN(round)) return;
@@ -33,7 +40,7 @@ export function RoundDetailPage() {
     };
 
     fetchRound();
-  }, [round]);
+  }, [round, switchCount]);
 
   if (isNaN(round)) {
     return <div className="text-red-400 py-8">Invalid round number</div>;

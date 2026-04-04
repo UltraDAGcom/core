@@ -177,7 +177,7 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
         backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center',
       }}>
         {wallets.map((w, i) => (
-          <option key={w.address} value={i} style={{ background: '#0B1120', color: 'var(--dag-text)' }}>
+          <option key={w.address} value={i} style={{ background: 'var(--dag-bg)', color: 'var(--dag-text)' }}>
             {w.name} — {((balances.get(w.address)?.balance ?? 0) / SATS).toFixed(2)} UDAG
           </option>
         ))}
