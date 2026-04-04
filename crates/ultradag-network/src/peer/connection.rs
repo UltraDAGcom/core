@@ -194,26 +194,30 @@ impl PeerWriter {
             ));
         }
 
-        // Encrypt all chunks under noise lock, then write under writer lock.
-        // Never hold both locks simultaneously to prevent deadlock.
+        // Acquire writer lock FIRST, then noise lock for encrypt+write atomically.
+        // This ensures Noise nonce ordering matches wire ordering: without this,
+        // two concurrent sends could encrypt with nonces N and N+1 but write in
+        // reverse order, causing the receiver to see N+1 before N and fail decryption.
+        //
+        // Lock order: writer→noise. No other code acquires these in the opposite
+        // order, so deadlock is impossible.
+        let mut writer = self.writer.lock().await;
+        let mut transport = noise.lock().await;
         let mut wire_data = Vec::with_capacity(4 + plaintext.len() + plaintext.len() / NOISE_MAX_PLAINTEXT * (2 + NOISE_TAG_LEN) + 64);
         wire_data.extend_from_slice(&(plaintext.len() as u32).to_be_bytes());
-        {
-            let mut transport = noise.lock().await;
-            for chunk in plaintext.chunks(NOISE_MAX_PLAINTEXT) {
-                let mut buf = vec![0u8; chunk.len() + NOISE_TAG_LEN + 16];
-                let len = transport
-                    .write_message(chunk, &mut buf)
-                    .map_err(|e| std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("noise encrypt: {}", e),
-                    ))?;
-                wire_data.extend_from_slice(&(len as u16).to_be_bytes());
-                wire_data.extend_from_slice(&buf[..len]);
-            }
+        for chunk in plaintext.chunks(NOISE_MAX_PLAINTEXT) {
+            let mut buf = vec![0u8; chunk.len() + NOISE_TAG_LEN + 16];
+            let len = transport
+                .write_message(chunk, &mut buf)
+                .map_err(|e| std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("noise encrypt: {}", e),
+                ))?;
+            wire_data.extend_from_slice(&(len as u16).to_be_bytes());
+            wire_data.extend_from_slice(&buf[..len]);
         }
+        drop(transport);
 
-        let mut writer = self.writer.lock().await;
         writer.write_all(&wire_data).await?;
         writer.flush().await?;
         Ok(())

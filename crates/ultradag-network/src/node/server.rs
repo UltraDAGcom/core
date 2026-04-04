@@ -1883,14 +1883,16 @@ async fn handle_peer(
                     checkpoint.signatures.push(signature);
                 }
 
-                // Check quorum using the checkpoint's own signers as the validator set.
-                // In pre-staking mode, all vertex producers are validators.
-                // Use configured_validators if set, otherwise count the signers.
-                let configured = {
+                // Check quorum against the actual validator set, not just the signers.
+                // Using signatures.len() as fallback would make quorum trivially met
+                // (you always have signatures.len() signatures), allowing 2 colluding
+                // validators to finalize arbitrary checkpoints.
+                let validator_count = {
                     let state_r = state.read().await;
                     state_r.configured_validator_count()
+                        .map(|c| c as usize)
+                        .unwrap_or_else(|| state_r.active_stakers().len().max(1))
                 };
-                let validator_count = configured.unwrap_or(checkpoint.signatures.len() as u64) as usize;
                 let quorum = (validator_count * 2).div_ceil(3).max(2);
                 let active: Vec<ultradag_coin::Address> = checkpoint.signatures.iter()
                     .map(|s| s.validator)
