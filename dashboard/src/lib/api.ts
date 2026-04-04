@@ -107,6 +107,11 @@ export const getTx = (hash: string) => fetchJson<any>(`/tx/${hash}`);
 export const getFeeEstimate = () => fetchJson<any>('/fee-estimate');
 export const getMetrics = () => fetchJson<any>('/metrics/json');
 export const getHealthDetailed = () => fetchJson<any>('/health/detailed');
+export const getNameInfo = (name: string) => fetchJson<any>(`/name/info/${encodeURIComponent(name)}`);
+export const getNameResolve = (name: string) => fetchJson<any>(`/name/resolve/${encodeURIComponent(name)}`);
+export const getSmartAccount = (addr: string) => fetchJson<any>(`/smart-account/${addr}`);
+export const getStreamsSender = (addr: string) => fetchJson<any>(`/streams/sender/${addr}`);
+export const getStreamsRecipient = (addr: string) => fetchJson<any>(`/streams/recipient/${addr}`);
 
 // POST endpoints
 export const postTx = (body: any) => fetchJson<any>('/tx', { method: 'POST', body: JSON.stringify(body) });

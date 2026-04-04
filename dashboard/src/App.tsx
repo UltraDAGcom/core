@@ -21,6 +21,7 @@ import { BridgePage } from './pages/BridgePage';
 import { SmartAccountPage } from './pages/SmartAccountPage';
 import { StreamsPage } from './pages/StreamsPage';
 import { BountyPage } from './pages/BountyPage';
+import { ProfilePage } from './pages/ProfilePage';
 import { useKeystore } from './hooks/useKeystore';
 import { usePasskeyWallet } from './hooks/usePasskeyWallet';
 import { useNode } from './hooks/useNode';
@@ -286,6 +287,7 @@ function App() {
           <Route path="staking" element={<StakingPage />} />
           <Route path="governance" element={<GovernancePage />} />
           <Route path="bounties" element={<BountyPage />} />
+          <Route path="profile/:nameOrAddress" element={<ProfilePage />} />
           <Route path="council" element={<CouncilPage />} />
           <Route path="explorer" element={<ExplorerPage />} />
           <Route path="network" element={<NetworkPage />} />

@@ -9,10 +9,11 @@ interface NavItem { to: string; icon: string; label: string }
 const sections: { label?: string; items: NavItem[] }[] = [
   { items: [{ to: '/', icon: '\u25C8', label: 'Dashboard' }] },
   { label: 'WALLET', items: [
+    { to: '/profile/me', icon: '\u25CE', label: 'My ULTRA ID' },
     { to: '/wallet', icon: '\u25C7', label: 'Wallets' },
     { to: '/wallet/send', icon: '\u21C4', label: 'Send & Receive' },
     { to: '/streams', icon: '\u224B', label: 'Streams' },
-    { to: '/smart-account', icon: '\u25CE', label: 'SmartAccount' },
+    { to: '/smart-account', icon: '\u2606', label: 'SmartAccount' },
   ]},
   { label: 'NETWORK', items: [
     { to: '/staking', icon: '\u2B21', label: 'Staking' },

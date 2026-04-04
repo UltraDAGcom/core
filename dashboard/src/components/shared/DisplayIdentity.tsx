@@ -54,9 +54,10 @@ export function DisplayIdentity({
     <span className={`${s.addr} font-mono text-slate-300`}>{short}</span>
   );
 
-  // Wrap in link if requested
+  // Wrap in link if requested — link to profile if ULTRA ID exists, otherwise address page
+  const linkTarget = ultraId ? `/profile/@${ultraId}` : `/address/${address}`;
   const display = link ? (
-    <Link to={`/address/${address}`} className="hover:underline decoration-dag-accent/40">
+    <Link to={linkTarget} className="hover:underline decoration-dag-accent/40">
       {primaryContent}
     </Link>
   ) : primaryContent;
