@@ -31,6 +31,7 @@ import { useTheme } from './hooks/useTheme';
 import { getNodeUrl, getNetwork, switchNetwork, type NetworkType } from './lib/api';
 import { ToastProvider } from './hooks/useToast';
 import { NameCacheProvider } from './contexts/NameCacheContext';
+import { AppStatusProvider } from './contexts/AppStatusContext';
 
 function App() {
   const pk = usePasskeyWallet();
@@ -57,6 +58,16 @@ function App() {
   const [showLockModal, setShowLockModal] = useState(false);
   const [network, setNetwork] = useState<NetworkType>(getNetwork());
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  const appUserName = pk.wallet?.name ? `@${pk.wallet.name}` : allWallets[0]?.name || 'Wallet';
+  const appStatus = useMemo(() => ({
+    connected: node.connected,
+    network,
+    userName: appUserName,
+    totalBalance: wb.totalBalance,
+    healthStatus: null as string | null, // filled by DashboardPage's health fetch
+    healthScore: node.connected ? 98 : 0,
+  }), [node.connected, network, appUserName, wb.totalBalance]);
 
   const handleSwitchNetwork = useCallback((net: NetworkType) => {
     switchNetwork(net);
@@ -198,6 +209,7 @@ function App() {
 
   return (
     <NameCacheProvider>
+    <AppStatusProvider value={appStatus}>
     <ToastProvider>
       <Routes>
         <Route
@@ -331,6 +343,7 @@ function App() {
         hasExisting={ks.hasStore}
       />
     </ToastProvider>
+    </AppStatusProvider>
     </NameCacheProvider>
   );
 }

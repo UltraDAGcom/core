@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { getHealthDetailed, getRound, getStatus } from '../lib/api';
-import { getPasskeyWallet } from '../lib/passkey-wallet';
+// getPasskeyWallet moved to AppStatusContext
 import { useIsMobile } from '../hooks/useIsMobile';
 import { PageHeader } from '../components/shared/PageHeader';
 import { useGeoLocatedPeers } from '../hooks/useGeoLocatedPeers';
@@ -151,15 +151,14 @@ function EmBar({ splits, colors }: { splits: number[]; colors: string[] }) {
 }
 
 // ── Main Dashboard ──────────────────────────────────────────────────────
-export function DashboardPage({ status, loading: _loading, network, wallets, totalBalance, totalStaked, totalDelegated }: DashboardPageProps) {
+export function DashboardPage({ status, loading: _loading, network: _network, wallets: _wallets, totalBalance, totalStaked, totalDelegated }: DashboardPageProps) {
   const [health, setHealth] = useState<HealthData | null>(null);
   const [recentRounds, setRecentRounds] = useState<RoundData[]>([]);
   const [vertexHistory, setVertexHistory] = useState<number[]>([]);
   const m = useIsMobile();
   const geo = useGeoLocatedPeers();
 
-  const pw = getPasskeyWallet();
-  const userName = pw?.name ? `@${pw.name}` : wallets?.[0]?.name || 'Wallet';
+  // getPasskeyWallet() — userName now provided via AppStatusContext in PageHeader
 
   const fetchHealth = useCallback(async () => {
     try {
@@ -232,7 +231,7 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
   const portfolioAvailable = portfolioTotal - (totalStaked ?? 0) / SATS - (totalDelegated ?? 0) / SATS;
   const portfolioStaked = (totalStaked ?? 0) / SATS;
   const portfolioDelegated = (totalDelegated ?? 0) / SATS;
-  const healthScore = health?.status === 'healthy' ? 98 : health?.status === 'degraded' ? 75 : 50;
+  // healthScore now shown in PageHeader via AppStatusContext
 
   return (
     <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
@@ -243,24 +242,7 @@ export function DashboardPage({ status, loading: _loading, network, wallets, tot
       `}</style>
 
       {/* Top bar */}
-      <PageHeader
-        title="Dashboard"
-        subtitle="Real-time network overview"
-        right={<>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#00E0C4', boxShadow: '0 0 8px #00E0C4', animation: 'pulse 2s ease-in-out infinite' }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: healthScore >= 90 ? '#00E0C4' : healthScore >= 60 ? '#FFB800' : '#EF4444' }}>{health?.status?.toUpperCase() ?? 'CONNECTING'}</span>
-            <span style={{ fontSize: 11, color: 'var(--dag-subheading)' }}>{health ? `${healthScore}%` : ''}</span>
-          </div>
-          {!m && <div style={{ padding: '5px 13px', borderRadius: 18, background: 'rgba(0,224,196,0.06)', border: '1px solid rgba(0,224,196,0.12)', fontSize: 10.5, fontWeight: 600, color: '#00E0C4', letterSpacing: 1, textTransform: 'uppercase' }}>{network}</div>}
-          {!m && <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 13px', borderRadius: 18, background: 'var(--dag-card)', border: '1px solid var(--dag-border)' }}>
-            <div style={{ width: 18, height: 18, borderRadius: 5, background: 'linear-gradient(135deg,#00E0C4,#0066FF)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800, color: '#fff' }}>{userName[0]?.toUpperCase()}</div>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)' }}>{userName}</span>
-            <span style={{ color: 'var(--dag-text-faint)' }}>|</span>
-            <span style={{ fontSize: 12, color: '#00E0C4', fontWeight: 600 }}>{portfolioTotal.toFixed(2)} UDAG</span>
-          </div>}
-        </>}
-      />
+      <PageHeader title="Dashboard" subtitle="Real-time network overview" />
 
       {/* Portfolio */}
       <div style={{
