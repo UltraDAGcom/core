@@ -149,18 +149,30 @@ let cachedIssues: GitHubIssue[] = [];
 let cacheTime = 0;
 let lastRateLimit: number | null = null;
 
+function isBountyIssue(issue: GitHubIssue): boolean {
+  // Match by label (bounty, bounty:*, bug-bounty)
+  const hasLabel = issue.labels.some(l =>
+    l.name.toLowerCase() === 'bounty' || l.name.toLowerCase().startsWith('bounty:') || l.name.toLowerCase() === 'bug-bounty'
+  );
+  // Match by title prefix [BOUNTY]
+  const hasTitle = /^\[BOUNTY\]/i.test(issue.title);
+  return hasLabel || hasTitle;
+}
+
 export async function fetchBountyIssues(): Promise<{ issues: GitHubIssue[]; rateLimitRemaining: number | null }> {
   if (Date.now() - cacheTime < CACHE_TTL_MS && cachedIssues.length > 0) {
     return { issues: cachedIssues, rateLimitRemaining: lastRateLimit };
   }
 
-  const url = `${API_BASE}/repos/${REPO}/issues?labels=bounty&state=all&per_page=100&sort=updated&direction=desc`;
+  // Fetch all recent issues and filter client-side for bounties.
+  // This catches both label-based and title-based bounty detection,
+  // since the 'bounty' label may not exist in the repo yet.
+  const url = `${API_BASE}/repos/${REPO}/issues?state=all&per_page=100&sort=updated&direction=desc`;
   const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
 
   lastRateLimit = res.headers.get('X-RateLimit-Remaining') ? parseInt(res.headers.get('X-RateLimit-Remaining')!) : null;
 
   if (res.status === 403) {
-    // Rate limited — return cached data
     return { issues: cachedIssues, rateLimitRemaining: 0 };
   }
 
@@ -168,7 +180,8 @@ export async function fetchBountyIssues(): Promise<{ issues: GitHubIssue[]; rate
     throw new Error(`GitHub API error: ${res.status}`);
   }
 
-  const issues: GitHubIssue[] = await res.json();
+  const allIssues: GitHubIssue[] = await res.json();
+  const issues = allIssues.filter(isBountyIssue);
   cachedIssues = issues;
   cacheTime = Date.now();
 
