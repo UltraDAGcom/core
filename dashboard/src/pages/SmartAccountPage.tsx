@@ -109,7 +109,7 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}} input:focus,select:focus{border-color:rgba(0,224,196,0.3)!important}`}</style>
 
       <PageHeader
-        title="SmartAccount"
+        title="Security"
         subtitle="Keys, recovery, spending limits, and name"
         right={<button onClick={fetchInfo} style={S.btn()}>↻ Refresh</button>}
       />

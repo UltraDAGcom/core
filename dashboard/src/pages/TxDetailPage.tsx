@@ -5,6 +5,7 @@ import { getTx, connectToNode, isConnected, shortHash, formatUdag } from '../lib
 import { CopyButton } from '../components/shared/CopyButton.tsx';
 import { Badge, StatusBadge } from '../components/shared/Badge.tsx';
 import { DisplayIdentity } from '../components/shared/DisplayIdentity.tsx';
+import { PageHeader } from '../components/shared/PageHeader.tsx';
 
 export function TxDetailPage() {
   const { hash } = useParams<{ hash: string }>();
@@ -61,14 +62,9 @@ export function TxDetailPage() {
   const txData = (tx.transaction && typeof tx.transaction === 'object') ? tx.transaction as Record<string, unknown> : tx;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link to="/explorer" className="text-slate-400 hover:text-slate-200">
-          <ChevronLeft className="w-5 h-5" />
-        </Link>
-        <h1 className="text-xl font-bold text-white">Transaction Detail</h1>
-        <StatusBadge status={status} />
-      </div>
+    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+      <PageHeader title="Transaction Detail" subtitle={hash ? `${shortHash(hash)}` : undefined} right={<StatusBadge status={status} />} />
+      <div className="space-y-4">
 
       <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
         <InfoRow label="Hash" value={hash ?? ''} mono copy />
@@ -115,6 +111,7 @@ export function TxDetailPage() {
         {txData.amount != null && <InfoRow label="Amount" value={`${formatUdag(Number(txData.amount))} UDAG`} mono />}
         {txData.fee != null && <InfoRow label="Fee" value={`${formatUdag(Number(txData.fee))} UDAG`} mono />}
         {txData.nonce != null && <InfoRow label="Nonce" value={String(txData.nonce)} mono />}
+      </div>
       </div>
     </div>
   );

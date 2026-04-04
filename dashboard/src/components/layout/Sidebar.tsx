@@ -8,23 +8,23 @@ interface NavItem { to: string; icon: string; label: string }
 
 const sections: { label?: string; items: NavItem[] }[] = [
   { items: [{ to: '/', icon: '\u25C8', label: 'Dashboard' }] },
-  { label: 'WALLET', items: [
+  { label: 'ACCOUNT', items: [
     { to: '/profile/me', icon: '\u25CE', label: 'My ULTRA ID' },
     { to: '/wallet', icon: '\u25C7', label: 'Wallets' },
     { to: '/wallet/send', icon: '\u21C4', label: 'Send & Receive' },
-    { to: '/streams', icon: '\u224B', label: 'Streams' },
-    { to: '/smart-account', icon: '\u2606', label: 'SmartAccount' },
+    { to: '/streams', icon: '\u224B', label: 'Payments' },
+    { to: '/smart-account', icon: '\u2606', label: 'Security' },
   ]},
   { label: 'NETWORK', items: [
     { to: '/staking', icon: '\u2B21', label: 'Staking' },
     { to: '/governance', icon: '\u2699', label: 'Governance' },
-    { to: '/bounties', icon: '\u26A1', label: 'Bounties' },
     { to: '/council', icon: '\u265B', label: 'Council' },
-    { to: '/explorer', icon: '\u25C9', label: 'Explorer' },
+    { to: '/bounties', icon: '\u2691', label: 'Bounties' },
   ]},
-  { label: 'ADVANCED', items: [
+  { label: 'EXPLORE', items: [
+    { to: '/explorer', icon: '\u25C9', label: 'Explorer' },
     { to: '/bridge', icon: '\u27F7', label: 'Bridge' },
-    { to: '/network', icon: '\u26A1', label: 'Node Status' },
+    { to: '/network', icon: '\u2630', label: 'Node Status' },
   ]},
 ];
 

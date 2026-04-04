@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getRound, getStatus, connectToNode, isConnected } from '../lib/api.ts';
 import { VertexCard } from '../components/explorer/VertexCard.tsx';
 import { Badge } from '../components/shared/Badge.tsx';
+import { PageHeader } from '../components/shared/PageHeader.tsx';
 
 export function RoundDetailPage() {
   const { round: roundStr } = useParams<{ round: string }>();
@@ -47,26 +48,25 @@ export function RoundDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link to="/explorer" className="text-slate-400 hover:text-slate-200">
-          <ChevronLeft className="w-5 h-5" />
-        </Link>
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-white font-mono">Round #{round.toLocaleString()}</h1>
+    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+      <PageHeader
+        title={`Round #${round.toLocaleString()}`}
+        subtitle={finalized ? 'Finalized' : 'Pending'}
+        right={<>
           <Badge label={finalized ? 'Finalized' : 'Pending'} variant={finalized ? 'green' : 'yellow'} />
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          {round > 1 && (
-            <Link to={`/round/${round - 1}`} className="p-2 rounded bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
-              <ChevronLeft className="w-4 h-4" />
+          <div style={{ display: 'flex', gap: 4 }}>
+            {round > 1 && (
+              <Link to={`/round/${round - 1}`} className="p-2 rounded bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+                <ChevronLeft className="w-4 h-4" />
+              </Link>
+            )}
+            <Link to={`/round/${round + 1}`} className="p-2 rounded bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
+              <ChevronRight className="w-4 h-4" />
             </Link>
-          )}
-          <Link to={`/round/${round + 1}`} className="p-2 rounded bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
-            <ChevronRight className="w-4 h-4" />
-          </Link>
-        </div>
-      </div>
+          </div>
+        </>}
+      />
+      <div className="space-y-4">
 
       {error && <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">{error}</div>}
 
@@ -92,6 +92,7 @@ export function RoundDetailPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

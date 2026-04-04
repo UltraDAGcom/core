@@ -1,4 +1,5 @@
 import { formatUdag } from '../lib/api.ts';
+import { PageHeader } from '../components/shared/PageHeader.tsx';
 import { Card } from '../components/shared/Card.tsx';
 import type { Wallet } from '../lib/keystore.ts';
 import type { WalletBalance } from '../hooks/useWalletBalances.ts';
@@ -59,8 +60,8 @@ export function PortfolioPage({
   const totalValue = totalBalance + totalStaked + totalDelegated;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-white">Portfolio</h1>
+    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+      <PageHeader title="Portfolio" subtitle="Your wallet breakdown" />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard

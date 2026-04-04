@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ChevronLeft, Wallet, Shield, Users, Crown } from 'lucide-react';
+import { useParams } from 'react-router-dom';
+import { Wallet, Shield, Users, Crown } from 'lucide-react';
 import { getBalance, getStake, getDelegation, getCouncil, connectToNode, isConnected, formatUdag } from '../lib/api.ts';
 import { Badge } from '../components/shared/Badge.tsx';
 import { DisplayIdentity } from '../components/shared/DisplayIdentity.tsx';
+import { PageHeader } from '../components/shared/PageHeader.tsx';
 
 function AddressHeader({ address, registeredName, isSmartAccount }: { address: string; registeredName: string | null; isSmartAccount: boolean }) {
   return (
@@ -88,13 +89,9 @@ export function AddressPage() {
   const delegationValidator = delegation?.validator ? String(delegation.validator) : null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link to="/explorer" className="text-slate-400 hover:text-slate-200">
-          <ChevronLeft className="w-5 h-5" />
-        </Link>
-        <h1 className="text-xl font-bold text-white">Address</h1>
-      </div>
+    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+      <PageHeader title={registeredName ? `@${registeredName}` : 'Address'} subtitle="Address details" />
+      <div className="space-y-4">
 
       <AddressHeader address={address ?? ''} registeredName={registeredName} isSmartAccount={isSmartAccount} />
 
@@ -210,6 +207,7 @@ export function AddressPage() {
             <p className="text-slate-500 text-sm">Not a council member</p>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

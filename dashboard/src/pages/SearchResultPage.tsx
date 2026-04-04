@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ChevronLeft, Loader } from 'lucide-react';
+import { Loader } from 'lucide-react';
 import { getTx, getVertex, getBalance, connectToNode, isConnected } from '../lib/api.ts';
+import { PageHeader } from '../components/shared/PageHeader.tsx';
 
 export function SearchResultPage() {
   const { query } = useParams<{ query: string }>();
@@ -69,13 +70,8 @@ export function SearchResultPage() {
   }, [query, navigate, switchCount]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link to="/explorer" className="text-slate-400 hover:text-slate-200">
-          <ChevronLeft className="w-5 h-5" />
-        </Link>
-        <h1 className="text-xl font-bold text-white">Search</h1>
-      </div>
+    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+      <PageHeader title="Search" subtitle={query ?? undefined} />
 
       {!error && (
         <div className="flex items-center gap-3 justify-center py-12">
