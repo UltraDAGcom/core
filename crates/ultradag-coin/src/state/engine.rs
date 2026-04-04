@@ -3497,6 +3497,15 @@ impl StateEngine {
     }
 
     /// Verify a SmartOp signature using the authorized key from state.
+    ///
+    /// KNOWN SIDE EFFECT: Auto-registration via p256_pubkey creates the SmartAccount
+    /// and registers the key during verification. If the transaction subsequently fails
+    /// nonce or balance validation, the key registration persists. This is deterministic
+    /// (all nodes see the same finalized vertex order) but violates the expectation that
+    /// failed transactions have no state effects. Acceptable because:
+    /// 1. Auto-registration only happens on the first tx from a new passkey account
+    /// 2. The key is already proven valid (signature verified against derived address)
+    /// 3. Splitting verification from registration would require two-phase application
     pub fn verify_smart_op(&mut self, tx: &crate::tx::smart_account::SmartOpTx) -> bool {
         use crate::tx::smart_account::{AuthorizedKey, KeyType};
 

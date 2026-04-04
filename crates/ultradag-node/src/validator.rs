@@ -301,7 +301,7 @@ pub async fn validator_loop(
 
         // Check finality and apply to state (multi-pass for parent finality guarantee)
         // Lock ordering: finality+dag → drop → state → drop → finality (for epoch sync)
-        let (all_finalized, finalized_vertices) = {
+        let (all_finalized, finalized_vertices, equivocation_slashes) = {
             let mut fin = server.finality.write().await;
             fin.register_validator(validator);
             let dag_r = server.dag.read().await;
@@ -355,7 +355,17 @@ pub async fn validator_loop(
                 .filter_map(|h| dag_r.get(h).cloned())
                 .collect();
 
-            (all_finalized, finalized_vertices)
+            // Collect equivocation evidence while we still hold the DAG lock.
+            // try_insert rejects equivocating vertices, so they never appear in
+            // finalized batches — but the DAG evidence_store has proof. We must
+            // trigger slashing here deterministically for validators that equivocated.
+            let equivocation_slashes: Vec<(ultradag_coin::Address, u64)> = dag_r
+                .all_evidence()
+                .iter()
+                .map(|e| (e.validator, e.round))
+                .collect();
+
+            (all_finalized, finalized_vertices, equivocation_slashes)
         }; // finality + dag locks dropped here
 
         if !all_finalized.is_empty() {
@@ -372,6 +382,16 @@ pub async fn validator_loop(
                     // This is separated from state mutation (C2 fix) so that
                     // attestations are only created once via the consensus path.
                     state_w.sign_pending_bridge_attestations(validator, &sk);
+
+                    // Apply equivocation slashing from DAG evidence.
+                    // try_insert rejects equivocating vertices before they enter the DAG,
+                    // so the intra/cross-batch checks in apply_finalized_vertices are
+                    // unreachable. Instead, we slash based on the DAG evidence store
+                    // which captures proofs at try_insert time. slash_at_round is
+                    // idempotent — safe to call on every finality cycle.
+                    for (addr, round) in &equivocation_slashes {
+                        state_w.slash_at_round(addr, *round);
+                    }
 
                     let changed = state_w.epoch_just_changed(prev_round);
                     let mut mp = server.mempool.write().await;
