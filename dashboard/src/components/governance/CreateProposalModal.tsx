@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { postProposal } from '../../lib/api';
 import type { Wallet } from '../../lib/keystore';
 import { isValidAddress, normalizeAddress } from '../../lib/api';
-import { X } from 'lucide-react';
+import { primaryButtonStyle, inputStyle as themeInputStyle } from '../../lib/theme';
 
 const PARAM_OPTIONS = [
   'min_fee_sats',
@@ -32,6 +32,22 @@ interface CreateProposalModalProps {
   onClose: () => void;
   onSuccess: () => void;
 }
+
+const modalInputStyle: React.CSSProperties = {
+  ...themeInputStyle,
+  marginTop: 4,
+};
+
+const labelStyle: React.CSSProperties = {
+  fontSize: 10.5, color: 'var(--dag-text-muted)', fontWeight: 600,
+  letterSpacing: 1, display: 'block',
+};
+
+const sectionBoxStyle: React.CSSProperties = {
+  padding: 12, borderRadius: 10,
+  background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)',
+  display: 'flex', flexDirection: 'column', gap: 12,
+};
 
 export function CreateProposalModal({ wallets, onClose, onSuccess }: CreateProposalModalProps) {
   const [walletIdx, setWalletIdx] = useState(0);
@@ -112,175 +128,117 @@ export function CreateProposalModal({ wallets, onClose, onSuccess }: CreatePropo
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-dag-card border border-dag-border rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold text-white">Create Proposal</h2>
-          <button onClick={onClose} className="text-dag-muted hover:text-white">
-            <X size={20} />
-          </button>
+    <div style={{
+      position: 'fixed', inset: 0, background: 'var(--dag-overlay)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16,
+    }}>
+      <div style={{
+        background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14,
+        width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto', padding: '20px 22px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--dag-text)' }}>Create Proposal</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dag-text-faint)', fontSize: 18, cursor: 'pointer' }}>✕</button>
         </div>
 
-        <div className="space-y-4">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {/* Wallet selector */}
-          <label className="block">
-            <span className="text-sm text-dag-muted">Wallet</span>
-            <select
-              value={walletIdx}
-              onChange={e => setWalletIdx(Number(e.target.value))}
-              className="mt-1 block w-full rounded bg-dag-surface border border-dag-border px-3 py-2 text-sm text-white"
-            >
-              {wallets.map((w, i) => (
-                <option key={i} value={i}>{w.name}</option>
-              ))}
+          <div>
+            <span style={labelStyle}>Wallet</span>
+            <select value={walletIdx} onChange={e => setWalletIdx(Number(e.target.value))} style={modalInputStyle}>
+              {wallets.map((w, i) => <option key={i} value={i} style={{ background: 'var(--dag-bg)' }}>{w.name}</option>)}
             </select>
-          </label>
+          </div>
 
           {/* Proposal type */}
-          <label className="block">
-            <span className="text-sm text-dag-muted">Type</span>
-            <select
-              value={proposalType}
-              onChange={e => setProposalType(e.target.value as typeof proposalType)}
-              className="mt-1 block w-full rounded bg-dag-surface border border-dag-border px-3 py-2 text-sm text-white"
-            >
+          <div>
+            <span style={labelStyle}>Type</span>
+            <select value={proposalType} onChange={e => setProposalType(e.target.value as typeof proposalType)} style={modalInputStyle}>
               <option value="Text">Text Proposal</option>
               <option value="ParameterChange">Parameter Change</option>
               <option value="CouncilMembership">Council Membership</option>
               <option value="TreasurySpend">Treasury Spend</option>
             </select>
-          </label>
+          </div>
 
           {/* Title */}
-          <label className="block">
-            <span className="text-sm text-dag-muted">Title (max 128 chars)</span>
-            <input
-              type="text"
-              maxLength={128}
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              className="mt-1 block w-full rounded bg-dag-surface border border-dag-border px-3 py-2 text-sm text-white"
-            />
-          </label>
+          <div>
+            <span style={labelStyle}>Title (max 128 chars)</span>
+            <input type="text" maxLength={128} value={title} onChange={e => setTitle(e.target.value)} style={modalInputStyle} />
+          </div>
 
           {/* Description */}
-          <label className="block">
-            <span className="text-sm text-dag-muted">Description (max 4096 chars)</span>
-            <textarea
-              maxLength={4096}
-              rows={4}
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              className="mt-1 block w-full rounded bg-dag-surface border border-dag-border px-3 py-2 text-sm text-white resize-y"
-            />
-          </label>
+          <div>
+            <span style={labelStyle}>Description (max 4096 chars)</span>
+            <textarea maxLength={4096} rows={4} value={description} onChange={e => setDescription(e.target.value)}
+              style={{ ...modalInputStyle, resize: 'vertical' } as React.CSSProperties} />
+          </div>
 
           {/* Type-specific fields */}
           {proposalType === 'ParameterChange' && (
-            <div className="space-y-3 p-3 rounded bg-dag-surface border border-dag-border">
-              <label className="block">
-                <span className="text-sm text-dag-muted">Parameter</span>
-                <select
-                  value={paramName}
-                  onChange={e => setParamName(e.target.value)}
-                  className="mt-1 block w-full rounded bg-dag-card border border-dag-border px-3 py-2 text-sm text-white"
-                >
+            <div style={sectionBoxStyle}>
+              <div>
+                <span style={labelStyle}>Parameter</span>
+                <select value={paramName} onChange={e => setParamName(e.target.value)} style={modalInputStyle}>
                   {PARAM_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
-              </label>
-              <label className="block">
-                <span className="text-sm text-dag-muted">New Value</span>
-                <input
-                  type="number"
-                  value={paramValue}
-                  onChange={e => setParamValue(e.target.value)}
-                  className="mt-1 block w-full rounded bg-dag-card border border-dag-border px-3 py-2 text-sm text-white"
-                />
-              </label>
+              </div>
+              <div>
+                <span style={labelStyle}>New Value</span>
+                <input type="number" value={paramValue} onChange={e => setParamValue(e.target.value)} style={modalInputStyle} />
+              </div>
             </div>
           )}
 
           {proposalType === 'CouncilMembership' && (
-            <div className="space-y-3 p-3 rounded bg-dag-surface border border-dag-border">
-              <label className="block">
-                <span className="text-sm text-dag-muted">Action</span>
-                <select
-                  value={councilAction}
-                  onChange={e => setCouncilAction(e.target.value as 'Add' | 'Remove')}
-                  className="mt-1 block w-full rounded bg-dag-card border border-dag-border px-3 py-2 text-sm text-white"
-                >
+            <div style={sectionBoxStyle}>
+              <div>
+                <span style={labelStyle}>Action</span>
+                <select value={councilAction} onChange={e => setCouncilAction(e.target.value as 'Add' | 'Remove')} style={modalInputStyle}>
                   <option value="Add">Add Member</option>
                   <option value="Remove">Remove Member</option>
                 </select>
-              </label>
-              <label className="block">
-                <span className="text-sm text-dag-muted">Address</span>
-                <input
-                  type="text"
-                  value={councilAddress}
-                  onChange={e => setCouncilAddress(e.target.value)}
-                  placeholder="hex or bech32m address (tudg1...)"
-                  className="mt-1 block w-full rounded bg-dag-card border border-dag-border px-3 py-2 text-sm text-white font-mono"
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm text-dag-muted">Category</span>
-                <select
-                  value={councilCategory}
-                  onChange={e => setCouncilCategory(e.target.value)}
-                  className="mt-1 block w-full rounded bg-dag-card border border-dag-border px-3 py-2 text-sm text-white"
-                >
+              </div>
+              <div>
+                <span style={labelStyle}>Address</span>
+                <input type="text" value={councilAddress} onChange={e => setCouncilAddress(e.target.value)}
+                  placeholder="hex or bech32m address (tudg1...)" style={{ ...modalInputStyle, fontFamily: "'DM Mono',monospace" }} />
+              </div>
+              <div>
+                <span style={labelStyle}>Category</span>
+                <select value={councilCategory} onChange={e => setCouncilCategory(e.target.value)} style={modalInputStyle}>
                   {SEAT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
-              </label>
+              </div>
             </div>
           )}
 
           {proposalType === 'TreasurySpend' && (
-            <div className="space-y-3 p-3 rounded bg-dag-surface border border-dag-border">
-              <label className="block">
-                <span className="text-sm text-dag-muted">Recipient Address</span>
-                <input
-                  type="text"
-                  value={treasuryRecipient}
-                  onChange={e => setTreasuryRecipient(e.target.value)}
-                  placeholder="hex or bech32m address (tudg1...)"
-                  className="mt-1 block w-full rounded bg-dag-card border border-dag-border px-3 py-2 text-sm text-white font-mono"
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm text-dag-muted">Amount (UDAG)</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={treasuryAmount}
-                  onChange={e => setTreasuryAmount(e.target.value)}
-                  className="mt-1 block w-full rounded bg-dag-card border border-dag-border px-3 py-2 text-sm text-white"
-                />
-              </label>
+            <div style={sectionBoxStyle}>
+              <div>
+                <span style={labelStyle}>Recipient Address</span>
+                <input type="text" value={treasuryRecipient} onChange={e => setTreasuryRecipient(e.target.value)}
+                  placeholder="hex or bech32m address (tudg1...)" style={{ ...modalInputStyle, fontFamily: "'DM Mono',monospace" }} />
+              </div>
+              <div>
+                <span style={labelStyle}>Amount (UDAG)</span>
+                <input type="number" min="0" step="0.01" value={treasuryAmount} onChange={e => setTreasuryAmount(e.target.value)} style={modalInputStyle} />
+              </div>
             </div>
           )}
 
           {/* Fee */}
-          <label className="block">
-            <span className="text-sm text-dag-muted">Fee (sats, min 10,000)</span>
-            <input
-              type="number"
-              min="10000"
-              value={fee}
-              onChange={e => setFee(e.target.value)}
-              className="mt-1 block w-full rounded bg-dag-surface border border-dag-border px-3 py-2 text-sm text-white"
-            />
-          </label>
+          <div>
+            <span style={labelStyle}>Fee (sats, min 10,000)</span>
+            <input type="number" min="10000" value={fee} onChange={e => setFee(e.target.value)} style={modalInputStyle} />
+          </div>
 
-          {error && <p className="text-sm text-dag-red">{error}</p>}
+          {error && <p style={{ fontSize: 11, color: '#EF4444' }}>{error}</p>}
 
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="w-full py-2.5 rounded bg-dag-blue text-white font-medium text-sm hover:bg-dag-blue/90 disabled:opacity-50"
-          >
+          <button onClick={handleSubmit} disabled={loading} style={{
+            ...primaryButtonStyle, width: '100%', padding: '12px 0',
+            opacity: loading ? 0.5 : 1,
+          }}>
             {loading ? 'Creating...' : 'Create Proposal'}
           </button>
         </div>

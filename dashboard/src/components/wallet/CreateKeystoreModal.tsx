@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { X, Plus, Key, ChevronLeft, Wallet, Eye, EyeOff, Copy, Check, AlertTriangle } from 'lucide-react';
+import { Eye, EyeOff, Copy, Check, AlertTriangle } from 'lucide-react';
 import { deriveAddress, generateKeypair } from '../../lib/keygen';
+import { primaryButtonStyle, secondaryButtonStyle, inputStyle as themeInputStyle, buttonStyle as themeButtonStyle } from '../../lib/theme';
 
 interface CreateKeystoreModalProps {
   open: boolean;
@@ -12,6 +13,11 @@ interface CreateKeystoreModalProps {
 }
 
 type Screen = 'welcome' | 'unlock' | 'create' | 'import' | 'backup' | 'restore';
+
+const modalInputStyle: React.CSSProperties = {
+  ...themeInputStyle,
+  padding: '10px 12px',
+};
 
 export function CreateKeystoreModal({
   open,
@@ -104,53 +110,66 @@ export function CreateKeystoreModal({
     goTo('unlock');
   };
 
-  const inputCls = "w-full px-3 py-2.5 bg-slate-800 border border-dag-border rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-dag-accent";
-  const btnPrimary = "w-full py-2.5 rounded-lg bg-dag-accent text-white font-medium text-sm hover:bg-dag-accent/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
-  const btnSecondary = "w-full py-2.5 rounded-lg bg-slate-700 text-slate-200 font-medium text-sm hover:bg-slate-600 transition-colors";
+  const linkBtnStyle: React.CSSProperties = {
+    background: 'none', border: 'none', color: 'var(--dag-text-faint)',
+    fontSize: 11, cursor: 'pointer', width: '100%', padding: '8px 0',
+    transition: 'color 0.2s',
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop bg-black/70">
-      <div className="modal-content bg-dag-card border border-dag-border rounded-2xl shadow-2xl w-full max-w-md">
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center',
+      justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,0.7)',
+      backdropFilter: 'blur(6px)',
+    }}>
+      <div style={{
+        background: 'var(--dag-card)', border: '1px solid var(--dag-border)',
+        borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
+        width: '100%', maxWidth: 420,
+      }}>
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-dag-border">
-          <div className="flex items-center gap-2">
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 20px', borderBottom: '1px solid var(--dag-border)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {screen !== 'welcome' && screen !== 'unlock' && (
-              <button onClick={() => goTo(hasExisting ? 'unlock' : 'welcome')} className="p-1 rounded text-slate-400 hover:text-white">
-                <ChevronLeft className="w-4 h-4" />
+              <button onClick={() => goTo(hasExisting ? 'unlock' : 'welcome')} style={{
+                background: 'none', border: 'none', color: 'var(--dag-text-muted)',
+                cursor: 'pointer', padding: 4, borderRadius: 4, fontSize: 14,
+              }}>
+                ←
               </button>
             )}
-            <Wallet className="w-5 h-5 text-dag-accent" />
-            <h2 className="text-lg font-semibold text-white">
+            <span style={{ color: '#00E0C4', fontSize: 16 }}>◇</span>
+            <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--dag-text)' }}>
               {screen === 'welcome' ? 'Welcome' : screen === 'unlock' ? 'Welcome Back' : screen === 'create' ? 'Create Wallet' : screen === 'import' ? 'Import Wallet' : screen === 'backup' ? 'Generated Wallet' : 'Restore Backup'}
             </h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700">
-            <X className="w-4 h-4" />
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', color: 'var(--dag-text-faint)',
+            cursor: 'pointer', padding: '4px 8px', borderRadius: 6, fontSize: 16,
+          }}>
+            ✕
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
 
           {/* ===== WELCOME (first time) ===== */}
           {screen === 'welcome' && (
             <>
-              <p className="text-sm text-dag-muted text-center">
+              <p style={{ fontSize: 12, color: 'var(--dag-text-muted)', textAlign: 'center' }}>
                 Create a new wallet or import an existing one to get started.
               </p>
-              <div className="space-y-3 pt-2">
-                <button onClick={() => { handleGenerate(); goTo('create'); }} className={btnPrimary}>
-                  <span className="flex items-center justify-center gap-2">
-                    <Plus className="w-4 h-4" />
-                    Create New Wallet
-                  </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 8 }}>
+                <button onClick={() => { handleGenerate(); goTo('create'); }} style={{ ...primaryButtonStyle, width: '100%', padding: '11px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  + Create New Wallet
                 </button>
-                <button onClick={() => goTo('import')} className={btnSecondary}>
-                  <span className="flex items-center justify-center gap-2">
-                    <Key className="w-4 h-4" />
-                    Import Private Key
-                  </span>
+                <button onClick={() => goTo('import')} style={{ ...secondaryButtonStyle, width: '100%', padding: '11px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  Import Private Key
                 </button>
-                <button onClick={() => goTo('restore')} className="w-full py-2 text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                <button onClick={() => goTo('restore')} style={linkBtnStyle}>
                   Restore from backup
                 </button>
               </div>
@@ -160,18 +179,18 @@ export function CreateKeystoreModal({
           {/* ===== UNLOCK (returning user) ===== */}
           {screen === 'unlock' && (
             <>
-              <p className="text-sm text-dag-muted">Enter your password to unlock your wallet.</p>
+              <p style={{ fontSize: 12, color: 'var(--dag-text-muted)' }}>Enter your password to unlock your wallet.</p>
               <input
                 type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password" className={inputCls}
+                placeholder="Password" style={modalInputStyle}
                 onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
                 autoFocus
               />
-              {error && <p className="text-sm text-red-400">{error}</p>}
-              <button onClick={handleUnlock} disabled={loading} className={btnPrimary}>
+              {error && <p style={{ fontSize: 12, color: '#EF4444' }}>{error}</p>}
+              <button onClick={handleUnlock} disabled={loading} style={{ ...primaryButtonStyle, width: '100%', padding: '11px 0', opacity: loading ? 0.5 : 1 }}>
                 {loading ? 'Unlocking...' : 'Unlock'}
               </button>
-              <button onClick={() => goTo('restore')} className="w-full py-2 text-xs text-slate-500 hover:text-slate-300 transition-colors">
+              <button onClick={() => goTo('restore')} style={linkBtnStyle}>
                 Restore from backup
               </button>
             </>
@@ -185,20 +204,20 @@ export function CreateKeystoreModal({
               )}
               <input
                 type="text" value={walletName} onChange={(e) => setWalletName(e.target.value)}
-                placeholder="Wallet name" className={inputCls} autoFocus
+                placeholder="Wallet name" style={modalInputStyle} autoFocus
               />
               <input
                 type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                placeholder="Set a password (min 8 characters)" className={inputCls}
+                placeholder="Set a password (min 8 characters)" style={modalInputStyle}
               />
               <input
                 type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm password" className={inputCls}
+                placeholder="Confirm password" style={modalInputStyle}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreateWallet()}
               />
-              <p className="text-[10px] text-dag-muted">Your wallet is encrypted locally with AES-256. Only you can access it.</p>
-              {error && <p className="text-sm text-red-400">{error}</p>}
-              <button onClick={handleCreateWallet} disabled={loading || !generatedKey} className={btnPrimary}>
+              <p style={{ fontSize: 10, color: 'var(--dag-text-muted)' }}>Your wallet is encrypted locally with AES-256. Only you can access it.</p>
+              {error && <p style={{ fontSize: 12, color: '#EF4444' }}>{error}</p>}
+              <button onClick={handleCreateWallet} disabled={loading || !generatedKey} style={{ ...primaryButtonStyle, width: '100%', padding: '11px 0', opacity: loading || !generatedKey ? 0.5 : 1 }}>
                 {loading ? 'Creating...' : 'Create Wallet'}
               </button>
             </>
@@ -207,32 +226,32 @@ export function CreateKeystoreModal({
           {/* ===== IMPORT PRIVATE KEY ===== */}
           {screen === 'import' && (
             <>
-              <p className="text-sm text-dag-muted">Paste your private key to import an existing wallet.</p>
+              <p style={{ fontSize: 12, color: 'var(--dag-text-muted)' }}>Paste your private key to import an existing wallet.</p>
               <input
                 type="text" value={walletName} onChange={(e) => setWalletName(e.target.value)}
-                placeholder="Wallet name" className={inputCls} autoFocus
+                placeholder="Wallet name" style={modalInputStyle} autoFocus
               />
               <input
                 type="password" value={importKeyHex} onChange={(e) => handleKeyChange(e.target.value)}
-                placeholder="Private key (64 hex characters)" className={inputCls + ' text-xs font-mono'}
+                placeholder="Private key (64 hex characters)" style={{ ...modalInputStyle, fontSize: 11, fontFamily: "'DM Mono',monospace" }}
               />
               {derivedAddress && (
-                <div className="bg-slate-800/50 rounded-lg px-3 py-2 border border-dag-border/50">
-                  <p className="text-[10px] text-dag-muted uppercase tracking-wider">Detected Address</p>
-                  <p className="text-xs font-mono text-dag-green">{derivedAddress.slice(0, 8)}...{derivedAddress.slice(-6)}</p>
+                <div style={{ background: 'var(--dag-input-bg)', borderRadius: 10, padding: '8px 12px', border: '1px solid var(--dag-border)' }}>
+                  <p style={{ fontSize: 10, color: 'var(--dag-text-muted)', letterSpacing: 1, textTransform: 'uppercase' }}>Detected Address</p>
+                  <p style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: '#00E0C4' }}>{derivedAddress.slice(0, 8)}...{derivedAddress.slice(-6)}</p>
                 </div>
               )}
               <input
                 type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                placeholder="Set a password (min 8 characters)" className={inputCls}
+                placeholder="Set a password (min 8 characters)" style={modalInputStyle}
               />
               <input
                 type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm password" className={inputCls}
+                placeholder="Confirm password" style={modalInputStyle}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreateWallet()}
               />
-              {error && <p className="text-sm text-red-400">{error}</p>}
-              <button onClick={handleCreateWallet} disabled={loading} className={btnPrimary}>
+              {error && <p style={{ fontSize: 12, color: '#EF4444' }}>{error}</p>}
+              <button onClick={handleCreateWallet} disabled={loading} style={{ ...primaryButtonStyle, width: '100%', padding: '11px 0', opacity: loading ? 0.5 : 1 }}>
                 {loading ? 'Importing...' : 'Import Wallet'}
               </button>
             </>
@@ -241,16 +260,16 @@ export function CreateKeystoreModal({
           {/* ===== RESTORE FROM BACKUP ===== */}
           {screen === 'restore' && (
             <>
-              <p className="text-sm text-dag-muted">Paste a previously exported wallet backup.</p>
+              <p style={{ fontSize: 12, color: 'var(--dag-text-muted)' }}>Paste a previously exported wallet backup.</p>
               <textarea
                 value={importJson} onChange={(e) => setImportJson(e.target.value)}
                 placeholder='Paste your backup JSON here...'
                 rows={5}
-                className={inputCls + ' text-xs font-mono resize-none'}
+                style={{ ...modalInputStyle, fontSize: 11, fontFamily: "'DM Mono',monospace", resize: 'none' } as React.CSSProperties}
                 autoFocus
               />
-              {error && <p className="text-sm text-red-400">{error}</p>}
-              <button onClick={handleRestore} disabled={loading} className={btnPrimary}>
+              {error && <p style={{ fontSize: 12, color: '#EF4444' }}>{error}</p>}
+              <button onClick={handleRestore} disabled={loading} style={{ ...primaryButtonStyle, width: '100%', padding: '11px 0', opacity: loading ? 0.5 : 1 }}>
                 Restore
               </button>
             </>
@@ -276,35 +295,39 @@ function KeystoreKeyDisplay({ address, secretKey }: { address: string; secretKey
     } catch { /* clipboard unavailable */ }
   };
 
+  const smallBtnStyle: React.CSSProperties = {
+    ...themeButtonStyle(),
+    padding: '4px 8px', fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 4,
+  };
+
   return (
-    <div className="bg-slate-800/50 rounded-lg p-3 border border-dag-accent/30 space-y-3">
-      <p className="text-[10px] text-dag-accent uppercase tracking-wider font-semibold">Your New Wallet</p>
+    <div style={{ background: 'var(--dag-input-bg)', borderRadius: 10, padding: 12, border: '1px solid rgba(0,224,196,0.2)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <p style={{ fontSize: 10, color: '#00E0C4', letterSpacing: 1, textTransform: 'uppercase', fontWeight: 600 }}>Your New Wallet</p>
       <div>
-        <p className="text-[10px] text-dag-muted uppercase tracking-wider">Address</p>
-        <p className="text-xs font-mono text-dag-green">{truncAddr}</p>
+        <p style={{ fontSize: 10, color: 'var(--dag-text-muted)', letterSpacing: 1, textTransform: 'uppercase' }}>Address</p>
+        <p style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: '#00E0C4' }}>{truncAddr}</p>
       </div>
 
-      <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-2.5 space-y-2">
-        <div className="flex items-start gap-2">
-          <AlertTriangle className="w-3 h-3 text-amber-400 mt-0.5 flex-shrink-0" />
-          <p className="text-[10px] text-amber-400 font-medium">Save your private key somewhere safe. It cannot be recovered.</p>
+      <div style={{ borderRadius: 8, border: '1px solid rgba(255,184,0,0.2)', background: 'rgba(255,184,0,0.04)', padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+          <AlertTriangle style={{ width: 12, height: 12, color: '#FFB800', flexShrink: 0, marginTop: 1 }} />
+          <p style={{ fontSize: 10, color: '#FFB800', fontWeight: 500 }}>Save your private key somewhere safe. It cannot be recovered.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setShowKey(!showKey)}
-            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium bg-slate-700/60 text-slate-300 hover:bg-slate-700 hover:text-white transition-all">
-            {showKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => setShowKey(!showKey)} style={smallBtnStyle}>
+            {showKey ? <EyeOff style={{ width: 12, height: 12 }} /> : <Eye style={{ width: 12, height: 12 }} />}
             {showKey ? 'Hide Key' : 'Show Private Key'}
           </button>
-          <button onClick={handleCopyKey}
-            className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-all ${
-              copied ? 'bg-green-500/15 text-green-400' : 'bg-slate-700/60 text-slate-300 hover:bg-slate-700 hover:text-white'
-            }`}>
-            {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+          <button onClick={handleCopyKey} style={{
+            ...smallBtnStyle,
+            ...(copied ? { background: 'rgba(0,224,196,0.1)', borderColor: 'rgba(0,224,196,0.2)', color: '#00E0C4' } : {}),
+          }}>
+            {copied ? <Check style={{ width: 12, height: 12 }} /> : <Copy style={{ width: 12, height: 12 }} />}
             {copied ? 'Copied!' : 'Copy Key'}
           </button>
         </div>
         {showKey && (
-          <p className="text-xs font-mono text-amber-300 bg-slate-800/80 px-2.5 py-2 rounded break-all border border-amber-500/10">
+          <p style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: '#FFB800', background: 'var(--dag-input-bg)', padding: '8px 10px', borderRadius: 6, wordBreak: 'break-all', border: '1px solid rgba(255,184,0,0.1)' }}>
             {secretKey}
           </p>
         )}

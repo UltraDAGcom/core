@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Badge } from '../shared/Badge.tsx';
 import { DisplayIdentity } from '../shared/DisplayIdentity.tsx';
+import { tableHeaderStyle, tableCellStyle } from '../../lib/theme';
 
 interface Vertex {
   hash: string;
@@ -19,48 +20,61 @@ interface RoundTableProps {
   }>;
 }
 
+const thStyle: React.CSSProperties = {
+  ...tableHeaderStyle,
+  padding: '8px 12px',
+  textAlign: 'left',
+};
+
+const tdStyle: React.CSSProperties = {
+  ...tableCellStyle,
+  padding: '10px 12px',
+};
+
 export function RoundTable({ rounds }: RoundTableProps) {
   if (rounds.length === 0) {
-    return <p className="text-slate-500 text-sm py-8 text-center">No rounds to display</p>;
+    return <p style={{ color: 'var(--dag-text-faint)', fontSize: 12, padding: '32px 0', textAlign: 'center' }}>No rounds to display</p>;
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
         <thead>
-          <tr className="text-left text-slate-400 border-b border-slate-700">
-            <th className="py-2 px-3 font-medium w-28">Round</th>
-            <th className="py-2 px-3 font-medium w-20 text-center">Vertices</th>
-            <th className="py-2 px-3 font-medium w-16 text-center">Txns</th>
-            <th className="py-2 px-3 font-medium">Validators</th>
-            <th className="py-2 px-3 font-medium w-24">Status</th>
+          <tr>
+            <th style={{ ...thStyle, width: 112 }}>Round</th>
+            <th style={{ ...thStyle, width: 80, textAlign: 'center' }}>Vertices</th>
+            <th style={{ ...thStyle, width: 64, textAlign: 'center' }}>Txns</th>
+            <th style={thStyle}>Validators</th>
+            <th style={{ ...thStyle, width: 96 }}>Status</th>
           </tr>
         </thead>
         <tbody>
           {rounds.map((r) => {
             const totalTxs = r.vertices.reduce((sum, v) => sum + v.tx_count, 0);
             return (
-              <tr key={r.round} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
-                <td className="py-2.5 px-3">
-                  <Link to={`/round/${r.round}`} className="text-blue-400 hover:text-blue-300 font-mono font-bold text-base">
+              <tr key={r.round} style={{ transition: 'background 0.15s' }}>
+                <td style={tdStyle}>
+                  <Link to={`/round/${r.round}`} style={{ color: '#00E0C4', textDecoration: 'none', fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: 14 }}>
                     #{r.round.toLocaleString()}
                   </Link>
                 </td>
-                <td className="py-2.5 px-3 font-mono text-center text-slate-300">{r.vertices.length}</td>
-                <td className="py-2.5 px-3 font-mono text-center text-slate-300">{totalTxs > 0 ? totalTxs : <span className="text-slate-600">0</span>}</td>
-                <td className="py-2.5 px-3">
-                  <div className="flex flex-wrap gap-1">
+                <td style={{ ...tdStyle, fontFamily: "'DM Mono',monospace", textAlign: 'center', color: 'var(--dag-text-secondary)' }}>{r.vertices.length}</td>
+                <td style={{ ...tdStyle, fontFamily: "'DM Mono',monospace", textAlign: 'center', color: 'var(--dag-text-secondary)' }}>
+                  {totalTxs > 0 ? totalTxs : <span style={{ color: 'var(--dag-text-faint)' }}>0</span>}
+                </td>
+                <td style={tdStyle}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                     {r.vertices.slice(0, 3).map((v) => (
-                      <span key={v.hash} className="inline-flex items-center gap-1 text-xs">
+                      <span key={v.hash} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
                         <DisplayIdentity address={v.validator} link size="xs" />
                       </span>
                     ))}
                     {r.vertices.length > 3 && (
-                      <span className="text-xs text-slate-500">+{r.vertices.length - 3} more</span>
+                      <span style={{ fontSize: 10, color: 'var(--dag-text-faint)' }}>+{r.vertices.length - 3} more</span>
                     )}
                   </div>
                 </td>
-                <td className="py-2.5 px-3">
+                <td style={tdStyle}>
                   <Badge label={r.finalized ? 'Finalized' : 'Pending'} variant={r.finalized ? 'green' : 'yellow'} />
                 </td>
               </tr>

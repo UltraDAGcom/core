@@ -68,7 +68,7 @@ export function PageHeader({ title, subtitle, right }: PageHeaderProps) {
             }}>
               <div style={{
                 width: 16, height: 16, borderRadius: 4,
-                background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
+                background: '#00E0C4',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 7, fontWeight: 800, color: '#fff',
               }}>

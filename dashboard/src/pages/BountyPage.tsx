@@ -8,6 +8,7 @@ import { BountyFilters } from '../components/bounty/BountyFilters';
 import { PayBountyModal } from '../components/bounty/PayBountyModal';
 import { Pagination } from '../components/shared/Pagination';
 import { PageHeader } from '../components/shared/PageHeader';
+import { primaryButtonStyle } from '../lib/theme';
 import type { ParsedBounty } from '../lib/github';
 
 const PAGE_SIZE = 10;
@@ -61,10 +62,8 @@ export function BountyPage() {
             target="_blank"
             rel="noopener noreferrer"
             style={{
-              padding: '8px 16px', borderRadius: 8, border: 'none',
-              background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
-              color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'none',
-              cursor: 'pointer', boxShadow: '0 2px 12px rgba(0,224,196,0.15)',
+              ...primaryButtonStyle, padding: '8px 16px', fontSize: 12,
+              textDecoration: 'none', display: 'inline-block',
             }}
           >
             + Post Bounty

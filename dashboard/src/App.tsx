@@ -32,6 +32,7 @@ import { getNodeUrl, getNetwork, switchNetwork, type NetworkType } from './lib/a
 import { ToastProvider } from './hooks/useToast';
 import { NameCacheProvider } from './contexts/NameCacheContext';
 import { AppStatusProvider } from './contexts/AppStatusContext';
+import { primaryButtonStyle, secondaryButtonStyle } from './lib/theme';
 
 function App() {
   const pk = usePasskeyWallet();
@@ -137,19 +138,17 @@ function App() {
               </p>
 
               <button onClick={async () => { await pk.unlock(); }} style={{
-                width: '100%', padding: '14px 0', borderRadius: 12,
-                background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
-                color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
-                boxShadow: '0 4px 20px rgba(0,224,196,0.2)',
-                transition: 'opacity 0.2s',
+                ...primaryButtonStyle, width: '100%', padding: '14px 0', borderRadius: 12,
+                fontSize: 14,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               }}>
                 ◎ Unlock with Biometrics
               </button>
 
               <button onClick={() => pk.destroy()} style={{
-                background: 'none', border: 'none', color: 'var(--dag-text-faint)',
-                fontSize: 11, cursor: 'pointer', marginTop: 20, transition: 'color 0.2s',
+                ...secondaryButtonStyle, background: 'none', border: 'none',
+                color: 'var(--dag-text-faint)', fontSize: 11, marginTop: 20,
+                padding: 0,
               }}>
                 Start Fresh
               </button>

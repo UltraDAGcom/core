@@ -86,6 +86,7 @@ export const accentCellStyle: React.CSSProperties = {
   fontFamily: fonts.mono,
 };
 
+/** Ghost/outline button — subtle background, colored text */
 export const buttonStyle = (accent = colors.accent): React.CSSProperties => ({
   padding: '8px 18px',
   borderRadius: 10,
@@ -97,6 +98,45 @@ export const buttonStyle = (accent = colors.accent): React.CSSProperties => ({
   cursor: 'pointer',
   transition: 'all 0.2s',
 });
+
+/** Primary solid button — cyan accent, white text */
+export const primaryButtonStyle: React.CSSProperties = {
+  padding: '10px 20px',
+  borderRadius: 10,
+  background: '#00E0C4',
+  border: 'none',
+  color: '#080C14',
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: 'pointer',
+  transition: 'all 0.2s',
+};
+
+/** Secondary solid button — subtle, muted */
+export const secondaryButtonStyle: React.CSSProperties = {
+  padding: '10px 20px',
+  borderRadius: 10,
+  background: 'var(--dag-input-bg)',
+  border: '1px solid var(--dag-border)',
+  color: 'var(--dag-text)',
+  fontSize: 13,
+  fontWeight: 600,
+  cursor: 'pointer',
+  transition: 'all 0.2s',
+};
+
+/** Danger button — red, for destructive actions */
+export const dangerButtonStyle: React.CSSProperties = {
+  padding: '8px 18px',
+  borderRadius: 10,
+  background: 'rgba(239,68,68,0.08)',
+  border: '1px solid rgba(239,68,68,0.2)',
+  color: '#EF4444',
+  fontSize: 12.5,
+  fontWeight: 600,
+  cursor: 'pointer',
+  transition: 'all 0.2s',
+};
 
 export const inputStyle: React.CSSProperties = {
   width: '100%',

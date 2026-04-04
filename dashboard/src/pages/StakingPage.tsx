@@ -7,6 +7,7 @@ import { hasPasskeyWallet, getPasskeyWallet } from '../lib/passkey-wallet';
 import { signAndSubmitSmartOp } from '../lib/webauthn-sign';
 import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { primaryButtonStyle, dangerButtonStyle, buttonStyle as themeButtonStyle } from '../lib/theme';
 
 const SATS = 100_000_000;
 const fmt = (s: number) => (s / SATS).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -187,7 +188,7 @@ export function StakingPage() {
                   </div>
                 )}
 
-                <button onClick={handleStake} disabled={stakeLoading || !target || !amount} style={{ ...S.btnSolid(), opacity: stakeLoading || !target || !amount ? 0.3 : 1 }}>
+                <button onClick={handleStake} disabled={stakeLoading || !target || !amount} style={{ ...primaryButtonStyle, width: '100%', padding: '12px 0', opacity: stakeLoading || !target || !amount ? 0.3 : 1 }}>
                   {stakeLoading ? 'Staking...' : pw ? '◎ Stake with Biometrics' : '⬡ Stake'}
                 </button>
               </div>
@@ -197,7 +198,7 @@ export function StakingPage() {
           {/* How it works */}
           <div style={S.card}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
-              <span style={{ color: '#0066FF', fontSize: 13 }}>◈</span>
+              <span style={{ color: '#00E0C4', fontSize: 13 }}>◈</span>
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-cell-text)' }}>How staking works</span>
             </div>
             <div style={{ fontSize: 11, color: 'var(--dag-subheading)', lineHeight: 1.7 }}>
@@ -234,7 +235,7 @@ export function StakingPage() {
                         <div style={{ fontSize: 9.5, color: '#FFB800' }}>Round {d.unlock_at_round}</div>
                       ) : (
                         <button onClick={() => handleUndelegate(d.address)} disabled={undelegateLoading === d.address}
-                          style={{ ...S.btn('#EF4444'), marginTop: 4, opacity: undelegateLoading === d.address ? 0.5 : 1 }}>
+                          style={{ ...dangerButtonStyle, padding: '6px 14px', fontSize: 11, marginTop: 4, opacity: undelegateLoading === d.address ? 0.5 : 1 }}>
                           {undelegateLoading === d.address ? '...' : 'Unstake'}
                         </button>
                       )}
@@ -277,7 +278,7 @@ export function StakingPage() {
                         <div style={{ fontSize: 11, color: v.commission_percent <= 10 ? '#00E0C4' : '#FFB800' }}>{v.commission_percent}%</div>
                         {unlocked && wallets.length > 0 && (
                           <button onClick={() => { setCustomValidator(v.address); setShowValidators(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                            style={S.btn()}>Select</button>
+                            style={themeButtonStyle()}>Select</button>
                         )}
                       </div>
                     ))}

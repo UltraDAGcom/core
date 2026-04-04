@@ -1,5 +1,6 @@
 import { severityInfo, statusColor, bountyDescription, timeAgo, type ParsedBounty } from '../../lib/github';
 import { DisplayIdentity } from '../shared/DisplayIdentity';
+import { primaryButtonStyle, secondaryButtonStyle } from '../../lib/theme';
 
 interface BountyDetailProps {
   bounty: ParsedBounty | null;
@@ -96,20 +97,15 @@ export function BountyDetail({ bounty, unlocked, onPayClick }: BountyDetailProps
           target="_blank"
           rel="noopener noreferrer"
           style={{
-            flex: 1, padding: '10px 0', borderRadius: 8, textAlign: 'center',
-            background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)',
-            color: 'var(--dag-text)', fontSize: 12, fontWeight: 600, textDecoration: 'none',
-            cursor: 'pointer', transition: 'border-color 0.15s',
+            ...secondaryButtonStyle, flex: 1, padding: '10px 0', textAlign: 'center' as const,
+            textDecoration: 'none',
           }}
         >
           View on GitHub →
         </a>
         {canPay && (
           <button onClick={onPayClick} style={{
-            flex: 1, padding: '10px 0', borderRadius: 8, border: 'none',
-            background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
-            color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            boxShadow: '0 2px 12px rgba(0,224,196,0.2)',
+            ...primaryButtonStyle, flex: 1, padding: '10px 0',
           }}>
             Pay Bounty
           </button>

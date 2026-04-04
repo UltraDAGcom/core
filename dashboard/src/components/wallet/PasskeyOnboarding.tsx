@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { getNodeUrl } from '../../lib/api';
+import { primaryButtonStyle, secondaryButtonStyle } from '../../lib/theme';
 import type { NetworkType } from '../../lib/api';
 // savePasskeyWallet is called by WelcomeScreen after backup step completes
 
@@ -284,13 +285,10 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
           </div>
 
           <button onClick={() => setStep('passkey')} disabled={!(username.length >= 3 && nameAvailable)} style={{
-            width: '100%', padding: '14px 0', borderRadius: 12,
-            background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
-            color: '#fff', fontSize: 14, fontWeight: 700, border: 'none',
+            ...primaryButtonStyle, width: '100%', padding: '14px 0', borderRadius: 12,
+            fontSize: 14,
             opacity: !(username.length >= 3 && nameAvailable) ? 0.35 : 1,
             cursor: !(username.length >= 3 && nameAvailable) ? 'default' : 'pointer',
-            boxShadow: '0 4px 20px rgba(0,224,196,0.2)',
-            transition: 'opacity 0.2s',
           }}>
             Continue
           </button>
@@ -323,10 +321,8 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
           </p>
 
           <button onClick={handleCreatePasskey} style={{
-            width: '100%', padding: '14px 0', borderRadius: 12,
-            background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
-            color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
-            boxShadow: '0 4px 20px rgba(0,224,196,0.2)',
+            ...primaryButtonStyle, width: '100%', padding: '14px 0', borderRadius: 12,
+            fontSize: 14,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           }}>
             ◎ Create with Biometrics
@@ -396,10 +392,8 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
           </div>
 
           <button onClick={() => setStep('backup')} style={{
-            width: '100%', padding: '14px 0', borderRadius: 12,
-            background: 'linear-gradient(135deg, #A855F7, #0066FF)',
-            color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', border: 'none',
-            boxShadow: '0 4px 20px rgba(168,85,247,0.2)',
+            ...primaryButtonStyle, width: '100%', padding: '14px 0', borderRadius: 12,
+            fontSize: 14,
           }}>
             Set Up Recovery
           </button>
@@ -553,15 +547,11 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
 
           {/* Continue button */}
           <button onClick={() => onComplete(result.address, result.name, pendingWallet!)} style={{
+            ...(backupSuccess ? primaryButtonStyle : secondaryButtonStyle),
             width: '100%', padding: '14px 0', borderRadius: 12,
-            background: backupSuccess
-              ? 'linear-gradient(135deg, #00E0C4, #0066FF)'
-              : 'var(--dag-input-bg)',
-            color: backupSuccess ? '#fff' : 'var(--dag-text)',
-            fontSize: 14, fontWeight: 700, cursor: 'pointer', border: backupSuccess ? 'none' : '1px solid var(--dag-border)',
-            boxShadow: backupSuccess ? '0 4px 20px rgba(0,224,196,0.2)' : 'none',
+            fontSize: 14, fontWeight: 700,
           }}>
-            {backupSuccess ? 'Open Wallet' : 'Open Wallet'}
+            Open Wallet
           </button>
 
           {!backupSuccess && !skipConfirm && (

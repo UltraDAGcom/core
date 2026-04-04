@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { postVote, getNodeUrl } from '../../lib/api';
 import { hasPasskeyWallet, getPasskeyWallet } from '../../lib/passkey-wallet';
 import { signAndSubmitSmartOp } from '../../lib/webauthn-sign';
+import { primaryButtonStyle, dangerButtonStyle } from '../../lib/theme';
 
 interface VoteButtonProps {
   proposalId: number;
@@ -45,20 +46,20 @@ export function VoteButton({ proposalId, secretKey, approve, fee, onSuccess }: V
     }
   };
 
+  const style = approve
+    ? { ...primaryButtonStyle, padding: '8px 16px', fontSize: 12, opacity: loading ? 0.5 : 1 }
+    : { ...dangerButtonStyle, padding: '8px 16px', fontSize: 12, opacity: loading ? 0.5 : 1 };
+
   return (
     <div>
       <button
         onClick={handleVote}
         disabled={loading}
-        className={`px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50 ${
-          approve
-            ? 'bg-dag-green/20 text-dag-green border border-dag-green/40 hover:bg-dag-green/30'
-            : 'bg-dag-red/20 text-dag-red border border-dag-red/40 hover:bg-dag-red/30'
-        }`}
+        style={style}
       >
         {loading ? 'Voting...' : approve ? 'Vote YES' : 'Vote NO'}
       </button>
-      {error && <p className="text-xs text-dag-red mt-1">{error}</p>}
+      {error && <p style={{ fontSize: 11, color: '#EF4444', marginTop: 4 }}>{error}</p>}
     </div>
   );
 }

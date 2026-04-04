@@ -569,8 +569,8 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
 
               <button onClick={handleCreate} disabled={!isValid || submitting} style={{
                 width: '100%', padding: '13px 0', borderRadius: 10, border: 'none', marginTop: 14,
-                background: (!isValid || submitting) ? 'var(--dag-border)' : 'linear-gradient(135deg, #00E0C4, #0066FF)',
-                color: (!isValid || submitting) ? 'var(--dag-text-faint)' : '#fff',
+                background: (!isValid || submitting) ? 'var(--dag-border)' : '#00E0C4',
+                color: (!isValid || submitting) ? 'var(--dag-text-faint)' : '#080C14',
                 fontSize: 14, fontWeight: 700, cursor: (!isValid || submitting) ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s',
                 boxShadow: isValid && !submitting ? '0 4px 20px rgba(0,224,196,0.15)' : 'none',

@@ -9,6 +9,7 @@ import { UltraIdCard } from '../components/profile/UltraIdCard';
 import { EditProfileModal } from '../components/profile/EditProfileModal';
 import { ProfileActivity } from '../components/profile/ProfileActivity';
 import { PageHeader } from '../components/shared/PageHeader';
+import { buttonStyle as themeButtonStyle } from '../lib/theme';
 
 export function ProfilePage() {
   const { nameOrAddress } = useParams<{ nameOrAddress: string }>();
@@ -127,9 +128,7 @@ export function ProfilePage() {
           <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: 2, color: 'var(--dag-text-faint)', textTransform: 'uppercase' }}>Links</span>
           {isOwnProfile && unlocked && (
             <button onClick={() => setShowEdit(true)} style={{
-              padding: '5px 14px', borderRadius: 8, border: 'none',
-              background: 'rgba(0,224,196,0.08)', color: '#00E0C4',
-              fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              ...themeButtonStyle(), padding: '5px 14px', fontSize: 11,
             }}>
               Edit Profile
             </button>

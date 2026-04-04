@@ -4,6 +4,7 @@ import { CopyButton } from '../shared/CopyButton.tsx';
 import { DisplayIdentity } from '../shared/DisplayIdentity.tsx';
 import { Badge } from '../shared/Badge.tsx';
 import { Pagination } from '../shared/Pagination.tsx';
+import { tableHeaderStyle, tableCellStyle } from '../../lib/theme';
 import { useState } from 'react';
 
 interface MempoolTx {
@@ -26,55 +27,66 @@ function txTypeLabel(tx: MempoolTx): string {
   return tx.tx_type ?? tx.type ?? 'unknown';
 }
 
+const thStyle: React.CSSProperties = {
+  ...tableHeaderStyle,
+  padding: '8px 12px',
+  textAlign: 'left',
+};
+
+const tdStyle: React.CSSProperties = {
+  ...tableCellStyle,
+  padding: '8px 12px',
+};
+
 export function MempoolTable({ transactions }: MempoolTableProps) {
   const [page, setPage] = useState(1);
   const totalPages = Math.ceil(transactions.length / PAGE_SIZE);
   const paged = transactions.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   if (transactions.length === 0) {
-    return <p className="text-slate-500 text-sm py-4 text-center">Mempool is empty</p>;
+    return <p style={{ color: 'var(--dag-text-faint)', fontSize: 12, padding: '16px 0', textAlign: 'center' }}>Mempool is empty</p>;
   }
 
   return (
     <div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
           <thead>
-            <tr className="text-left text-slate-400 border-b border-slate-700">
-              <th className="py-2 px-3 font-medium">Hash</th>
-              <th className="py-2 px-3 font-medium">Type</th>
-              <th className="py-2 px-3 font-medium">From</th>
-              <th className="py-2 px-3 font-medium">Fee</th>
+            <tr>
+              <th style={thStyle}>Hash</th>
+              <th style={thStyle}>Type</th>
+              <th style={thStyle}>From</th>
+              <th style={thStyle}>Fee</th>
             </tr>
           </thead>
           <tbody>
             {paged.map((tx, i) => (
-              <tr key={tx.hash ?? i} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
-                <td className="py-2 px-3">
-                  <div className="flex items-center gap-1">
+              <tr key={tx.hash ?? i} style={{ transition: 'background 0.15s' }}>
+                <td style={tdStyle}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     {tx.hash ? (
                       <>
-                        <Link to={`/tx/${tx.hash}`} className="font-mono text-blue-400 hover:text-blue-300 text-xs">
+                        <Link to={`/tx/${tx.hash}`} style={{ fontFamily: "'DM Mono',monospace", color: '#00E0C4', textDecoration: 'none', fontSize: 11 }}>
                           {shortHash(tx.hash)}
                         </Link>
                         <CopyButton text={tx.hash} />
                       </>
                     ) : (
-                      <span className="text-slate-500 text-xs">--</span>
+                      <span style={{ color: 'var(--dag-text-faint)', fontSize: 11 }}>--</span>
                     )}
                   </div>
                 </td>
-                <td className="py-2 px-3">
+                <td style={tdStyle}>
                   <Badge label={txTypeLabel(tx)} variant="blue" />
                 </td>
-                <td className="py-2 px-3">
+                <td style={tdStyle}>
                   {tx.from ? (
                     <DisplayIdentity address={tx.from} link size="xs" />
                   ) : (
-                    <span className="text-slate-500 text-xs">--</span>
+                    <span style={{ color: 'var(--dag-text-faint)', fontSize: 11 }}>--</span>
                   )}
                 </td>
-                <td className="py-2 px-3 font-mono text-slate-300 text-xs">
+                <td style={{ ...tdStyle, fontFamily: "'DM Mono',monospace", color: 'var(--dag-text-secondary)', fontSize: 11 }}>
                   {tx.fee != null ? formatUdag(tx.fee) : '--'}
                 </td>
               </tr>

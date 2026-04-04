@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { postTx, isValidAddress, normalizeAddress, getNodeUrl } from '../../lib/api';
 import { getPasskeyInfo, signAndSubmitWithPasskey } from '../../lib/webauthn-sign';
 import { useToast } from '../../hooks/useToast';
+import { primaryButtonStyle } from '../../lib/theme';
 import type { ParsedBounty } from '../../lib/github';
 import type { Wallet } from '../../lib/keystore';
 
@@ -134,12 +135,9 @@ export function PayBountyModal({ bounty, wallets, onClose, onSuccess }: PayBount
         )}
 
         <button onClick={handlePay} disabled={loading} style={{
-          width: '100%', padding: '12px 0', borderRadius: 10, border: 'none',
-          background: loading ? 'var(--dag-input-bg)' : 'linear-gradient(135deg, #00E0C4, #0066FF)',
-          color: loading ? 'var(--dag-text-faint)' : '#fff',
-          fontSize: 13, fontWeight: 700, cursor: loading ? 'default' : 'pointer',
-          boxShadow: loading ? 'none' : '0 2px 12px rgba(0,224,196,0.2)',
-          transition: 'all 0.2s',
+          ...primaryButtonStyle, width: '100%', padding: '12px 0',
+          opacity: loading ? 0.5 : 1,
+          cursor: loading ? 'default' : 'pointer',
         }}>
           {loading ? 'Sending...' : `Pay ${amount || '0'} UDAG`}
         </button>

@@ -4,6 +4,7 @@ import { VerifiedAddressInput } from '../components/shared/VerifiedAddressInput'
 import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { PageHeader } from '../components/shared/PageHeader';
+import { primaryButtonStyle, buttonStyle as themeButtonStyle } from '../lib/theme';
 
 interface AuthorizedKey { key_id: string; key_type: string; label: string; daily_limit: number | null }
 interface SmartAccountInfo {
@@ -193,7 +194,7 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
 
         {/* ── Recovery ── */}
         <Section icon="♛" color="#A855F7" title="Social Recovery"
-          action={!info?.has_recovery && !showRecoveryForm ? <button onClick={() => setShowRecoveryForm(true)} style={S.btn('#A855F7')}>+ Set Up</button> : undefined}>
+          action={!info?.has_recovery && !showRecoveryForm ? <button onClick={() => setShowRecoveryForm(true)} style={themeButtonStyle()}>+ Set Up</button> : undefined}>
           {info?.has_recovery ? (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
@@ -230,7 +231,7 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
                   onChange={v => { const n = [...guardians]; n[i] = v; setGuardians(n); }}
                   placeholder={`Guardian ${i + 1} — paste their wallet address`} />
               ))}
-              <button onClick={() => setGuardians([...guardians, ''])} style={{ ...S.btn('#A855F7'), alignSelf: 'flex-start', fontSize: 10 }}>+ Add another guardian</button>
+              <button onClick={() => setGuardians([...guardians, ''])} style={{ ...themeButtonStyle(), alignSelf: 'flex-start', fontSize: 10 }}>+ Add another guardian</button>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 10.5, color: 'var(--dag-subheading)' }}>How many must approve:</span>
@@ -248,7 +249,7 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
                   if (valid.length < 2) { alert('Add at least 2 guardian addresses.'); return; }
                   if (threshold < 1 || threshold > valid.length) { alert('Invalid threshold.'); return; }
                   alert(`Set Recovery Guardians Transaction:\n\nGuardians (${valid.length}):\n${valid.map((g, i) => `  ${i + 1}. ${g.slice(0, 12)}...${g.slice(-8)}`).join('\n')}\nThreshold: ${threshold}-of-${valid.length}\nDelay: 2,016 rounds (~2.8 hours)\n\nThis will be submitted as a SmartOp::SetRecovery transaction.\nClient-side signing coming soon.`);
-                }} style={S.btnSolid('#A855F7')}>Save Guardians</button>
+                }} style={primaryButtonStyle}>Save Guardians</button>
                 <button onClick={() => setShowRecoveryForm(false)} style={S.btn('var(--dag-text-muted)')}>Cancel</button>
               </div>
             </div>
@@ -266,7 +267,7 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
 
         {/* ── Spending Policy ── */}
         <Section icon="⬡" color="#FFB800" title="Spending Policy"
-          action={!info?.has_policy && !showPolicyForm ? <button onClick={() => setShowPolicyForm(true)} style={S.btn('#FFB800')}>+ Set Up</button> : undefined}>
+          action={!info?.has_policy && !showPolicyForm ? <button onClick={() => setShowPolicyForm(true)} style={themeButtonStyle()}>+ Set Up</button> : undefined}>
           {info?.has_policy ? (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {[
@@ -302,7 +303,7 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
                   const daily = parseFloat(policyDaily) || 0;
                   if (instant <= 0 && vault <= 0 && daily <= 0) { alert('Set at least one limit.'); return; }
                   alert(`Set Spending Policy Transaction:\n\nInstant limit: ${instant > 0 ? instant + ' UDAG' : 'None'}\nVault threshold: ${vault > 0 ? vault + ' UDAG' : 'None'}\nVault delay: 2,016 rounds (~2.8 hours)\nDaily cap: ${daily > 0 ? daily + ' UDAG' : 'None'}\n\nPolicy changes are time-locked (~2.8 hours) for security.\nThis will be submitted as a SmartOp::SetPolicy transaction.\nClient-side signing coming soon.`);
-                }} style={S.btnSolid('#FFB800')}>Save (2.8hr time-lock)</button>
+                }} style={primaryButtonStyle}>Save (2.8hr time-lock)</button>
                 <button onClick={() => setShowPolicyForm(false)} style={S.btn('var(--dag-text-muted)')}>Cancel</button>
               </div>
             </div>

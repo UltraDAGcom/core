@@ -8,6 +8,7 @@ import { QrScanner } from '../components/shared/QrScanner';
 import { useToast } from '../hooks/useToast';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { PageHeader } from '../components/shared/PageHeader';
+import { primaryButtonStyle, secondaryButtonStyle } from '../lib/theme';
 import type { Wallet } from '../lib/keystore';
 import type { WalletBalance } from '../hooks/useWalletBalances';
 
@@ -239,7 +240,7 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
               {error && <div style={{ fontSize: 11, color: '#EF4444', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 8, padding: '8px 12px' }}>{error}</div>}
               {success && <div style={{ fontSize: 11, color: '#00E0C4', background: 'rgba(0,224,196,0.06)', border: '1px solid rgba(0,224,196,0.15)', borderRadius: 8, padding: '8px 12px' }}>{success}</div>}
 
-              <button onClick={handleSend} disabled={loading} style={{ ...S.btnSolid(), opacity: loading ? 0.5 : 1 }}>
+              <button onClick={handleSend} disabled={loading} style={{ ...primaryButtonStyle, width: '100%', padding: '12px 0', opacity: loading ? 0.5 : 1 }}>
                 {loading ? 'Sending...' : pw && wallet?.address === pw.address ? '◎ Send with Biometrics' : '⇄ Send'}
               </button>
             </div>
@@ -255,7 +256,7 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
               </div>
               <p style={{ fontSize: 11, color: 'var(--dag-subheading)', marginBottom: 10 }}>Request 100 free UDAG for testing.</p>
               {faucetMsg && <div style={{ fontSize: 11, color: faucetMsg.startsWith('✓') ? '#00E0C4' : '#EF4444', marginBottom: 8 }}>{faucetMsg}</div>}
-              <button onClick={handleFaucet} disabled={faucetLoading} style={{ ...S.btnSolid('#FFB800'), opacity: faucetLoading ? 0.5 : 1 }}>
+              <button onClick={handleFaucet} disabled={faucetLoading} style={{ ...secondaryButtonStyle, width: '100%', padding: '12px 0', opacity: faucetLoading ? 0.5 : 1 }}>
                 {faucetLoading ? 'Requesting...' : '⬡ Request 100 UDAG'}
               </button>
             </div>

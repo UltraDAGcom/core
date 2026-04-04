@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useToast } from '../../hooks/useToast';
+import { primaryButtonStyle } from '../../lib/theme';
 import type { Wallet } from '../../lib/keystore';
 
 interface EditProfileModalProps {
@@ -116,10 +117,9 @@ export function EditProfileModal({ name, wallet: _wallet, currentBio, currentWeb
         )}
 
         <button onClick={handleSave} disabled={!canSave || loading} style={{
-          width: '100%', padding: '12px 0', borderRadius: 10, border: 'none', marginTop: 16,
-          background: !canSave || loading ? 'var(--dag-input-bg)' : 'linear-gradient(135deg, #00E0C4, #0066FF)',
-          color: !canSave || loading ? 'var(--dag-text-faint)' : '#fff',
-          fontSize: 13, fontWeight: 700, cursor: !canSave || loading ? 'default' : 'pointer',
+          ...primaryButtonStyle, width: '100%', padding: '12px 0', marginTop: 16,
+          opacity: !canSave || loading ? 0.4 : 1,
+          cursor: !canSave || loading ? 'default' : 'pointer',
         }}>
           {loading ? 'Saving...' : 'Save Profile (Coming Soon)'}
         </button>

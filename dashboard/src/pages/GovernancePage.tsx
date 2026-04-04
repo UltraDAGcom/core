@@ -7,6 +7,7 @@ import { CreateProposalModal } from '../components/governance/CreateProposalModa
 import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { PageHeader } from '../components/shared/PageHeader';
+import { primaryButtonStyle } from '../lib/theme';
 
 const S = {
   card: { background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14, padding: '18px 20px' } as React.CSSProperties,
@@ -74,7 +75,7 @@ export function GovernancePage() {
         title="Governance"
         subtitle="Vote on proposals that shape the network"
         right={unlocked && wallets.length > 0 ? (
-          <button onClick={() => setShowCreate(true)} style={{ padding: '8px 16px', borderRadius: 10, background: '#0066FF', color: 'var(--dag-text)', fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none' }}>+ New Proposal</button>
+          <button onClick={() => setShowCreate(true)} style={{ ...primaryButtonStyle, padding: '8px 16px', fontSize: 12 }}>+ New Proposal</button>
         ) : undefined}
       />
 
@@ -82,7 +83,7 @@ export function GovernancePage() {
         {/* Proposal List */}
         <div style={S.card}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14 }}>
-            <span style={{ color: '#0066FF', fontSize: 14 }}>⚙</span>
+            <span style={{ color: '#00E0C4', fontSize: 14 }}>⚙</span>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Proposals ({proposals.length})</span>
           </div>
           {loading ? (

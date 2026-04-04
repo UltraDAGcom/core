@@ -424,7 +424,7 @@ export function WalletPage({
           >
             <span
               style={{
-                background: 'linear-gradient(135deg, #00E0C4, #0066FF)',
+                background: '#00E0C4',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
               }}
@@ -678,7 +678,7 @@ export function WalletPage({
                             alignItems: 'center',
                             justifyContent: 'center',
                             background: isPk
-                              ? 'linear-gradient(135deg, #00E0C4, #0066FF)'
+                              ? '#00E0C4'
                               : `hsl(${i * 60 + 180}, 35%, 18%)`,
                             fontSize: 15,
                             fontWeight: 800,
@@ -797,7 +797,7 @@ export function WalletPage({
                       justifyContent: 'center',
                       background:
                         pw?.address === selected.address
-                          ? 'linear-gradient(135deg, #00E0C4, #0066FF)'
+                          ? '#00E0C4'
                           : 'var(--dag-card-hover)',
                       fontSize: 20,
                       fontWeight: 800,
@@ -944,14 +944,14 @@ export function WalletPage({
                   <Link
                     to="/staking"
                     className="action-btn"
-                    style={{ ...S.btn('#0066FF'), textDecoration: 'none' }}
+                    style={{ ...S.btn(), textDecoration: 'none' }}
                   >
                     ⬡ Stake
                   </Link>
                   <Link
                     to="/smart-account"
                     className="action-btn"
-                    style={{ ...S.btn('#A855F7'), textDecoration: 'none' }}
+                    style={{ ...S.btn(), textDecoration: 'none' }}
                   >
                     ◎ SmartAccount
                   </Link>
