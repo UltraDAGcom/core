@@ -5,15 +5,16 @@ import { getBalance, getStake, getDelegation, getCouncil, connectToNode, isConne
 import { Badge } from '../components/shared/Badge.tsx';
 import { DisplayIdentity } from '../components/shared/DisplayIdentity.tsx';
 import { PageHeader } from '../components/shared/PageHeader.tsx';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 function AddressHeader({ address, registeredName, isSmartAccount }: { address: string; registeredName: string | null; isSmartAccount: boolean }) {
   return (
-    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 space-y-2">
+    <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
       {registeredName && (
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-dag-accent font-bold text-lg">@{registeredName}</span>
-          <span className="text-[10px] text-slate-500 uppercase tracking-wider">ULTRA ID</span>
-          {isSmartAccount && <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">SmartAccount</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <span style={{ color: '#00E0C4', fontWeight: 700, fontSize: 18 }}>@{registeredName}</span>
+          <span style={{ fontSize: 10, color: 'var(--dag-text-faint)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ULTRA ID</span>
+          {isSmartAccount && <span style={{ fontSize: 10, background: 'rgba(168,85,247,0.12)', color: '#A855F7', padding: '2px 8px', borderRadius: 9999 }}>SmartAccount</span>}
         </div>
       )}
 
@@ -24,6 +25,7 @@ function AddressHeader({ address, registeredName, isSmartAccount }: { address: s
 
 export function AddressPage() {
   const { address } = useParams<{ address: string }>();
+  const m = useIsMobile();
   const [balance, setBalance] = useState<Record<string, unknown> | null>(null);
   const [stake, setStake] = useState<Record<string, unknown> | null>(null);
   const [delegation, setDelegation] = useState<Record<string, unknown> | null>(null);
@@ -61,7 +63,7 @@ export function AddressPage() {
         if (results[3].status === 'fulfilled') {
           const council = results[3].value;
           const members = (council?.members ?? []) as Array<Record<string, unknown>>;
-          const member = members.find((m) => String(m.address) === address);
+          const member = members.find((mem) => String(mem.address) === address);
           if (member) setCouncilMember(String(member.category ?? 'Member'));
         }
       } catch (e) {
@@ -74,7 +76,7 @@ export function AddressPage() {
     fetchAll();
   }, [address, switchCount]);
 
-  if (loading) return <div className="text-slate-500 py-8 text-center">Loading address...</div>;
+  if (loading) return <div style={{ color: 'var(--dag-text-faint)', padding: '32px 0', textAlign: 'center' }}>Loading address...</div>;
 
   const balanceSats = Number(balance?.balance ?? 0);
   const balanceDelegated = Number(balance?.delegated ?? 0);
@@ -89,122 +91,122 @@ export function AddressPage() {
   const delegationValidator = delegation?.validator ? String(delegation.validator) : null;
 
   return (
-    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+    <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <PageHeader title={registeredName ? `@${registeredName}` : 'Address'} subtitle="Address details" />
-      <div className="space-y-4">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       <AddressHeader address={address ?? ''} registeredName={registeredName} isSmartAccount={isSmartAccount} />
 
-      {error && <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">{error}</div>}
+      {error && <div style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 10, padding: 12, fontSize: 12, color: '#EF4444' }}>{error}</div>}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '1fr 1fr', gap: 16 }}>
         {/* Balance card */}
-        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Wallet className="w-4 h-4 text-blue-400" />
-            <h2 className="text-sm font-semibold text-slate-200">Balance</h2>
+        <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 10, padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <Wallet style={{ width: 16, height: 16, color: '#00E0C4' }} />
+            <h2 style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)' }}>Balance</h2>
           </div>
-          <p className="text-2xl font-bold text-white font-mono">
-            {formatUdag(balanceSats)} <span className="text-sm text-slate-400">UDAG</span>
+          <p style={{ fontSize: 22, fontWeight: 700, color: 'var(--dag-text)', fontFamily: "'DM Mono',monospace" }}>
+            {formatUdag(balanceSats)} <span style={{ fontSize: 12, color: 'var(--dag-text-muted)' }}>UDAG</span>
           </p>
-          <p className="text-xs text-slate-500 mt-1">{balanceSats.toLocaleString()} sats</p>
-          <div className="mt-3 pt-3 border-t border-slate-700 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Nonce</span>
-              <span className="font-mono text-slate-300">{nonce}</span>
+          <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginTop: 4 }}>{balanceSats.toLocaleString()} sats</p>
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--dag-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+              <span style={{ color: 'var(--dag-text-faint)' }}>Nonce</span>
+              <span style={{ fontFamily: "'DM Mono',monospace", color: 'var(--dag-text-secondary)' }}>{nonce}</span>
             </div>
             {balanceDelegated > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Delegated</span>
-                <span className="font-mono text-slate-300">{formatUdag(balanceDelegated)} UDAG</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                <span style={{ color: 'var(--dag-text-faint)' }}>Delegated</span>
+                <span style={{ fontFamily: "'DM Mono',monospace", color: 'var(--dag-text-secondary)' }}>{formatUdag(balanceDelegated)} UDAG</span>
               </div>
             )}
           </div>
         </div>
 
         {/* Staking card */}
-        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Shield className="w-4 h-4 text-purple-400" />
-            <h2 className="text-sm font-semibold text-slate-200">Staking</h2>
+        <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 10, padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <Shield style={{ width: 16, height: 16, color: '#A855F7' }} />
+            <h2 style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)' }}>Staking</h2>
             {isActiveValidator && <Badge label="Active Validator" variant="green" />}
           </div>
           {stakedSats > 0 ? (
             <>
-              <p className="text-2xl font-bold text-white font-mono">
-                {formatUdag(stakedSats)} <span className="text-sm text-slate-400">UDAG</span>
+              <p style={{ fontSize: 22, fontWeight: 700, color: 'var(--dag-text)', fontFamily: "'DM Mono',monospace" }}>
+                {formatUdag(stakedSats)} <span style={{ fontSize: 12, color: 'var(--dag-text-muted)' }}>UDAG</span>
               </p>
-              <p className="text-xs text-slate-500 mt-1">{stakedSats.toLocaleString()} sats staked</p>
-              <div className="mt-3 pt-3 border-t border-slate-700 space-y-2">
+              <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginTop: 4 }}>{stakedSats.toLocaleString()} sats staked</p>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--dag-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {effectiveStake > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Effective Stake</span>
-                    <span className="font-mono text-slate-300">{formatUdag(effectiveStake)} UDAG</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                    <span style={{ color: 'var(--dag-text-faint)' }}>Effective Stake</span>
+                    <span style={{ fontFamily: "'DM Mono',monospace", color: 'var(--dag-text-secondary)' }}>{formatUdag(effectiveStake)} UDAG</span>
                   </div>
                 )}
                 {commission != null && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Commission</span>
-                    <span className="font-mono text-slate-300">{String(commission)}%</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                    <span style={{ color: 'var(--dag-text-faint)' }}>Commission</span>
+                    <span style={{ fontFamily: "'DM Mono',monospace", color: 'var(--dag-text-secondary)' }}>{String(commission)}%</span>
                   </div>
                 )}
                 {stake?.unlock_at_round != null && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Unstaking at</span>
-                    <span className="font-mono text-yellow-400">Round {Number(stake.unlock_at_round).toLocaleString()}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                    <span style={{ color: 'var(--dag-text-faint)' }}>Unstaking at</span>
+                    <span style={{ fontFamily: "'DM Mono',monospace", color: '#FFB800' }}>Round {Number(stake.unlock_at_round).toLocaleString()}</span>
                   </div>
                 )}
               </div>
             </>
           ) : (
-            <p className="text-slate-500 text-sm">Not staking</p>
+            <p style={{ color: 'var(--dag-text-faint)', fontSize: 12 }}>Not staking</p>
           )}
         </div>
 
         {/* Delegation card */}
-        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Users className="w-4 h-4 text-green-400" />
-            <h2 className="text-sm font-semibold text-slate-200">Delegation</h2>
+        <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 10, padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <Users style={{ width: 16, height: 16, color: '#00E0C4' }} />
+            <h2 style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)' }}>Delegation</h2>
           </div>
           {delegatedSats > 0 ? (
             <>
-              <p className="text-2xl font-bold text-white font-mono">
-                {formatUdag(delegatedSats)} <span className="text-sm text-slate-400">UDAG</span>
+              <p style={{ fontSize: 22, fontWeight: 700, color: 'var(--dag-text)', fontFamily: "'DM Mono',monospace" }}>
+                {formatUdag(delegatedSats)} <span style={{ fontSize: 12, color: 'var(--dag-text-muted)' }}>UDAG</span>
               </p>
               {delegationValidator && (
-                <div className="mt-3 pt-3 border-t border-slate-700">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-500">Delegated to</span>
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--dag-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+                    <span style={{ color: 'var(--dag-text-faint)' }}>Delegated to</span>
                     <DisplayIdentity address={delegationValidator} link size="xs" />
                   </div>
                   {delegation?.unlock_at_round != null && (
-                    <div className="flex justify-between text-sm mt-1">
-                      <span className="text-slate-500">Undelegating at</span>
-                      <span className="font-mono text-yellow-400">Round {Number(delegation.unlock_at_round).toLocaleString()}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginTop: 4 }}>
+                      <span style={{ color: 'var(--dag-text-faint)' }}>Undelegating at</span>
+                      <span style={{ fontFamily: "'DM Mono',monospace", color: '#FFB800' }}>Round {Number(delegation.unlock_at_round).toLocaleString()}</span>
                     </div>
                   )}
                 </div>
               )}
             </>
           ) : (
-            <p className="text-slate-500 text-sm">No delegation</p>
+            <p style={{ color: 'var(--dag-text-faint)', fontSize: 12 }}>No delegation</p>
           )}
         </div>
 
         {/* Council card */}
-        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <Crown className="w-4 h-4 text-yellow-400" />
-            <h2 className="text-sm font-semibold text-slate-200">Council</h2>
+        <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 10, padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <Crown style={{ width: 16, height: 16, color: '#FFB800' }} />
+            <h2 style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)' }}>Council</h2>
           </div>
           {councilMember ? (
             <div>
               <Badge label="Council Member" variant="purple" />
-              <p className="text-sm text-slate-300 mt-2">Category: <span className="text-white">{councilMember}</span></p>
+              <p style={{ fontSize: 12, color: 'var(--dag-text-secondary)', marginTop: 8 }}>Category: <span style={{ color: 'var(--dag-text)' }}>{councilMember}</span></p>
             </div>
           ) : (
-            <p className="text-slate-500 text-sm">Not a council member</p>
+            <p style={{ color: 'var(--dag-text-faint)', fontSize: 12 }}>Not a council member</p>
           )}
         </div>
       </div>

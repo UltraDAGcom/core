@@ -3,10 +3,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Loader } from 'lucide-react';
 import { getTx, getVertex, getBalance, connectToNode, isConnected } from '../lib/api.ts';
 import { PageHeader } from '../components/shared/PageHeader.tsx';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 export function SearchResultPage() {
   const { query } = useParams<{ query: string }>();
   const navigate = useNavigate();
+  const m = useIsMobile();
   const [status, setStatus] = useState('Searching...');
   const [error, setError] = useState('');
   const [switchCount, setSwitchCount] = useState(0);
@@ -70,20 +72,20 @@ export function SearchResultPage() {
   }, [query, navigate, switchCount]);
 
   return (
-    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+    <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <PageHeader title="Search" subtitle={query ?? undefined} />
 
       {!error && (
-        <div className="flex items-center gap-3 justify-center py-12">
-          <Loader className="w-5 h-5 text-blue-400 animate-spin" />
-          <span className="text-slate-400">{status}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center', padding: '48px 0' }}>
+          <Loader style={{ width: 20, height: 20, color: '#00E0C4', animation: 'spin 1s linear infinite' }} />
+          <span style={{ color: 'var(--dag-text-muted)' }}>{status}</span>
         </div>
       )}
 
       {error && (
-        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 text-center">
-          <p className="text-slate-400 mb-3">{error}</p>
-          <Link to="/explorer" className="text-sm text-blue-400 hover:text-blue-300">Back to Explorer</Link>
+        <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 10, padding: 24, textAlign: 'center' }}>
+          <p style={{ color: 'var(--dag-text-muted)', marginBottom: 12 }}>{error}</p>
+          <Link to="/explorer" style={{ fontSize: 12, color: '#00E0C4', textDecoration: 'none' }}>Back to Explorer</Link>
         </div>
       )}
     </div>

@@ -5,10 +5,12 @@ import { getRound, getStatus, connectToNode, isConnected } from '../lib/api.ts';
 import { VertexCard } from '../components/explorer/VertexCard.tsx';
 import { Badge } from '../components/shared/Badge.tsx';
 import { PageHeader } from '../components/shared/PageHeader.tsx';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 export function RoundDetailPage() {
   const { round: roundStr } = useParams<{ round: string }>();
   const round = Number(roundStr);
+  const m = useIsMobile();
   const [vertices, setVertices] = useState<Array<Record<string, unknown>>>([]);
   const [finalized, setFinalized] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -44,11 +46,11 @@ export function RoundDetailPage() {
   }, [round, switchCount]);
 
   if (isNaN(round)) {
-    return <div className="text-red-400 py-8">Invalid round number</div>;
+    return <div style={{ color: '#EF4444', padding: '32px 0' }}>Invalid round number</div>;
   }
 
   return (
-    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+    <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <PageHeader
         title={`Round #${round.toLocaleString()}`}
         subtitle={finalized ? 'Finalized' : 'Pending'}
@@ -56,28 +58,28 @@ export function RoundDetailPage() {
           <Badge label={finalized ? 'Finalized' : 'Pending'} variant={finalized ? 'green' : 'yellow'} />
           <div style={{ display: 'flex', gap: 4 }}>
             {round > 1 && (
-              <Link to={`/round/${round - 1}`} className="p-2 rounded bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
-                <ChevronLeft className="w-4 h-4" />
+              <Link to={`/round/${round - 1}`} style={{ padding: 8, borderRadius: 6, background: 'var(--dag-card)', border: '1px solid var(--dag-border)', color: 'var(--dag-text-muted)', display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
+                <ChevronLeft style={{ width: 16, height: 16 }} />
               </Link>
             )}
-            <Link to={`/round/${round + 1}`} className="p-2 rounded bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition-colors">
-              <ChevronRight className="w-4 h-4" />
+            <Link to={`/round/${round + 1}`} style={{ padding: 8, borderRadius: 6, background: 'var(--dag-card)', border: '1px solid var(--dag-border)', color: 'var(--dag-text-muted)', display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
+              <ChevronRight style={{ width: 16, height: 16 }} />
             </Link>
           </div>
         </>}
       />
-      <div className="space-y-4">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-      {error && <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">{error}</div>}
+      {error && <div style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 10, padding: 12, fontSize: 12, color: '#EF4444' }}>{error}</div>}
 
       {loading ? (
-        <div className="text-slate-500 text-sm py-8 text-center">Loading...</div>
+        <div style={{ color: 'var(--dag-text-faint)', fontSize: 12, padding: '32px 0', textAlign: 'center' }}>Loading...</div>
       ) : vertices.length === 0 ? (
-        <div className="text-slate-500 text-sm py-8 text-center">No vertices found in this round</div>
+        <div style={{ color: 'var(--dag-text-faint)', fontSize: 12, padding: '32px 0', textAlign: 'center' }}>No vertices found in this round</div>
       ) : (
         <div>
-          <p className="text-sm text-slate-400 mb-3">{vertices.length} vertices in this round</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <p style={{ fontSize: 12, color: 'var(--dag-text-muted)', marginBottom: 12 }}>{vertices.length} vertices in this round</p>
+          <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '1fr 1fr', gap: 12 }}>
             {vertices.map((v) => (
               <VertexCard
                 key={String(v.hash)}

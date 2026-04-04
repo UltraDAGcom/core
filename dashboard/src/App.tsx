@@ -308,10 +308,10 @@ function App() {
           <Route path="address/:address" element={<AddressPage />} />
           <Route path="search/:query" element={<SearchResultPage />} />
           <Route path="*" element={
-            <div className="flex flex-col items-center justify-center h-64 text-center">
-              <h1 className="text-4xl font-bold text-white mb-2">404</h1>
-              <p className="text-dag-muted">Page not found</p>
-              <a href="/" className="text-dag-accent mt-4 hover:underline">Go to Dashboard</a>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 256, textAlign: 'center' }}>
+              <h1 style={{ fontSize: 32, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 8 }}>404</h1>
+              <p style={{ color: 'var(--dag-text-muted)' }}>Page not found</p>
+              <a href="/" style={{ color: '#00E0C4', marginTop: 16, textDecoration: 'none' }}>Go to Dashboard</a>
             </div>
           } />
         </Route>

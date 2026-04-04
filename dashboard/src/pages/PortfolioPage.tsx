@@ -1,6 +1,7 @@
 import { formatUdag } from '../lib/api.ts';
 import { PageHeader } from '../components/shared/PageHeader.tsx';
 import { Card } from '../components/shared/Card.tsx';
+import { useIsMobile } from '../hooks/useIsMobile';
 import type { Wallet } from '../lib/keystore.ts';
 import type { WalletBalance } from '../hooks/useWalletBalances.ts';
 
@@ -21,21 +22,21 @@ function pct(part: number, total: number): string {
 function StatCard({
   label,
   value,
-  gradient,
+  accentColor,
   percentage,
 }: {
   label: string;
   value: string;
-  gradient: string;
+  accentColor: string;
   percentage: string;
 }) {
   return (
-    <div className="bg-dag-card border border-dag-border rounded-xl overflow-hidden">
-      <div className={`h-0.5 bg-gradient-to-r ${gradient}`} />
-      <div className="p-5">
-        <p className="text-xs text-dag-muted uppercase tracking-wider">{label}</p>
-        <p className="text-xl font-bold text-white mt-1">{value}</p>
-        <p className="text-xs text-dag-muted mt-1">{percentage} of total</p>
+    <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ height: 2, background: accentColor }} />
+      <div style={{ padding: 20 }}>
+        <p style={{ fontSize: 10, color: 'var(--dag-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</p>
+        <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--dag-text)', marginTop: 4 }}>{value}</p>
+        <p style={{ fontSize: 10, color: 'var(--dag-text-muted)', marginTop: 4 }}>{percentage} of total</p>
       </div>
     </div>
   );
@@ -49,10 +50,12 @@ export function PortfolioPage({
   totalStaked,
   totalDelegated,
 }: PortfolioPageProps) {
+  const m = useIsMobile();
+
   if (!unlocked) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-dag-muted">Unlock your wallet to view portfolio.</p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 256 }}>
+        <p style={{ color: 'var(--dag-text-muted)' }}>Unlock your wallet to view portfolio.</p>
       </div>
     );
   }
@@ -60,49 +63,49 @@ export function PortfolioPage({
   const totalValue = totalBalance + totalStaked + totalDelegated;
 
   return (
-    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+    <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <PageHeader title="Portfolio" subtitle="Your wallet breakdown" />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : 'repeat(4, 1fr)', gap: 16 }}>
         <StatCard
           label="Total Value"
           value={`${formatUdag(totalValue)} UDAG`}
-          gradient="from-dag-blue to-dag-purple"
+          accentColor="#00E0C4"
           percentage="100%"
         />
         <StatCard
           label="Available"
           value={`${formatUdag(totalBalance)} UDAG`}
-          gradient="from-dag-green to-emerald-400"
+          accentColor="#00E0C4"
           percentage={pct(totalBalance, totalValue)}
         />
         <StatCard
           label="Staked"
           value={`${formatUdag(totalStaked)} UDAG`}
-          gradient="from-dag-purple to-fuchsia-400"
+          accentColor="#A855F7"
           percentage={pct(totalStaked, totalValue)}
         />
         <StatCard
           label="Delegated"
           value={`${formatUdag(totalDelegated)} UDAG`}
-          gradient="from-dag-blue to-cyan-400"
+          accentColor="#00E0C4"
           percentage={pct(totalDelegated, totalValue)}
         />
       </div>
 
       <Card title={`Wallets (${wallets.length})`}>
         {wallets.length === 0 ? (
-          <p className="text-dag-muted text-sm">No wallets. Create one in the wallet page.</p>
+          <p style={{ color: 'var(--dag-text-muted)', fontSize: 12 }}>No wallets. Create one in the wallet page.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
               <thead>
-                <tr className="text-left text-dag-muted border-b border-dag-border">
-                  <th className="py-2 px-3 font-medium">Name</th>
-                  <th className="py-2 px-3 font-medium">Balance</th>
-                  <th className="py-2 px-3 font-medium">Staked</th>
-                  <th className="py-2 px-3 font-medium">Delegated</th>
-                  <th className="py-2 px-3 font-medium w-32">Share</th>
+                <tr style={{ textAlign: 'left', color: 'var(--dag-text-muted)', borderBottom: '1px solid var(--dag-border)' }}>
+                  <th style={{ padding: '8px 12px', fontWeight: 500 }}>Name</th>
+                  <th style={{ padding: '8px 12px', fontWeight: 500 }}>Balance</th>
+                  <th style={{ padding: '8px 12px', fontWeight: 500 }}>Staked</th>
+                  <th style={{ padding: '8px 12px', fontWeight: 500 }}>Delegated</th>
+                  <th style={{ padding: '8px 12px', fontWeight: 500, width: 128 }}>Share</th>
                 </tr>
               </thead>
               <tbody>
@@ -111,33 +114,32 @@ export function PortfolioPage({
                   const walletTotal = b ? b.balance + b.staked + b.delegated : 0;
                   const share = totalValue > 0 ? (walletTotal / totalValue) * 100 : 0;
                   return (
-                    <tr key={w.address} className="border-b border-dag-border/50">
-                      <td className="py-2.5 px-3 text-white">{w.name}</td>
-                      <td className="py-2.5 px-3 font-mono text-slate-300">{b ? formatUdag(b.balance) : '--'}</td>
-                      <td className="py-2.5 px-3 font-mono text-slate-300">{b ? formatUdag(b.staked) : '--'}</td>
-                      <td className="py-2.5 px-3 font-mono text-slate-300">{b ? formatUdag(b.delegated) : '--'}</td>
-                      <td className="py-2.5 px-3">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-1.5 rounded-full bg-dag-surface overflow-hidden">
+                    <tr key={w.address} style={{ borderBottom: '1px solid var(--dag-border)' }}>
+                      <td style={{ padding: '10px 12px', color: 'var(--dag-text)' }}>{w.name}</td>
+                      <td style={{ padding: '10px 12px', fontFamily: "'DM Mono',monospace", color: 'var(--dag-text-secondary)' }}>{b ? formatUdag(b.balance) : '--'}</td>
+                      <td style={{ padding: '10px 12px', fontFamily: "'DM Mono',monospace", color: 'var(--dag-text-secondary)' }}>{b ? formatUdag(b.staked) : '--'}</td>
+                      <td style={{ padding: '10px 12px', fontFamily: "'DM Mono',monospace", color: 'var(--dag-text-secondary)' }}>{b ? formatUdag(b.delegated) : '--'}</td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ flex: 1, height: 6, borderRadius: 9999, background: 'var(--dag-surface)', overflow: 'hidden' }}>
                             <div
-                              className="h-full rounded-full bg-gradient-to-r from-dag-blue to-dag-purple transition-all duration-500"
-                              style={{ width: `${Math.min(share, 100)}%` }}
+                              style={{ height: '100%', borderRadius: 9999, background: '#00E0C4', width: `${Math.min(share, 100)}%`, transition: 'width 0.5s' }}
                             />
                           </div>
-                          <span className="text-xs text-dag-muted font-mono w-10 text-right">{share.toFixed(0)}%</span>
+                          <span style={{ fontSize: 10, color: 'var(--dag-text-muted)', fontFamily: "'DM Mono',monospace", width: 40, textAlign: 'right' }}>{share.toFixed(0)}%</span>
                         </div>
                       </td>
                     </tr>
                   );
                 })}
                 {/* Total row */}
-                <tr className="border-t-2 border-dag-border">
-                  <td className="py-2.5 px-3 font-semibold text-white">Total</td>
-                  <td className="py-2.5 px-3 font-mono font-semibold text-white">{formatUdag(totalBalance)}</td>
-                  <td className="py-2.5 px-3 font-mono font-semibold text-white">{formatUdag(totalStaked)}</td>
-                  <td className="py-2.5 px-3 font-mono font-semibold text-white">{formatUdag(totalDelegated)}</td>
-                  <td className="py-2.5 px-3">
-                    <span className="text-xs font-semibold text-white font-mono">100%</span>
+                <tr style={{ borderTop: '2px solid var(--dag-border)' }}>
+                  <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--dag-text)' }}>Total</td>
+                  <td style={{ padding: '10px 12px', fontFamily: "'DM Mono',monospace", fontWeight: 600, color: 'var(--dag-text)' }}>{formatUdag(totalBalance)}</td>
+                  <td style={{ padding: '10px 12px', fontFamily: "'DM Mono',monospace", fontWeight: 600, color: 'var(--dag-text)' }}>{formatUdag(totalStaked)}</td>
+                  <td style={{ padding: '10px 12px', fontFamily: "'DM Mono',monospace", fontWeight: 600, color: 'var(--dag-text)' }}>{formatUdag(totalDelegated)}</td>
+                  <td style={{ padding: '10px 12px' }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--dag-text)', fontFamily: "'DM Mono',monospace" }}>100%</span>
                   </td>
                 </tr>
               </tbody>

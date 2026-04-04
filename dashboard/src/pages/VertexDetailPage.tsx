@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
 import { getVertex, connectToNode, isConnected, shortHash, formatUdag } from '../lib/api.ts';
 import { CopyButton } from '../components/shared/CopyButton.tsx';
 import { Badge } from '../components/shared/Badge.tsx';
 import { DisplayIdentity } from '../components/shared/DisplayIdentity.tsx';
 import { PageHeader } from '../components/shared/PageHeader.tsx';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 export function VertexDetailPage() {
   const { hash } = useParams<{ hash: string }>();
+  const m = useIsMobile();
   const [vertex, setVertex] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -40,14 +41,14 @@ export function VertexDetailPage() {
     fetchVertex();
   }, [hash, switchCount]);
 
-  if (loading) return <div className="text-slate-500 py-8 text-center">Loading vertex...</div>;
+  if (loading) return <div style={{ color: 'var(--dag-text-faint)', padding: '32px 0', textAlign: 'center' }}>Loading vertex...</div>;
   if (error) {
     return (
-      <div className="space-y-4">
-        <Link to="/explorer" className="inline-flex items-center gap-1 text-slate-400 hover:text-slate-200 text-sm">
-          <ChevronLeft className="w-4 h-4" /> Back to Explorer
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: m ? '12px 14px' : '18px 26px' }}>
+        <Link to="/explorer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--dag-text-muted)', fontSize: 12, textDecoration: 'none' }}>
+          Back to Explorer
         </Link>
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">{error}</div>
+        <div style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 10, padding: 12, fontSize: 12, color: '#EF4444' }}>{error}</div>
       </div>
     );
   }
@@ -63,15 +64,15 @@ export function VertexDetailPage() {
   const rewardDisplay = rewardSats != null ? `${formatUdag(rewardSats)} UDAG` : '--';
 
   return (
-    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
+    <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <PageHeader title="Vertex Detail" subtitle={hash ? `${shortHash(hash)}` : undefined} />
-      <div className="space-y-4">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* Vertex info */}
-      <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
+      <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <InfoRow label="Hash" value={hash ?? ''} mono copy />
         <InfoRow label="Round">
-          <Link to={`/round/${round}`} className="font-mono text-blue-400 hover:text-blue-300">
+          <Link to={`/round/${round}`} style={{ fontFamily: "'DM Mono',monospace", color: '#00E0C4', textDecoration: 'none' }}>
             #{round.toLocaleString()}
           </Link>
         </InfoRow>
@@ -85,56 +86,56 @@ export function VertexDetailPage() {
 
       {/* Parents */}
       {parentCount > 0 && (
-        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-          <h2 className="text-sm font-semibold text-slate-200 mb-3">Parent Vertices ({parentCount})</h2>
-          <p className="text-sm text-slate-500">{parentCount} parent{parentCount !== 1 ? 's' : ''} (hashes not available in this view)</p>
+        <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 10, padding: 16 }}>
+          <h2 style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)', marginBottom: 12 }}>Parent Vertices ({parentCount})</h2>
+          <p style={{ fontSize: 12, color: 'var(--dag-text-faint)' }}>{parentCount} parent{parentCount !== 1 ? 's' : ''} (hashes not available in this view)</p>
         </div>
       )}
 
       {/* Transactions */}
       {transactions.length > 0 && (
-        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-          <h2 className="text-sm font-semibold text-slate-200 mb-3">Transactions ({transactions.length})</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+        <div style={{ background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 10, padding: 16 }}>
+          <h2 style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)', marginBottom: 12 }}>Transactions ({transactions.length})</h2>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
               <thead>
-                <tr className="text-left text-slate-400 border-b border-slate-700">
-                  <th className="py-2 px-3 font-medium">Hash</th>
-                  <th className="py-2 px-3 font-medium">Type</th>
-                  <th className="py-2 px-3 font-medium">From</th>
-                  <th className="py-2 px-3 font-medium">Amount</th>
-                  <th className="py-2 px-3 font-medium">Fee</th>
+                <tr style={{ textAlign: 'left', color: 'var(--dag-text-muted)', borderBottom: '1px solid var(--dag-border)' }}>
+                  <th style={{ padding: '8px 12px', fontWeight: 500 }}>Hash</th>
+                  <th style={{ padding: '8px 12px', fontWeight: 500 }}>Type</th>
+                  <th style={{ padding: '8px 12px', fontWeight: 500 }}>From</th>
+                  <th style={{ padding: '8px 12px', fontWeight: 500 }}>Amount</th>
+                  <th style={{ padding: '8px 12px', fontWeight: 500 }}>Fee</th>
                 </tr>
               </thead>
               <tbody>
                 {transactions.map((tx, i) => (
-                  <tr key={String(tx.hash ?? i)} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
-                    <td className="py-2 px-3">
+                  <tr key={String(tx.hash ?? i)} style={{ borderBottom: '1px solid var(--dag-border)' }}>
+                    <td style={{ padding: '8px 12px' }}>
                       {tx.hash ? (
-                        <div className="flex items-center gap-1">
-                          <Link to={`/tx/${tx.hash}`} className="font-mono text-blue-400 hover:text-blue-300 text-xs">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Link to={`/tx/${tx.hash}`} style={{ fontFamily: "'DM Mono',monospace", color: '#00E0C4', fontSize: 10, textDecoration: 'none' }}>
                             {shortHash(String(tx.hash))}
                           </Link>
                           <CopyButton text={String(tx.hash)} />
                         </div>
                       ) : (
-                        <span className="text-slate-500 text-xs">--</span>
+                        <span style={{ color: 'var(--dag-text-faint)', fontSize: 10 }}>--</span>
                       )}
                     </td>
-                    <td className="py-2 px-3">
+                    <td style={{ padding: '8px 12px' }}>
                       <Badge label={String(tx.tx_type ?? tx.type ?? 'unknown')} variant="blue" />
                     </td>
-                    <td className="py-2 px-3">
+                    <td style={{ padding: '8px 12px' }}>
                       {tx.from ? (
                         <DisplayIdentity address={String(tx.from)} link size="xs" />
                       ) : (
-                        <span className="text-slate-500 text-xs">--</span>
+                        <span style={{ color: 'var(--dag-text-faint)', fontSize: 10 }}>--</span>
                       )}
                     </td>
-                    <td className="py-2 px-3 font-mono text-xs text-slate-300">
+                    <td style={{ padding: '8px 12px', fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--dag-text-secondary)' }}>
                       {tx.amount != null ? `${formatUdag(Number(tx.amount))} UDAG` : '--'}
                     </td>
-                    <td className="py-2 px-3 font-mono text-xs text-slate-300">
+                    <td style={{ padding: '8px 12px', fontFamily: "'DM Mono',monospace", fontSize: 10, color: 'var(--dag-text-secondary)' }}>
                       {tx.fee != null ? `${formatUdag(Number(tx.fee))} UDAG` : '--'}
                     </td>
                   </tr>
@@ -163,11 +164,11 @@ function InfoRow({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-3">
-      <span className="text-slate-500 text-sm w-36 shrink-0">{label}</span>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+      <span style={{ color: 'var(--dag-text-faint)', fontSize: 12, width: 144, flexShrink: 0 }}>{label}</span>
       {children ?? (
-        <div className="flex items-center gap-1 min-w-0">
-          <span className={`text-sm text-slate-200 break-all ${mono ? 'font-mono' : ''}`}>{value}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+          <span style={{ fontSize: 12, color: 'var(--dag-text)', wordBreak: 'break-all', fontFamily: mono ? "'DM Mono',monospace" : undefined }}>{value}</span>
           {copy && value && <CopyButton text={value} />}
         </div>
       )}
