@@ -1,11 +1,11 @@
 const SEAT_CONFIG: { category: string; key: string; max: number; color: string }[] = [
-  { category: 'Engineering', key: 'engineering', max: 5, color: 'bg-blue-500' },
-  { category: 'Growth', key: 'growth', max: 3, color: 'bg-emerald-500' },
-  { category: 'Legal', key: 'legal', max: 2, color: 'bg-yellow-500' },
-  { category: 'Research', key: 'research', max: 2, color: 'bg-purple-500' },
-  { category: 'Community', key: 'community', max: 4, color: 'bg-pink-500' },
-  { category: 'Operations', key: 'operations', max: 3, color: 'bg-orange-500' },
-  { category: 'Security', key: 'security', max: 2, color: 'bg-red-500' },
+  { category: 'Engineering', key: 'engineering', max: 5, color: '#3B82F6' },
+  { category: 'Growth', key: 'growth', max: 3, color: '#10B981' },
+  { category: 'Legal', key: 'legal', max: 2, color: '#EAB308' },
+  { category: 'Research', key: 'research', max: 2, color: '#A855F7' },
+  { category: 'Community', key: 'community', max: 4, color: '#EC4899' },
+  { category: 'Operations', key: 'operations', max: 3, color: '#F97316' },
+  { category: 'Security', key: 'security', max: 2, color: '#EF4444' },
 ];
 
 interface CouncilMember {
@@ -26,28 +26,30 @@ interface CouncilSeatGridProps {
 
 export function CouncilSeatGrid({ members, seats }: CouncilSeatGridProps) {
   return (
-    <div className="space-y-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {SEAT_CONFIG.map(({ category, key, max: defaultMax, color }) => {
         const seatData = seats?.[key];
         const filled = seatData ? seatData.filled : members.filter(m => m.category === category).length;
         const max = seatData ? seatData.max : defaultMax;
         return (
-          <div key={category} className="flex items-center gap-3">
-            <span className="text-sm text-dag-muted w-24">{category}</span>
-            <div className="flex gap-1.5">
+          <div key={category} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 12, color: 'var(--dag-text-muted)', width: 96 }}>{category}</span>
+            <div style={{ display: 'flex', gap: 6 }}>
               {Array.from({ length: max }).map((_, i) => (
                 <div
                   key={i}
-                  className={`w-4 h-4 rounded-full border transition-all duration-300 ${
-                    i < filled
-                      ? `${color} border-transparent shadow-[0_0_6px_rgba(255,255,255,0.15)]`
-                      : 'bg-dag-surface border-dag-border'
-                  }`}
+                  style={{
+                    width: 16, height: 16, borderRadius: '50%',
+                    transition: 'all 0.3s',
+                    ...(i < filled
+                      ? { background: color, border: '1px solid transparent', boxShadow: '0 0 6px rgba(255,255,255,0.15)' }
+                      : { background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)' }),
+                  }}
                   title={i < filled ? `Seat ${i + 1} filled` : `Seat ${i + 1} empty`}
                 />
               ))}
             </div>
-            <span className="text-xs text-dag-muted font-mono">{filled}/{max}</span>
+            <span style={{ fontSize: 10, color: 'var(--dag-text-muted)', fontFamily: 'monospace' }}>{filled}/{max}</span>
           </div>
         );
       })}

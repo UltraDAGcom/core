@@ -68,7 +68,7 @@ function WalletPickerModal({
     >
       <div style={{
         background: 'var(--dag-card)', border: '1px solid var(--dag-border)',
-        borderRadius: 16, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+        borderRadius: 14, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
         width: '100%', maxWidth: 384, overflow: 'hidden',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 20px 12px' }}>
@@ -659,7 +659,7 @@ export function BridgePage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
           {/* Main Bridge Card */}
-          <div style={{ borderRadius: 16, background: 'var(--dag-card)', border: '1px solid var(--dag-border)', overflow: 'hidden' }}>
+          <div style={{ borderRadius: 14, background: 'var(--dag-card)', border: '1px solid var(--dag-border)', overflow: 'hidden' }}>
             <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
 
               {/* Direction tabs */}
@@ -1185,7 +1185,7 @@ export function BridgePage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
           {/* Attestations Card */}
-          <div style={{ borderRadius: 16, background: 'var(--dag-card)', border: '1px solid var(--dag-border)', overflow: 'hidden' }}>
+          <div style={{ borderRadius: 14, background: 'var(--dag-card)', border: '1px solid var(--dag-border)', overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 20px 0' }}>
               <h3 style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)' }}>Recent Attestations</h3>
               {loadingAttestations && <Loader2 style={{ width: 14, height: 14, color: 'var(--dag-text-muted)', animation: 'spin 1s linear infinite' }} />}
@@ -1291,7 +1291,7 @@ export function BridgePage() {
           </div>
 
           {/* How it Works Card */}
-          <div style={{ borderRadius: 16, background: 'var(--dag-card)', border: '1px solid var(--dag-border)', overflow: 'hidden' }}>
+          <div style={{ borderRadius: 14, background: 'var(--dag-card)', border: '1px solid var(--dag-border)', overflow: 'hidden' }}>
             <div style={{ padding: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                 <Shield style={{ width: 16, height: 16, color: '#00E0C4' }} />

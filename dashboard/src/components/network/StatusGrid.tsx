@@ -37,9 +37,22 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
+const gridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+  gap: 12,
+};
+
+const cardStyle: React.CSSProperties = {
+  background: 'var(--dag-card)',
+  border: '1px solid var(--dag-border)',
+  borderRadius: 8,
+  padding: 12,
+};
+
 export function StatusGrid({ status }: StatusGridProps) {
   if (!status) {
-    return <div className="text-slate-500 text-sm py-4">Loading status...</div>;
+    return <div style={{ color: 'var(--dag-text-faint)', fontSize: 12, padding: '16px 0' }}>Loading status...</div>;
   }
 
   const lag = (status.dag_round ?? 0) - (status.last_finalized_round ?? 0);
@@ -84,16 +97,16 @@ export function StatusGrid({ status }: StatusGridProps) {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-4">
-        <h2 className="text-lg font-semibold text-slate-200">Node Status</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Node Status</h2>
         <FinalityBadge lag={lag} />
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+      <div style={gridStyle}>
         {cards.map((card) => (
-          <div key={card.label} className="bg-slate-800 border border-slate-700 rounded-lg p-3">
-            <p className="text-xs text-slate-500 mb-1">{card.label}</p>
-            <p className="text-lg font-semibold text-slate-200 font-mono">{card.value}</p>
-            {card.sub && <p className="text-xs text-slate-500 mt-0.5">{card.sub}</p>}
+          <div key={card.label} style={cardStyle}>
+            <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginBottom: 4 }}>{card.label}</p>
+            <p style={{ fontSize: 18, fontWeight: 600, color: 'var(--dag-text-secondary)', fontFamily: 'monospace' }}>{card.value}</p>
+            {card.sub && <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginTop: 2 }}>{card.sub}</p>}
           </div>
         ))}
       </div>

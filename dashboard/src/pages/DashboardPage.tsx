@@ -247,7 +247,7 @@ export function DashboardPage({ status, loading: _loading, network: _network, wa
       {/* Portfolio */}
       <div style={{
         background: 'linear-gradient(135deg, rgba(0,224,196,0.03), rgba(0,102,255,0.03))',
-        border: '1px solid rgba(0,224,196,0.08)', borderRadius: 16, padding: '20px 26px', marginBottom: 16,
+        border: '1px solid rgba(0,224,196,0.08)', borderRadius: 14, padding: '20px 26px', marginBottom: 16,
         animation: 'slideUp 0.4s ease',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>

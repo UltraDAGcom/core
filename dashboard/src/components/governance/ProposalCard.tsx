@@ -11,6 +11,17 @@ interface ProposalCardProps {
   onClick: () => void;
 }
 
+const cardStyle: React.CSSProperties = {
+  width: '100%',
+  textAlign: 'left' as const,
+  borderRadius: 8,
+  background: 'var(--dag-input-bg)',
+  border: '1px solid var(--dag-border)',
+  padding: 16,
+  cursor: 'pointer',
+  transition: 'all 0.15s',
+};
+
 export function ProposalCard({
   id,
   title,
@@ -26,35 +37,43 @@ export function ProposalCard({
   const quorumPct = council_size > 0 ? Math.round((totalVotes / council_size) * 100) : 0;
 
   return (
-    <button
-      onClick={onClick}
-      className="w-full text-left rounded-lg bg-dag-surface border border-dag-border p-4 hover:border-dag-blue/50 transition-colors"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-xs text-dag-muted">#{id}</span>
+    <button onClick={onClick} style={cardStyle}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 10, color: 'var(--dag-text-muted)' }}>#{id}</span>
             <StatusBadge status={status} />
-            <span className="text-xs text-dag-muted px-1.5 py-0.5 rounded bg-dag-card border border-dag-border truncate max-w-[200px]">
+            <span style={{
+              fontSize: 10, color: 'var(--dag-text-muted)',
+              padding: '2px 6px', borderRadius: 4,
+              background: 'var(--dag-card)', border: '1px solid var(--dag-border)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              maxWidth: 200,
+            }}>
               {proposal_type}
             </span>
           </div>
-          <h4 className="text-white font-medium truncate">{title}</h4>
+          <h4 style={{
+            color: 'var(--dag-text)', fontWeight: 500,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {title}
+          </h4>
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
+      <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, fontSize: 12 }}>
         <div>
-          <span className="text-dag-muted block text-xs">For</span>
-          <span className="text-dag-green">{votes_for} ({approvalPct}%)</span>
+          <span style={{ color: 'var(--dag-text-muted)', display: 'block', fontSize: 10 }}>For</span>
+          <span style={{ color: '#00E0C4' }}>{votes_for} ({approvalPct}%)</span>
         </div>
         <div>
-          <span className="text-dag-muted block text-xs">Against</span>
-          <span className="text-dag-red">{votes_against}</span>
+          <span style={{ color: 'var(--dag-text-muted)', display: 'block', fontSize: 10 }}>Against</span>
+          <span style={{ color: '#EF4444' }}>{votes_against}</span>
         </div>
         <div>
-          <span className="text-dag-muted block text-xs">Quorum</span>
-          <span className="text-white">{quorumPct}% of {council_size}</span>
+          <span style={{ color: 'var(--dag-text-muted)', display: 'block', fontSize: 10 }}>Quorum</span>
+          <span style={{ color: 'var(--dag-text)' }}>{quorumPct}% of {council_size}</span>
         </div>
       </div>
     </button>

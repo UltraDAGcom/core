@@ -11,27 +11,37 @@ export function SessionBar({ secondsLeft, totalSeconds }: SessionTimerProps) {
   const urgent = secondsLeft <= 120;
   const critical = secondsLeft <= 30;
 
-  // Gradient and glow color based on urgency
-  const gradient = critical
-    ? 'from-red-500 via-rose-400 to-red-500'
+  const barColor = critical
+    ? 'linear-gradient(90deg, #EF4444, #FB7185, #EF4444)'
     : urgent
-      ? 'from-amber-500 via-yellow-400 to-amber-500'
-      : 'from-indigo-500 via-dag-accent to-purple-500';
+      ? 'linear-gradient(90deg, #F59E0B, #FBBF24, #F59E0B)'
+      : 'linear-gradient(90deg, #6366F1, var(--dag-subheading, #7C3AED), #A855F7)';
 
-  const glow = critical
-    ? 'shadow-[0_0_12px_rgba(239,68,68,0.6)]'
+  const glowShadow = critical
+    ? '0 0 12px rgba(239,68,68,0.6)'
     : urgent
-      ? 'shadow-[0_0_8px_rgba(245,158,11,0.4)]'
-      : 'shadow-[0_0_6px_rgba(99,102,241,0.3)]';
+      ? '0 0 8px rgba(245,158,11,0.4)'
+      : '0 0 6px rgba(99,102,241,0.3)';
 
   return (
-    <div className="h-[3px] w-full bg-slate-800/50 relative overflow-hidden">
-      <div
-        className={`h-full bg-gradient-to-r ${gradient} ${glow} transition-all duration-1000 ease-linear ${critical ? 'animate-pulse' : ''}`}
-        style={{ width: `${percent}%` }}
-      >
+    <div style={{
+      height: 3, width: '100%', background: 'rgba(30,41,59,0.5)',
+      position: 'relative', overflow: 'hidden',
+    }}>
+      <div style={{
+        height: '100%',
+        background: barColor,
+        boxShadow: glowShadow,
+        transition: 'all 1s linear',
+        width: `${percent}%`,
+        position: 'relative',
+        ...(critical ? { animation: 'pulse 2s ease-in-out infinite' } : {}),
+      }}>
         {/* Shimmer effect on the leading edge */}
-        <div className="absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-white/30 to-transparent" />
+        <div style={{
+          position: 'absolute', right: 0, top: 0, height: '100%', width: 32,
+          background: 'linear-gradient(to left, rgba(255,255,255,0.3), transparent)',
+        }} />
       </div>
     </div>
   );
@@ -49,15 +59,23 @@ export function SessionBadge({ secondsLeft }: { secondsLeft: number }) {
     ? `${mins}:${secs.toString().padStart(2, '0')}`
     : `${secs}s`;
 
-  const style = critical
-    ? 'text-red-400 bg-red-500/10 border-red-500/30 shadow-[0_0_8px_rgba(239,68,68,0.2)]'
+  const badgeStyle: React.CSSProperties = critical
+    ? { color: '#F87171', background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)', boxShadow: '0 0 8px rgba(239,68,68,0.2)' }
     : urgent
-      ? 'text-amber-400 bg-amber-500/10 border-amber-500/30'
-      : 'text-slate-400 bg-slate-800/50 border-slate-600/30';
+      ? { color: '#FBBF24', background: 'rgba(245,158,11,0.1)', borderColor: 'rgba(245,158,11,0.3)' }
+      : { color: 'var(--dag-text-muted)', background: 'rgba(30,41,59,0.5)', borderColor: 'rgba(71,85,105,0.3)' };
 
   return (
-    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-mono tabular-nums transition-all ${style} ${critical ? 'animate-pulse' : ''}`}>
-      <Timer className="w-3 h-3" />
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '4px 10px', borderRadius: 8,
+      border: '1px solid', fontSize: 11,
+      fontFamily: 'monospace', fontVariantNumeric: 'tabular-nums',
+      transition: 'all 0.15s',
+      ...badgeStyle,
+      ...(critical ? { animation: 'pulse 2s ease-in-out infinite' } : {}),
+    }}>
+      <Timer size={12} />
       {timeStr}
     </div>
   );

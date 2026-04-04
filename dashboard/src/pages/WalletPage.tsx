@@ -413,7 +413,7 @@ export function WalletPage({
             style={{
               width: 80,
               height: 80,
-              borderRadius: 20,
+              borderRadius: 12,
               background: 'linear-gradient(135deg, rgba(0,224,196,0.06), rgba(0,102,255,0.06))',
               border: '1px solid rgba(0,224,196,0.1)',
               display: 'flex',
@@ -1077,7 +1077,7 @@ export function WalletPage({
                   style={{
                     width: 56,
                     height: 56,
-                    borderRadius: 16,
+                    borderRadius: 14,
                     background: 'linear-gradient(135deg, rgba(0,224,196,0.04), rgba(0,102,255,0.04))',
                     border: '1px solid rgba(0,224,196,0.06)',
                     display: 'flex',

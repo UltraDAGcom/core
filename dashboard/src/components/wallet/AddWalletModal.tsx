@@ -8,6 +8,71 @@ interface AddWalletModalProps {
   onAdd: (name: string, secretKey: string, address: string) => Promise<void>;
 }
 
+const overlayStyle: React.CSSProperties = {
+  position: 'fixed', inset: 0, zIndex: 50,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  padding: 16, background: 'var(--dag-overlay)',
+};
+
+const cardStyle: React.CSSProperties = {
+  background: 'var(--dag-card)', border: '1px solid var(--dag-border)',
+  borderRadius: 14, boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
+  width: '100%', maxWidth: 448,
+};
+
+const headerStyle: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  padding: 20, borderBottom: '1px solid var(--dag-border)',
+};
+
+const closeBtnStyle: React.CSSProperties = {
+  padding: 6, borderRadius: 8, color: 'var(--dag-text-muted)',
+  background: 'none', border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+};
+
+const tabBorderStyle: React.CSSProperties = {
+  display: 'flex', borderBottom: '1px solid var(--dag-border)',
+};
+
+const bodyStyle: React.CSSProperties = {
+  padding: 20, display: 'flex', flexDirection: 'column', gap: 16,
+};
+
+const labelStyle: React.CSSProperties = {
+  fontSize: 10, color: 'var(--dag-text-muted)', textTransform: 'uppercase',
+  letterSpacing: 1.2, fontWeight: 600,
+};
+
+const inputStyle: React.CSSProperties = {
+  marginTop: 4, width: '100%', padding: '10px 12px',
+  background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)',
+  borderRadius: 10, fontSize: 12, color: 'var(--dag-text-secondary)',
+  outline: 'none',
+};
+
+const monoInputStyle: React.CSSProperties = {
+  ...inputStyle, fontSize: 10, fontFamily: 'monospace',
+};
+
+const primaryBtnStyle: React.CSSProperties = {
+  width: '100%', padding: '10px 0', borderRadius: 10,
+  background: 'var(--dag-subheading)', color: 'var(--dag-text)', fontWeight: 500,
+  fontSize: 12, border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+};
+
+const secondaryBtnStyle: React.CSSProperties = {
+  width: '100%', padding: '10px 0', borderRadius: 10,
+  background: 'var(--dag-input-bg)', color: 'var(--dag-text-secondary)', fontWeight: 500,
+  fontSize: 12, border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+};
+
+const smallBtnStyle: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 6,
+  padding: '6px 10px', borderRadius: 6, fontSize: 10, fontWeight: 500,
+  background: 'rgba(51,65,85,0.6)', color: 'var(--dag-text-secondary)',
+  border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+};
+
 export function AddWalletModal({ open, onClose, onGenerate, onAdd }: AddWalletModalProps) {
   const [tab, setTab] = useState<'generate' | 'import'>('generate');
   const [name, setName] = useState('');
@@ -82,35 +147,35 @@ export function AddWalletModal({ open, onClose, onGenerate, onAdd }: AddWalletMo
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop bg-black/70">
-      <div className="modal-content bg-dag-card border border-dag-border rounded-2xl shadow-2xl w-full max-w-md">
+    <div style={overlayStyle} onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
+      <div style={cardStyle}>
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-dag-border">
-          <div className="flex items-center gap-2">
-            <Plus className="w-5 h-5 text-dag-accent" />
-            <h2 className="text-lg font-semibold text-white">Add Wallet</h2>
+        <div style={headerStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Plus size={20} style={{ color: 'var(--dag-subheading)' }} />
+            <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--dag-text)' }}>Add Wallet</h2>
           </div>
-          <button onClick={handleClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700">
-            <X className="w-4 h-4" />
+          <button onClick={handleClose} style={closeBtnStyle}>
+            <X size={16} />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-dag-border">
+        <div style={tabBorderStyle}>
           <TabBtn active={tab === 'generate'} onClick={() => setTab('generate')} label="Generate" />
           <TabBtn active={tab === 'import'} onClick={() => setTab('import')} label="Import Key" />
         </div>
 
         {/* Body */}
-        <div className="p-5 space-y-4">
+        <div style={bodyStyle}>
           <div>
-            <label className="text-xs text-dag-muted uppercase tracking-wider">Wallet Name</label>
+            <label style={labelStyle}>Wallet Name</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="My Wallet"
-              className="mt-1 w-full px-3 py-2.5 bg-slate-800 border border-dag-border rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-dag-accent"
+              style={inputStyle}
               autoFocus
             />
           </div>
@@ -128,35 +193,41 @@ export function AddWalletModal({ open, onClose, onGenerate, onAdd }: AddWalletMo
           {tab === 'import' && (
             <>
               <div>
-                <label className="text-xs text-dag-muted uppercase tracking-wider">Secret Key (64 hex)</label>
+                <label style={labelStyle}>Secret Key (64 hex)</label>
                 <input
                   type="password"
                   value={secretKey}
                   onChange={(e) => setSecretKey(e.target.value)}
                   placeholder="Enter 64-character hex secret key"
-                  className="mt-1 w-full px-3 py-2.5 bg-slate-800 border border-dag-border rounded-lg text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-dag-accent"
+                  style={monoInputStyle}
                 />
               </div>
               <div>
-                <label className="text-xs text-dag-muted uppercase tracking-wider">Address (64 hex)</label>
+                <label style={labelStyle}>Address (64 hex)</label>
                 <input
                   type="text"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="Enter 64-character hex address"
-                  className="mt-1 w-full px-3 py-2.5 bg-slate-800 border border-dag-border rounded-lg text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-dag-accent"
+                  style={monoInputStyle}
                 />
               </div>
-              <p className="text-[10px] text-slate-500">Your key is stored encrypted on this device. It never leaves your browser.</p>
+              <p style={{ fontSize: 10, color: 'var(--dag-text-faint)' }}>
+                Your key is stored encrypted on this device. It never leaves your browser.
+              </p>
             </>
           )}
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && <p style={{ fontSize: 12, color: '#F87171' }}>{error}</p>}
 
           <button
             onClick={handleSave}
             disabled={loading || !name.trim() || !secretKey.trim() || !address.trim()}
-            className="w-full py-2.5 rounded-lg bg-dag-accent text-white font-medium text-sm hover:bg-dag-accent/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            style={{
+              ...primaryBtnStyle,
+              ...(loading || !name.trim() || !secretKey.trim() || !address.trim()
+                ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
+            }}
           >
             {loading ? 'Saving...' : 'Save Wallet'}
           </button>
@@ -184,8 +255,14 @@ function GenerateTab({ generated, loading, address, secretKey, onGenerate }: {
 
   if (!generated) {
     return (
-      <button onClick={onGenerate} disabled={loading}
-        className="w-full py-2.5 rounded-lg bg-slate-700 text-slate-200 font-medium text-sm hover:bg-slate-600 disabled:opacity-50 transition-colors">
+      <button
+        onClick={onGenerate}
+        disabled={loading}
+        style={{
+          ...secondaryBtnStyle,
+          ...(loading ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
+        }}
+      >
         {loading ? 'Generating...' : 'Generate Keypair'}
       </button>
     );
@@ -194,32 +271,49 @@ function GenerateTab({ generated, loading, address, secretKey, onGenerate }: {
   return (
     <>
       <div>
-        <label className="text-xs text-dag-muted uppercase tracking-wider">Your Address</label>
-        <p className="mt-1 text-xs font-mono text-slate-300 bg-slate-800 px-3 py-2 rounded-lg">
+        <label style={labelStyle}>Your Address</label>
+        <p style={{
+          marginTop: 4, fontSize: 10, fontFamily: 'monospace',
+          color: 'var(--dag-text-secondary)', background: 'var(--dag-input-bg)',
+          padding: '8px 12px', borderRadius: 10,
+        }}>
           {truncAddr}
         </p>
       </div>
-      <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-2">
-        <div className="flex items-start gap-2">
-          <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
-          <p className="text-[11px] text-amber-400 font-medium">Save your private key. It cannot be recovered if lost.</p>
+      <div style={{
+        borderRadius: 10, border: '1px solid rgba(245,158,11,0.2)',
+        background: 'rgba(245,158,11,0.04)', padding: 12,
+        display: 'flex', flexDirection: 'column', gap: 8,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <AlertTriangle size={14} style={{ color: '#FBBF24', marginTop: 2, flexShrink: 0 }} />
+          <p style={{ fontSize: 11, color: '#FBBF24', fontWeight: 500 }}>
+            Save your private key. It cannot be recovered if lost.
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setShowKey(!showKey)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[10px] font-medium bg-slate-700/60 text-slate-300 hover:bg-slate-700 hover:text-white transition-all">
-            {showKey ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => setShowKey(!showKey)} style={smallBtnStyle}>
+            {showKey ? <EyeOff size={12} /> : <Eye size={12} />}
             {showKey ? 'Hide Key' : 'Show Private Key'}
           </button>
-          <button onClick={handleCopyKey}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded text-[10px] font-medium transition-all ${
-              copied ? 'bg-green-500/15 text-green-400' : 'bg-slate-700/60 text-slate-300 hover:bg-slate-700 hover:text-white'
-            }`}>
-            {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+          <button
+            onClick={handleCopyKey}
+            style={{
+              ...smallBtnStyle,
+              ...(copied ? { background: 'rgba(34,197,94,0.12)', color: '#4ADE80' } : {}),
+            }}
+          >
+            {copied ? <Check size={12} /> : <Copy size={12} />}
             {copied ? 'Copied!' : 'Copy Key'}
           </button>
         </div>
         {showKey && (
-          <p className="text-xs font-mono text-amber-300 bg-slate-800/80 px-3 py-2 rounded break-all border border-amber-500/10">
+          <p style={{
+            fontSize: 10, fontFamily: 'monospace', color: '#FCD34D',
+            background: 'rgba(30,41,59,0.8)', padding: '8px 12px',
+            borderRadius: 6, wordBreak: 'break-all',
+            border: '1px solid rgba(245,158,11,0.1)',
+          }}>
             {secretKey}
           </p>
         )}
@@ -232,11 +326,13 @@ function TabBtn({ active, onClick, label }: { active: boolean; onClick: () => vo
   return (
     <button
       onClick={onClick}
-      className={`flex-1 py-3 text-sm font-medium transition-colors ${
-        active
-          ? 'text-dag-accent border-b-2 border-dag-accent'
-          : 'text-slate-400 hover:text-slate-200'
-      }`}
+      style={{
+        flex: 1, padding: '12px 0', fontSize: 12, fontWeight: 500,
+        transition: 'all 0.15s', background: 'none', cursor: 'pointer',
+        border: 'none',
+        borderBottom: active ? '2px solid var(--dag-subheading)' : '2px solid transparent',
+        color: active ? 'var(--dag-subheading)' : 'var(--dag-text-muted)',
+      }}
     >
       {label}
     </button>
