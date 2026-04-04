@@ -1232,6 +1232,116 @@ ultradag_banned_ips {ban_count}
             )
         }
 
+        // TESTNET ONLY: update profile metadata for a registered name.
+        // Accepts {secret_key, name, metadata: [[key, value], ...], external_addresses: [[chain, addr], ...]}
+        // Server builds, signs, and submits the UpdateProfileTx on behalf of the caller.
+        (&Method::POST, ["profile", "update"]) => {
+            if !server.testnet_mode {
+                return Ok(error_response(StatusCode::GONE,
+                    "POST /profile/update disabled on mainnet: use /tx/submit with a pre-signed UpdateProfileTx (client-side signing)."));
+            }
+            if !rate_limiter.check_rate_limit(client_ip, limits::TX) {
+                return Ok(error_response(StatusCode::TOO_MANY_REQUESTS, "rate limit exceeded"));
+            }
+
+            let body = req.collect().await?.to_bytes();
+            if body.len() > MAX_REQUEST_SIZE {
+                return Ok(error_response(StatusCode::PAYLOAD_TOO_LARGE, "request body too large"));
+            }
+
+            #[derive(Deserialize)]
+            struct UpdateProfileRequest {
+                secret_key: String,
+                name: String,
+                #[serde(default)]
+                metadata: Vec<(String, String)>,
+                #[serde(default)]
+                external_addresses: Vec<(String, String)>,
+                #[serde(default = "default_profile_fee")]
+                fee: u64,
+            }
+            fn default_profile_fee() -> u64 { ultradag_coin::constants::MIN_FEE_SATS }
+
+            let Ok(req_body) = serde_json::from_slice::<UpdateProfileRequest>(&body) else {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    "invalid JSON: need {secret_key, name, metadata?, external_addresses?, fee?}"));
+            };
+
+            // Parse secret key
+            let sk = match parse_secret_key(&req_body.secret_key) {
+                Ok(sk) => sk,
+                Err(e) => return Ok(error_response(StatusCode::BAD_REQUEST, e)),
+            };
+            let sender = sk.address();
+
+            // Validate name
+            if let Err(e) = ultradag_coin::tx::name_registry::validate_name(&req_body.name) {
+                return Ok(error_response(StatusCode::BAD_REQUEST, &format!("invalid name: {}", e)));
+            }
+
+            // Validate fee
+            if req_body.fee < ultradag_coin::constants::MIN_FEE_SATS {
+                return Ok(error_response(StatusCode::BAD_REQUEST,
+                    &format!("fee too low: minimum {} sats", ultradag_coin::constants::MIN_FEE_SATS)));
+            }
+
+            // Verify name ownership, compute nonce, build/sign/insert tx
+            let (tx, tx_hash, nonce) = {
+                let state = read_lock_or_503!(server.state);
+                let mut mp = write_lock_or_503!(server.mempool);
+
+                // Check name is owned by sender
+                match state.resolve_name(&req_body.name) {
+                    Some(owner) if owner == sender => {},
+                    Some(_) => return Ok(error_response(StatusCode::FORBIDDEN,
+                        &format!("name '{}' is not owned by this address", req_body.name))),
+                    None => return Ok(error_response(StatusCode::NOT_FOUND,
+                        &format!("name '{}' is not registered", req_body.name))),
+                }
+
+                let nonce = next_nonce(&state, &mp, &sender);
+                let balance = state.balance(&sender);
+                let pending = pending_cost(&mp, &sender);
+                let total_needed = pending.saturating_add(req_body.fee);
+                if balance < total_needed {
+                    return Ok(error_response(StatusCode::BAD_REQUEST,
+                        &format!("insufficient balance: need {} sats (incl. {} pending), have {} sats",
+                            total_needed, pending, balance)));
+                }
+
+                let mut update = ultradag_coin::tx::name_registry::UpdateProfileTx {
+                    from: sender,
+                    name: req_body.name.clone(),
+                    external_addresses: req_body.external_addresses.clone(),
+                    metadata: req_body.metadata.clone(),
+                    fee: req_body.fee,
+                    nonce,
+                    pub_key: sk.verifying_key().to_bytes(),
+                    signature: ultradag_coin::Signature([0u8; 64]),
+                };
+                update.signature = sk.sign(&update.signable_bytes());
+                let tx = Transaction::UpdateProfile(update);
+                let tx_hash = tx.hash();
+
+                if let Err(reason) = mp.insert_with_reason(tx.clone()) {
+                    return Ok(error_response(StatusCode::CONFLICT, reason));
+                }
+
+                (tx, tx_hash, nonce)
+            };
+
+            server.peers.broadcast(&Message::NewTx(tx.clone()), "").await;
+            let _ = server.tx_tx.send(tx);
+
+            json_response(StatusCode::OK, &serde_json::json!({
+                "hash": hex_encode(&tx_hash),
+                "from": sender.to_hex(),
+                "name": req_body.name,
+                "nonce": nonce,
+                "fee": req_body.fee,
+            }))
+        }
+
         (&Method::GET, ["fee-estimate"]) => {
             let state = read_lock_or_503!(server.state);
             let mp = read_lock_or_503!(server.mempool);
