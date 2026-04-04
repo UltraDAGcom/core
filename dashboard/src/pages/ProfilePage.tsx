@@ -97,8 +97,11 @@ export function ProfilePage() {
   }
 
   return (
-    <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif", maxWidth: 700, margin: '0 auto' }}>
-      <PageHeader title="ULTRA ID" subtitle="Your on-chain identity" />
+    <div style={{ fontFamily: "'DM Sans',sans-serif" }}>
+      <div style={{ padding: m ? '12px 14px 0' : '18px 26px 0' }}>
+        <PageHeader title="ULTRA ID" subtitle="Your on-chain identity" />
+      </div>
+      <div style={{ padding: m ? '0 14px 14px' : '0 26px 26px', maxWidth: 700, margin: '0 auto' }}>
       {/* ID Card */}
       <div style={{ marginBottom: 20 }}>
         <UltraIdCard
@@ -202,6 +205,7 @@ export function ProfilePage() {
           onSuccess={refresh}
         />
       )}
+      </div>
     </div>
   );
 }
