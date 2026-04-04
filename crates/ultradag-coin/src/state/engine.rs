@@ -826,6 +826,36 @@ impl StateEngine {
         self.total_supply
     }
 
+    /// Verify the supply invariant: liquid + staked + delegated + treasury + bridge + streamed == total_supply.
+    /// Called after loading from disk to catch corruption before the node starts processing.
+    pub fn verify_supply_invariant(&self) -> Result<(), CoinError> {
+        let liquid: u64 = self.accounts.values()
+            .try_fold(0u64, |acc, a| acc.checked_add(a.balance))
+            .ok_or_else(|| CoinError::SupplyInvariantBroken("liquid balance overflow".into()))?;
+        let staked: u64 = self.stake_accounts.values()
+            .try_fold(0u64, |acc, s| acc.checked_add(s.staked))
+            .ok_or_else(|| CoinError::SupplyInvariantBroken("staked balance overflow".into()))?;
+        let delegated: u64 = self.delegation_accounts.values()
+            .try_fold(0u64, |acc, d| acc.checked_add(d.delegated))
+            .ok_or_else(|| CoinError::SupplyInvariantBroken("delegated balance overflow".into()))?;
+        let streamed: u64 = self.streams.values()
+            .try_fold(0u64, |acc, s| acc.checked_add(s.deposited.saturating_sub(s.withdrawn)))
+            .ok_or_else(|| CoinError::SupplyInvariantBroken("streamed balance overflow".into()))?;
+        let total = liquid.checked_add(staked)
+            .and_then(|s| s.checked_add(delegated))
+            .and_then(|s| s.checked_add(self.treasury_balance))
+            .and_then(|s| s.checked_add(self.bridge_reserve))
+            .and_then(|s| s.checked_add(streamed))
+            .ok_or_else(|| CoinError::SupplyInvariantBroken("total overflow".into()))?;
+        if total != self.total_supply {
+            return Err(CoinError::SupplyInvariantBroken(format!(
+                "liquid={} staked={} delegated={} treasury={} bridge={} streamed={} sum={} != total_supply={}",
+                liquid, staked, delegated, self.treasury_balance, self.bridge_reserve, streamed, total, self.total_supply
+            )));
+        }
+        Ok(())
+    }
+
     pub fn account_count(&self) -> usize {
         self.accounts.len()
     }
@@ -3594,15 +3624,61 @@ impl StateEngine {
                 }
                 self.votes.insert((*proposal_id, tx.from), *approve);
             }
-            SmartOpType::CreateProposal { title, description, .. } => {
+            SmartOpType::CreateProposal { title, description, proposal_type_tag, param, new_value } => {
                 if !self.is_council_member(&tx.from) {
                     return Err(CoinError::ValidationError("only council members can create proposals".into()));
                 }
                 if title.len() > crate::constants::PROPOSAL_TITLE_MAX_BYTES || description.len() > crate::constants::PROPOSAL_DESCRIPTION_MAX_BYTES {
                     return Err(CoinError::ValidationError("proposal title or description too long".into()));
                 }
-                // Simplified — full proposal creation would need type dispatch
-                tracing::info!("SmartOp CreateProposal from {}: {}", tx.from.to_hex(), title);
+
+                // Map tag to ProposalType
+                let proposal_type = match proposal_type_tag {
+                    0 => crate::governance::ProposalType::TextProposal,
+                    1 => crate::governance::ProposalType::ParameterChange {
+                        param: param.clone(),
+                        new_value: new_value.to_string(),
+                    },
+                    _ => return Err(CoinError::ValidationError(
+                        format!("unsupported proposal_type_tag: {}", proposal_type_tag),
+                    )),
+                };
+
+                // Check active proposal count
+                let active_count = self.proposals.values()
+                    .filter(|p| matches!(p.status, crate::governance::ProposalStatus::Active))
+                    .count();
+                if active_count as u64 >= self.governance_params.max_active_proposals {
+                    return Err(CoinError::TooManyActiveProposals);
+                }
+
+                // Check proposal cooldown
+                if let Some(&last_round) = self.last_proposal_round.get(&tx.from) {
+                    if current_round.saturating_sub(last_round) < crate::constants::PROPOSAL_COOLDOWN_ROUNDS {
+                        return Err(CoinError::ProposalCooldownNotElapsed);
+                    }
+                }
+
+                // Snapshot council count for quorum
+                let snapshot_total_stake = self.council_members.len() as u64;
+
+                // Create and insert proposal
+                let proposal = crate::governance::Proposal {
+                    id: self.next_proposal_id,
+                    proposer: tx.from,
+                    title: title.clone(),
+                    description: description.clone(),
+                    proposal_type,
+                    voting_starts: current_round,
+                    voting_ends: current_round.saturating_add(self.governance_params.voting_period_rounds),
+                    votes_for: 0,
+                    votes_against: 0,
+                    status: crate::governance::ProposalStatus::Active,
+                    snapshot_total_stake,
+                };
+                self.proposals.insert(self.next_proposal_id, proposal);
+                self.last_proposal_round.insert(tx.from, current_round);
+                self.next_proposal_id = self.next_proposal_id.saturating_add(1);
             }
             SmartOpType::RegisterName { name, duration_years } => {
                 use crate::tx::name_registry::*;

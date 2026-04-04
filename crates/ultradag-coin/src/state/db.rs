@@ -622,6 +622,16 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
         engine.restore_slashed_events(slashed);
     }
 
+    // Verify supply invariant after all restores (including streams, bridge state, etc.).
+    // Catches state divergence that wouldn't surface until the next finalized vertex.
+    if let Err(e) = engine.verify_supply_invariant() {
+        return Err(PersistenceError::Serialization(format!(
+            "Supply invariant violation after loading from redb: {}. \
+             Persisted state may be corrupted. Delete state.redb and restart with fast-sync.",
+            e
+        )));
+    }
+
     // Verify state integrity: recompute state root and compare against stored value.
     // Catches silent corruption from disk errors, partial writes, or software bugs.
     {
