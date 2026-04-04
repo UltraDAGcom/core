@@ -59,7 +59,7 @@ export function Layout({ connected: _connected, nodeUrl: _nodeUrl, keystoreUnloc
               background: 'none', border: 'none', color: 'var(--dag-text)', fontSize: 22,
               cursor: 'pointer', padding: '2px 6px', lineHeight: 1,
             }}>&#9776;</button>
-            <img src="/media/logo/logo_website.png" alt="UltraDAG" style={{ height: 24, width: 'auto' }} />
+            <img src="/media/logo/logo_website.png" alt="UltraDAG" style={{ height: 24, width: 'auto', filter: theme === 'light' ? 'brightness(0.15)' : 'none' }} />
             <div style={{
               padding: '3px 10px', borderRadius: 14, fontSize: 9, fontWeight: 600, letterSpacing: 0.8,
               textTransform: 'uppercase',

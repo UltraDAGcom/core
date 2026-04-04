@@ -150,36 +150,36 @@ export const globalStyles = `
   }
 
   [data-theme="light"] {
-    --dag-bg: #F5F6F8;
-    --dag-card: rgba(255,255,255,0.85);
-    --dag-card-hover: rgba(0,0,0,0.02);
-    --dag-border: rgba(0,0,0,0.08);
-    --dag-border-hover: rgba(0,0,0,0.15);
-    --dag-text: #1a1a2e;
-    --dag-text-secondary: rgba(0,0,0,0.55);
-    --dag-text-muted: rgba(0,0,0,0.35);
-    --dag-text-faint: rgba(0,0,0,0.2);
-    --dag-input-bg: rgba(0,0,0,0.03);
-    --dag-row-border: rgba(0,0,0,0.06);
-    --dag-table-border: rgba(0,0,0,0.06);
-    --dag-cell-text: rgba(0,0,0,0.55);
-    --dag-value-text: rgba(0,0,0,0.7);
-    --dag-subheading: rgba(0,0,0,0.4);
-    --dag-sidebar-bg: rgba(255,255,255,0.7);
-    --dag-sidebar-border: rgba(0,0,0,0.06);
-    --dag-sidebar-section: rgba(0,0,0,0.25);
-    --dag-sidebar-inactive: rgba(0,0,0,0.45);
-    --dag-sidebar-lock-bg: rgba(0,0,0,0.03);
-    --dag-sidebar-lock-border: rgba(0,0,0,0.08);
-    --dag-sidebar-lock-text: rgba(0,0,0,0.4);
-    --dag-sidebar-footer-border: rgba(0,0,0,0.06);
-    --dag-sidebar-footer-text: rgba(0,0,0,0.4);
-    --dag-sidebar-footer-muted: rgba(0,0,0,0.25);
-    --dag-sidebar-footer-faint: rgba(0,0,0,0.15);
-    --dag-overlay: rgba(0,0,0,0.3);
-    --dag-net-inactive: rgba(0,0,0,0.25);
-    --dag-net-switch-bg: rgba(0,0,0,0.03);
-    --dag-net-switch-border: rgba(0,0,0,0.08);
+    --dag-bg: #ECEEF2;
+    --dag-card: rgba(255,255,255,0.9);
+    --dag-card-hover: rgba(0,0,0,0.04);
+    --dag-border: rgba(0,0,0,0.12);
+    --dag-border-hover: rgba(0,0,0,0.2);
+    --dag-text: #111827;
+    --dag-text-secondary: rgba(0,0,0,0.7);
+    --dag-text-muted: rgba(0,0,0,0.5);
+    --dag-text-faint: rgba(0,0,0,0.32);
+    --dag-input-bg: rgba(0,0,0,0.04);
+    --dag-row-border: rgba(0,0,0,0.08);
+    --dag-table-border: rgba(0,0,0,0.08);
+    --dag-cell-text: rgba(0,0,0,0.65);
+    --dag-value-text: rgba(0,0,0,0.8);
+    --dag-subheading: rgba(0,0,0,0.55);
+    --dag-sidebar-bg: rgba(255,255,255,0.8);
+    --dag-sidebar-border: rgba(0,0,0,0.1);
+    --dag-sidebar-section: rgba(0,0,0,0.4);
+    --dag-sidebar-inactive: rgba(0,0,0,0.55);
+    --dag-sidebar-lock-bg: rgba(0,0,0,0.04);
+    --dag-sidebar-lock-border: rgba(0,0,0,0.12);
+    --dag-sidebar-lock-text: rgba(0,0,0,0.55);
+    --dag-sidebar-footer-border: rgba(0,0,0,0.08);
+    --dag-sidebar-footer-text: rgba(0,0,0,0.55);
+    --dag-sidebar-footer-muted: rgba(0,0,0,0.35);
+    --dag-sidebar-footer-faint: rgba(0,0,0,0.22);
+    --dag-overlay: rgba(0,0,0,0.35);
+    --dag-net-inactive: rgba(0,0,0,0.35);
+    --dag-net-switch-bg: rgba(0,0,0,0.04);
+    --dag-net-switch-border: rgba(0,0,0,0.12);
   }
 `;
 

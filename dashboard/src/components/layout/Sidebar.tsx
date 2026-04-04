@@ -61,7 +61,7 @@ export function Sidebar({ open, onClose, network = 'testnet', onSwitchNetwork, o
       }}>
         {/* Logo + network badge */}
         <div style={{ padding: '2px 8px', marginBottom: 20, textAlign: 'center' }}>
-          <img src="/media/logo/logo_website.png" alt="UltraDAG" style={{ height: 30, width: 'auto', marginBottom: 6 }} />
+          <img src="/media/logo/logo_website.png" alt="UltraDAG" style={{ height: 30, width: 'auto', marginBottom: 6, filter: theme === 'light' ? 'brightness(0.15)' : 'none' }} />
           <div style={{
             fontSize: 8.5, fontWeight: 600, letterSpacing: 2.5,
             color: isMainnet ? '#00E0C4' : '#FFB800',
