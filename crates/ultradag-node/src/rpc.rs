@@ -237,10 +237,12 @@ struct DagMemoryStats {
 }
 
 /// Cached /status response — serves last good data when locks are contended.
-static STATUS_CACHE: std::sync::OnceLock<tokio::sync::Mutex<Option<StatusResponse>>> = std::sync::OnceLock::new();
-fn status_cache() -> &'static tokio::sync::Mutex<Option<StatusResponse>> {
+/// Expires after 30 seconds to avoid serving indefinitely stale data.
+static STATUS_CACHE: std::sync::OnceLock<tokio::sync::Mutex<Option<(StatusResponse, std::time::Instant)>>> = std::sync::OnceLock::new();
+fn status_cache() -> &'static tokio::sync::Mutex<Option<(StatusResponse, std::time::Instant)>> {
     STATUS_CACHE.get_or_init(|| tokio::sync::Mutex::new(None))
 }
+const STATUS_CACHE_TTL: Duration = Duration::from_secs(30);
 
 /// Get current process memory usage in bytes (cached 30s to avoid subprocess spam).
 fn get_memory_usage() -> Option<u64> {
@@ -927,8 +929,10 @@ ultradag_banned_ips {ban_count}
                         Ok(guard) => guard,
                         Err(_) => {
                             let cache = status_cache().lock().await;
-                            if let Some(cached) = cache.as_ref() {
-                                return Ok(json_response(StatusCode::OK, cached));
+                            if let Some((cached, ts)) = cache.as_ref() {
+                                if ts.elapsed() < STATUS_CACHE_TTL {
+                                    return Ok(json_response(StatusCode::OK, cached));
+                                }
                             }
                             return Ok(error_response(StatusCode::SERVICE_UNAVAILABLE, "node busy, try again"));
                         }
@@ -1008,7 +1012,7 @@ ultradag_banned_ips {ban_count}
                 }),
             };
 
-            *status_cache().lock().await = Some(status.clone());
+            *status_cache().lock().await = Some((status.clone(), std::time::Instant::now()));
             json_response(StatusCode::OK, &status)
         }
 
@@ -1575,6 +1579,17 @@ ultradag_banned_ips {ban_count}
         // ====== Sponsored Account Creation Relay ======
         // TESTNET ONLY: creates a SmartAccount on behalf of a new passkey user.
         // Sends a small initial balance from the faucet and registers the P256 key + optional name.
+        //
+        // KNOWN LIMITATION: SmartAccount + key + name are written directly to state, bypassing
+        // the mempool/DAG/finality pipeline. This means:
+        // - The account only exists on this node until the next checkpoint is loaded by peers
+        // - State divergence between nodes is possible if the user transacts before sync
+        // - This is acceptable for testnet bootstrapping but must be replaced with a
+        //   SponsoredAccountCreation transaction type before mainnet (tracked as a TODO)
+        //
+        // The chicken-and-egg: passkey users can't sign ed25519 transactions to create their
+        // account, because they only have a P256 key. The P256 key needs to be registered on
+        // the SmartAccount before they can sign SmartOps.
         (&Method::POST, ["relay", "create-account"]) => {
             // Rate limit: 5/min per IP
             if !rate_limiter.check_rate_limit(client_ip, limits::STAKE) {

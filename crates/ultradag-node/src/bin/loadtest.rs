@@ -40,15 +40,16 @@ impl From<serde_json::Error> for LoadTestError {
 async fn send_transaction(
     client: &reqwest::Client,
     config: &LoadTestConfig,
-    _nonce: u64,
+    nonce: u64,
 ) -> Result<(Duration, String), LoadTestError> {
     let start = Instant::now();
-    
+
     let body = serde_json::json!({
-        "from_secret": config.sender_secret,
+        "secret_key": config.sender_secret,
         "to": config.receiver_address,
         "amount": 1000,
         "fee": 100,
+        "nonce": nonce,
     });
 
     let response = client
