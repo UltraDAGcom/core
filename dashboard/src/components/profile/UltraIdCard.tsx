@@ -26,7 +26,7 @@ export function UltraIdCard({
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg, rgba(0,224,196,0.06) 0%, rgba(0,102,255,0.04) 50%, rgba(168,85,247,0.04) 100%)',
+      background: 'linear-gradient(135deg, rgba(0,224,196,0.04) 0%, rgba(0,224,196,0.02) 100%)',
       border: '1px solid var(--dag-border)',
       borderRadius: isLg ? 16 : 12,
       padding: isLg ? '24px 28px' : '14px 16px',
@@ -36,9 +36,7 @@ export function UltraIdCard({
       {/* Holographic accent line */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, height: 2,
-        background: 'linear-gradient(90deg, #00E0C4, #0066FF, #A855F7, #FFB800, #00E0C4)',
-        backgroundSize: '200% 100%',
-        animation: 'gradientShift 6s linear infinite',
+        background: '#00E0C4',
       }} />
 
       {/* Header: ULTRA ID label */}

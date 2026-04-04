@@ -59,79 +59,114 @@ function WalletPickerModal({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop bg-black/70"
+      style={{
+        position: 'fixed', inset: 0, zIndex: 50,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16, background: 'rgba(0,0,0,0.7)',
+      }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="modal-content bg-dag-card border border-dag-border rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div className="flex items-center justify-between p-5 pb-3">
-          <h2 className="text-lg font-semibold text-white">Connect Wallet</h2>
+      <div style={{
+        background: 'var(--dag-card)', border: '1px solid var(--dag-border)',
+        borderRadius: 16, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+        width: '100%', maxWidth: 384, overflow: 'hidden',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 20px 12px' }}>
+          <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--dag-text)' }}>Connect Wallet</h2>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-dag-muted hover:text-white hover:bg-dag-surface transition-colors"
+            style={{
+              padding: 6, borderRadius: 8, border: 'none', cursor: 'pointer',
+              color: 'var(--dag-text-muted)', background: 'transparent',
+              transition: 'all 0.15s',
+            }}
           >
-            <X className="w-4 h-4" />
+            <X style={{ width: 16, height: 16 }} />
           </button>
         </div>
 
         {wallets.length === 0 ? (
-          <div className="px-5 pb-6 space-y-4">
-            <div className="text-center py-6">
-              <Wallet className="w-10 h-10 text-dag-muted mx-auto mb-3 opacity-40" />
-              <p className="text-sm text-dag-muted">No wallets detected</p>
-              <p className="text-xs text-dag-muted mt-1">Install a Web3 wallet to get started</p>
+          <div style={{ padding: '0 20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <Wallet style={{ width: 40, height: 40, color: 'var(--dag-text-muted)', margin: '0 auto 12px', opacity: 0.4 }} />
+              <p style={{ fontSize: 12, color: 'var(--dag-text-muted)' }}>No wallets detected</p>
+              <p style={{ fontSize: 10, color: 'var(--dag-text-muted)', marginTop: 4 }}>Install a Web3 wallet to get started</p>
             </div>
             <a
               href="https://metamask.io/download/"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 w-full p-3 rounded-xl bg-dag-surface border border-dag-border hover:border-dag-accent/40 transition-all group"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: 12,
+                borderRadius: 12, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)',
+                transition: 'all 0.15s', textDecoration: 'none',
+              }}
             >
-              <div className="w-9 h-9 rounded-lg bg-[#F6851B]/10 flex items-center justify-center">
-                <span className="text-lg">🦊</span>
+              <div style={{
+                width: 36, height: 36, borderRadius: 8,
+                background: 'rgba(246,133,27,0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <span style={{ fontSize: 16 }}>🦊</span>
               </div>
-              <div className="flex-1 text-left">
-                <span className="text-sm font-medium text-white group-hover:text-dag-accent transition-colors">Install MetaMask</span>
-                <p className="text-[10px] text-dag-muted">The most popular Ethereum wallet</p>
+              <div style={{ flex: 1, textAlign: 'left' }}>
+                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--dag-text)', transition: 'all 0.15s' }}>Install MetaMask</span>
+                <p style={{ fontSize: 10, color: 'var(--dag-text-muted)' }}>The most popular Ethereum wallet</p>
               </div>
-              <ExternalLink className="w-3.5 h-3.5 text-dag-muted group-hover:text-dag-accent transition-colors" />
+              <ExternalLink style={{ width: 14, height: 14, color: 'var(--dag-text-muted)', transition: 'all 0.15s' }} />
             </a>
             <a
               href="https://rabby.io/"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 w-full p-3 rounded-xl bg-dag-surface border border-dag-border hover:border-dag-accent/40 transition-all group"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: 12,
+                borderRadius: 12, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)',
+                transition: 'all 0.15s', textDecoration: 'none',
+              }}
             >
-              <div className="w-9 h-9 rounded-lg bg-[#8167F5]/10 flex items-center justify-center">
-                <span className="text-lg">🐰</span>
+              <div style={{
+                width: 36, height: 36, borderRadius: 8,
+                background: 'rgba(129,103,245,0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <span style={{ fontSize: 16 }}>🐰</span>
               </div>
-              <div className="flex-1 text-left">
-                <span className="text-sm font-medium text-white group-hover:text-dag-accent transition-colors">Install Rabby</span>
-                <p className="text-[10px] text-dag-muted">Multi-chain wallet with security focus</p>
+              <div style={{ flex: 1, textAlign: 'left' }}>
+                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--dag-text)', transition: 'all 0.15s' }}>Install Rabby</span>
+                <p style={{ fontSize: 10, color: 'var(--dag-text-muted)' }}>Multi-chain wallet with security focus</p>
               </div>
-              <ExternalLink className="w-3.5 h-3.5 text-dag-muted group-hover:text-dag-accent transition-colors" />
+              <ExternalLink style={{ width: 14, height: 14, color: 'var(--dag-text-muted)', transition: 'all 0.15s' }} />
             </a>
           </div>
         ) : (
-          <div className="px-5 pb-5 space-y-2">
-            <p className="text-xs text-dag-muted mb-3">Choose your wallet to connect</p>
+          <div style={{ padding: '0 20px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <p style={{ fontSize: 10, color: 'var(--dag-text-muted)', marginBottom: 12 }}>Choose your wallet to connect</p>
             {wallets.map((w) => (
               <button
                 key={w.uuid}
                 onClick={() => onSelect(w.uuid)}
-                className="flex items-center gap-3 w-full p-3 rounded-xl bg-dag-surface border border-dag-border hover:border-dag-accent/40 hover:bg-dag-surface/80 transition-all group"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: 12,
+                  borderRadius: 12, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)',
+                  transition: 'all 0.15s', cursor: 'pointer',
+                }}
               >
                 <img
                   src={w.icon}
                   alt={w.name}
-                  className="w-9 h-9 rounded-lg object-contain"
+                  style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'contain' }}
                   onError={(e) => {
                     (e.target as HTMLImageElement).style.display = 'none';
                   }}
                 />
-                <span className="text-sm font-medium text-white group-hover:text-dag-accent transition-colors flex-1 text-left">
+                <span style={{
+                  fontSize: 12, fontWeight: 500, color: 'var(--dag-text)',
+                  transition: 'all 0.15s', flex: 1, textAlign: 'left',
+                }}>
                   {w.name}
                 </span>
-                <ArrowRight className="w-4 h-4 text-dag-muted group-hover:text-dag-accent transition-colors opacity-0 group-hover:opacity-100" />
+                <ArrowRight style={{ width: 16, height: 16, color: 'var(--dag-text-muted)', transition: 'all 0.15s' }} />
               </button>
             ))}
           </div>
@@ -476,6 +511,79 @@ export function BridgePage() {
     setAmount(sanitized);
   };
 
+  // Shared inline style fragments
+  const chipBadge = (bg: string, color: string, borderColor: string): React.CSSProperties => ({
+    fontSize: 10, padding: '2px 6px', borderRadius: 4,
+    background: bg, color, border: `1px solid ${borderColor}`, fontWeight: 600,
+  });
+  const arbChip = chipBadge('rgba(59,130,246,0.2)', '#60A5FA', 'rgba(59,130,246,0.3)');
+  const udagChip = chipBadge('rgba(0,224,196,0.2)', '#00E0C4', 'rgba(0,224,196,0.3)');
+
+  const sectionBox: React.CSSProperties = {
+    borderRadius: 12, background: 'var(--dag-bg)',
+    border: '1px solid rgba(255,255,255,0.045)', padding: 16,
+    display: 'flex', flexDirection: 'column', gap: 12,
+  };
+
+  const labelRow: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  };
+
+  const labelText: React.CSSProperties = {
+    fontSize: 10, color: 'var(--dag-text-muted)', fontWeight: 500,
+    textTransform: 'uppercase', letterSpacing: 1.5,
+  };
+
+  const chainIndicator = (bg: string, _dotColor?: string): React.CSSProperties => ({
+    width: 16, height: 16, borderRadius: '50%', background: bg,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  });
+
+  const chainDot = (color: string): React.CSSProperties => ({
+    width: 8, height: 8, borderRadius: '50%', background: color,
+  });
+
+  const inputBox: React.CSSProperties = {
+    width: '100%', padding: '16px 112px 16px 16px',
+    background: 'var(--dag-input-bg)', border: '1px solid rgba(255,255,255,0.045)',
+    borderRadius: 12, fontSize: 22, fontFamily: "'DM Mono',monospace",
+    color: 'var(--dag-text)', outline: 'none', transition: 'all 0.15s',
+  };
+
+  const inputBoxSmall: React.CSSProperties = {
+    width: '100%', padding: '12px 16px',
+    background: 'var(--dag-input-bg)', border: '1px solid rgba(255,255,255,0.045)',
+    borderRadius: 12, fontSize: 12, fontFamily: "'DM Mono',monospace",
+    color: 'var(--dag-text)', outline: 'none', transition: 'all 0.15s',
+  };
+
+  const gradientButton: React.CSSProperties = {
+    width: '100%', padding: '16px 0', borderRadius: 12, border: 'none',
+    background: 'linear-gradient(to right, #00E0C4, #0066FF)',
+    color: '#fff', fontWeight: 600, fontSize: 12,
+    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    gap: 8, transition: 'all 0.15s',
+  };
+
+  const warningButton = (color: string): React.CSSProperties => ({
+    width: '100%', padding: '10px 0', borderRadius: 12,
+    background: `${color}15`, color, border: `1px solid ${color}30`,
+    fontSize: 10, fontWeight: 500, cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    transition: 'all 0.15s',
+  });
+
+  const successBox: React.CSSProperties = {
+    borderRadius: 12, background: 'rgba(0,224,196,0.05)',
+    border: '1px solid rgba(0,224,196,0.2)', padding: 14,
+    display: 'flex', alignItems: 'center', gap: 10,
+  };
+
+  const statCard: React.CSSProperties = {
+    borderRadius: 12, background: 'var(--dag-card)',
+    border: '1px solid var(--dag-border)', padding: 16,
+  };
+
   return (
     <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif", animation: 'slideUp 0.3s ease' }}>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
@@ -494,123 +602,143 @@ export function BridgePage() {
         subtitle="Secured by the validator federation — no external relayers"
         right={<>
           {/* Bridge status pill */}
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${
-            canBridge
-              ? 'bg-dag-green/10 text-dag-green border-dag-green/20'
-              : bridgePaused
-                ? 'bg-dag-red/10 text-dag-red border-dag-red/20'
-                : 'bg-dag-yellow/10 text-dag-yellow border-dag-yellow/20'
-          }`}>
-            <div className={`w-1.5 h-1.5 rounded-full ${canBridge ? 'bg-dag-green animate-pulse' : bridgePaused ? 'bg-dag-red' : 'bg-dag-yellow'}`} />
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '6px 12px', borderRadius: 999, fontSize: 10, fontWeight: 500,
+            background: canBridge ? 'rgba(0,224,196,0.1)' : bridgePaused ? 'rgba(239,68,68,0.1)' : 'rgba(255,184,0,0.1)',
+            color: canBridge ? '#00E0C4' : bridgePaused ? '#EF4444' : '#FFB800',
+            border: `1px solid ${canBridge ? 'rgba(0,224,196,0.2)' : bridgePaused ? 'rgba(239,68,68,0.2)' : 'rgba(255,184,0,0.2)'}`,
+          }}>
+            <div style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: canBridge ? '#00E0C4' : bridgePaused ? '#EF4444' : '#FFB800',
+              animation: canBridge ? 'pulse 2s infinite' : 'none',
+            }} />
             {canBridge ? 'Bridge Active' : bridgePaused ? 'Bridge Paused' : 'Inactive'}
           </div>
 
           {/* Connected wallet pill */}
           {eth.connected && eth.selectedWallet ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-dag-surface border border-dag-border">
-              <img src={eth.selectedWallet.icon} alt="" className="w-4 h-4 rounded" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-              <span className="text-xs text-white font-mono">{eth.address.slice(0, 6)}...{eth.address.slice(-4)}</span>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '6px 12px', borderRadius: 999,
+              background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)',
+            }}>
+              <img src={eth.selectedWallet.icon} alt="" style={{ width: 16, height: 16, borderRadius: 4 }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              <span style={{ fontSize: 10, color: 'var(--dag-text)', fontFamily: "'DM Mono',monospace" }}>{eth.address.slice(0, 6)}...{eth.address.slice(-4)}</span>
               <button
                 onClick={eth.disconnect}
-                className="ml-0.5 p-0.5 rounded text-dag-muted hover:text-dag-red transition-colors"
+                style={{ marginLeft: 2, padding: 2, borderRadius: 4, border: 'none', background: 'transparent', color: 'var(--dag-text-muted)', cursor: 'pointer', transition: 'all 0.15s' }}
                 title="Disconnect"
               >
-                <X className="w-3 h-3" />
+                <X style={{ width: 12, height: 12 }} />
               </button>
             </div>
           ) : eth.connected ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-dag-surface border border-dag-border">
-              <div className="w-2 h-2 rounded-full bg-dag-green" />
-              <span className="text-xs text-white font-mono">{eth.address.slice(0, 6)}...{eth.address.slice(-4)}</span>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '6px 12px', borderRadius: 999,
+              background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)',
+            }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#00E0C4' }} />
+              <span style={{ fontSize: 10, color: 'var(--dag-text)', fontFamily: "'DM Mono',monospace" }}>{eth.address.slice(0, 6)}...{eth.address.slice(-4)}</span>
               <button
                 onClick={eth.disconnect}
-                className="ml-0.5 p-0.5 rounded text-dag-muted hover:text-dag-red transition-colors"
+                style={{ marginLeft: 2, padding: 2, borderRadius: 4, border: 'none', background: 'transparent', color: 'var(--dag-text-muted)', cursor: 'pointer', transition: 'all 0.15s' }}
                 title="Disconnect"
               >
-                <X className="w-3 h-3" />
+                <X style={{ width: 12, height: 12 }} />
               </button>
             </div>
           ) : null}
         </>}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Left: Bridge Form (3 cols) */}
-        <div className="lg:col-span-3 space-y-6">
+      <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '3fr 2fr', gap: 24 }}>
+        {/* Left: Bridge Form */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
           {/* Main Bridge Card */}
-          <div className="rounded-2xl bg-dag-card border border-dag-border overflow-hidden card-glow">
-            <div className="p-6 space-y-5">
+          <div style={{ borderRadius: 16, background: 'var(--dag-card)', border: '1px solid var(--dag-border)', overflow: 'hidden' }}>
+            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
 
               {/* Direction tabs */}
-              <div className="flex gap-1 p-1 bg-dag-bg rounded-xl">
+              <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--dag-bg)', borderRadius: 12 }}>
                 <button
                   onClick={() => setDirection('to-native')}
-                  className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium transition-all ${
-                    direction === 'to-native'
-                      ? 'bg-dag-surface text-white shadow-sm'
-                      : 'text-dag-muted hover:text-white'
-                  }`}
+                  style={{
+                    flex: 1, padding: '10px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500,
+                    transition: 'all 0.15s', border: 'none', cursor: 'pointer',
+                    background: direction === 'to-native' ? 'var(--dag-input-bg)' : 'transparent',
+                    color: direction === 'to-native' ? 'var(--dag-text)' : 'var(--dag-text-muted)',
+                    boxShadow: direction === 'to-native' ? '0 1px 3px rgba(0,0,0,0.2)' : 'none',
+                  }}
                 >
-                  <div className="flex items-center justify-center gap-2">
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-semibold">ARB</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-dag-accent/20 text-dag-accent font-semibold">UDAG</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <span style={arbChip}>ARB</span>
+                    <ArrowRight style={{ width: 14, height: 14 }} />
+                    <span style={udagChip}>UDAG</span>
                   </div>
                 </button>
                 <button
                   onClick={() => setDirection('to-arbitrum')}
-                  className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium transition-all ${
-                    direction === 'to-arbitrum'
-                      ? 'bg-dag-surface text-white shadow-sm'
-                      : 'text-dag-muted hover:text-white'
-                  }`}
+                  style={{
+                    flex: 1, padding: '10px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500,
+                    transition: 'all 0.15s', border: 'none', cursor: 'pointer',
+                    background: direction === 'to-arbitrum' ? 'var(--dag-input-bg)' : 'transparent',
+                    color: direction === 'to-arbitrum' ? 'var(--dag-text)' : 'var(--dag-text-muted)',
+                    boxShadow: direction === 'to-arbitrum' ? '0 1px 3px rgba(0,0,0,0.2)' : 'none',
+                  }}
                 >
-                  <div className="flex items-center justify-center gap-2">
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-dag-accent/20 text-dag-accent font-semibold">UDAG</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-semibold">ARB</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <span style={udagChip}>UDAG</span>
+                    <ArrowRight style={{ width: 14, height: 14 }} />
+                    <span style={arbChip}>ARB</span>
                   </div>
                 </button>
               </div>
 
               {/* ---- Arbitrum -> Native ---- */}
               {direction === 'to-native' ? (
-                <div className="space-y-3">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {/* Source: Arbitrum */}
-                  <div className="rounded-xl bg-dag-bg border border-dag-border/50 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-dag-muted font-medium uppercase tracking-wider">From</span>
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center">
-                          <div className="w-2 h-2 rounded-full bg-blue-400" />
+                  <div style={sectionBox}>
+                    <div style={labelRow}>
+                      <span style={labelText}>From</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={chainIndicator('rgba(59,130,246,0.2)', '#60A5FA')}>
+                          <div style={chainDot('#60A5FA')} />
                         </div>
-                        <span className="text-xs font-medium text-blue-400">Arbitrum</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400/70 border border-blue-500/20">ERC-20</span>
+                        <span style={{ fontSize: 10, fontWeight: 500, color: '#60A5FA' }}>Arbitrum</span>
+                        <span style={chipBadge('rgba(59,130,246,0.1)', 'rgba(96,165,250,0.7)', 'rgba(59,130,246,0.2)')}>ERC-20</span>
                       </div>
                     </div>
 
                     {eth.connected ? (
-                      <div className="space-y-3">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {/* Wallet info row */}
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             {eth.selectedWallet && (
-                              <img src={eth.selectedWallet.icon} alt="" className="w-5 h-5 rounded" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                              <img src={eth.selectedWallet.icon} alt="" style={{ width: 20, height: 20, borderRadius: 4 }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                             )}
-                            <span className="text-sm text-white font-mono">{eth.address.slice(0, 6)}...{eth.address.slice(-4)}</span>
+                            <span style={{ fontSize: 12, color: 'var(--dag-text)', fontFamily: "'DM Mono',monospace" }}>{eth.address.slice(0, 6)}...{eth.address.slice(-4)}</span>
                             <CopyButton text={eth.address} />
                           </div>
                           <button
                             onClick={eth.disconnect}
-                            className="text-[10px] text-dag-muted hover:text-dag-red flex items-center gap-1 transition-colors"
+                            style={{
+                              fontSize: 10, color: 'var(--dag-text-muted)', background: 'transparent',
+                              border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+                              transition: 'all 0.15s',
+                            }}
                           >
-                            <Unplug className="w-3 h-3" /> Disconnect
+                            <Unplug style={{ width: 12, height: 12 }} /> Disconnect
                           </button>
                         </div>
 
                         {/* Amount input */}
-                        <div className="relative">
+                        <div style={{ position: 'relative' }}>
                           <input
                             type="text"
                             inputMode="decimal"
@@ -618,47 +746,55 @@ export function BridgePage() {
                             onChange={amountInputHandler}
                             placeholder="0.00"
                             disabled={!canBridge}
-                            className="w-full px-4 py-4 bg-dag-surface border border-dag-border/50 rounded-xl text-2xl font-mono text-white placeholder-dag-muted/30 focus:outline-none focus:border-dag-accent/50 disabled:opacity-50 pr-28"
+                            style={{ ...inputBox, opacity: !canBridge ? 0.5 : 1 }}
                           />
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                          <div style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: 8 }}>
                             {eth.connected && (
                               <button
                                 onClick={() => setAmount(formatUnits(eth.udagBalanceRaw, 8))}
-                                className="text-[10px] font-bold text-dag-accent hover:text-dag-accent/80 px-2 py-1 rounded bg-dag-accent/10 hover:bg-dag-accent/15 transition-colors"
+                                style={{
+                                  fontSize: 10, fontWeight: 700, color: '#00E0C4',
+                                  padding: '4px 8px', borderRadius: 4,
+                                  background: 'rgba(0,224,196,0.1)', border: 'none',
+                                  cursor: 'pointer', transition: 'all 0.15s',
+                                }}
                               >
                                 MAX
                               </button>
                             )}
-                            <span className="text-sm font-medium text-dag-muted">UDAG</span>
+                            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--dag-text-muted)' }}>UDAG</span>
                           </div>
                         </div>
 
                         {/* Balance row */}
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-dag-muted">
-                            Balance: <span className="text-white font-mono">{Number(eth.udagBalance).toLocaleString(undefined, { maximumFractionDigits: 4 })}</span> UDAG
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10 }}>
+                          <span style={{ color: 'var(--dag-text-muted)' }}>
+                            Balance: <span style={{ color: 'var(--dag-text)', fontFamily: "'DM Mono',monospace" }}>{Number(eth.udagBalance).toLocaleString(undefined, { maximumFractionDigits: 4 })}</span> UDAG
                           </span>
-                          <span className="text-dag-muted">
-                            <span className="text-white font-mono">{Number(eth.balance).toFixed(4)}</span> ETH
+                          <span style={{ color: 'var(--dag-text-muted)' }}>
+                            <span style={{ color: 'var(--dag-text)', fontFamily: "'DM Mono',monospace" }}>{Number(eth.balance).toFixed(4)}</span> ETH
                           </span>
                         </div>
 
                         {!eth.isCorrectChain && (
                           <button
                             onClick={eth.switchToArbitrum}
-                            className="w-full py-2.5 rounded-xl bg-dag-yellow/10 text-dag-yellow border border-dag-yellow/20 text-xs font-medium hover:bg-dag-yellow/15 transition-colors flex items-center justify-center gap-2"
+                            style={warningButton('#FFB800')}
                           >
-                            <AlertTriangle className="w-3.5 h-3.5" />
+                            <AlertTriangle style={{ width: 14, height: 14 }} />
                             Switch to Arbitrum Network
                           </button>
                         )}
                       </div>
                     ) : (
-                      <div className="space-y-3">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {!CONTRACTS_DEPLOYED && (
-                          <div className="flex items-start gap-2 p-2.5 rounded-lg bg-dag-accent/5 border border-dag-accent/10">
-                            <Shield className="w-4 h-4 text-dag-accent mt-0.5 shrink-0" />
-                            <p className="text-xs text-dag-muted">
+                          <div style={{
+                            display: 'flex', alignItems: 'flex-start', gap: 8, padding: 10,
+                            borderRadius: 8, background: 'rgba(0,224,196,0.05)', border: '1px solid rgba(0,224,196,0.1)',
+                          }}>
+                            <Shield style={{ width: 16, height: 16, color: '#00E0C4', marginTop: 2, flexShrink: 0 }} />
+                            <p style={{ fontSize: 10, color: 'var(--dag-text-muted)' }}>
                               Secured by UltraDAG's validator federation — same BFT consensus that protects the network.
                             </p>
                           </div>
@@ -666,32 +802,38 @@ export function BridgePage() {
                         <button
                           onClick={handleConnectClick}
                           disabled={eth.loading}
-                          className="w-full py-3.5 rounded-xl bg-gradient-to-r from-dag-accent to-dag-blue text-white font-medium text-sm disabled:opacity-50 flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-dag-accent/20 transition-all"
+                          style={{ ...gradientButton, padding: '14px 0', opacity: eth.loading ? 0.5 : 1 }}
                         >
-                          {eth.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wallet className="w-4 h-4" />}
+                          {eth.loading ? <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} /> : <Wallet style={{ width: 16, height: 16 }} />}
                           {eth.loading ? 'Connecting...' : 'Connect Wallet'}
                         </button>
+                        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
                       </div>
                     )}
                   </div>
 
                   {/* Arrow Divider */}
-                  <div className="flex justify-center -my-1 relative z-10">
-                    <div className="w-10 h-10 rounded-xl bg-dag-card border border-dag-border flex items-center justify-center shadow-lg">
-                      <ArrowDown className="w-4 h-4 text-dag-accent" />
+                  <div style={{ display: 'flex', justifyContent: 'center', margin: '-4px 0', position: 'relative', zIndex: 10 }}>
+                    <div style={{
+                      width: 40, height: 40, borderRadius: 12,
+                      background: 'var(--dag-card)', border: '1px solid var(--dag-border)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    }}>
+                      <ArrowDown style={{ width: 16, height: 16, color: '#00E0C4' }} />
                     </div>
                   </div>
 
                   {/* Destination: UltraDAG */}
-                  <div className="rounded-xl bg-dag-bg border border-dag-border/50 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-dag-muted font-medium uppercase tracking-wider">To</span>
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-4 h-4 rounded-full bg-dag-accent/20 flex items-center justify-center">
-                          <div className="w-2 h-2 rounded-full bg-dag-accent" />
+                  <div style={sectionBox}>
+                    <div style={labelRow}>
+                      <span style={labelText}>To</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={chainIndicator('rgba(0,224,196,0.2)', '#00E0C4')}>
+                          <div style={chainDot('#00E0C4')} />
                         </div>
-                        <span className="text-xs font-medium text-dag-accent">UltraDAG</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-dag-accent/10 text-dag-accent/70 border border-dag-accent/20">Native</span>
+                        <span style={{ fontSize: 10, fontWeight: 500, color: '#00E0C4' }}>UltraDAG</span>
+                        <span style={chipBadge('rgba(0,224,196,0.1)', 'rgba(0,224,196,0.7)', 'rgba(0,224,196,0.2)')}>Native</span>
                       </div>
                     </div>
 
@@ -700,8 +842,12 @@ export function BridgePage() {
                         <select
                           value={selectedWalletIdx}
                           onChange={(e) => setSelectedWalletIdx(Number(e.target.value))}
-                          className="w-full px-4 py-3 bg-dag-surface border border-dag-border/50 rounded-xl text-sm font-mono text-white focus:outline-none focus:border-dag-accent/50 appearance-none cursor-pointer"
-                          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
+                          style={{
+                            ...inputBoxSmall,
+                            appearance: 'none' as const, cursor: 'pointer',
+                            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
+                            backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center',
+                          }}
                         >
                           {wallets.map((w, i) => (
                             <option key={w.address} value={i}>
@@ -709,8 +855,8 @@ export function BridgePage() {
                             </option>
                           ))}
                         </select>
-                        <div className="flex items-center gap-1.5 text-xs text-dag-muted">
-                          <CheckCircle className="w-3 h-3 text-dag-green" />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--dag-text-muted)' }}>
+                          <CheckCircle style={{ width: 12, height: 12, color: '#00E0C4' }} />
                           <span>Receiving on {wallet?.name || 'your UltraDAG wallet'}</span>
                         </div>
                       </>
@@ -722,23 +868,23 @@ export function BridgePage() {
                           onChange={(e) => setNativeAddress(e.target.value)}
                           placeholder="tudg1... or 40-char hex address"
                           disabled={!canBridge}
-                          className="w-full px-4 py-3 bg-dag-surface border border-dag-border/50 rounded-xl text-sm font-mono text-white placeholder-dag-muted/30 focus:outline-none focus:border-dag-accent/50 disabled:opacity-50"
+                          style={{ ...inputBoxSmall, opacity: !canBridge ? 0.5 : 1 }}
                         />
-                        <p className="text-[10px] text-dag-muted">Enter your UltraDAG address or create a wallet in the Wallet tab</p>
+                        <p style={{ fontSize: 10, color: 'var(--dag-text-muted)' }}>Enter your UltraDAG address or create a wallet in the Wallet tab</p>
                       </>
                     )}
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="space-y-2.5 pt-1">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 4 }}>
                     {/* Approval button */}
                     {needsApproval && (
                       <button
                         onClick={handleApprove}
                         disabled={approving || !canBridge}
-                        className="w-full py-3.5 rounded-xl bg-dag-yellow/10 text-dag-yellow border border-dag-yellow/20 font-medium text-sm disabled:opacity-50 flex items-center justify-center gap-2 hover:bg-dag-yellow/15 transition-colors"
+                        style={{ ...warningButton('#FFB800'), opacity: (approving || !canBridge) ? 0.5 : 1, padding: '14px 0' }}
                       >
-                        {approving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+                        {approving ? <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} /> : <Shield style={{ width: 16, height: 16 }} />}
                         {approving ? 'Approving...' : 'Approve UDAG Transfer'}
                       </button>
                     )}
@@ -747,14 +893,18 @@ export function BridgePage() {
                     <button
                       onClick={handleBridgeToNative}
                       disabled={!eth.connected || !canBridge || bridging || needsApproval || amountSats <= 0n}
-                      className="w-full py-4 rounded-xl bg-gradient-to-r from-dag-accent to-dag-blue text-white font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-dag-accent/20 transition-all"
+                      style={{
+                        ...gradientButton,
+                        opacity: (!eth.connected || !canBridge || bridging || needsApproval || amountSats <= 0n) ? 0.4 : 1,
+                        cursor: (!eth.connected || !canBridge || bridging || needsApproval || amountSats <= 0n) ? 'not-allowed' : 'pointer',
+                      }}
                     >
                       {bridging ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} />
                       ) : !eth.connected ? (
-                        <Wallet className="w-4 h-4" />
+                        <Wallet style={{ width: 16, height: 16 }} />
                       ) : (
-                        <Zap className="w-4 h-4" />
+                        <Zap style={{ width: 16, height: 16 }} />
                       )}
                       {bridging
                         ? 'Bridging...'
@@ -772,106 +922,120 @@ export function BridgePage() {
 
                   {/* Success message */}
                   {txHash && (
-                    <div className="rounded-xl bg-dag-green/5 border border-dag-green/20 p-3.5 flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-dag-green/10 flex items-center justify-center shrink-0">
-                        <CheckCircle className="w-4 h-4 text-dag-green" />
+                    <div style={successBox}>
+                      <div style={{
+                        width: 32, height: 32, borderRadius: '50%',
+                        background: 'rgba(0,224,196,0.1)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                      }}>
+                        <CheckCircle style={{ width: 16, height: 16, color: '#00E0C4' }} />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-dag-green">Transaction submitted!</p>
-                        <p className="text-[10px] text-dag-muted mt-0.5 truncate font-mono">{txHash}</p>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 10, fontWeight: 500, color: '#00E0C4' }}>Transaction submitted!</p>
+                        <p style={{ fontSize: 10, color: 'var(--dag-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'DM Mono',monospace" }}>{txHash}</p>
                       </div>
                       <a
                         href={`https://arbiscan.io/tx/${txHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-dag-green hover:underline flex items-center gap-1 shrink-0"
+                        style={{ fontSize: 10, color: '#00E0C4', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, textDecoration: 'none' }}
                       >
-                        View <ExternalLink className="w-3 h-3" />
+                        View <ExternalLink style={{ width: 12, height: 12 }} />
                       </a>
                     </div>
                   )}
                 </div>
               ) : (
                 /* ---- Native -> Arbitrum ---- */
-                <div className="space-y-3">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {/* Source: UltraDAG Wallet */}
-                  <div className="rounded-xl bg-dag-bg border border-dag-border/50 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-dag-muted font-medium uppercase tracking-wider">From</span>
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-4 h-4 rounded-full bg-dag-accent/20 flex items-center justify-center">
-                          <div className="w-2 h-2 rounded-full bg-dag-accent" />
+                  <div style={sectionBox}>
+                    <div style={labelRow}>
+                      <span style={labelText}>From</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={chainIndicator('rgba(0,224,196,0.2)', '#00E0C4')}>
+                          <div style={chainDot('#00E0C4')} />
                         </div>
-                        <span className="text-xs font-medium text-dag-accent">UltraDAG</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-dag-accent/10 text-dag-accent/70 border border-dag-accent/20">Native</span>
+                        <span style={{ fontSize: 10, fontWeight: 500, color: '#00E0C4' }}>UltraDAG</span>
+                        <span style={chipBadge('rgba(0,224,196,0.1)', 'rgba(0,224,196,0.7)', 'rgba(0,224,196,0.2)')}>Native</span>
                       </div>
                     </div>
 
                     {wallets.length > 0 ? (
-                      <div className="space-y-3">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         <WalletSelector wallets={wallets} selectedIdx={depositWalletIdx} onChange={setDepositWalletIdx} label="Source Wallet" />
 
                         {/* Amount input */}
-                        <div className="relative">
+                        <div style={{ position: 'relative' }}>
                           <input
                             type="text"
                             inputMode="decimal"
                             value={depositAmount}
                             onChange={depositAmountInputHandler}
                             placeholder="0.00"
-                            className="w-full px-4 py-4 bg-dag-surface border border-dag-border/50 rounded-xl text-2xl font-mono text-white placeholder-dag-muted/30 focus:outline-none focus:border-dag-accent/50 pr-28"
+                            style={inputBox}
                           />
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                          <div style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: 8 }}>
                             {(() => {
                               const wb = wallets[depositWalletIdx] ? walletBalances.get(wallets[depositWalletIdx].address) : undefined;
                               const bal = wb?.balance ?? 0;
                               return bal > 10000 ? (
                                 <button
                                   onClick={() => setDepositAmount(((bal - 10000) / 100_000_000).toFixed(8).replace(/0+$/, '').replace(/\.$/, ''))}
-                                  className="text-[10px] font-bold text-dag-accent hover:text-dag-accent/80 px-2 py-1 rounded bg-dag-accent/10 hover:bg-dag-accent/15 transition-colors"
+                                  style={{
+                                    fontSize: 10, fontWeight: 700, color: '#00E0C4',
+                                    padding: '4px 8px', borderRadius: 4,
+                                    background: 'rgba(0,224,196,0.1)', border: 'none',
+                                    cursor: 'pointer', transition: 'all 0.15s',
+                                  }}
                                 >
                                   MAX
                                 </button>
                               ) : null;
                             })()}
-                            <span className="text-sm font-medium text-dag-muted">UDAG</span>
+                            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--dag-text-muted)' }}>UDAG</span>
                           </div>
                         </div>
 
                         {/* Balance row */}
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-dag-muted">
-                            Balance: <span className="text-white font-mono">
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10 }}>
+                          <span style={{ color: 'var(--dag-text-muted)' }}>
+                            Balance: <span style={{ color: 'var(--dag-text)', fontFamily: "'DM Mono',monospace" }}>
                               {formatUdag(walletBalances.get(wallets[depositWalletIdx]?.address ?? '')?.balance ?? 0)}
                             </span> UDAG
                           </span>
-                          <span className="text-dag-muted">
-                            Fee: <span className="text-white font-mono">0.0001</span> UDAG
+                          <span style={{ color: 'var(--dag-text-muted)' }}>
+                            Fee: <span style={{ color: 'var(--dag-text)', fontFamily: "'DM Mono',monospace" }}>0.0001</span> UDAG
                           </span>
                         </div>
                       </div>
                     ) : (
-                      <p className="text-sm text-dag-muted">Create a wallet in the Wallet tab to bridge UDAG to Arbitrum.</p>
+                      <p style={{ fontSize: 12, color: 'var(--dag-text-muted)' }}>Create a wallet in the Wallet tab to bridge UDAG to Arbitrum.</p>
                     )}
                   </div>
 
                   {/* Arrow Divider */}
-                  <div className="flex justify-center -my-1 relative z-10">
-                    <div className="w-10 h-10 rounded-xl bg-dag-card border border-dag-border flex items-center justify-center shadow-lg">
-                      <ArrowDown className="w-4 h-4 text-dag-accent" />
+                  <div style={{ display: 'flex', justifyContent: 'center', margin: '-4px 0', position: 'relative', zIndex: 10 }}>
+                    <div style={{
+                      width: 40, height: 40, borderRadius: 12,
+                      background: 'var(--dag-card)', border: '1px solid var(--dag-border)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    }}>
+                      <ArrowDown style={{ width: 16, height: 16, color: '#00E0C4' }} />
                     </div>
                   </div>
 
                   {/* Destination: Arbitrum */}
-                  <div className="rounded-xl bg-dag-bg border border-dag-border/50 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-dag-muted font-medium uppercase tracking-wider">To</span>
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center">
-                          <div className="w-2 h-2 rounded-full bg-blue-400" />
+                  <div style={sectionBox}>
+                    <div style={labelRow}>
+                      <span style={labelText}>To</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={chainIndicator('rgba(59,130,246,0.2)', '#60A5FA')}>
+                          <div style={chainDot('#60A5FA')} />
                         </div>
-                        <span className="text-xs font-medium text-blue-400">Arbitrum</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400/70 border border-blue-500/20">ERC-20</span>
+                        <span style={{ fontSize: 10, fontWeight: 500, color: '#60A5FA' }}>Arbitrum</span>
+                        <span style={chipBadge('rgba(59,130,246,0.1)', 'rgba(96,165,250,0.7)', 'rgba(59,130,246,0.2)')}>ERC-20</span>
                       </div>
                     </div>
 
@@ -880,30 +1044,34 @@ export function BridgePage() {
                       value={depositRecipient}
                       onChange={(e) => setDepositRecipient(e.target.value)}
                       placeholder="0x... (Ethereum/Arbitrum address)"
-                      className="w-full px-4 py-3 bg-dag-surface border border-dag-border/50 rounded-xl text-sm font-mono text-white placeholder-dag-muted/30 focus:outline-none focus:border-dag-accent/50"
+                      style={inputBoxSmall}
                     />
                     {eth.connected && eth.address && (
                       <button
                         onClick={() => setDepositRecipient(eth.address)}
-                        className="text-[10px] text-dag-accent hover:text-dag-accent/80 transition-colors"
+                        style={{ fontSize: 10, color: '#00E0C4', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}
                       >
                         Use connected wallet: {eth.address.slice(0, 6)}...{eth.address.slice(-4)}
                       </button>
                     )}
-                    <p className="text-[10px] text-dag-muted">Enter your Arbitrum/Ethereum address to receive bridged UDAG ERC-20 tokens</p>
+                    <p style={{ fontSize: 10, color: 'var(--dag-text-muted)' }}>Enter your Arbitrum/Ethereum address to receive bridged UDAG ERC-20 tokens</p>
                   </div>
 
                   {/* Bridge button */}
-                  <div className="space-y-2.5 pt-1">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 4 }}>
                     <button
                       onClick={handleBridgeToArbitrum}
                       disabled={wallets.length === 0 || depositing || !depositAmount || !depositRecipient}
-                      className="w-full py-4 rounded-xl bg-gradient-to-r from-dag-accent to-dag-blue text-white font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-dag-accent/20 transition-all"
+                      style={{
+                        ...gradientButton,
+                        opacity: (wallets.length === 0 || depositing || !depositAmount || !depositRecipient) ? 0.4 : 1,
+                        cursor: (wallets.length === 0 || depositing || !depositAmount || !depositRecipient) ? 'not-allowed' : 'pointer',
+                      }}
                     >
                       {depositing ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} />
                       ) : (
-                        <Zap className="w-4 h-4" />
+                        <Zap style={{ width: 16, height: 16 }} />
                       )}
                       {depositing
                         ? 'Bridging...'
@@ -918,31 +1086,43 @@ export function BridgePage() {
                   </div>
 
                   {/* Info note */}
-                  <div className="flex items-start gap-2 p-2.5 rounded-lg bg-dag-accent/5 border border-dag-accent/10">
-                    <Info className="w-3.5 h-3.5 text-dag-accent mt-0.5 shrink-0" />
-                    <p className="text-xs text-dag-muted">
+                  <div style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 8, padding: 10,
+                    borderRadius: 8, background: 'rgba(0,224,196,0.05)', border: '1px solid rgba(0,224,196,0.1)',
+                  }}>
+                    <Info style={{ width: 14, height: 14, color: '#00E0C4', marginTop: 2, flexShrink: 0 }} />
+                    <p style={{ fontSize: 10, color: 'var(--dag-text-muted)' }}>
                       Validators sign attestations as part of consensus. Once 2/3+ signatures are collected, you can claim on Arbitrum.
                     </p>
                   </div>
 
                   {/* Validator badge */}
-                  <div className="flex justify-center">
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-dag-green/10 text-dag-green text-xs font-medium border border-dag-green/20">
-                      <div className="w-1.5 h-1.5 rounded-full bg-dag-green animate-pulse" />
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <div style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 8,
+                      padding: '6px 12px', borderRadius: 999,
+                      background: 'rgba(0,224,196,0.1)', color: '#00E0C4',
+                      fontSize: 10, fontWeight: 500, border: '1px solid rgba(0,224,196,0.2)',
+                    }}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#00E0C4', animation: 'pulse 2s infinite' }} />
                       5 Validators Active
                     </div>
                   </div>
 
                   {/* Deposit success message */}
                   {depositTxHash && (
-                    <div className="rounded-xl bg-dag-green/5 border border-dag-green/20 p-3.5 flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-dag-green/10 flex items-center justify-center shrink-0">
-                        <CheckCircle className="w-4 h-4 text-dag-green" />
+                    <div style={successBox}>
+                      <div style={{
+                        width: 32, height: 32, borderRadius: '50%',
+                        background: 'rgba(0,224,196,0.1)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                      }}>
+                        <CheckCircle style={{ width: 16, height: 16, color: '#00E0C4' }} />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-dag-green">Bridge deposit submitted!</p>
-                        <p className="text-[10px] text-dag-muted mt-0.5">Validators will sign attestations during consensus. Track status in the Arbitrum &rarr; Native tab.</p>
-                        <p className="text-[10px] text-dag-muted mt-0.5 truncate font-mono">{depositTxHash}</p>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 10, fontWeight: 500, color: '#00E0C4' }}>Bridge deposit submitted!</p>
+                        <p style={{ fontSize: 10, color: 'var(--dag-text-muted)', marginTop: 2 }}>Validators will sign attestations during consensus. Track status in the Arbitrum &rarr; Native tab.</p>
+                        <p style={{ fontSize: 10, color: 'var(--dag-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'DM Mono',monospace" }}>{depositTxHash}</p>
                       </div>
                       <CopyButton text={depositTxHash} />
                     </div>
@@ -953,109 +1133,131 @@ export function BridgePage() {
           </div>
 
           {/* Bridge Stats Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 stagger-enter">
-            <div className="rounded-xl bg-dag-card border border-dag-border p-4 card-glow">
-              <div className="flex items-center gap-2 mb-2">
-                <Lock className="w-3.5 h-3.5 text-dag-accent" />
-                <span className="text-[10px] text-dag-muted uppercase tracking-wider font-medium">Bridge Reserve</span>
+          <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : 'repeat(3, 1fr)', gap: 12 }}>
+            <div style={statCard}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <Lock style={{ width: 14, height: 14, color: '#00E0C4' }} />
+                <span style={{ fontSize: 10, color: 'var(--dag-text-muted)', textTransform: 'uppercase', letterSpacing: 1.5, fontWeight: 500 }}>Bridge Reserve</span>
               </div>
-              <p className="text-lg font-bold text-white font-mono">
+              <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--dag-text)', fontFamily: "'DM Mono',monospace" }}>
                 {bridgeReserve ? formatUdag(bridgeReserve.reserve_udag) : '0.00'}
               </p>
-              <p className="text-[10px] text-dag-muted mt-0.5">UDAG locked on native chain</p>
+              <p style={{ fontSize: 10, color: 'var(--dag-text-muted)', marginTop: 2 }}>UDAG locked on native chain</p>
             </div>
-            <div className="rounded-xl bg-dag-card border border-dag-border p-4 card-glow">
-              <div className="flex items-center gap-2 mb-2">
-                <Clock className="w-3.5 h-3.5 text-dag-muted" />
-                <span className="text-[10px] text-dag-muted uppercase tracking-wider font-medium">24h Volume</span>
+            <div style={statCard}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <Clock style={{ width: 14, height: 14, color: 'var(--dag-text-muted)' }} />
+                <span style={{ fontSize: 10, color: 'var(--dag-text-muted)', textTransform: 'uppercase', letterSpacing: 1.5, fontWeight: 500 }}>24h Volume</span>
               </div>
-              <p className="text-lg font-bold text-white font-mono">
+              <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--dag-text)', fontFamily: "'DM Mono',monospace" }}>
                 {dailyCap > 0n ? formatUdagBigint(dailyVolume) : '0.00'}
               </p>
               {dailyCap > 0n && (
-                <div className="mt-1.5">
-                  <div className="flex items-center justify-between text-[10px] text-dag-muted mb-1">
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10, color: 'var(--dag-text-muted)', marginBottom: 4 }}>
                     <span>{formatUdagBigint(dailyVolume)}</span>
                     <span>{formatUdagBigint(dailyCap)} cap</span>
                   </div>
-                  <div className="w-full bg-dag-bg rounded-full h-1">
+                  <div style={{ width: '100%', background: 'var(--dag-bg)', borderRadius: 999, height: 4 }}>
                     <div
-                      className="bg-gradient-to-r from-dag-accent to-dag-blue h-1 rounded-full transition-all"
-                      style={{ width: `${Math.min(100, Number((dailyVolume * 100n) / dailyCap))}%` }}
+                      style={{
+                        background: 'linear-gradient(to right, #00E0C4, #0066FF)',
+                        height: 4, borderRadius: 999, transition: 'all 0.3s',
+                        width: `${Math.min(100, Number((dailyVolume * 100n) / dailyCap))}%`,
+                      }}
                     />
                   </div>
                 </div>
               )}
             </div>
-            <div className="rounded-xl bg-dag-card border border-dag-border p-4 card-glow">
-              <div className="flex items-center gap-2 mb-2">
-                <Shield className="w-3.5 h-3.5 text-dag-green" />
-                <span className="text-[10px] text-dag-muted uppercase tracking-wider font-medium">Security</span>
+            <div style={statCard}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <Shield style={{ width: 14, height: 14, color: '#00E0C4' }} />
+                <span style={{ fontSize: 10, color: 'var(--dag-text-muted)', textTransform: 'uppercase', letterSpacing: 1.5, fontWeight: 500 }}>Security</span>
               </div>
-              <p className="text-lg font-bold text-white">2/3 BFT</p>
-              <p className="text-[10px] text-dag-muted mt-0.5">Validator threshold consensus</p>
+              <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--dag-text)' }}>2/3 BFT</p>
+              <p style={{ fontSize: 10, color: 'var(--dag-text-muted)', marginTop: 2 }}>Validator threshold consensus</p>
             </div>
           </div>
         </div>
 
-        {/* Right: Attestations + How it Works (2 cols) */}
-        <div className="lg:col-span-2 space-y-6">
+        {/* Right: Attestations + How it Works */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
           {/* Attestations Card */}
-          <div className="rounded-2xl bg-dag-card border border-dag-border overflow-hidden card-glow">
-            <div className="flex items-center justify-between p-5 pb-0">
-              <h3 className="text-sm font-semibold text-white">Recent Attestations</h3>
-              {loadingAttestations && <Loader2 className="w-3.5 h-3.5 text-dag-muted animate-spin" />}
+          <div style={{ borderRadius: 16, background: 'var(--dag-card)', border: '1px solid var(--dag-border)', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 20px 0' }}>
+              <h3 style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)' }}>Recent Attestations</h3>
+              {loadingAttestations && <Loader2 style={{ width: 14, height: 14, color: 'var(--dag-text-muted)', animation: 'spin 1s linear infinite' }} />}
             </div>
-            <div className="p-5 pt-3">
+            <div style={{ padding: '12px 20px 20px' }}>
               {attestations.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="w-10 h-10 rounded-xl bg-dag-surface border border-dag-border flex items-center justify-center mx-auto mb-3">
-                    <Shield className="w-5 h-5 text-dag-muted/30" />
+                <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 12,
+                    background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    margin: '0 auto 12px',
+                  }}>
+                    <Shield style={{ width: 20, height: 20, color: 'var(--dag-text-faint)' }} />
                   </div>
-                  <p className="text-sm text-dag-muted">No recent attestations</p>
-                  <p className="text-[10px] text-dag-muted mt-1">Bridge transfers will appear here</p>
+                  <p style={{ fontSize: 12, color: 'var(--dag-text-muted)' }}>No recent attestations</p>
+                  <p style={{ fontSize: 10, color: 'var(--dag-text-muted)', marginTop: 4 }}>Bridge transfers will appear here</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {attestations.map((att) => (
-                    <div key={att.nonce} className="rounded-xl bg-dag-bg border border-dag-border/50 p-3.5 space-y-2.5">
+                    <div key={att.nonce} style={{
+                      borderRadius: 12, background: 'var(--dag-bg)',
+                      border: '1px solid rgba(255,255,255,0.045)', padding: 14,
+                      display: 'flex', flexDirection: 'column', gap: 10,
+                    }}>
                       {/* Header row */}
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-mono text-dag-muted">#{att.nonce}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: 'var(--dag-text-muted)' }}>#{att.nonce}</span>
                         {att.ready ? (
-                          <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-dag-green/10 text-dag-green border border-dag-green/20">
-                            <div className="w-1.5 h-1.5 rounded-full bg-dag-green animate-pulse" />
+                          <span style={{
+                            display: 'flex', alignItems: 'center', gap: 4,
+                            fontSize: 10, padding: '2px 8px', borderRadius: 999,
+                            background: 'rgba(0,224,196,0.1)', color: '#00E0C4', border: '1px solid rgba(0,224,196,0.2)',
+                          }}>
+                            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#00E0C4', animation: 'pulse 2s infinite' }} />
                             Ready to Claim
                           </span>
                         ) : (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-dag-yellow/10 text-dag-yellow border border-dag-yellow/20">
+                          <span style={{
+                            fontSize: 10, padding: '2px 8px', borderRadius: 999,
+                            background: 'rgba(255,184,0,0.1)', color: '#FFB800', border: '1px solid rgba(255,184,0,0.2)',
+                          }}>
                             {att.signature_count}/{att.threshold} signatures
                           </span>
                         )}
                       </div>
 
                       {/* Progress bar */}
-                      <div className="w-full bg-dag-surface rounded-full h-1.5">
+                      <div style={{ width: '100%', background: 'var(--dag-input-bg)', borderRadius: 999, height: 6 }}>
                         <div
-                          className={`h-1.5 rounded-full transition-all ${att.ready ? 'bg-dag-green' : 'bg-dag-yellow'}`}
-                          style={{ width: `${Math.min(100, (att.signature_count / att.threshold) * 100)}%` }}
+                          style={{
+                            height: 6, borderRadius: 999, transition: 'all 0.3s',
+                            background: att.ready ? '#00E0C4' : '#FFB800',
+                            width: `${Math.min(100, (att.signature_count / att.threshold) * 100)}%`,
+                          }}
                         />
                       </div>
 
                       {/* Details */}
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-dag-muted">Amount</span>
-                          <span className="text-white font-mono font-medium">{formatUdag(att.amount_udag)} UDAG</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10 }}>
+                          <span style={{ color: 'var(--dag-text-muted)' }}>Amount</span>
+                          <span style={{ color: 'var(--dag-text)', fontFamily: "'DM Mono',monospace", fontWeight: 500 }}>{formatUdag(att.amount_udag)} UDAG</span>
                         </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-dag-muted">From</span>
-                          <span className="text-white font-mono text-[11px] truncate max-w-[140px]">{att.sender_bech32}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10 }}>
+                          <span style={{ color: 'var(--dag-text-muted)' }}>From</span>
+                          <span style={{ color: 'var(--dag-text)', fontFamily: "'DM Mono',monospace", fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>{att.sender_bech32}</span>
                         </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-dag-muted">To</span>
-                          <span className="text-white font-mono text-[11px] truncate max-w-[140px]">{att.recipient.slice(0, 10)}...{att.recipient.slice(-6)}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10 }}>
+                          <span style={{ color: 'var(--dag-text-muted)' }}>To</span>
+                          <span style={{ color: 'var(--dag-text)', fontFamily: "'DM Mono',monospace", fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>{att.recipient.slice(0, 10)}...{att.recipient.slice(-6)}</span>
                         </div>
                       </div>
 
@@ -1064,12 +1266,19 @@ export function BridgePage() {
                         <button
                           onClick={() => handleClaim(att)}
                           disabled={claiming === att.nonce}
-                          className="w-full mt-1 py-2.5 rounded-xl bg-dag-green/10 text-dag-green border border-dag-green/20 text-xs font-semibold hover:bg-dag-green/15 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                          style={{
+                            width: '100%', marginTop: 4, padding: '10px 0', borderRadius: 12,
+                            background: 'rgba(0,224,196,0.1)', color: '#00E0C4',
+                            border: '1px solid rgba(0,224,196,0.2)',
+                            fontSize: 10, fontWeight: 600, cursor: claiming === att.nonce ? 'default' : 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                            transition: 'all 0.15s', opacity: claiming === att.nonce ? 0.5 : 1,
+                          }}
                         >
                           {claiming === att.nonce ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} />
                           ) : (
-                            <CheckCircle className="w-3.5 h-3.5" />
+                            <CheckCircle style={{ width: 14, height: 14 }} />
                           )}
                           {claiming === att.nonce ? 'Claiming...' : 'Claim on Arbitrum'}
                         </button>
@@ -1082,54 +1291,69 @@ export function BridgePage() {
           </div>
 
           {/* How it Works Card */}
-          <div className="rounded-2xl bg-dag-card border border-dag-border overflow-hidden card-glow">
-            <div className="p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Shield className="w-4 h-4 text-dag-accent" />
-                <h3 className="text-sm font-semibold text-white">How the Bridge Works</h3>
+          <div style={{ borderRadius: 16, background: 'var(--dag-card)', border: '1px solid var(--dag-border)', overflow: 'hidden' }}>
+            <div style={{ padding: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                <Shield style={{ width: 16, height: 16, color: '#00E0C4' }} />
+                <h3 style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)' }}>How the Bridge Works</h3>
               </div>
 
-              <div className="space-y-4">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {/* Step 1 */}
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-dag-accent/10 border border-dag-accent/20 flex items-center justify-center shrink-0">
-                    <span className="text-xs font-bold text-dag-accent">1</span>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 8,
+                    background: 'rgba(0,224,196,0.1)', border: '1px solid rgba(0,224,196,0.2)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#00E0C4' }}>1</span>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-white">Deposit</p>
-                    <p className="text-xs text-dag-muted mt-0.5">Lock tokens on the source chain. Funds are escrowed in the bridge contract.</p>
+                    <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--dag-text)' }}>Deposit</p>
+                    <p style={{ fontSize: 10, color: 'var(--dag-text-muted)', marginTop: 2 }}>Lock tokens on the source chain. Funds are escrowed in the bridge contract.</p>
                   </div>
                 </div>
 
                 {/* Step 2 */}
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-dag-blue/10 border border-dag-blue/20 flex items-center justify-center shrink-0">
-                    <span className="text-xs font-bold text-dag-blue">2</span>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 8,
+                    background: 'rgba(0,102,255,0.1)', border: '1px solid rgba(0,102,255,0.2)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#0066FF' }}>2</span>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-white">Attestation</p>
-                    <p className="text-xs text-dag-muted mt-0.5">Validators sign the transfer as part of normal consensus. 2/3+ signatures required.</p>
+                    <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--dag-text)' }}>Attestation</p>
+                    <p style={{ fontSize: 10, color: 'var(--dag-text-muted)', marginTop: 2 }}>Validators sign the transfer as part of normal consensus. 2/3+ signatures required.</p>
                   </div>
                 </div>
 
                 {/* Step 3 */}
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-dag-green/10 border border-dag-green/20 flex items-center justify-center shrink-0">
-                    <span className="text-xs font-bold text-dag-green">3</span>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 8,
+                    background: 'rgba(0,224,196,0.1)', border: '1px solid rgba(0,224,196,0.2)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#00E0C4' }}>3</span>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-white">Claim</p>
-                    <p className="text-xs text-dag-muted mt-0.5">Submit the attestation proof to unlock tokens on the destination chain.</p>
+                    <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--dag-text)' }}>Claim</p>
+                    <p style={{ fontSize: 10, color: 'var(--dag-text-muted)', marginTop: 2 }}>Submit the attestation proof to unlock tokens on the destination chain.</p>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-4 p-3 rounded-xl bg-dag-green/5 border border-dag-green/10">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-3.5 h-3.5 text-dag-green shrink-0" />
+              <div style={{
+                marginTop: 16, padding: 12, borderRadius: 12,
+                background: 'rgba(0,224,196,0.05)', border: '1px solid rgba(0,224,196,0.1)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <CheckCircle style={{ width: 14, height: 14, color: '#00E0C4', flexShrink: 0 }} />
                   <div>
-                    <span className="text-xs font-medium text-dag-green">Same security as DAG consensus</span>
-                    <p className="text-[10px] text-dag-muted mt-0.5">No external relayers. Uses the existing validator federation with 2/3 BFT threshold.</p>
+                    <span style={{ fontSize: 10, fontWeight: 500, color: '#00E0C4' }}>Same security as DAG consensus</span>
+                    <p style={{ fontSize: 10, color: 'var(--dag-text-muted)', marginTop: 2 }}>No external relayers. Uses the existing validator federation with 2/3 BFT threshold.</p>
                   </div>
                 </div>
               </div>
