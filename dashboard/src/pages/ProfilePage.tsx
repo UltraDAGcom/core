@@ -4,7 +4,7 @@ import { useProfile } from '../hooks/useProfile';
 import { useKeystore } from '../hooks/useKeystore';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
-import { getBalance, normalizeAddress } from '../lib/api';
+import { getBalance, normalizeAddress, isValidAddress } from '../lib/api';
 import { UltraIdCard } from '../components/profile/UltraIdCard';
 import { EditProfileModal } from '../components/profile/EditProfileModal';
 import { ProfileActivity } from '../components/profile/ProfileActivity';
@@ -36,10 +36,11 @@ export function ProfilePage() {
       input = input.replace(/^@/, '');
 
       // Try as address first (hex or bech32)
-      try {
-        const normalized = normalizeAddress(input);
-        if (normalized) { setResolvedAddress(normalized); setResolving(false); return; }
-      } catch { /* not an address, try as name */ }
+      if (isValidAddress(input)) {
+        setResolvedAddress(normalizeAddress(input));
+        setResolving(false);
+        return;
+      }
 
       // Resolve as name via /balance/ endpoint (accepts names)
       try {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getBalance, getStake, getDelegation, getSmartAccount, getNameInfo, getStreamsSender, getStreamsRecipient, getProposals } from '../lib/api';
+import { getBalance, getStake, getDelegation, getSmartAccount, getNameInfo, getStreamsSender, getStreamsRecipient, getProposals, getProposal } from '../lib/api';
 import { computeBadges, type Badge, type BadgeInput } from '../lib/badges';
 
 export interface ProfileData {
@@ -39,7 +39,7 @@ export function useProfile(address: string | undefined) {
   const [error, setError] = useState<string | null>(null);
 
   const fetchProfile = useCallback(async () => {
-    if (!address) return;
+    if (!address) { setLoading(false); return; }
     setLoading(true);
     setError(null);
 
@@ -59,8 +59,10 @@ export function useProfile(address: string | undefined) {
       const stake = stakeRes.status === 'fulfilled' ? stakeRes.value : null;
       const deleg = delegRes.status === 'fulfilled' ? delegRes.value : null;
       const sa = saRes.status === 'fulfilled' ? saRes.value : null;
-      const streamsOut = streamsOutRes.status === 'fulfilled' ? (Array.isArray(streamsOutRes.value) ? streamsOutRes.value : []) : [];
-      const streamsIn = streamsInRes.status === 'fulfilled' ? (Array.isArray(streamsInRes.value) ? streamsInRes.value : []) : [];
+      const streamsOutData = streamsOutRes.status === 'fulfilled' ? streamsOutRes.value : null;
+      const streamsInData = streamsInRes.status === 'fulfilled' ? streamsInRes.value : null;
+      const streamsOut = Array.isArray(streamsOutData?.streams) ? streamsOutData.streams : (Array.isArray(streamsOutData) ? streamsOutData : []);
+      const streamsIn = Array.isArray(streamsInData?.streams) ? streamsInData.streams : (Array.isArray(streamsInData) ? streamsInData : []);
       const proposals = proposalsRes.status === 'fulfilled' ? (Array.isArray(proposalsRes.value) ? proposalsRes.value : []) : [];
 
       if (!bal) { setError('Address not found'); setLoading(false); return; }
@@ -75,14 +77,18 @@ export function useProfile(address: string | undefined) {
       const metadata = profileMeta.metadata ?? [];
       const getMeta = (key: string) => metadata.find(([k]: [string, string]) => k === key)?.[1] ?? null;
 
-      // Count proposals this address voted on
+      // Count proposals this address voted on (check up to 10 recent proposals)
       let votedCount = 0;
-      for (const p of proposals) {
-        if (p.voters && Array.isArray(p.voters)) {
-          if (p.voters.some((v: Record<string, unknown>) => String(v.address) === address)) {
-            votedCount++;
+      const recentProposals = proposals.slice(0, 10);
+      for (const p of recentProposals) {
+        try {
+          const detail = await getProposal(p.id);
+          if (detail?.voters && Array.isArray(detail.voters)) {
+            if (detail.voters.some((v: Record<string, unknown>) => String(v.address) === address)) {
+              votedCount++;
+            }
           }
-        }
+        } catch { /* skip */ }
       }
 
       const data: ProfileData = {

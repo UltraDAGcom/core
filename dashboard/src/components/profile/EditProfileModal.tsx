@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { postTxSubmit, getNodeUrl } from '../../lib/api';
-import { getPasskeyWallet } from '../../lib/passkey-wallet';
 import { useToast } from '../../hooks/useToast';
 import type { Wallet } from '../../lib/keystore';
 
@@ -28,68 +26,25 @@ const labelStyle: React.CSSProperties = {
   display: 'block', marginBottom: 4, fontWeight: 600,
 };
 
-export function EditProfileModal({ name, wallet, currentBio, currentWebsite, currentGithub, currentTwitter, currentExternalAddresses, onClose, onSuccess }: EditProfileModalProps) {
+export function EditProfileModal({ name, wallet: _wallet, currentBio, currentWebsite, currentGithub, currentTwitter, currentExternalAddresses, onClose, onSuccess: _onSuccess }: EditProfileModalProps) {
   const [bio, setBio] = useState(currentBio ?? '');
   const [website, setWebsite] = useState(currentWebsite ?? '');
   const [github, setGithub] = useState(currentGithub ?? '');
   const [twitter, setTwitter] = useState(currentTwitter ?? '');
   const [ethAddr, setEthAddr] = useState(currentExternalAddresses.find(([k]) => k === 'eth')?.[1] ?? '');
   const [btcAddr, setBtcAddr] = useState(currentExternalAddresses.find(([k]) => k === 'btc')?.[1] ?? '');
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const [error, setError] = useState('');
   const { toast } = useToast();
 
-  const isPasskey = !!getPasskeyWallet() && !wallet.secret_key;
+  // TODO: Profile editing requires either a testnet convenience endpoint for
+  // UpdateProfileTx or client-side ed25519 signing. Neither is available yet.
+  // For now, show the form as read-only preview of what will be saved.
+  const canSave = false;
 
   const handleSave = async () => {
-    if (isPasskey) {
-      setError('SmartOp UpdateProfile not yet supported for passkey wallets. Use a legacy wallet.');
-      return;
-    }
-    setError('');
-    setLoading(true);
-
-    try {
-      // Build metadata entries
-      const metadata: Array<[string, string]> = [];
-      if (bio.trim()) metadata.push(['bio', bio.trim()]);
-      if (website.trim()) metadata.push(['website', website.trim()]);
-      if (github.trim()) metadata.push(['github', github.trim()]);
-      if (twitter.trim()) metadata.push(['twitter', twitter.trim()]);
-
-      // Build external addresses
-      const externalAddresses: Array<[string, string]> = [];
-      if (ethAddr.trim()) externalAddresses.push(['eth', ethAddr.trim()]);
-      if (btcAddr.trim()) externalAddresses.push(['btc', btcAddr.trim()]);
-
-      // Get nonce
-      const balRes = await fetch(`${getNodeUrl()}/balance/${wallet.address}`, { signal: AbortSignal.timeout(5000) });
-      const balData = await balRes.json();
-      const nonce = balData.nonce ?? 0;
-      const fee = 10000; // MIN_FEE
-
-      // Build and sign UpdateProfileTx
-      // The /profile/update endpoint doesn't exist, so we use /tx with the update_profile type
-      const body = {
-        secret_key: wallet.secret_key,
-        name,
-        external_addresses: externalAddresses,
-        metadata,
-        fee,
-        nonce,
-      };
-
-      await postTxSubmit({ type: 'update_profile', ...body });
-      toast('Profile updated!', 'success');
-      onSuccess();
-      onClose();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Failed to update profile';
-      setError(msg);
-      toast(msg, 'error');
-    } finally {
-      setLoading(false);
-    }
+    setError('Profile editing is coming soon. The UpdateProfile transaction endpoint is being added to the next release.');
+    toast('Profile editing coming soon', 'info');
   };
 
   return (
@@ -105,11 +60,9 @@ export function EditProfileModal({ name, wallet, currentBio, currentWebsite, cur
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--dag-text-faint)', fontSize: 18, cursor: 'pointer' }}>✕</button>
         </div>
 
-        {isPasskey && (
-          <div style={{ marginBottom: 14, padding: '10px 12px', background: 'rgba(255,184,0,0.06)', border: '1px solid rgba(255,184,0,0.15)', borderRadius: 8, fontSize: 11, color: '#FFB800' }}>
-            Profile editing is not yet available for passkey wallets. SmartOp UpdateProfile support coming soon.
-          </div>
-        )}
+        <div style={{ marginBottom: 14, padding: '10px 12px', background: 'rgba(0,224,196,0.06)', border: '1px solid rgba(0,224,196,0.15)', borderRadius: 8, fontSize: 11, color: '#00E0C4' }}>
+          Preview your profile changes below. Saving will be enabled in the next release when the UpdateProfile endpoint is live.
+        </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
@@ -162,13 +115,13 @@ export function EditProfileModal({ name, wallet, currentBio, currentWebsite, cur
           </div>
         )}
 
-        <button onClick={handleSave} disabled={loading || isPasskey} style={{
+        <button onClick={handleSave} disabled={!canSave || loading} style={{
           width: '100%', padding: '12px 0', borderRadius: 10, border: 'none', marginTop: 16,
-          background: loading || isPasskey ? 'var(--dag-input-bg)' : 'linear-gradient(135deg, #00E0C4, #0066FF)',
-          color: loading || isPasskey ? 'var(--dag-text-faint)' : '#fff',
-          fontSize: 13, fontWeight: 700, cursor: loading || isPasskey ? 'default' : 'pointer',
+          background: !canSave || loading ? 'var(--dag-input-bg)' : 'linear-gradient(135deg, #00E0C4, #0066FF)',
+          color: !canSave || loading ? 'var(--dag-text-faint)' : '#fff',
+          fontSize: 13, fontWeight: 700, cursor: !canSave || loading ? 'default' : 'pointer',
         }}>
-          {loading ? 'Saving...' : 'Save Profile'}
+          {loading ? 'Saving...' : 'Save Profile (Coming Soon)'}
         </button>
       </div>
     </div>
