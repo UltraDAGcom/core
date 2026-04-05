@@ -2512,10 +2512,17 @@ impl StateEngine {
     // ────────────────────────────────────────────────────────────
 
     /// Resolve a name to an address. Returns None if name doesn't exist or is expired.
+    ///
+    /// Perpetual (free-tier, 6+ char) names never expire — the grace-period
+    /// check is skipped entirely based on name length, so old on-disk state
+    /// carrying a finite expiry for a free-tier name is transparently upgraded.
     pub fn resolve_name(&self, name: &str) -> Option<Address> {
-        let current_round = self.last_finalized_round.unwrap_or(0);
         let addr = self.name_to_address.get(name)?;
-        // Check if expired (but within grace period, only owner can renew)
+        if crate::tx::name_registry::is_perpetual_name(name) {
+            return Some(*addr);
+        }
+        let current_round = self.last_finalized_round.unwrap_or(0);
+        // Premium (3-5 char) names: check grace-period expiry.
         if let Some(&expiry) = self.name_expiry.get(name) {
             let grace_end = expiry.saturating_add(crate::tx::name_registry::NAME_GRACE_PERIOD_ROUNDS);
             if current_round > grace_end {
@@ -2530,8 +2537,12 @@ impl StateEngine {
         self.address_to_name.get(addr).map(|s| s.as_str())
     }
 
-    /// Get name expiry round.
+    /// Get name expiry round. Returns `None` for perpetual (free-tier) names,
+    /// even if the underlying map still holds a legacy finite value.
     pub fn name_expiry(&self, name: &str) -> Option<u64> {
+        if crate::tx::name_registry::is_perpetual_name(name) {
+            return None;
+        }
         self.name_expiry.get(name).copied()
     }
 
@@ -2585,10 +2596,10 @@ impl StateEngine {
         if fee > 0 {
             return Err(CoinError::ValidationError("premium names (3-5 chars) require payment — use RegisterNameTx".into()));
         }
-        let expiry = current_round.saturating_add(ROUNDS_PER_YEAR);
+        // Free-tier names are perpetual — stamp the sentinel.
         self.name_to_address.insert(name.to_string(), *addr);
         self.address_to_name.insert(*addr, name.to_string());
-        self.name_expiry.insert(name.to_string(), expiry);
+        self.name_expiry.insert(name.to_string(), PERPETUAL_EXPIRY);
         self.name_created_at.insert(name.to_string(), current_round);
         Ok(())
     }
@@ -2614,10 +2625,16 @@ impl StateEngine {
         }
 
         let current_round = self.last_finalized_round.unwrap_or(0);
+        let perpetual = is_perpetual_name(&tx.name);
 
         // Check if name is available
         if let Some(&existing_addr) = self.name_to_address.get(&tx.name) {
-            // Name exists — check if it's expired past grace period
+            if perpetual {
+                // Perpetual names never release. If the caller already owns it,
+                // the outer check below will catch it; otherwise it's permanently taken.
+                return Err(CoinError::ValidationError("name is permanently taken".into()));
+            }
+            // Premium tier — check if it's expired past grace period
             if let Some(&expiry) = self.name_expiry.get(&tx.name) {
                 let grace_end = expiry.saturating_add(NAME_GRACE_PERIOD_ROUNDS);
                 if current_round <= grace_end {
@@ -2662,21 +2679,37 @@ impl StateEngine {
         self.treasury_balance = self.treasury_balance.saturating_add(tx.fee);
         self.increment_nonce(&tx.from);
 
-        // Register
-        let expiry = current_round.saturating_add(ROUNDS_PER_YEAR.saturating_mul(tx.duration_years as u64));
+        // Register. Perpetual names get the sentinel expiry; premium names
+        // get a concrete expiry based on duration_years.
+        let expiry = if perpetual {
+            PERPETUAL_EXPIRY
+        } else {
+            current_round.saturating_add(ROUNDS_PER_YEAR.saturating_mul(tx.duration_years as u64))
+        };
         self.name_to_address.insert(tx.name.clone(), tx.from);
         self.address_to_name.insert(tx.from, tx.name.clone());
         self.name_expiry.insert(tx.name.clone(), expiry);
         self.name_created_at.insert(tx.name.clone(), current_round);
 
-        tracing::info!("Name '{}' registered to {} (expires round {})", tx.name, tx.from.to_hex(), expiry);
+        if perpetual {
+            tracing::info!("Name '{}' registered to {} (perpetual)", tx.name, tx.from.to_hex());
+        } else {
+            tracing::info!("Name '{}' registered to {} (expires round {})", tx.name, tx.from.to_hex(), expiry);
+        }
 
         Ok(())
     }
 
-    /// Renew a name registration.
+    /// Renew a name registration. Only valid for premium (3-5 char) names;
+    /// free-tier names are perpetual and have nothing to renew.
     pub fn apply_renew_name_tx(&mut self, tx: &crate::tx::name_registry::RenewNameTx) -> Result<(), CoinError> {
         use crate::tx::name_registry::*;
+
+        if is_perpetual_name(&tx.name) {
+            return Err(CoinError::ValidationError(
+                "free-tier names (6+ chars) are permanent and cannot be renewed".into(),
+            ));
+        }
 
         if tx.additional_years == 0 || tx.additional_years > MAX_REGISTRATION_YEARS {
             return Err(CoinError::ValidationError(format!(
@@ -2787,12 +2820,17 @@ impl StateEngine {
     }
 
     /// Process expired names. Called periodically (every STATE_PRUNING_INTERVAL rounds).
-    /// Removes names past their grace period.
+    /// Removes premium (3-5 char) names past their grace period.
+    /// Perpetual (free-tier) names are never processed, even if legacy state
+    /// carries a finite expiry value for them.
     pub fn process_name_expiry(&mut self, current_round: u64) {
-        use crate::tx::name_registry::NAME_GRACE_PERIOD_ROUNDS;
+        use crate::tx::name_registry::{NAME_GRACE_PERIOD_ROUNDS, is_perpetual_name};
 
         let expired: Vec<String> = self.name_expiry.iter()
-            .filter(|(_, &expiry)| {
+            .filter(|(name, &expiry)| {
+                if is_perpetual_name(name) {
+                    return false;
+                }
                 current_round > expiry.saturating_add(NAME_GRACE_PERIOD_ROUNDS)
             })
             .map(|(name, _)| name.clone())

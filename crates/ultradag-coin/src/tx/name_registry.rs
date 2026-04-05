@@ -17,7 +17,14 @@ pub const MAX_NAME_LENGTH: usize = 20;
 pub const ROUNDS_PER_YEAR: u64 = 6_307_200;
 
 /// Grace period after expiration (30 days in rounds).
+///
+/// Applies ONLY to premium (3-5 char) names, which are rented annually.
+/// Free-tier names (6+ chars) are perpetual — see `is_perpetual_name`.
 pub const NAME_GRACE_PERIOD_ROUNDS: u64 = 518_400;
+
+/// Sentinel expiry value used for perpetual (free-tier) names.
+/// Never decremented; `process_name_expiry` skips entries bearing this value.
+pub const PERPETUAL_EXPIRY: u64 = u64::MAX;
 
 /// Maximum years for a single registration or renewal.
 pub const MAX_REGISTRATION_YEARS: u8 = 5;
@@ -46,17 +53,33 @@ const RESERVED_NAMES: &[&str] = &[
 // ────────────────────────────────────────────────────────────
 
 /// Compute the annual registration/renewal fee for a name based on length.
-/// Standard names (6+ chars) are FREE — no barrier to onboarding.
-/// Premium short names (3-5 chars) have fees to prevent squatting.
+/// Standard names (6+ chars) are FREE AND PERMANENT — no fee, no expiry.
+/// Premium short names (3-5 chars) are rented annually; fee paid to treasury.
 /// All fees go to the DAO treasury.
 pub fn name_annual_fee(name: &str) -> u64 {
     match name.len() {
-        3 => 1_000 * COIN,        // 1,000 UDAG — premium 3-char
-        4 => 500 * COIN,          // 500 UDAG — premium 4-char
-        5 => 100 * COIN,          // 100 UDAG — premium 5-char
-        6..=20 => 0,              // FREE — standard names, no barrier to onboarding
+        3 => 1_000 * COIN,        // 1,000 UDAG/yr — premium 3-char, rented
+        4 => 500 * COIN,          //   500 UDAG/yr — premium 4-char, rented
+        5 => 100 * COIN,          //   100 UDAG/yr — premium 5-char, rented
+        6..=20 => 0,              // FREE and PERMANENT — standard names, own forever
         _ => u64::MAX,            // Invalid length — will be rejected by validation
     }
+}
+
+/// Whether a name belongs to the perpetual (free) tier.
+///
+/// Perpetual names never expire. The consensus rules for these names:
+/// - Registration sets `expiry = PERPETUAL_EXPIRY` (u64::MAX).
+/// - `resolve_name` skips the grace-period check entirely.
+/// - `process_name_expiry` skips entries for these names even if they
+///   were migrated from an older pre-perpetual format with a finite expiry.
+/// - `apply_renew_name_tx` rejects renewal attempts (nothing to renew).
+///
+/// This makes the decision purely a function of name length, so old on-disk
+/// state needs no migration: any previously-registered 6+ char name is
+/// automatically promoted to perpetual at the next resolve.
+pub fn is_perpetual_name(name: &str) -> bool {
+    name_annual_fee(name) == 0
 }
 
 // ────────────────────────────────────────────────────────────

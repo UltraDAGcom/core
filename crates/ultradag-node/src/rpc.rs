@@ -4082,9 +4082,13 @@ ultradag_banned_ips {ban_count}
             };
             match state.reverse_name(&addr) {
                 Some(name) => {
+                    let owned_name = name.to_string();
+                    let is_perpetual = ultradag_coin::tx::name_registry::is_perpetual_name(&owned_name);
                     json_response(StatusCode::OK, &serde_json::json!({
                         "address": addr.to_hex(),
-                        "name": name,
+                        "name": owned_name,
+                        "expiry_round": state.name_expiry(&owned_name),
+                        "is_perpetual": is_perpetual,
                     }))
                 }
                 None => {
@@ -4098,6 +4102,7 @@ ultradag_banned_ips {ban_count}
             let available = state.resolve_name(name).is_none();
             let valid = ultradag_coin::tx::name_registry::validate_name(name).is_ok();
             let fee = if valid { ultradag_coin::tx::name_registry::name_annual_fee(name) } else { 0 };
+            let is_perpetual = valid && ultradag_coin::tx::name_registry::is_perpetual_name(name);
 
             // Name phishing check: warn if name is similar to an existing name
             // (e.g., "paypa1" vs "paypal", "a1ice" vs "alice")
@@ -4117,6 +4122,7 @@ ultradag_banned_ips {ban_count}
                 "valid": valid,
                 "annual_fee": fee,
                 "annual_fee_udag": fee as f64 / ultradag_coin::SATS_PER_UDAG as f64,
+                "is_perpetual": is_perpetual,
                 "similar_warning": similar_warning,
             }))
         }
@@ -4127,11 +4133,13 @@ ultradag_banned_ips {ban_count}
                 Some(addr) => {
                     let profile = state.name_profile(name);
                     let reverse_name = state.reverse_name(&addr);
+                    let is_perpetual = ultradag_coin::tx::name_registry::is_perpetual_name(name);
                     json_response(StatusCode::OK, &serde_json::json!({
                         "name": name,
                         "owner": addr.to_hex(),
                         "owner_bech32": addr.to_bech32(),
                         "expiry_round": state.name_expiry(name),
+                        "is_perpetual": is_perpetual,
                         "reverse_name": reverse_name,
                         "has_profile": profile.is_some(),
                         "profile": profile.map(|p| serde_json::json!({

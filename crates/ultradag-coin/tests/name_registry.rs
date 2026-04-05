@@ -114,18 +114,20 @@ fn test_tiered_pricing() {
 
 #[test]
 fn test_renew_extends_expiry() {
+    // Renewal only applies to premium (3-5 char) rented names. Use a 5-char
+    // name so we exercise the real expiry/renewal path.
     let alice = SecretKey::from_bytes([0x06; 32]);
     let mut engine = setup(&alice, 500 * COIN);
 
-    let tx = make_register(&alice, "myname", 1, 10 * COIN, 0);
+    let tx = make_register(&alice, "rentl", 1, 100 * COIN, 0);
     engine.apply_register_name_tx(&tx).unwrap();
 
-    let expiry1 = engine.name_expiry("myname").unwrap();
+    let expiry1 = engine.name_expiry("rentl").unwrap();
 
-    let renew_tx = make_renew(&alice, "myname", 1, 10 * COIN, 1);
+    let renew_tx = make_renew(&alice, "rentl", 1, 100 * COIN, 1);
     engine.apply_renew_name_tx(&renew_tx).unwrap();
 
-    let expiry2 = engine.name_expiry("myname").unwrap();
+    let expiry2 = engine.name_expiry("rentl").unwrap();
     assert!(expiry2 > expiry1);
     assert_eq!(expiry2 - expiry1, ROUNDS_PER_YEAR);
 }
@@ -168,31 +170,106 @@ fn test_non_owner_cannot_transfer() {
 
 #[test]
 fn test_name_expiry_releases_name() {
+    // Expiry + release only applies to premium (3-5 char) rented names.
+    // Use a 5-char name to exercise the real grace-period logic.
     let alice = SecretKey::from_bytes([0x0C; 32]);
     let bob = SecretKey::from_bytes([0x0D; 32]);
     let mut engine = setup(&alice, 500 * COIN);
     engine.faucet_credit(&bob.address(), 500 * COIN).unwrap();
 
-    let tx = make_register(&alice, "expiring", 1, 10 * COIN, 0);
+    let tx = make_register(&alice, "abcde", 1, 100 * COIN, 0);
     engine.apply_register_name_tx(&tx).unwrap();
 
-    let expiry = engine.name_expiry("expiring").unwrap();
+    let expiry = engine.name_expiry("abcde").unwrap();
 
     // Still valid during grace period
     let grace_end = expiry + NAME_GRACE_PERIOD_ROUNDS;
-    assert!(engine.resolve_name("expiring").is_some());
+    assert!(engine.resolve_name("abcde").is_some());
 
     // Process expiry past grace
     engine.process_name_expiry(grace_end + 1);
 
     // Name should be released
-    assert!(engine.resolve_name("expiring").is_none());
+    assert!(engine.resolve_name("abcde").is_none());
     assert!(engine.reverse_name(&alice.address()).is_none());
 
     // Bob can now register the expired name
-    let tx2 = make_register(&bob, "expiring", 1, 10 * COIN, 0);
+    let tx2 = make_register(&bob, "abcde", 1, 100 * COIN, 0);
     engine.apply_register_name_tx(&tx2).unwrap();
-    assert_eq!(engine.resolve_name("expiring"), Some(bob.address()));
+    assert_eq!(engine.resolve_name("abcde"), Some(bob.address()));
+}
+
+#[test]
+fn test_free_name_is_perpetual() {
+    // Free-tier (6+ char) names never expire. Registration records the
+    // PERPETUAL_EXPIRY sentinel, name_expiry() returns None, and neither
+    // resolve_name nor process_name_expiry can ever release them.
+    let alice = SecretKey::from_bytes([0x20; 32]);
+    let mut engine = setup(&alice, 500 * COIN);
+
+    let tx = make_register(&alice, "foreveralice", 1, 0, 0);
+    engine.apply_register_name_tx(&tx).unwrap();
+
+    assert_eq!(engine.resolve_name("foreveralice"), Some(alice.address()));
+    // Engine reports None for perpetual names so RPC clients render "Permanent".
+    assert!(
+        engine.name_expiry("foreveralice").is_none(),
+        "name_expiry() must return None for perpetual names"
+    );
+    assert!(is_perpetual_name("foreveralice"));
+
+    // Even pushing process_name_expiry well past any finite timestamp must
+    // leave the free-tier name untouched.
+    engine.process_name_expiry(u64::MAX / 2);
+    assert_eq!(engine.resolve_name("foreveralice"), Some(alice.address()));
+}
+
+#[test]
+fn test_free_name_cannot_be_renewed() {
+    // Renewal is meaningless for perpetual names and must be rejected with
+    // an explicit error so clients don't silently waste a tx.
+    let alice = SecretKey::from_bytes([0x21; 32]);
+    let mut engine = setup(&alice, 500 * COIN);
+
+    let tx = make_register(&alice, "bobsyouruncle", 1, 0, 0);
+    engine.apply_register_name_tx(&tx).unwrap();
+
+    let renew_tx = make_renew(&alice, "bobsyouruncle", 1, 10 * COIN, 1);
+    let result = engine.apply_renew_name_tx(&renew_tx);
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("perman") || err.contains("cannot be renewed"),
+        "expected perpetual/renew error, got: {}", err
+    );
+}
+
+#[test]
+fn test_free_name_cannot_be_re_registered_by_someone_else() {
+    // Perpetual names never enter a grace period, so another address
+    // must never be able to snipe them — even in the far future.
+    let alice = SecretKey::from_bytes([0x22; 32]);
+    let bob = SecretKey::from_bytes([0x23; 32]);
+    let mut engine = setup(&alice, 500 * COIN);
+    engine.faucet_credit(&bob.address(), 500 * COIN).unwrap();
+
+    let tx = make_register(&alice, "permaname", 1, 0, 0);
+    engine.apply_register_name_tx(&tx).unwrap();
+
+    // Simulate deep future pruning cycles — should be a no-op for perpetual.
+    engine.process_name_expiry(u64::MAX / 2);
+
+    let bob_tx = make_register(&bob, "permaname", 1, 0, 0);
+    let result = engine.apply_register_name_tx(&bob_tx);
+    assert!(result.is_err(), "perpetual name should never be re-registerable");
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("permanently taken") || err.contains("taken"),
+        "expected 'permanently taken' error, got: {}", err
+    );
+
+    // And the original owner still resolves.
+    assert_eq!(engine.resolve_name("permaname"), Some(alice.address()));
 }
 
 #[test]
