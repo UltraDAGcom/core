@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { getNodeUrl } from '../../lib/api';
 import { primaryButtonStyle } from '../../lib/theme';
 import type { NetworkType } from '../../lib/api';
+import { signAndSubmitSmartOp } from '../../lib/webauthn-sign';
 // savePasskeyWallet is called by WelcomeScreen after backup step completes
 
 interface PasskeyOnboardingProps {
@@ -85,6 +86,9 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ address: string; name: string | null } | null>(null);
   const [pendingWallet, setPendingWallet] = useState<{ credentialId: string; p256PubkeyHex: string; address: string; keyId: string; name: string | null } | null>(null);
+  const [linkingDevice, setLinkingDevice] = useState(false);
+  const [linkError, setLinkError] = useState('');
+  const [linkedKeyLabel, setLinkedKeyLabel] = useState<string | null>(null);
   // Backup-device registration requires SmartOpType::AddKey which doesn't
   // exist in the Rust protocol yet, so the old backup step was removed.
   // Social recovery is surfaced on the final success screen instead.
@@ -269,6 +273,91 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
       setStep('passkey'); // Go back to passkey step on failure
     } finally {
       setCreating(false);
+    }
+  };
+
+  // Link a second device (cross-platform passkey, usually via browser QR).
+  // Creates a new P256 credential on the scanning device, extracts the pubkey,
+  // and registers it on-chain via SmartOpType::AddKey signed by the PRIMARY
+  // passkey (still held in `pendingWallet` because we haven't saved it to
+  // localStorage yet — once "Open Wallet" is clicked the primary gets persisted).
+  const handleLinkDevice = async () => {
+    if (!pendingWallet) return;
+    setLinkError('');
+    setLinkingDevice(true);
+    try {
+      if (!window.PublicKeyCredential) {
+        throw new Error('WebAuthn is not supported on this device.');
+      }
+
+      // 1. Create a cross-platform passkey (the browser shows its own QR UI
+      //    on desktop, or lets the user pick another authenticator).
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: { name: 'UltraDAG Wallet', id: window.location.hostname },
+          user: {
+            id: crypto.getRandomValues(new Uint8Array(16)),
+            name: pendingWallet.name ? `ultradag-${pendingWallet.name}-backup` : 'ultradag-backup',
+            displayName: pendingWallet.name ? `UltraDAG @${pendingWallet.name} (Backup)` : 'UltraDAG Backup',
+          },
+          pubKeyCredParams: [{ alg: -7, type: 'public-key' }],
+          authenticatorSelection: {
+            authenticatorAttachment: 'cross-platform',
+            userVerification: 'required',
+            residentKey: 'preferred',
+          },
+          timeout: 120000,
+        },
+      }) as PublicKeyCredential | null;
+      if (!credential) { setLinkError('Cancelled.'); return; }
+
+      // 2. Extract the new P256 pubkey (compressed SEC1, 33 bytes).
+      const attestation = credential.response as AuthenticatorAttestationResponse;
+      const pubkeyCose = attestation.getPublicKey?.();
+      if (!pubkeyCose) throw new Error('Could not extract public key from backup device.');
+      const spkiKey = new Uint8Array(pubkeyCose);
+      const cryptoKey = await crypto.subtle.importKey('spki', spkiKey, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['verify']);
+      const rawKey = new Uint8Array(await crypto.subtle.exportKey('raw', cryptoKey));
+      let compressed: Uint8Array;
+      if (rawKey.length === 65 && rawKey[0] === 0x04) {
+        compressed = new Uint8Array(33);
+        compressed[0] = (rawKey[64] & 1) === 0 ? 0x02 : 0x03;
+        compressed.set(rawKey.slice(1, 33), 1);
+      } else if (rawKey.length === 33) {
+        compressed = rawKey;
+      } else {
+        throw new Error('Unexpected key format from backup device.');
+      }
+      const hexNewPubkey = Array.from(compressed).map(b => b.toString(16).padStart(2, '0')).join('');
+
+      // 3. Fetch the primary's current nonce for the SmartOp.
+      const balRes = await fetch(`${getNodeUrl()}/balance/${pendingWallet.address}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      const balData = await balRes.json();
+      const nonce = balData.nonce ?? 0;
+
+      // 4. Sign + submit AddKey SmartOp with the PRIMARY passkey.
+      const label = 'Backup Device';
+      await signAndSubmitSmartOp(
+        { AddKey: { key_type: 'p256', pubkey: hexNewPubkey, label } },
+        0, // fee-exempt
+        nonce,
+        pendingWallet, // wallet override — primary not yet in localStorage
+      );
+
+      setLinkedKeyLabel(label);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      if (msg.includes('NotAllowed') || msg.includes('cancelled')) {
+        setLinkError('Cancelled. You can try again or skip for now.');
+      } else {
+        setLinkError(`Could not link device: ${msg}`);
+      }
+    } finally {
+      setLinkingDevice(false);
     }
   };
 
@@ -667,28 +756,61 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
             );
           })()}
 
-          {/* Cross-platform device linking — disabled pending protocol work */}
+          {/* Cross-platform device linking — live AddKey flow */}
           <div style={{
-            background: 'var(--dag-card)', border: '1px solid var(--dag-border)',
+            background: 'var(--dag-card)',
+            border: linkedKeyLabel ? '1px solid rgba(0,224,196,0.3)' : '1px solid var(--dag-border)',
             borderRadius: 14, padding: '14px 16px', textAlign: 'left', marginBottom: 24,
+            transition: 'border-color 0.3s',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
               <span style={{ fontSize: 16, color: '#0066FF' }}>◇</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)' }}>
-                  Link another device (QR)
+                  Link another device
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginTop: 2 }}>
                   Pair a security key or a device in a different ecosystem
                 </div>
               </div>
-              <span style={{
-                fontSize: 8.5, fontWeight: 700, letterSpacing: 0.6, padding: '2px 7px', borderRadius: 4,
-                background: 'rgba(255,184,0,0.12)', color: '#FFB800',
-              }}>SOON</span>
             </div>
-            <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', lineHeight: 1.5, margin: '6px 0 0' }}>
-              Cross-platform device pairing requires a protocol update (<code style={{ fontSize: 9.5 }}>SmartOpType::AddKey</code>). Tracked as the next passkey security milestone. Within one ecosystem, your passkey already syncs automatically via the backup above.
+
+            {linkedKeyLabel ? (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '8px 12px', borderRadius: 8,
+                background: 'rgba(0,224,196,0.06)', border: '1px solid rgba(0,224,196,0.15)',
+              }}>
+                <span style={{ color: '#00E0C4', fontSize: 13 }}>✓</span>
+                <span style={{ fontSize: 11, color: '#00E0C4', fontWeight: 600 }}>
+                  {linkedKeyLabel} registered on-chain
+                </span>
+              </div>
+            ) : (
+              <button
+                onClick={handleLinkDevice}
+                disabled={linkingDevice}
+                style={{
+                  width: '100%', padding: '10px 0', borderRadius: 8,
+                  background: linkingDevice ? 'var(--dag-input-bg)' : 'rgba(0,102,255,0.08)',
+                  border: '1px solid rgba(0,102,255,0.2)',
+                  color: linkingDevice ? 'var(--dag-text-faint)' : '#0066FF',
+                  fontSize: 12, fontWeight: 600,
+                  cursor: linkingDevice ? 'default' : 'pointer',
+                }}
+              >
+                {linkingDevice ? 'Waiting for device...' : '+ Add Backup Device'}
+              </button>
+            )}
+
+            {linkError && (
+              <p role="alert" style={{ fontSize: 10.5, color: '#EF4444', marginTop: 8, lineHeight: 1.5 }}>
+                {linkError}
+              </p>
+            )}
+
+            <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', lineHeight: 1.5, margin: '8px 0 0' }}>
+              On desktop your browser shows a QR code — scan it with another phone, tablet, or security key. The new key is registered on-chain as a second authorized key for your account. Within one ecosystem (Apple/Google) your passkey already syncs automatically via the card above, so this is only needed for cross-ecosystem pairing.
             </p>
           </div>
 

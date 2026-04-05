@@ -181,6 +181,17 @@ function serializeOperation(op: Record<string, unknown>): Record<string, unknown
     const s = op.StreamCancel as { stream_id: string };
     return { StreamCancel: { stream_id: Array.from(hexToBytes(s.stream_id)) } };
   }
+  if ('AddKey' in op) {
+    const a = op.AddKey as { key_type: 'p256' | 'ed25519'; pubkey: string; label: string };
+    return {
+      AddKey: {
+        // Rust enum variants serialize with their exact identifier.
+        key_type: a.key_type === 'p256' ? 'P256' : 'Ed25519',
+        pubkey: Array.from(hexToBytes(a.pubkey)),
+        label: a.label,
+      },
+    };
+  }
   return op;
 }
 
@@ -188,8 +199,14 @@ export async function signAndSubmitSmartOp(
   operation: Record<string, unknown>,
   fee: number,
   nonce: number,
+  /**
+   * Optional wallet override. Pass this when the wallet hasn't been saved
+   * to localStorage yet (e.g., during onboarding before the "Open Wallet"
+   * handoff). Defaults to getPasskeyWallet() for normal post-onboarding use.
+   */
+  walletOverride?: PasskeyWallet,
 ): Promise<{ tx_hash: string }> {
-  const passkey = getPasskeyWallet();
+  const passkey = walletOverride ?? getPasskeyWallet();
   if (!passkey) throw new Error('No passkey wallet found');
 
   const networkStr = localStorage.getItem('ultradag_network') === 'mainnet' ? 'ultradag-mainnet-v1' : 'ultradag-testnet-v1';
@@ -247,6 +264,19 @@ export async function signAndSubmitSmartOp(
     const op = operation.StreamCancel as { stream_id: string };
     parts.push(new Uint8Array([12])); // discriminant 12
     parts.push(hexToBytes(op.stream_id));
+  } else if ('AddKey' in operation) {
+    // Byte-exact match to Rust SmartOpType::AddKey signable_bytes encoding.
+    // Covered by test_add_key_signable_bytes_stable_encoding in Rust —
+    // any change here must update that test.
+    const op = operation.AddKey as { key_type: 'p256' | 'ed25519'; pubkey: string; label: string };
+    const pubkeyBytes = hexToBytes(op.pubkey);
+    const labelBytes = new TextEncoder().encode(op.label);
+    parts.push(new Uint8Array([13])); // discriminant 13
+    parts.push(new Uint8Array([op.key_type === 'p256' ? 1 : 0])); // KeyType: Ed25519=0, P256=1
+    parts.push(u32ToLE(pubkeyBytes.length));
+    parts.push(pubkeyBytes);
+    parts.push(u32ToLE(labelBytes.length));
+    parts.push(labelBytes);
   } else {
     throw new Error('Unsupported SmartOp type');
   }
