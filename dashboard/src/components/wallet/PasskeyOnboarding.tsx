@@ -25,6 +25,53 @@ function biometricLabel(): string {
   return 'Biometrics';
 }
 
+/** Which passkey sync ecosystem is this user in, if any. */
+interface SyncEcosystem {
+  name: string;            // "iCloud Keychain", "Google Password Manager", ...
+  synced: boolean;         // true if passkey is automatically backed up cross-device
+  guide: string;           // short user-facing instruction
+  color: string;           // accent color for the card
+}
+
+function detectSyncEcosystem(): SyncEcosystem {
+  if (typeof navigator === 'undefined') {
+    return { name: 'your password manager', synced: false, color: '#FFB800',
+      guide: 'Your passkey is stored on this device. To back it up, save it to a password manager that supports passkey sync.' };
+  }
+  const ua = navigator.userAgent;
+  const platform = navigator.platform || '';
+  if (/iPhone|iPad|iPod/.test(ua) || /Mac/.test(platform)) {
+    return {
+      name: 'iCloud Keychain',
+      synced: true,
+      color: '#00E0C4',
+      guide: 'Your passkey is automatically backed up to iCloud Keychain and available on every Apple device signed into your Apple ID. No action needed.',
+    };
+  }
+  if (/Android/.test(ua)) {
+    return {
+      name: 'Google Password Manager',
+      synced: true,
+      color: '#00E0C4',
+      guide: 'Your passkey is automatically backed up to Google Password Manager and available on every device signed into your Google account.',
+    };
+  }
+  if (/Win/.test(platform)) {
+    return {
+      name: 'Windows Hello',
+      synced: false,
+      color: '#FFB800',
+      guide: 'Windows Hello stores your passkey on this device only — it is NOT automatically synced. To back up, also create the passkey via a browser signed into a cross-device password manager (Google, 1Password, Bitwarden).',
+    };
+  }
+  return {
+    name: 'your password manager',
+    synced: false,
+    color: '#FFB800',
+    guide: 'Your passkey is stored on this device. To back it up, save it to a password manager that supports passkey sync (1Password, Bitwarden, Chrome/Google).',
+  };
+}
+
 export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, onSwitchNetwork }: PasskeyOnboardingProps) {
   const [step, setStep] = useState<Step>('welcome');
   const [p256PubkeyHex, setP256PubkeyHex] = useState('');
@@ -45,7 +92,11 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
   const abortRef = useRef<AbortController | null>(null);
 
   // Step 1: Create passkey via WebAuthn
-  const handleCreatePasskey = useCallback(async () => {
+  // NOTE: plain function (no useCallback) so closure always captures latest
+  // username/nameAvailable/handleCreateAccount — an earlier useCallback(…, [])
+  // captured a stale first-render `handleCreateAccount` whose own closure
+  // baked in `username=""` and `nameAvailable=null`, losing the user's name.
+  const handleCreatePasskey = async () => {
     setError('');
     try {
       if (!window.PublicKeyCredential) {
@@ -107,7 +158,7 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
         setError(`Passkey creation failed: ${msg}`);
       }
     }
-  }, []);
+  };
 
   // Step 2: Check name availability (debounced, with abort)
   const checkNameNow = useCallback(async (name: string) => {
@@ -175,8 +226,9 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
     }
   }, [network]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Create account via relay (called after passkey creation)
-  const handleCreateAccount = useCallback(async (pubkey?: string, credId?: string) => {
+  // Create account via relay (called after passkey creation).
+  // Plain function (no useCallback) — must always see current username/nameAvailable.
+  const handleCreateAccount = async (pubkey?: string, credId?: string) => {
     const finalPubkey = pubkey || p256PubkeyHex;
     const finalCredId = credId || credentialId;
     setCreating(true);
@@ -218,7 +270,7 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
     } finally {
       setCreating(false);
     }
-  }, [p256PubkeyHex, username, nameAvailable, credentialId]);
+  };
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '12px 14px', borderRadius: 10, background: 'var(--dag-input-bg)',
@@ -256,16 +308,19 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
       {/* ───────────────────────────────────────────────────────── */}
       {step === 'welcome' && (
         <div style={{ textAlign: 'center', animation: 'slideUp 0.5s ease' }}>
-          {/* Brand mark with soft glow */}
+          {/* Typographic ULTRA ID mark */}
           <div style={{
-            width: 96, height: 96, borderRadius: 24, margin: '8px auto 28px',
-            background: 'linear-gradient(135deg, rgba(0,224,196,0.12), rgba(0,102,255,0.08))',
-            border: '1px solid rgba(0,224,196,0.25)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 0 60px rgba(0,224,196,0.12)',
-            position: 'relative',
+            display: 'inline-flex', alignItems: 'baseline', gap: 8,
+            margin: '8px auto 24px', padding: '8px 18px',
+            borderRadius: 999,
+            background: 'rgba(0,224,196,0.06)',
+            border: '1px solid rgba(0,224,196,0.18)',
           }}>
-            <img src="/media/logo/logo_website.png" alt="UltraDAG" style={{ height: 42, width: 'auto' }} />
+            <span style={{
+              fontSize: 10.5, fontWeight: 700, letterSpacing: 2.5,
+              color: '#00E0C4', textTransform: 'uppercase',
+              fontFamily: "'DM Mono',monospace",
+            }}>ULTRA ID</span>
           </div>
 
           <h1 style={{
@@ -586,19 +641,54 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
 
           <div style={{ display: 'inline-flex', marginBottom: 24 }}>{networkPill}</div>
 
-          {/* Honest backup notice — no buttons that don't do anything */}
+          {/* Backup & sync — ecosystem-aware explainer */}
+          {(() => {
+            const eco = detectSyncEcosystem();
+            return (
+              <div style={{
+                background: 'var(--dag-card)', border: `1px solid ${eco.color}30`,
+                borderRadius: 14, padding: '16px 18px', textAlign: 'left', marginBottom: 14,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 15, color: eco.color }}>{eco.synced ? '✓' : '⚠'}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--dag-text)' }}>
+                    {eco.synced ? `Backed up via ${eco.name}` : `Not auto-backed-up`}
+                  </span>
+                </div>
+                <p style={{ fontSize: 11.5, color: 'var(--dag-text-muted)', lineHeight: 1.6, margin: '0 0 10px' }}>
+                  {eco.guide}
+                </p>
+                {!eco.synced && (
+                  <p style={{ fontSize: 10.5, color: '#EF4444', lineHeight: 1.5, margin: 0 }}>
+                    Without sync, losing this device means losing access to the wallet. Consider creating it on a device with iCloud Keychain or Google Password Manager.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Cross-platform device linking — disabled pending protocol work */}
           <div style={{
             background: 'var(--dag-card)', border: '1px solid var(--dag-border)',
-            borderRadius: 14, padding: '16px 18px', textAlign: 'left', marginBottom: 24,
+            borderRadius: 14, padding: '14px 16px', textAlign: 'left', marginBottom: 24,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 15, color: '#FFB800' }}>⚠</span>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--dag-text)' }}>
-                Protect this device
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              <span style={{ fontSize: 16, color: '#0066FF' }}>◇</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)' }}>
+                  Link another device (QR)
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginTop: 2 }}>
+                  Pair a security key or a device in a different ecosystem
+                </div>
+              </div>
+              <span style={{
+                fontSize: 8.5, fontWeight: 700, letterSpacing: 0.6, padding: '2px 7px', borderRadius: 4,
+                background: 'rgba(255,184,0,0.12)', color: '#FFB800',
+              }}>SOON</span>
             </div>
-            <p style={{ fontSize: 11.5, color: 'var(--dag-text-muted)', lineHeight: 1.6, margin: 0 }}>
-              Your key lives on this device only. If you lose it without a backup, <strong style={{ color: '#EF4444' }}>funds are gone forever</strong>. On-chain social recovery is coming soon — for now, keep this device safe and consider using the same passkey across devices via iCloud Keychain or Google Password Manager.
+            <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', lineHeight: 1.5, margin: '6px 0 0' }}>
+              Cross-platform device pairing requires a protocol update (<code style={{ fontSize: 9.5 }}>SmartOpType::AddKey</code>). Tracked as the next passkey security milestone. Within one ecosystem, your passkey already syncs automatically via the backup above.
             </p>
           </div>
 
