@@ -654,6 +654,24 @@ export function BridgePage() {
         </>}
       />
 
+      {!CONTRACTS_DEPLOYED && (
+        <div role="alert" style={{
+          display: 'flex', alignItems: 'flex-start', gap: 10,
+          padding: '14px 18px', marginBottom: 18, borderRadius: 12,
+          background: 'rgba(255,184,0,0.06)', border: '1px solid rgba(255,184,0,0.25)',
+        }}>
+          <AlertTriangle style={{ width: 18, height: 18, color: '#FFB800', flexShrink: 0, marginTop: 1 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: '#FFB800', marginBottom: 3 }}>
+              Bridge contracts not yet deployed
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--dag-text-muted)', lineHeight: 1.5 }}>
+              The UDAG token and bridge contracts on Arbitrum have not been deployed yet. Deposits and withdrawals are disabled until <code style={{ fontSize: 10 }}>UDAG_TOKEN_ADDRESS</code> and <code style={{ fontSize: 10 }}>UDAG_BRIDGE_ADDRESS</code> in <code style={{ fontSize: 10 }}>lib/contracts.ts</code> are populated.
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '3fr 2fr', gap: 24 }}>
         {/* Left: Bridge Form */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -788,7 +806,7 @@ export function BridgePage() {
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {!CONTRACTS_DEPLOYED && (
+                        {CONTRACTS_DEPLOYED && (
                           <div style={{
                             display: 'flex', alignItems: 'flex-start', gap: 8, padding: 10,
                             borderRadius: 8, background: 'rgba(0,224,196,0.05)', border: '1px solid rgba(0,224,196,0.1)',
@@ -801,11 +819,12 @@ export function BridgePage() {
                         )}
                         <button
                           onClick={handleConnectClick}
-                          disabled={eth.loading}
-                          style={{ ...gradientButton, padding: '14px 0', opacity: eth.loading ? 0.5 : 1 }}
+                          disabled={eth.loading || !CONTRACTS_DEPLOYED}
+                          title={!CONTRACTS_DEPLOYED ? 'Bridge contracts not deployed yet' : undefined}
+                          style={{ ...gradientButton, padding: '14px 0', opacity: eth.loading || !CONTRACTS_DEPLOYED ? 0.4 : 1, cursor: !CONTRACTS_DEPLOYED ? 'not-allowed' : 'pointer' }}
                         >
                           {eth.loading ? <Loader2 style={{ width: 16, height: 16, animation: 'spin 1s linear infinite' }} /> : <Wallet style={{ width: 16, height: 16 }} />}
-                          {eth.loading ? 'Connecting...' : 'Connect Wallet'}
+                          {!CONTRACTS_DEPLOYED ? 'Bridge Unavailable' : eth.loading ? 'Connecting...' : 'Connect Wallet'}
                         </button>
                         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
                       </div>

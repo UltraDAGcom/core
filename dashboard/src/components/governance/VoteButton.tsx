@@ -15,8 +15,21 @@ interface VoteButtonProps {
 export function VoteButton({ proposalId, secretKey, approve, fee, onSuccess }: VoteButtonProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [confirming, setConfirming] = useState(false);
+
+  const handleClick = () => {
+    if (loading) return;
+    if (!confirming) {
+      setConfirming(true);
+      // Auto-cancel after 3s if user doesn't re-click
+      window.setTimeout(() => setConfirming(false), 3000);
+      return;
+    }
+    void handleVote();
+  };
 
   const handleVote = async () => {
+    setConfirming(false);
     setLoading(true);
     setError('');
     try {
@@ -46,20 +59,32 @@ export function VoteButton({ proposalId, secretKey, approve, fee, onSuccess }: V
     }
   };
 
-  const style = approve
-    ? { ...primaryButtonStyle, padding: '8px 16px', fontSize: 12, opacity: loading ? 0.5 : 1 }
-    : { ...dangerButtonStyle, padding: '8px 16px', fontSize: 12, opacity: loading ? 0.5 : 1 };
+  const base = approve ? primaryButtonStyle : dangerButtonStyle;
+  const style = {
+    ...base,
+    padding: '8px 16px',
+    fontSize: 12,
+    opacity: loading ? 0.5 : 1,
+    ...(confirming ? { outline: '2px solid #FFB800', outlineOffset: 2 } : {}),
+  } as React.CSSProperties;
+
+  const label = loading
+    ? 'Voting...'
+    : confirming
+      ? (approve ? 'Confirm YES?' : 'Confirm NO?')
+      : (approve ? 'Vote YES' : 'Vote NO');
 
   return (
     <div>
       <button
-        onClick={handleVote}
+        onClick={handleClick}
         disabled={loading}
+        aria-label={approve ? 'Vote yes on proposal' : 'Vote no on proposal'}
         style={style}
       >
-        {loading ? 'Voting...' : approve ? 'Vote YES' : 'Vote NO'}
+        {label}
       </button>
-      {error && <p style={{ fontSize: 11, color: '#EF4444', marginTop: 4 }}>{error}</p>}
+      {error && <p role="alert" style={{ fontSize: 11, color: '#EF4444', marginTop: 4 }}>{error}</p>}
     </div>
   );
 }

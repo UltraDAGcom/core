@@ -108,8 +108,8 @@ export function EditProfileModal({ name, wallet, currentBio, currentWebsite, cur
         </div>
 
         {isPasskey && (
-          <div style={{ marginBottom: 14, padding: '10px 12px', background: 'rgba(255,184,0,0.06)', border: '1px solid rgba(255,184,0,0.15)', borderRadius: 8, fontSize: 11, color: '#FFB800' }}>
-            Profile editing is not yet available for passkey wallets. SmartOp UpdateProfile support coming soon.
+          <div role="note" style={{ marginBottom: 14, padding: '10px 12px', background: 'rgba(255,184,0,0.06)', border: '1px solid rgba(255,184,0,0.15)', borderRadius: 8, fontSize: 11, color: '#FFB800' }}>
+            Profile editing from passkey wallets requires a protocol update (<code style={{ fontSize: 10 }}>SmartOpType::UpdateProfile</code> variant). Use a legacy secret-key wallet to edit for now.
           </div>
         )}
 

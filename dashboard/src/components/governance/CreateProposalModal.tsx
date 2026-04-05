@@ -163,13 +163,19 @@ export function CreateProposalModal({ wallets, onClose, onSuccess }: CreatePropo
 
           {/* Title */}
           <div>
-            <span style={labelStyle}>Title (max 128 chars)</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span style={labelStyle}>Title</span>
+              <span style={{ fontSize: 9.5, color: title.length > 120 ? '#FFB800' : 'var(--dag-text-faint)', fontFamily: "'DM Mono',monospace" }}>{title.length}/128</span>
+            </div>
             <input type="text" maxLength={128} value={title} onChange={e => setTitle(e.target.value)} style={modalInputStyle} />
           </div>
 
           {/* Description */}
           <div>
-            <span style={labelStyle}>Description (max 4096 chars)</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span style={labelStyle}>Description</span>
+              <span style={{ fontSize: 9.5, color: description.length > 3900 ? '#FFB800' : 'var(--dag-text-faint)', fontFamily: "'DM Mono',monospace" }}>{description.length}/4096</span>
+            </div>
             <textarea maxLength={4096} rows={4} value={description} onChange={e => setDescription(e.target.value)}
               style={{ ...modalInputStyle, resize: 'vertical' } as React.CSSProperties} />
           </div>

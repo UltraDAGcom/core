@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
+import { signAndSubmitSmartOp } from '../lib/webauthn-sign';
 import { VerifiedAddressInput } from '../components/shared/VerifiedAddressInput';
 import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -14,7 +15,7 @@ interface SmartAccountInfo {
   vault_threshold: number | null; daily_limit: number | null; pending_vault_count: number;
   pending_key_removal: { key_id: string; executes_at_round: number } | null;
 }
-interface NameInfo { name: string; address: string; expiry_round: number | null }
+interface NameInfo { name: string; address: string; expiry_round: number | null; is_perpetual?: boolean }
 
 const SATS = 100_000_000;
 const fmt = (s: number) => (s / SATS).toFixed(4);
@@ -65,6 +66,8 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
   const [policyInstant, setPolicyInstant] = useState('');
   const [policyVault, setPolicyVault] = useState('');
   const [policyDaily, setPolicyDaily] = useState('');
+  const [nameSubmitting, setNameSubmitting] = useState(false);
+  const [nameError, setNameError] = useState('');
 
   const pw = getPasskeyWallet();
   const localName = pw?.name || null;
@@ -84,6 +87,30 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
   }, [walletAddress, nodeUrl]);
 
   useEffect(() => { fetchInfo(); }, [fetchInfo]);
+
+  const handleRegisterName = useCallback(async () => {
+    if (!nameAvail || !nameInput || !walletAddress) return;
+    setNameError('');
+    setNameSubmitting(true);
+    try {
+      const balRes = await fetch(`${nodeUrl}/balance/${walletAddress}`, { signal: AbortSignal.timeout(5000) });
+      const balData = await balRes.json();
+      // RegisterName is fee-exempt for 6+ char names (see Rust is_fee_exempt).
+      await signAndSubmitSmartOp(
+        { RegisterName: { name: nameInput, duration_years: 1 } },
+        0,
+        balData.nonce ?? 0,
+      );
+      setShowNameForm(false);
+      setNameInput('');
+      setNameAvail(null);
+      await fetchInfo();
+    } catch (e: unknown) {
+      setNameError(e instanceof Error ? e.message : 'Failed to register name');
+    } finally {
+      setNameSubmitting(false);
+    }
+  }, [nameAvail, nameInput, walletAddress, nodeUrl, fetchInfo]);
 
   const checkName = useCallback(async (name: string) => {
     setNameInput(name); setNameAvail(null); setNameWarn('');
@@ -124,11 +151,25 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
           action={!nameInfo && !localName && !showNameForm ? <button onClick={() => setShowNameForm(true)} style={S.btn()}>+ Claim</button> : undefined}>
           {nameInfo ? (
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 24, fontWeight: 700, color: '#00E0C4' }}>@{nameInfo.name}</span>
                 <span style={{ fontSize: 8.5, background: 'rgba(0,224,196,0.12)', color: '#00E0C4', padding: '2px 7px', borderRadius: 4, fontWeight: 600 }}>ON-CHAIN</span>
+                {nameInfo.is_perpetual && (
+                  <span title="Free-tier names (6+ chars) are permanent — no expiry, no renewal required"
+                    style={{ fontSize: 8.5, background: 'rgba(255,184,0,0.12)', color: '#FFB800', padding: '2px 7px', borderRadius: 4, fontWeight: 600 }}>
+                    ★ PERMANENT
+                  </span>
+                )}
               </div>
-              {nameInfo.expiry_round && <p style={{ fontSize: 10.5, color: 'var(--dag-text-faint)' }}>Expires round {nameInfo.expiry_round.toLocaleString()}</p>}
+              {nameInfo.is_perpetual ? (
+                <p style={{ fontSize: 10.5, color: 'var(--dag-text-faint)' }}>
+                  Yours forever — no renewal required.
+                </p>
+              ) : nameInfo.expiry_round != null ? (
+                <p style={{ fontSize: 10.5, color: 'var(--dag-text-faint)' }}>
+                  Rented — expires round {nameInfo.expiry_round.toLocaleString()}
+                </p>
+              ) : null}
             </div>
           ) : localName ? (
             <div>
@@ -148,12 +189,13 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
               </div>
               {nameWarn && <p style={{ fontSize: 10, color: '#FFB800' }}>{nameWarn}</p>}
               {nameAvail && <p style={{ fontSize: 10, color: '#00E0C4' }}>{nameInput} available! {nameFee > 0 ? `${fmt(nameFee)} UDAG/yr` : 'Free'}</p>}
+              {nameError && <p role="alert" style={{ fontSize: 10, color: '#EF4444' }}>{nameError}</p>}
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => {
-                  if (!nameAvail || !nameInput) return;
-                  alert(`Register Name Transaction:\n\nName: ${nameInput}\nOwner: ${walletAddress}\nFee: ${nameFee > 0 ? fmt(nameFee) + ' UDAG/yr' : 'Free'}\n\nThis will be submitted as a SmartOp::RegisterName transaction.\nClient-side signing coming soon.`);
-                }} style={S.btnSolid()}>Register Name</button>
-                <button onClick={() => setShowNameForm(false)} style={S.btn('var(--dag-text-muted)')}>Cancel</button>
+                <button onClick={handleRegisterName} disabled={!nameAvail || !nameInput || nameSubmitting}
+                  style={{ ...S.btnSolid(), opacity: !nameAvail || !nameInput || nameSubmitting ? 0.4 : 1 }}>
+                  {nameSubmitting ? 'Signing...' : 'Register Name'}
+                </button>
+                <button onClick={() => { setShowNameForm(false); setNameError(''); }} style={S.btn('var(--dag-text-muted)')}>Cancel</button>
               </div>
             </div>
           ) : (
@@ -243,13 +285,12 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
                 </select>
               </div>
 
+              <div role="note" style={{ fontSize: 10.5, color: '#FFB800', background: 'rgba(255,184,0,0.06)', border: '1px solid rgba(255,184,0,0.15)', borderRadius: 8, padding: '8px 12px' }}>
+                ⚠ Social recovery requires a protocol update (<code style={{ fontSize: 10 }}>SmartOpType::SetRecovery</code> variant).
+                The form is a preview only — submit is disabled until the Rust variant and signable_bytes handler land.
+              </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => {
-                  const valid = guardians.filter(g => g.length >= 40);
-                  if (valid.length < 2) { alert('Add at least 2 guardian addresses.'); return; }
-                  if (threshold < 1 || threshold > valid.length) { alert('Invalid threshold.'); return; }
-                  alert(`Set Recovery Guardians Transaction:\n\nGuardians (${valid.length}):\n${valid.map((g, i) => `  ${i + 1}. ${g.slice(0, 12)}...${g.slice(-8)}`).join('\n')}\nThreshold: ${threshold}-of-${valid.length}\nDelay: 2,016 rounds (~2.8 hours)\n\nThis will be submitted as a SmartOp::SetRecovery transaction.\nClient-side signing coming soon.`);
-                }} style={primaryButtonStyle}>Save Guardians</button>
+                <button disabled style={{ ...primaryButtonStyle, opacity: 0.35, cursor: 'not-allowed' }}>Save Guardians</button>
                 <button onClick={() => setShowRecoveryForm(false)} style={S.btn('var(--dag-text-muted)')}>Cancel</button>
               </div>
             </div>
@@ -296,14 +337,12 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
                 <span style={{ ...S.label, display: 'block' }}>Daily cap (UDAG)</span>
                 <input type="number" placeholder="10" value={policyDaily} onChange={e => setPolicyDaily(e.target.value)} style={S.input} />
               </div>
+              <div role="note" style={{ fontSize: 10.5, color: '#FFB800', background: 'rgba(255,184,0,0.06)', border: '1px solid rgba(255,184,0,0.15)', borderRadius: 8, padding: '8px 12px' }}>
+                ⚠ Spending policy requires a protocol update (<code style={{ fontSize: 10 }}>SmartOpType::SetPolicy</code> variant).
+                The form is a preview only — submit is disabled until the Rust variant and signable_bytes handler land.
+              </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => {
-                  const instant = parseFloat(policyInstant) || 0;
-                  const vault = parseFloat(policyVault) || 0;
-                  const daily = parseFloat(policyDaily) || 0;
-                  if (instant <= 0 && vault <= 0 && daily <= 0) { alert('Set at least one limit.'); return; }
-                  alert(`Set Spending Policy Transaction:\n\nInstant limit: ${instant > 0 ? instant + ' UDAG' : 'None'}\nVault threshold: ${vault > 0 ? vault + ' UDAG' : 'None'}\nVault delay: 2,016 rounds (~2.8 hours)\nDaily cap: ${daily > 0 ? daily + ' UDAG' : 'None'}\n\nPolicy changes are time-locked (~2.8 hours) for security.\nThis will be submitted as a SmartOp::SetPolicy transaction.\nClient-side signing coming soon.`);
-                }} style={primaryButtonStyle}>Save (2.8hr time-lock)</button>
+                <button disabled style={{ ...primaryButtonStyle, opacity: 0.35, cursor: 'not-allowed' }}>Save (2.8hr time-lock)</button>
                 <button onClick={() => setShowPolicyForm(false)} style={S.btn('var(--dag-text-muted)')}>Cancel</button>
               </div>
             </div>

@@ -22,6 +22,7 @@ interface EncryptedBlob {
 }
 
 const STORAGE_KEY = 'ultradag_keystore';
+const PRIMARY_KEY = 'ultradag_primary_address';
 let keystoreData: KeystoreData | null = null;
 let encryptedBlob: EncryptedBlob | null = null;
 
@@ -83,6 +84,24 @@ export function hasKeystore(): boolean { return encryptedBlob !== null; }
 export function getWallets(): Wallet[] { return keystoreData?.wallets ?? []; }
 export function getWallet(index: number): Wallet | undefined { return keystoreData?.wallets[index]; }
 
+/**
+ * Returns the user-chosen primary wallet address, or null if none is set.
+ * Stored in plaintext localStorage (not encrypted) because addresses are public
+ * and this preference needs to be readable before unlock (e.g., for route resolution).
+ */
+export function getPrimaryAddress(): string | null {
+  try { return localStorage.getItem(PRIMARY_KEY); } catch { return null; }
+}
+
+/** Set the primary wallet address. Pass null to clear the preference. */
+export function setPrimaryAddress(address: string | null): void {
+  try {
+    if (address == null) localStorage.removeItem(PRIMARY_KEY);
+    else localStorage.setItem(PRIMARY_KEY, address);
+    notify();
+  } catch { /* quota / private mode — ignore */ }
+}
+
 export function loadFromStorage(): boolean {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -121,6 +140,7 @@ export function destroy(): void {
   encryptedBlob = null;
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(WEBAUTHN_STORAGE_KEY);
+  localStorage.removeItem(PRIMARY_KEY);
   notify();
 }
 
@@ -135,7 +155,12 @@ export async function addWallet(name: string, secretKey: string, address: string
 
 export async function removeWallet(index: number): Promise<void> {
   if (!keystoreData) throw new Error('Keystore not unlocked');
+  const removed = keystoreData.wallets[index];
   keystoreData.wallets.splice(index, 1);
+  // Clear the primary-address preference if the removed wallet was primary.
+  if (removed && getPrimaryAddress() === removed.address) {
+    try { localStorage.removeItem(PRIMARY_KEY); } catch { /* ignore */ }
+  }
   await save();
   notify();
 }

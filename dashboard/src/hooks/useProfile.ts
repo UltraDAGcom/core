@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getBalance, getStake, getDelegation, getSmartAccount, getNameInfo, getStreamsSender, getStreamsRecipient, getProposals, getProposal } from '../lib/api';
 import { computeBadges, type Badge, type BadgeInput } from '../lib/badges';
+import { fetchBountyIssues, parseBounty } from '../lib/github';
 
 export interface ProfileData {
   address: string;
@@ -30,6 +31,7 @@ export interface ProfileData {
   externalAddresses: Array<[string, string]>;
   metadata: Array<[string, string]>;
   expiryRound: number | null;
+  isPerpetualName: boolean;
 }
 
 export function useProfile(address: string | undefined) {
@@ -77,6 +79,19 @@ export function useProfile(address: string | undefined) {
       const metadata = profileMeta.metadata ?? [];
       const getMeta = (key: string) => metadata.find(([k]: [string, string]) => k === key)?.[1] ?? null;
 
+      // Count paid bounties whose creator_address matches this profile (cached 2min in github.ts)
+      let paidBountiesCount = 0;
+      try {
+        const { issues } = await fetchBountyIssues();
+        const addrLower = address.toLowerCase();
+        for (const issue of issues) {
+          const parsed = parseBounty(issue);
+          if (parsed.status === 'paid' && parsed.creatorAddress && parsed.creatorAddress.toLowerCase() === addrLower) {
+            paidBountiesCount++;
+          }
+        }
+      } catch { /* GitHub rate-limited or offline — leave at 0 */ }
+
       // Count proposals this address voted on (check up to 10 recent proposals)
       let votedCount = 0;
       const recentProposals = proposals.slice(0, 10);
@@ -119,6 +134,7 @@ export function useProfile(address: string | undefined) {
         externalAddresses: profileMeta.external_addresses ?? [],
         metadata,
         expiryRound: nameInfo?.expiry_round ? Number(nameInfo.expiry_round) : null,
+        isPerpetualName: nameInfo?.is_perpetual === true,
       };
 
       setProfile(data);
@@ -130,7 +146,7 @@ export function useProfile(address: string | undefined) {
         delegation: { delegated: data.delegated, validator: data.delegatedTo ?? undefined },
         smartAccount: { created_at_round: data.createdAtRound ?? undefined, has_recovery: data.hasRecovery, has_policy: data.hasPolicy },
         votedOnProposals: data.votedOnProposals,
-        paidBounties: 0, // TODO: check GitHub bounties
+        paidBounties: paidBountiesCount,
         streamsSent: data.streamsSentCount,
         streamsReceived: data.streamsReceivedCount,
       };

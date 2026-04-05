@@ -48,7 +48,10 @@ function App() {
       : ks.wallets;
   }, [pk.wallet?.address, pk.wallet?.name, ks.wallets]);
   const isUnlocked = pk.unlocked || ks.unlocked;
-  const primaryAddress = pk.wallet?.address || ks.wallets[0]?.address;
+  // Primary wallet resolution: passkey wins, then user-chosen primary (if still present),
+  // then first wallet as last-resort fallback.
+  const primaryKeystore = ks.wallets.find(w => w.address === ks.primaryAddress) ?? ks.wallets[0];
+  const primaryAddress = pk.wallet?.address || primaryKeystore?.address;
 
   const wb = useWalletBalances(allWallets, node.connected);
   const notifications = useNotifications({
@@ -60,7 +63,7 @@ function App() {
   const [network, setNetwork] = useState<NetworkType>(getNetwork());
   const [showOnboarding, setShowOnboarding] = useState(false);
 
-  const appUserName = pk.wallet?.name ? `@${pk.wallet.name}` : allWallets[0]?.name || 'Wallet';
+  const appUserName = pk.wallet?.name ? `@${pk.wallet.name}` : primaryKeystore?.name || allWallets[0]?.name || 'Wallet';
   const appStatus = useMemo(() => ({
     connected: node.connected,
     network,
@@ -265,6 +268,9 @@ function App() {
                 notificationsSupported={notifications.supported}
                 notificationsEnabled={notifications.enabled}
                 onToggleNotifications={notifications.toggle}
+                primaryAddress={ks.primaryAddress}
+                onSetPrimary={ks.setPrimaryAddress}
+                isPasskeyPrimary={!!pk.wallet?.address}
               />
             }
           />

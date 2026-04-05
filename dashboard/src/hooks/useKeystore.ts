@@ -8,6 +8,7 @@ export function useKeystore() {
   const [unlocked, setUnlocked] = useState(keystore.isUnlocked());
   const [hasStore, setHasStore] = useState(keystore.hasKeystore());
   const [wallets, setWallets] = useState<Wallet[]>(keystore.getWallets());
+  const [primaryAddress, setPrimaryAddressState] = useState<string | null>(keystore.getPrimaryAddress());
   const [autoUnlockDone, setAutoUnlockDone] = useState(false);
   const [sessionSecondsLeft, setSessionSecondsLeft] = useState(AUTO_LOCK_TIMEOUT_MS / 1000);
   const lastActivityRef = useRef<number>(Date.now());
@@ -39,6 +40,7 @@ export function useKeystore() {
       setUnlocked(keystore.isUnlocked());
       setHasStore(keystore.hasKeystore());
       setWallets([...keystore.getWallets()]);
+      setPrimaryAddressState(keystore.getPrimaryAddress());
     });
     return unsub;
   }, []);
@@ -105,6 +107,11 @@ export function useKeystore() {
     resetActivity();
   }, [resetActivity]);
 
+  const setPrimaryAddress = useCallback((address: string | null) => {
+    keystore.setPrimaryAddress(address);
+    resetActivity();
+  }, [resetActivity]);
+
   const importBlob = useCallback((json: string) => {
     return keystore.importBlob(json);
   }, []);
@@ -146,6 +153,8 @@ export function useKeystore() {
     unlocked,
     hasStore,
     wallets,
+    primaryAddress,
+    setPrimaryAddress,
     create,
     unlock,
     lock,

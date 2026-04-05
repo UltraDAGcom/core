@@ -13,7 +13,7 @@ import { buttonStyle as themeButtonStyle } from '../lib/theme';
 
 export function ProfilePage() {
   const { nameOrAddress } = useParams<{ nameOrAddress: string }>();
-  const { wallets, unlocked } = useKeystore();
+  const { wallets, unlocked, primaryAddress } = useKeystore();
   const m = useIsMobile();
 
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
@@ -26,10 +26,11 @@ export function ProfilePage() {
     const resolve = async () => {
       let input = nameOrAddress ?? '';
 
-      // "me" → current wallet address
+      // "me" → current wallet address. Prefer passkey, then user-chosen primary, then wallets[0].
       if (input === 'me') {
         const pk = getPasskeyWallet();
-        const addr = pk?.address ?? wallets[0]?.address;
+        const chosenPrimary = wallets.find(w => w.address === primaryAddress);
+        const addr = pk?.address ?? chosenPrimary?.address ?? wallets[0]?.address;
         if (addr) { setResolvedAddress(addr); setResolving(false); return; }
         setResolvedAddress(null); setResolving(false); return;
       }

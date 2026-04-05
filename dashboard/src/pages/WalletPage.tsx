@@ -351,6 +351,10 @@ interface WalletPageProps {
   notificationsSupported?: boolean;
   notificationsEnabled?: boolean;
   onToggleNotifications?: () => Promise<void>;
+  primaryAddress?: string | null;
+  onSetPrimary?: (address: string | null) => void;
+  /** True when a passkey wallet is active — passkey always wins, so the UI hides "Set as primary". */
+  isPasskeyPrimary?: boolean;
 }
 
 export function WalletPage({
@@ -369,6 +373,9 @@ export function WalletPage({
   webauthnEnrolled,
   onEnrollWebAuthn,
   onRemoveWebAuthn,
+  primaryAddress,
+  onSetPrimary,
+  isPasskeyPrimary,
 }: WalletPageProps) {
   const [showKsModal, setShowKsModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -640,6 +647,7 @@ export function WalletPage({
                 const bal = balances.get(w.address);
                 const isPk = pw?.address === w.address;
                 const active = sel === i;
+                const isPrimary = !isPasskeyPrimary && !isPk && primaryAddress === w.address;
                 const totalVal =
                   (bal?.balance ?? 0) + (bal?.staked ?? 0) + (bal?.delegated ?? 0);
 
@@ -715,6 +723,23 @@ export function WalletPage({
                                 }}
                               >
                                 PASSKEY
+                              </span>
+                            )}
+                            {isPrimary && (
+                              <span
+                                aria-label="Primary wallet"
+                                title="Primary wallet — used as the default across the app"
+                                style={{
+                                  fontSize: 8,
+                                  background: 'rgba(255,184,0,0.12)',
+                                  color: '#FFB800',
+                                  padding: '1px 6px',
+                                  borderRadius: 3,
+                                  fontWeight: 700,
+                                  letterSpacing: 0.6,
+                                }}
+                              >
+                                ★ PRIMARY
                               </span>
                             )}
                           </div>
@@ -968,6 +993,25 @@ export function WalletPage({
                   }}
                 >
                   <CopyButton text={fullAddr(selected.address)} label="Copy Bech32m Address" />
+                  {sel !== null && onSetPrimary && !isPasskeyPrimary && pw?.address !== selected.address && (
+                    primaryAddress === selected.address ? (
+                      <button
+                        onClick={e => { e.stopPropagation(); onSetPrimary(null); }}
+                        aria-label="Unset as primary wallet"
+                        style={S.btn('#FFB800')}
+                      >
+                        ★ Primary (unset)
+                      </button>
+                    ) : (
+                      <button
+                        onClick={e => { e.stopPropagation(); onSetPrimary(selected.address); }}
+                        aria-label="Set as primary wallet"
+                        style={S.btn('#FFB800')}
+                      >
+                        ☆ Set as Primary
+                      </button>
+                    )
+                  )}
                   {sel !== null && (
                     <button
                       onClick={e => {

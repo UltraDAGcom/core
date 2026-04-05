@@ -39,6 +39,7 @@ export function GovernancePage() {
   const [loading, setLoading] = useState(true);
   const [proposalPage, setProposalPage] = useState(1);
   const [voterPage, setVoterPage] = useState(1);
+  const [voteWalletIdx, setVoteWalletIdx] = useState(0);
   const GOV_PAGE_SIZE = 10;
 
   const refresh = useCallback(async () => {
@@ -159,12 +160,31 @@ export function GovernancePage() {
               </div>
 
               {/* Vote buttons */}
-              {unlocked && wallets.length > 0 && selected.status === 'Active' && (
-                <div style={{ display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid var(--dag-table-border)' }}>
-                  <VoteButton proposalId={selected.id} secretKey={wallets[0].secret_key} approve={true} fee={10000} onSuccess={refresh} />
-                  <VoteButton proposalId={selected.id} secretKey={wallets[0].secret_key} approve={false} fee={10000} onSuccess={refresh} />
-                </div>
-              )}
+              {unlocked && wallets.length > 0 && selected.status === 'Active' && (() => {
+                const safeIdx = voteWalletIdx < wallets.length ? voteWalletIdx : 0;
+                const voter = wallets[safeIdx];
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 12, borderTop: '1px solid var(--dag-table-border)' }}>
+                    {wallets.length > 1 && (
+                      <div>
+                        <div style={{ fontSize: 9, color: 'var(--dag-text-faint)', letterSpacing: 1, marginBottom: 4 }}>VOTE FROM</div>
+                        <select
+                          value={safeIdx}
+                          onChange={e => setVoteWalletIdx(Number(e.target.value))}
+                          aria-label="Select wallet to vote with"
+                          style={{ width: '100%', padding: '8px 10px', borderRadius: 8, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)', color: 'var(--dag-text)', fontSize: 12, fontFamily: "'DM Sans',sans-serif" }}
+                        >
+                          {wallets.map((w, i) => <option key={i} value={i} style={{ background: 'var(--dag-bg)' }}>{w.name}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <VoteButton key={`${selected.id}-yes-${safeIdx}`} proposalId={selected.id} secretKey={voter.secret_key} approve={true} fee={10000} onSuccess={refresh} />
+                      <VoteButton key={`${selected.id}-no-${safeIdx}`} proposalId={selected.id} secretKey={voter.secret_key} approve={false} fee={10000} onSuccess={refresh} />
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Voter list */}
               {selected.voters && selected.voters.length > 0 && (

@@ -15,8 +15,8 @@ const fmt = (s: number) => (s / SATS).toLocaleString(undefined, { minimumFractio
 interface ValidatorInfo { address: string; staked: number; effective_stake: number; delegator_count: number; commission_percent: number; is_active?: boolean }
 interface DelegInfo { address: string; name: string; delegated: number; validator: string; is_undelegating: boolean; unlock_at_round: number | null }
 
-function pickBest(vs: ValidatorInfo[]): ValidatorInfo | null {
-  const a = vs.filter(v => v.is_active);
+function pickBest(vs: ValidatorInfo[], excludeAddrs: Set<string>): ValidatorInfo | null {
+  const a = vs.filter(v => v.is_active && !excludeAddrs.has(v.address.toLowerCase()));
   if (!a.length) return null;
   return [...a].sort((x, y) => x.commission_percent - y.commission_percent || x.effective_stake - y.effective_stake)[0];
 }
@@ -46,6 +46,8 @@ export function StakingPage() {
   const [showValidators, setShowValidators] = useState(false);
   const [customValidator, setCustomValidator] = useState<string | null>(null);
   const [undelegateLoading, setUndelegateLoading] = useState('');
+  const [undelegateConfirm, setUndelegateConfirm] = useState('');
+  const [undelegateError, setUndelegateError] = useState('');
   const [validatorPage, setValidatorPage] = useState(1);
   const [delegationPage, setDelegationPage] = useState(1);
   const STAKING_PAGE_SIZE = 10;
@@ -76,12 +78,15 @@ export function StakingPage() {
     return () => window.removeEventListener('ultradag-network-switch', handler);
   }, [refresh]);
 
-  const best = pickBest(validators);
+  const ownAddrs = new Set(wallets.map(w => w.address.toLowerCase()));
+  const best = pickBest(validators, ownAddrs);
   const target = customValidator || best?.address || null;
+  const targetIsSelf = target != null && ownAddrs.has(target.toLowerCase());
 
   const handleStake = async () => {
     const wallet = wallets[walletIdx];
     if (!wallet || !target) return;
+    if (targetIsSelf) { setStakeMsg('⚠ Cannot delegate to your own wallet'); return; }
     const sats = Math.floor(parseFloat(amount) * SATS);
     if (isNaN(sats) || sats < 100 * SATS) { setStakeMsg('⚠ Minimum 100 UDAG'); return; }
     setStakeLoading(true); setStakeMsg('');
@@ -99,9 +104,18 @@ export function StakingPage() {
   };
 
   const handleUndelegate = async (addr: string) => {
+    // Two-click confirmation: first click arms, second click within 3s commits.
+    if (undelegateConfirm !== addr) {
+      setUndelegateConfirm(addr);
+      setUndelegateError('');
+      window.setTimeout(() => setUndelegateConfirm(c => (c === addr ? '' : c)), 3000);
+      return;
+    }
+    setUndelegateConfirm('');
     const wallet = wallets.find(w => w.address === addr);
     if (!wallet) return;
     setUndelegateLoading(addr);
+    setUndelegateError('');
     try {
       if (hasPasskeyWallet() && !wallet.secret_key) {
         const br = await fetch(`${getNodeUrl()}/balance/${wallet.address}`, { signal: AbortSignal.timeout(5000) });
@@ -109,7 +123,9 @@ export function StakingPage() {
         await signAndSubmitSmartOp({ Undelegate: {} }, 0, bd.nonce ?? 0);
       } else { await postUndelegate({ secret_key: wallet.secret_key }); }
       refresh();
-    } catch {} finally { setUndelegateLoading(''); }
+    } catch (e: unknown) {
+      setUndelegateError(e instanceof Error ? e.message : 'Unstake failed');
+    } finally { setUndelegateLoading(''); }
   };
 
   return (
@@ -235,14 +251,22 @@ export function StakingPage() {
                         <div style={{ fontSize: 9.5, color: '#FFB800' }}>Round {d.unlock_at_round}</div>
                       ) : (
                         <button onClick={() => handleUndelegate(d.address)} disabled={undelegateLoading === d.address}
-                          style={{ ...dangerButtonStyle, padding: '6px 14px', fontSize: 11, marginTop: 4, opacity: undelegateLoading === d.address ? 0.5 : 1 }}>
-                          {undelegateLoading === d.address ? '...' : 'Unstake'}
+                          aria-label={`Unstake ${d.name}`}
+                          style={{ ...dangerButtonStyle, padding: '6px 14px', fontSize: 11, marginTop: 4,
+                            opacity: undelegateLoading === d.address ? 0.5 : 1,
+                            ...(undelegateConfirm === d.address ? { outline: '2px solid #FFB800', outlineOffset: 2 } : {}) }}>
+                          {undelegateLoading === d.address ? '...' : undelegateConfirm === d.address ? 'Confirm unstake?' : 'Unstake'}
                         </button>
                       )}
                     </div>
                   </div>
                 ))}
                 <Pagination page={delegationPage} totalPages={Math.ceil(delegations.length / STAKING_PAGE_SIZE)} onPageChange={setDelegationPage} totalItems={delegations.length} pageSize={STAKING_PAGE_SIZE} />
+                {undelegateError && (
+                  <div role="alert" style={{ fontSize: 11, color: '#EF4444', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 8, padding: '8px 12px', marginTop: 4 }}>
+                    ⚠ {undelegateError}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -277,8 +301,12 @@ export function StakingPage() {
                         <div style={{ fontSize: 11, color: 'var(--dag-cell-text)' }}>{v.delegator_count}</div>
                         <div style={{ fontSize: 11, color: v.commission_percent <= 10 ? '#00E0C4' : '#FFB800' }}>{v.commission_percent}%</div>
                         {unlocked && wallets.length > 0 && (
-                          <button onClick={() => { setCustomValidator(v.address); setShowValidators(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                            style={themeButtonStyle()}>Select</button>
+                          ownAddrs.has(v.address.toLowerCase()) ? (
+                            <span style={{ fontSize: 9, color: 'var(--dag-text-faint)' }}>You</span>
+                          ) : (
+                            <button onClick={() => { setCustomValidator(v.address); setShowValidators(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                              style={themeButtonStyle()}>Select</button>
+                          )
                         )}
                       </div>
                     ))}
