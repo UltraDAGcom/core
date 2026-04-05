@@ -3858,6 +3858,73 @@ impl StateEngine {
                 stream.withdrawn = accrued;
                 stream.cancel_recipient_credited = true;
             }
+            SmartOpType::AddKey { key_type, pubkey, label } => {
+                use crate::tx::smart_account::{AuthorizedKey, KeyType, MAX_AUTHORIZED_KEYS, MAX_KEY_LABEL_BYTES};
+
+                // Account must already exist — AddKey is adding to an existing
+                // authorized-key set, not creating an account. The outer SmartOp
+                // verification already proved `tx.from` has a valid key signing
+                // this op, so the account must exist.
+                let config = self.smart_accounts.get_mut(&tx.from)
+                    .ok_or_else(|| CoinError::ValidationError("smart account not found".into()))?;
+
+                // Validate label length.
+                if label.len() > MAX_KEY_LABEL_BYTES {
+                    return Err(CoinError::ValidationError(
+                        format!("key label exceeds {} bytes", MAX_KEY_LABEL_BYTES)
+                    ));
+                }
+
+                // Validate pubkey length matches key type.
+                match key_type {
+                    KeyType::Ed25519 => {
+                        if pubkey.len() != 32 {
+                            return Err(CoinError::ValidationError(
+                                "Ed25519 pubkey must be 32 bytes".into()
+                            ));
+                        }
+                    }
+                    KeyType::P256 => {
+                        if pubkey.len() != 33 && pubkey.len() != 65 {
+                            return Err(CoinError::ValidationError(
+                                "P256 pubkey must be 33 (compressed) or 65 (uncompressed) bytes".into()
+                            ));
+                        }
+                    }
+                }
+
+                // Enforce max authorized keys per account.
+                if config.authorized_keys.len() >= MAX_AUTHORIZED_KEYS {
+                    return Err(CoinError::ValidationError(
+                        format!("account already has the maximum {} authorized keys", MAX_AUTHORIZED_KEYS)
+                    ));
+                }
+
+                // Derive key_id and reject duplicates.
+                let key_id = AuthorizedKey::compute_key_id(*key_type, pubkey);
+                if config.authorized_keys.iter().any(|k| k.key_id == key_id) {
+                    return Err(CoinError::ValidationError("key already authorized on this account".into()));
+                }
+
+                // All good — append the new key.
+                config.authorized_keys.push(AuthorizedKey {
+                    key_id,
+                    key_type: *key_type,
+                    pubkey: pubkey.clone(),
+                    label: label.clone(),
+                    daily_limit: None,
+                    daily_spent: (0, 0),
+                });
+
+                let key_id_hex: String = key_id.iter().map(|b| format!("{:02x}", b)).collect();
+                tracing::info!(
+                    "AddKey: {} added key {} ({:?}) labeled '{}'",
+                    tx.from.to_hex(),
+                    key_id_hex,
+                    key_type,
+                    label,
+                );
+            }
         }
 
         Ok(())

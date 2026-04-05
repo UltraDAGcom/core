@@ -971,6 +971,13 @@ pub enum SmartOpType {
     StreamWithdraw { stream_id: [u8; 32] },
     /// Cancel a stream.
     StreamCancel { stream_id: [u8; 32] },
+    /// Add a new authorized key to an existing SmartAccount.
+    /// Signed by an already-authorized key on the account — the new key
+    /// itself does not sign (it isn't yet authorized and can't). This
+    /// enables cross-ecosystem device pairing (e.g. primary on iPhone,
+    /// backup YubiKey) where the OS-level passkey sync doesn't apply.
+    /// Fee-exempt (account management op).
+    AddKey { key_type: KeyType, pubkey: Vec<u8>, label: String },
 }
 
 /// A generic SmartAccount operation signed with any authorized key (Ed25519 or P256).
@@ -1072,6 +1079,14 @@ impl SmartOpTx {
                 buf.push(12);
                 buf.extend_from_slice(stream_id);
             }
+            SmartOpType::AddKey { key_type, pubkey, label } => {
+                buf.push(13);
+                buf.push(*key_type as u8);
+                buf.extend_from_slice(&(pubkey.len() as u32).to_le_bytes());
+                buf.extend_from_slice(pubkey);
+                buf.extend_from_slice(&(label.len() as u32).to_le_bytes());
+                buf.extend_from_slice(label.as_bytes());
+            }
         }
         buf.extend_from_slice(&self.fee.to_le_bytes());
         buf.extend_from_slice(&self.nonce.to_le_bytes());
@@ -1111,6 +1126,7 @@ impl SmartOpTx {
             | SmartOpType::Delegate { .. } | SmartOpType::Undelegate
             | SmartOpType::SetCommission { .. }
             | SmartOpType::RegisterName { .. } // Free for 6+ chars
+            | SmartOpType::AddKey { .. }       // Account management op
         )
     }
 }
