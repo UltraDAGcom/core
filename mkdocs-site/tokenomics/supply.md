@@ -108,7 +108,7 @@ graph TD
 The validator pool (75% of round reward) is distributed to validators:
 
 - **Active validators** (producing vertices): receive rewards proportional to effective stake
-- **Passive stakers** (staked but not in top 21): receive 20% of what an equivalent active validator would earn
+- **Passive stakers** (staked but not in top 100): receive 50% of what an equivalent active validator would earn
 
 $$
 \text{validator\_reward}_i = \text{round\_reward} \times (1 - \frac{\text{council\_emission\_percent}}{100}) \times \frac{\text{effective\_stake}_i}{\sum \text{effective\_stakes}}

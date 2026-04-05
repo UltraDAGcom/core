@@ -208,13 +208,14 @@ pub fn dev_keypair() -> crate::address::SecretKey {
 }
 
 /// Maximum number of active validators (top stakers by amount).
-/// Odd number for clean BFT quorum (ceil(2*21/3) = 14).
-pub const MAX_ACTIVE_VALIDATORS: usize = 21;
+/// Increased from 21 to 100 for better decentralization while maintaining
+/// tractable DAG-BFT consensus (O(n²) message complexity).
+pub const MAX_ACTIVE_VALIDATORS: usize = 100;
 
 /// Minimum number of active validators required for BFT consensus.
-/// BFT requires at least 4 validators to tolerate 1 Byzantine fault (3f+1 where f=1).
-/// With fewer than 4 validators, the system cannot guarantee safety.
-pub const MIN_ACTIVE_VALIDATORS: usize = 4;
+/// BFT requires at least 7 validators to tolerate 2 Byzantine faults (3f+1 where f=2).
+/// With fewer than 7 validators, the system cannot guarantee safety.
+pub const MIN_ACTIVE_VALIDATORS: usize = 7;
 
 /// Epoch length in rounds. Validator set recalculated at epoch boundaries.
 /// Matches halving interval for clean alignment.
@@ -229,8 +230,10 @@ pub const EPOCH_LENGTH_ROUNDS: u64 = 210_000;
 /// `EPOCH_LENGTH_ROUNDS` is a compile-time constant, not governable, so this invariant holds forever.
 pub const EPOCH_UNINITIALIZED: u64 = u64::MAX;
 
-/// Observer reward percentage: staked-but-not-active addresses earn 20% of normal.
-pub const OBSERVER_REWARD_PERCENT: u64 = 20;
+/// Observer reward percentage: staked-but-not-active addresses earn 50% of normal.
+/// Increased from 20% to provide better rewards for small validators who are
+/// staked but not in the top-100 active set, helping them grow through passive accumulation.
+pub const OBSERVER_REWARD_PERCENT: u64 = 50;
 
 // ===== COUNCIL OF 21 CONSTANTS =====
 
@@ -379,8 +382,9 @@ pub fn block_reward(height: u64) -> u64 {
 // ========================================
 
 /// Minimum stake required to submit a governance proposal.
-/// Prevents spam. Set low for testnet community building.
-pub const MIN_STAKE_TO_PROPOSE: u64 = 10_000 * COIN; // 10,000 UDAG (same as MIN_STAKE_SATS)
+/// Prevents spam. Set equal to MIN_STAKE_SATS for consistency.
+/// 2,000 UDAG — accessible for community participation.
+pub const MIN_STAKE_TO_PROPOSE: u64 = 2_000 * COIN; // 2,000 UDAG (same as MIN_STAKE_SATS)
 
 /// Voting period in rounds. At 2.5s/round ≈ 3.5 days.
 /// Long enough for community participation, short enough to ship.
@@ -508,7 +512,9 @@ pub const BFT_MAX_QUORUM_NUMERATOR: u64 = 50;
 
 /// Minimum stake required to prevent dust attacks on governance.
 /// Below this threshold, attackers could spam proposals cheaply.
-pub const BFT_MIN_STAKE_SATS: u64 = 1_000;
+/// Set to 500 sats (0.000005 UDAG) — low enough to allow 2,000 UDAG minimum stake
+/// while preventing governance spam from zero-stake accounts.
+pub const BFT_MIN_STAKE_SATS: u64 = 500;
 
 #[cfg(test)]
 mod tests {

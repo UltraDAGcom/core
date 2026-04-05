@@ -12,7 +12,7 @@ UltraDAG uses a DAG-based Byzantine Fault Tolerant consensus protocol. This page
 
 ### Validators
 
-The protocol operates with a set of up to **21 active validators**, each identified by an Ed25519 public key and weighted by effective stake. Validators produce DAG vertices containing transactions and references to parent vertices.
+The protocol operates with a set of up to **100 active validators**, each identified by an Ed25519 public key and weighted by effective stake. Validators produce DAG vertices containing transactions and references to parent vertices.
 
 ### BFT Fault Model
 
@@ -22,7 +22,7 @@ $$
 n \geq 3f + 1
 $$
 
-Where $n$ is the total number of validators and $f$ is the maximum number of Byzantine (arbitrarily faulty) validators. With 21 validators, the protocol tolerates up to **6 Byzantine validators**.
+Where $n$ is the total number of validators and $f$ is the maximum number of Byzantine (arbitrarily faulty) validators. With 100 validators, the protocol tolerates up to **33 Byzantine validators**.
 
 ### Partial Synchrony
 
@@ -241,7 +241,8 @@ Pruning only removes vertices that are **deeply finalized** — finalized for at
 | `MAX_PARENTS` | 64 | Hard maximum parents |
 | `PRUNING_HORIZON` | 1,000 rounds | Rounds before vertex pruning |
 | `EPOCH_LENGTH` | 210,000 rounds | Validator set recalculation interval |
-| `MAX_VALIDATORS` | 21 | Maximum active validators |
+| `MAX_VALIDATORS` | 100 | Maximum active validators |
+| `BFT_FAULT_TOLERANCE` | 33 | Byzantine faults tolerated (with 100 validators) |
 | `BFT_THRESHOLD` | ceil(2n/3) | Finality threshold (>2/3 by validator count) |
 
 ---

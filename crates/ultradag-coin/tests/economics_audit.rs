@@ -580,7 +580,7 @@ fn test_41_multiple_delegators_proportional_rewards() {
     );
 }
 
-/// Test that observer_reward_percent is respected: passive stakers earn 20%.
+/// Test that observer_reward_percent is respected: passive stakers earn 50%.
 #[test]
 fn test_42_observer_reward_percent_applied() {
     let mut state = StateEngine::new_with_genesis();
@@ -609,13 +609,13 @@ fn test_42_observer_reward_percent_applied() {
     let active_earned = state.balance(&active) - active_bal_before;
     let passive_earned = state.balance(&passive) - passive_bal_before;
 
-    // Both have equal stake. Active gets 100% proportional, passive gets 20%.
-    // active_earned / passive_earned should be approximately 5x (100/20)
+    // Both have equal stake. Active gets 100% proportional, passive gets 50%.
+    // active_earned / passive_earned should be approximately 2x (100/50)
     assert!(active_earned > 0 && passive_earned > 0);
     let ratio = (active_earned as f64) / (passive_earned as f64);
     assert!(
-        (ratio - 5.0).abs() < 0.5,
-        "Active should earn ~5x passive (OBSERVER_REWARD_PERCENT=20). Ratio={:.2}",
+        (ratio - 2.0).abs() < 0.5,
+        "Active should earn ~2x passive (OBSERVER_REWARD_PERCENT=50). Ratio={:.2}",
         ratio
     );
 }

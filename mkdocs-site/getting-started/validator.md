@@ -10,11 +10,11 @@ This guide walks you through becoming an UltraDAG validator — from generating 
 
 ## Overview
 
-Validators produce DAG vertices, participate in BFT finality, and earn block rewards proportional to their effective stake. UltraDAG supports up to **21 active validators** at any time, selected by effective stake (own stake + delegations).
+Validators produce DAG vertices, participate in BFT finality, and earn block rewards proportional to their effective stake. UltraDAG supports up to **100 active validators** at any time, selected by effective stake (own stake + delegations).
 
 **Requirements:**
 
-- Minimum stake: **10,000 UDAG**
+- Minimum stake: **2,000 UDAG**
 - Stable internet connection
 - Low-latency network path to other validators
 - Hardware: any machine capable of running the < 2 MB binary (1 CPU core, 128 MB RAM minimum)
@@ -187,11 +187,11 @@ curl -X POST http://localhost:10333/unstake \
 
 ### Minimum Stake
 
-The minimum stake to become a validator is **10,000 UDAG** (1,000,000,000,000 sats).
+The minimum stake to become a validator is **2,000 UDAG** (200,000,000,000 sats).
 
 ### Active Validator Set
 
-Only the top **21 validators** by effective stake are active in each epoch. The validator set is recalculated every **210,000 rounds** (one epoch, approximately 12 days at 5-second rounds).
+Only the top **100 validators** by effective stake are active in each epoch. The validator set is recalculated every **210,000 rounds** (one epoch, approximately 12 days at 5-second rounds).
 
 ### Effective Stake
 
@@ -237,8 +237,8 @@ UltraDAG operates on an epoch system:
 At each epoch boundary:
 
 1. Active validator set is recalculated based on effective stake rankings
-2. Validators ranked 1-21 become active for the next epoch
-3. Validators outside top 21 continue earning passive staking rewards (20% rate)
+2. Validators ranked 1-100 become active for the next epoch
+3. Validators ranked 101+ continue earning passive staking rewards (50% rate)
 
 ---
 
@@ -288,7 +288,7 @@ See [Security Model](../security/model.md) for full details on slashing mechanic
 
 ### "Insufficient stake" error
 
-Ensure you have at least 10,000 UDAG (1,000,000,000,000 sats) available for staking. Check your balance:
+Ensure you have at least 2,000 UDAG (200,000,000,000 sats) available for staking. Check your balance:
 
 ```bash
 curl http://localhost:10333/balance/YOUR_ADDRESS
@@ -296,7 +296,7 @@ curl http://localhost:10333/balance/YOUR_ADDRESS
 
 ### Not in active validator set
 
-If there are already 21 validators with more effective stake, you will not be active. You still earn passive staking rewards (20% rate). Increase your stake or attract delegations to enter the active set.
+If there are already 100 validators with more effective stake, you will not be active. You still earn passive staking rewards (50% rate). Increase your stake or attract delegations to enter the active set.
 
 ### Node not producing vertices
 

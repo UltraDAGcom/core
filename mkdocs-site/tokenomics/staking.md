@@ -12,8 +12,8 @@ UltraDAG uses a proof-of-stake system with delegated staking. Validators stake U
 
 | Parameter | Value |
 |-----------|-------|
-| Minimum validator stake | 10,000 UDAG |
-| Maximum active validators | 21 |
+| Minimum validator stake | 2,000 UDAG |
+| Maximum active validators | 100 |
 | Epoch length | 210,000 rounds (~12.15 days) |
 | Minimum delegation | 100 UDAG |
 | Unstake/Undelegate cooldown | 2,016 rounds (~2.8 hours) |
@@ -28,16 +28,16 @@ UltraDAG uses a proof-of-stake system with delegated staking. Validators stake U
 
 To become a validator:
 
-1. Acquire at least **10,000 UDAG**
+1. Acquire at least **2,000 UDAG**
 2. Submit a `Stake` transaction
-3. If your effective stake ranks in the top 21 at the next epoch boundary, you become an active validator
+3. If your effective stake ranks in the top 100 at the next epoch boundary, you become an active validator
 
 ```bash
 curl -X POST http://localhost:10333/stake \
   -H "Content-Type: application/json" \
   -d '{
     "secret_key": "YOUR_SECRET_KEY",
-    "amount": 1000000000000
+    "amount": 200000000000
   }'
 ```
 
@@ -49,16 +49,16 @@ curl -X POST http://localhost:10333/stake \
 The active validator set is determined at each **epoch boundary** (every 210,000 rounds):
 
 1. All staked addresses are ranked by **effective stake** (own stake + delegations)
-2. The top 21 become active validators for the next epoch
+2. The top 100 become active validators for the next epoch
 3. Ties are broken by address bytes ascending (deterministic)
 
 ```mermaid
 graph TD
-    A[All Stakers] -->|Rank by effective stake| B[Top 21]
+    A[All Stakers] -->|Rank by effective stake| B[Top 100]
     B --> C[Active Validators]
-    A -->|Rank 22+| D[Passive Stakers]
+    A -->|Rank 101+| D[Passive Stakers]
     C -->|Full rewards| E[100% proportional share]
-    D -->|Reduced rewards| F[20% observer rate]
+    D -->|Reduced rewards| F[50% observer rate]
 ```
 
 ### Effective Stake
@@ -101,16 +101,16 @@ The remaining 0.100 UDAG goes to the Council.
 
 ### Passive Staking Rewards
 
-Validators who are staked but **not in the top 21** still earn rewards at a reduced rate:
+Validators who are staked but **not in the top 100** still earn rewards at a reduced rate:
 
 $$
-\text{passive\_reward}_i = \text{active\_equivalent}_i \times 0.20
+\text{passive\_reward}_i = \text{active\_equivalent}_i \times 0.50
 $$
 
-This incentivizes staking even when not in the active set — passive stakers earn 20% of what they would earn as an active validator with the same stake.
+This incentivizes staking even when not in the active set — passive stakers earn 50% of what they would earn as an active validator with the same stake.
 
 !!! tip "Why passive rewards?"
-    Passive staking rewards encourage a deep bench of validators ready to enter the active set. Without passive rewards, there would be no incentive to stake until you could guarantee a top-21 position, creating a barrier to entry.
+    Passive staking rewards encourage a deep bench of validators ready to enter the active set. Without passive rewards, there would be no incentive to stake until you could guarantee a top-100 position, creating a barrier to entry.
 
 ---
 
@@ -227,7 +227,7 @@ curl -X POST http://localhost:10333/undelegate \
 ```
 
 !!! warning "Partial unstake"
-    If unstaking would reduce your stake below the 10,000 UDAG minimum, the unstake is rejected. You must unstake the full amount to exit the validator set.
+    If unstaking would reduce your stake below the 2,000 UDAG minimum, the unstake is rejected. You must unstake the full amount to exit the validator set.
 
 ---
 
@@ -282,8 +282,8 @@ Equivocation is detected automatically by any node that receives two different v
 At each epoch boundary:
 
 1. Rank all stakers by effective stake
-2. Top 21 become active validators
-3. Remaining stakers become passive (20% reward rate)
+2. Top 100 become active validators
+3. Remaining stakers become passive (50% reward rate)
 4. Cooldowns from the previous epoch are processed
 5. Commission changes are reflected in new reward calculations
 

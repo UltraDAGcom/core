@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::address::{Address, Signature};
 
 /// Minimum stake required to become a validator.
-pub const MIN_STAKE_SATS: u64 = 10_000 * crate::constants::COIN; // 10,000 UDAG
+pub const MIN_STAKE_SATS: u64 = 2_000 * crate::constants::COIN; // 2,000 UDAG
 
 /// Cooldown period before unstaked funds are returned (in rounds).
 pub const UNSTAKE_COOLDOWN_ROUNDS: u64 = 2_016; // ~2.8 hours at 5s rounds

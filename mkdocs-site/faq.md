@@ -79,11 +79,11 @@ For mainnet, sign transactions client-side using an [SDK](api/sdks.md) and submi
 
 ### What is the minimum stake?
 
-**10,000 UDAG** (1,000,000,000,000 sats) is required to become eligible as a validator.
+**2,000 UDAG** (200,000,000,000 sats) is required to become eligible as a validator.
 
 ### How do I earn rewards?
 
-Stake UDAG and your node will earn rewards proportional to your effective stake (own stake + delegations). Active validators (top 21) earn 100% of their proportional share. Passive stakers earn 20%.
+Stake UDAG and your node will earn rewards proportional to your effective stake (own stake + delegations). Active validators (top 100) earn 100% of their proportional share. Passive stakers earn 50%.
 
 ### How long is the unstaking cooldown?
 
@@ -145,7 +145,7 @@ UltraDAG automatically **prunes** DAG vertices older than 1000 rounds (configura
 
 ### How many validators can participate?
 
-Up to **21 active validators** (top by effective stake). Additional stakers earn passive rewards at 20% rate. The validator set is recalculated every 210,000 rounds (~12 days).
+Up to **100 active validators** (top by effective stake). Additional stakers earn passive rewards at 50% rate. The validator set is recalculated every 210,000 rounds (~12 days).
 
 ### How is the state root computed?
 

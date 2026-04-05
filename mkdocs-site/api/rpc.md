@@ -284,7 +284,7 @@ curl http://localhost:10333/validators
   ],
   "total_staked": 5000000000000,
   "active_count": 5,
-  "max_validators": 21
+  "max_validators": 100
 }
 ```
 

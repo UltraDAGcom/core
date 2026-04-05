@@ -50,14 +50,14 @@ $$
 n \geq 3f + 1
 $$
 
-With 21 validators, the protocol tolerates up to **6 Byzantine validators**. Safety holds if fewer than 1/3 of validators (by stake weight) are Byzantine.
+With 100 validators, the protocol tolerates up to **33 Byzantine validators**. Safety holds if fewer than 1/3 of validators (by stake weight) are Byzantine.
 
 | Validators | Byzantine Tolerance |
 |-----------|-------------------|
 | 4 | 1 |
 | 7 | 2 |
 | 13 | 4 |
-| 21 | 6 |
+| 100 | 33 |
 
 ### What Byzantine Means
 
