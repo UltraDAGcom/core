@@ -2551,6 +2551,18 @@ impl StateEngine {
         self.name_profiles.get(name)
     }
 
+    /// Resolve a pocket under a name. Returns the pocket target address,
+    /// or `None` if the parent name doesn't exist, has no profile, or the
+    /// pocket label isn't registered.
+    pub fn resolve_pocket(&self, parent: &str, label: &str) -> Option<crate::address::Address> {
+        // Parent must resolve (checks expiry for paid names, skips for perpetual).
+        self.resolve_name(parent)?;
+        let profile = self.name_profiles.get(parent)?;
+        profile.pockets.iter()
+            .find(|p| p.label == label)
+            .map(|p| p.address)
+    }
+
     /// Public: ensure a SmartAccount exists for an address (creates if missing).
     /// Used by the relay endpoint to create accounts without transactions.
     pub fn ensure_smart_account(&mut self, addr: &Address) {
@@ -2807,6 +2819,32 @@ impl StateEngine {
             }
         }
 
+        // Validate pockets (if any).
+        if tx.pockets.len() > MAX_POCKETS {
+            return Err(CoinError::ValidationError(format!(
+                "too many pockets (max {})", MAX_POCKETS
+            )));
+        }
+        // Check unique labels.
+        {
+            let mut seen_labels = std::collections::HashSet::new();
+            for p in &tx.pockets {
+                if !seen_labels.insert(&p.label) {
+                    return Err(CoinError::ValidationError(format!(
+                        "duplicate pocket label '{}'", p.label
+                    )));
+                }
+            }
+        }
+        // Verify each pocket's ownership proof.
+        for p in &tx.pockets {
+            if let Err(e) = p.verify_proof(&tx.name) {
+                return Err(CoinError::ValidationError(format!(
+                    "pocket '{}' proof invalid: {}", p.label, e
+                )));
+            }
+        }
+
         self.debit(&tx.from, tx.fee)?;
         self.treasury_balance = self.treasury_balance.saturating_add(tx.fee);
         self.increment_nonce(&tx.from);
@@ -2814,6 +2852,7 @@ impl StateEngine {
         self.name_profiles.insert(tx.name.clone(), NameProfile {
             external_addresses: tx.external_addresses.clone(),
             metadata: tx.metadata.clone(),
+            pockets: tx.pockets.clone(),
         });
 
         Ok(())
@@ -3924,6 +3963,63 @@ impl StateEngine {
                     key_type,
                     label,
                 );
+            }
+            SmartOpType::UpdateProfile { name, external_addresses, metadata, pockets } => {
+                use crate::tx::name_registry::{NameProfile, MAX_PROFILE_EXTERNAL_ADDRESSES, MAX_PROFILE_METADATA, MAX_PROFILE_KEY_BYTES, MAX_PROFILE_VALUE_BYTES, MAX_POCKETS};
+                // Same validation as apply_update_profile_tx but signed by any
+                // authorized key (P256 or Ed25519) instead of Ed25519-only.
+                let owner = self.name_to_address.get(name)
+                    .ok_or_else(|| CoinError::ValidationError("name not registered".into()))?;
+                if *owner != tx.from {
+                    return Err(CoinError::ValidationError("only the name owner can update profile".into()));
+                }
+                if external_addresses.len() > MAX_PROFILE_EXTERNAL_ADDRESSES {
+                    return Err(CoinError::ValidationError(format!(
+                        "too many external addresses (max {})", MAX_PROFILE_EXTERNAL_ADDRESSES
+                    )));
+                }
+                if metadata.len() > MAX_PROFILE_METADATA {
+                    return Err(CoinError::ValidationError(format!(
+                        "too many metadata entries (max {})", MAX_PROFILE_METADATA
+                    )));
+                }
+                for (key, val) in metadata {
+                    if key.len() > MAX_PROFILE_KEY_BYTES {
+                        return Err(CoinError::ValidationError(format!("metadata key '{}' too long", key)));
+                    }
+                    if val.len() > MAX_PROFILE_VALUE_BYTES {
+                        return Err(CoinError::ValidationError("metadata value too long".into()));
+                    }
+                }
+                // Validate pockets.
+                if pockets.len() > MAX_POCKETS {
+                    return Err(CoinError::ValidationError(format!(
+                        "too many pockets (max {})", MAX_POCKETS
+                    )));
+                }
+                {
+                    let mut seen_labels = std::collections::HashSet::new();
+                    for p in pockets {
+                        if !seen_labels.insert(&p.label) {
+                            return Err(CoinError::ValidationError(format!(
+                                "duplicate pocket label '{}'", p.label
+                            )));
+                        }
+                    }
+                }
+                for p in pockets {
+                    if let Err(e) = p.verify_proof(name) {
+                        return Err(CoinError::ValidationError(format!(
+                            "pocket '{}' proof invalid: {}", p.label, e
+                        )));
+                    }
+                }
+
+                self.name_profiles.insert(name.clone(), NameProfile {
+                    external_addresses: external_addresses.clone(),
+                    metadata: metadata.clone(),
+                    pockets: pockets.clone(),
+                });
             }
         }
 

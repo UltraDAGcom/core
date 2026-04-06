@@ -1250,6 +1250,16 @@ ultradag_banned_ips {ban_count}
             }
 
             #[derive(Deserialize)]
+            struct PocketInput {
+                label: String,
+                address: String,
+                /// Hex-encoded Ed25519 pubkey of the target wallet (32 bytes → 64 hex).
+                pub_key: String,
+                /// Hex-encoded Ed25519 signature of the pocket-claim challenge (64 bytes → 128 hex).
+                proof: String,
+            }
+
+            #[derive(Deserialize)]
             struct UpdateProfileRequest {
                 secret_key: String,
                 name: String,
@@ -1257,6 +1267,8 @@ ultradag_banned_ips {ban_count}
                 metadata: Vec<(String, String)>,
                 #[serde(default)]
                 external_addresses: Vec<(String, String)>,
+                #[serde(default)]
+                pockets: Vec<PocketInput>,
                 #[serde(default = "default_profile_fee")]
                 fee: u64,
             }
@@ -1309,11 +1321,47 @@ ultradag_banned_ips {ban_count}
                             total_needed, pending, balance)));
                 }
 
+                // Parse pocket inputs into typed Pocket structs.
+                let mut parsed_pockets = Vec::new();
+                for pi in &req_body.pockets {
+                    let Some(addr_bytes) = hex_decode(&pi.address) else {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, &format!("pocket '{}': invalid address hex", pi.label)));
+                    };
+                    if addr_bytes.len() != 20 {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, &format!("pocket '{}': address must be 20 bytes (40 hex chars)", pi.label)));
+                    }
+                    let Some(pk_bytes) = hex_decode(&pi.pub_key) else {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, &format!("pocket '{}': invalid pub_key hex", pi.label)));
+                    };
+                    if pk_bytes.len() != 32 {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, &format!("pocket '{}': pub_key must be 32 bytes (64 hex chars, Ed25519)", pi.label)));
+                    }
+                    let Some(sig_bytes) = hex_decode(&pi.proof) else {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, &format!("pocket '{}': invalid proof hex", pi.label)));
+                    };
+                    if sig_bytes.len() != 64 {
+                        return Ok(error_response(StatusCode::BAD_REQUEST, &format!("pocket '{}': proof must be 64 bytes (128 hex chars, Ed25519)", pi.label)));
+                    }
+                    let mut addr = [0u8; 20];
+                    addr.copy_from_slice(&addr_bytes);
+                    let mut pk = [0u8; 32];
+                    pk.copy_from_slice(&pk_bytes);
+                    let mut sig = [0u8; 64];
+                    sig.copy_from_slice(&sig_bytes);
+                    parsed_pockets.push(ultradag_coin::tx::name_registry::Pocket {
+                        label: pi.label.clone(),
+                        address: Address(addr),
+                        pub_key: pk,
+                        proof: ultradag_coin::Signature(sig),
+                    });
+                }
+
                 let mut update = ultradag_coin::tx::name_registry::UpdateProfileTx {
                     from: sender,
                     name: req_body.name.clone(),
                     external_addresses: req_body.external_addresses.clone(),
                     metadata: req_body.metadata.clone(),
+                    pockets: parsed_pockets,
                     fee: req_body.fee,
                     nonce,
                     pub_key: sk.verifying_key().to_bytes(),
@@ -4145,6 +4193,11 @@ ultradag_banned_ips {ban_count}
                         "profile": profile.map(|p| serde_json::json!({
                             "external_addresses": p.external_addresses,
                             "metadata": p.metadata,
+                            "pockets": p.pockets.iter().map(|pk| serde_json::json!({
+                                "label": pk.label,
+                                "address": pk.address.to_hex(),
+                                "address_bech32": pk.address.to_bech32(),
+                            })).collect::<Vec<_>>(),
                         })),
                     }))
                 }

@@ -41,6 +41,21 @@ pub const MAX_PROFILE_KEY_BYTES: usize = 32;
 /// Maximum length for profile metadata values.
 pub const MAX_PROFILE_VALUE_BYTES: usize = 256;
 
+/// Maximum number of pockets per name.
+/// Pockets let a name owner expose multiple labeled addresses under the same
+/// name (e.g. `@alice.savings`, `@alice.business`). 10 is plenty for a
+/// personal wallet and keeps per-name storage bounded.
+pub const MAX_POCKETS: usize = 10;
+
+/// Maximum pocket label length in bytes. Same charset as names
+/// (`[a-z0-9-]`, no leading/trailing hyphen), so 32 is comfortable.
+pub const MAX_POCKET_LABEL_BYTES: usize = 32;
+
+/// Domain-separation tag for pocket-ownership challenge signatures.
+/// The target wallet signs blake3(this || parent || label || addr20) with
+/// its own key, proving it consents to being pointed to as a pocket.
+pub const POCKET_CLAIM_DOMAIN: &[u8] = b"ultradag-pocket-claim";
+
 /// Reserved names that cannot be registered.
 const RESERVED_NAMES: &[&str] = &[
     "admin", "system", "null", "bridge", "treasury", "ultradag",
@@ -113,6 +128,100 @@ pub fn validate_name(name: &str) -> Result<(), &'static str> {
 // Data structures
 // ────────────────────────────────────────────────────────────
 
+/// A labeled sub-address under a name.
+///
+/// Lets the owner of `@alice` expose multiple addresses under a single
+/// public name: `@alice` → primary, `@alice.savings` → cold wallet,
+/// `@alice.business` → business wallet, etc.
+///
+/// The target address must *consent* to being listed — otherwise anyone
+/// could point `@alice.foo` at Bob's wallet and confuse Alice's payers.
+/// Consent is proven by a counter-signature from the target wallet over
+/// `blake3(POCKET_CLAIM_DOMAIN || parent_name || label || target_addr_20bytes)`.
+/// Verification is stateless and happens every time the profile is written.
+///
+/// v1 accepts Ed25519 targets only. P256/WebAuthn targets can be added later
+/// by extending `Pocket` with a `KeyType` discriminator and a WebAuthn
+/// envelope; out of scope for the first cut.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Pocket {
+    /// Human-readable label (same charset as names: `[a-z0-9-]`, 1–32 bytes,
+    /// no leading/trailing hyphen). Resolved as `@parent.label`.
+    pub label: String,
+    /// Target address the pocket points to.
+    pub address: Address,
+    /// Target wallet's Ed25519 public key (must hash to `address`).
+    pub pub_key: [u8; 32],
+    /// Target wallet's signature over the pocket-claim challenge bytes.
+    pub proof: Signature,
+}
+
+/// Validate a pocket label. Uses the same charset rules as names (minus the
+/// reserved word check — labels are scoped under a parent name so they can
+/// be called `admin.alice` without polluting the name registry).
+pub fn validate_pocket_label(label: &str) -> Result<(), &'static str> {
+    if label.is_empty() {
+        return Err("pocket label cannot be empty");
+    }
+    if label.len() > MAX_POCKET_LABEL_BYTES {
+        return Err("pocket label too long (max 32 bytes)");
+    }
+    if label.starts_with('-') || label.ends_with('-') {
+        return Err("pocket label cannot start or end with a hyphen");
+    }
+    if label.contains("--") {
+        return Err("pocket label cannot contain consecutive hyphens");
+    }
+    if !label.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+        return Err("pocket label can only contain lowercase letters, numbers, and hyphens");
+    }
+    Ok(())
+}
+
+/// Build the bytes that the target wallet signs to prove consent.
+///
+/// Layout: `POCKET_CLAIM_DOMAIN || parent_name_utf8 || 0x00 || label_utf8 || 0x00 || target_addr_20bytes`
+///
+/// The 0x00 separators prevent prefix collision between different
+/// `(parent, label)` pairs (e.g. `ab` + `c` vs `a` + `bc`).
+pub fn pocket_claim_bytes(parent: &str, label: &str, target: &Address) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(
+        POCKET_CLAIM_DOMAIN.len() + parent.len() + 1 + label.len() + 1 + 20,
+    );
+    buf.extend_from_slice(POCKET_CLAIM_DOMAIN);
+    buf.extend_from_slice(parent.as_bytes());
+    buf.push(0);
+    buf.extend_from_slice(label.as_bytes());
+    buf.push(0);
+    buf.extend_from_slice(&target.0);
+    buf
+}
+
+impl Pocket {
+    /// Verify this pocket's ownership proof. Stateless — pure function of
+    /// the pocket contents plus the parent name.
+    ///
+    /// Steps:
+    /// 1. `label` must match the charset rules.
+    /// 2. `pub_key` must hash to `address` (so we know the proof is signed
+    ///    by the key that owns the target wallet, not some random key).
+    /// 3. Ed25519 `proof` must verify against the pocket-claim challenge.
+    pub fn verify_proof(&self, parent_name: &str) -> Result<(), &'static str> {
+        validate_pocket_label(&self.label)?;
+        if Address::from_pubkey(&self.pub_key) != self.address {
+            return Err("pocket pub_key does not match address");
+        }
+        let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(&self.pub_key) else {
+            return Err("pocket pub_key is not a valid Ed25519 point");
+        };
+        let challenge = pocket_claim_bytes(parent_name, &self.label, &self.address);
+        let sig = ed25519_dalek::Signature::from_bytes(&self.proof.0);
+        vk.verify_strict(&challenge, &sig)
+            .map_err(|_| "pocket proof signature invalid")?;
+        Ok(())
+    }
+}
+
 /// Optional profile data associated with a name.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct NameProfile {
@@ -120,6 +229,10 @@ pub struct NameProfile {
     pub external_addresses: Vec<(String, String)>,
     /// Public metadata: ("website", "https://..."), ("avatar", "https://..."), etc.
     pub metadata: Vec<(String, String)>,
+    /// Labeled sub-addresses under this name. `@parent.label` resolves here.
+    /// Each pocket carries its own ownership proof (see `Pocket`).
+    #[serde(default)]
+    pub pockets: Vec<Pocket>,
 }
 
 impl Default for NameProfile {
@@ -127,6 +240,7 @@ impl Default for NameProfile {
         Self {
             external_addresses: Vec::new(),
             metadata: Vec::new(),
+            pockets: Vec::new(),
         }
     }
 }
@@ -269,6 +383,10 @@ pub struct UpdateProfileTx {
     pub name: String,
     pub external_addresses: Vec<(String, String)>,
     pub metadata: Vec<(String, String)>,
+    /// Labeled sub-addresses under this name. Each pocket carries an
+    /// Ed25519 ownership proof from the target wallet — see `Pocket`.
+    #[serde(default)]
+    pub pockets: Vec<Pocket>,
     pub fee: u64,
     pub nonce: u64,
     pub pub_key: [u8; 32],
@@ -296,6 +414,18 @@ impl UpdateProfileTx {
             buf.extend_from_slice(key.as_bytes());
             buf.extend_from_slice(&(val.len() as u32).to_le_bytes());
             buf.extend_from_slice(val.as_bytes());
+        }
+        // Pockets — appended after metadata. When no pockets are present
+        // this is just 4 bytes of zero (u32 count = 0), so clients that
+        // don't use pockets still produce a stable (if slightly longer)
+        // signable_bytes. Each pocket encodes: label_len + label + addr + pubkey + sig.
+        buf.extend_from_slice(&(self.pockets.len() as u32).to_le_bytes());
+        for p in &self.pockets {
+            buf.extend_from_slice(&(p.label.len() as u32).to_le_bytes());
+            buf.extend_from_slice(p.label.as_bytes());
+            buf.extend_from_slice(&p.address.0);
+            buf.extend_from_slice(&p.pub_key);
+            buf.extend_from_slice(&p.proof.0);
         }
         buf.extend_from_slice(&self.fee.to_le_bytes());
         buf.extend_from_slice(&self.nonce.to_le_bytes());

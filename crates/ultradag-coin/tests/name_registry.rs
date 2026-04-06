@@ -42,7 +42,7 @@ fn make_transfer_name(sk: &SecretKey, name: &str, new_owner: Address, fee: u64, 
 fn make_update_profile(sk: &SecretKey, name: &str, ext: Vec<(String, String)>, meta: Vec<(String, String)>, fee: u64, nonce: u64) -> UpdateProfileTx {
     let mut tx = UpdateProfileTx {
         from: sk.address(), name: name.to_string(),
-        external_addresses: ext, metadata: meta,
+        external_addresses: ext, metadata: meta, pockets: Vec::new(),
         fee, nonce, pub_key: sk.verifying_key().to_bytes(), signature: Signature([0u8; 64]),
     };
     tx.signature = sk.sign(&tx.signable_bytes());

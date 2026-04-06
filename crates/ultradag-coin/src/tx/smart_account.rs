@@ -978,6 +978,16 @@ pub enum SmartOpType {
     /// backup YubiKey) where the OS-level passkey sync doesn't apply.
     /// Fee-exempt (account management op).
     AddKey { key_type: KeyType, pubkey: Vec<u8>, label: String },
+    /// Update the name profile (external addresses, metadata, pockets).
+    /// The passkey-friendly counterpart to `UpdateProfileTx` (Ed25519-only).
+    /// This variant lets passkey wallets manage their profile and pockets
+    /// without needing an Ed25519 key.
+    UpdateProfile {
+        name: String,
+        external_addresses: Vec<(String, String)>,
+        metadata: Vec<(String, String)>,
+        pockets: Vec<crate::tx::name_registry::Pocket>,
+    },
 }
 
 /// A generic SmartAccount operation signed with any authorized key (Ed25519 or P256).
@@ -1086,6 +1096,33 @@ impl SmartOpTx {
                 buf.extend_from_slice(pubkey);
                 buf.extend_from_slice(&(label.len() as u32).to_le_bytes());
                 buf.extend_from_slice(label.as_bytes());
+            }
+            SmartOpType::UpdateProfile { name, external_addresses, metadata, pockets } => {
+                buf.push(14);
+                buf.extend_from_slice(&(name.len() as u32).to_le_bytes());
+                buf.extend_from_slice(name.as_bytes());
+                buf.extend_from_slice(&(external_addresses.len() as u32).to_le_bytes());
+                for (chain, addr) in external_addresses {
+                    buf.extend_from_slice(&(chain.len() as u32).to_le_bytes());
+                    buf.extend_from_slice(chain.as_bytes());
+                    buf.extend_from_slice(&(addr.len() as u32).to_le_bytes());
+                    buf.extend_from_slice(addr.as_bytes());
+                }
+                buf.extend_from_slice(&(metadata.len() as u32).to_le_bytes());
+                for (key, val) in metadata {
+                    buf.extend_from_slice(&(key.len() as u32).to_le_bytes());
+                    buf.extend_from_slice(key.as_bytes());
+                    buf.extend_from_slice(&(val.len() as u32).to_le_bytes());
+                    buf.extend_from_slice(val.as_bytes());
+                }
+                buf.extend_from_slice(&(pockets.len() as u32).to_le_bytes());
+                for p in pockets {
+                    buf.extend_from_slice(&(p.label.len() as u32).to_le_bytes());
+                    buf.extend_from_slice(p.label.as_bytes());
+                    buf.extend_from_slice(&p.address.0);
+                    buf.extend_from_slice(&p.pub_key);
+                    buf.extend_from_slice(&p.proof.0);
+                }
             }
         }
         buf.extend_from_slice(&self.fee.to_le_bytes());
