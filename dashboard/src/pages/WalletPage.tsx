@@ -409,7 +409,12 @@ export function WalletPage({
     } catch { /* offline — keep existing */ }
   }, [pw?.address]);
 
-  useEffect(() => { fetchPockets(); }, [fetchPockets]);
+  useEffect(() => {
+    fetchPockets();
+    // Refresh pockets every 10s so newly-created pockets show up after finalization.
+    const iv = setInterval(fetchPockets, 10000);
+    return () => clearInterval(iv);
+  }, [fetchPockets]);
 
   useEffect(() => {
     setWalletPage(1);
@@ -870,9 +875,14 @@ export function WalletPage({
                             const balRes = await fetch(`${getNodeUrl()}/balance/${pw.address}`, { signal: AbortSignal.timeout(5000) });
                             const balData = await balRes.json();
                             await signAndSubmitSmartOp({ CreatePocket: { label: newPocketLabel } }, 0, balData.nonce ?? 0);
-                            setPocketMsg(`✓ @${pw.name || ''}.${newPocketLabel} created!`);
+                            const createdLabel = newPocketLabel;
+                            setPocketMsg(`✓ @${pw.name || ''}.${createdLabel} created! Waiting for confirmation...`);
                             setNewPocketLabel('');
-                            fetchPockets();
+                            setShowCreatePocket(false);
+                            // Tx is in mempool — wait for finalization (~5s round time), then refetch.
+                            await new Promise(r => setTimeout(r, 4000));
+                            await fetchPockets();
+                            setPocketMsg(`✓ @${pw.name || ''}.${createdLabel} is live!`);
                           } catch (e: unknown) {
                             setPocketMsg(e instanceof Error ? e.message : 'Failed');
                           } finally { setPocketLoading(false); }
