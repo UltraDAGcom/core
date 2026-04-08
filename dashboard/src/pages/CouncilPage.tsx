@@ -31,14 +31,17 @@ export function CouncilPage() {
   const [council, setCouncil] = useState<CouncilData | null>(null);
   const [govConfig, setGovConfig] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [memberPage, setMemberPage] = useState(1);
   const COUNCIL_PAGE_SIZE = 10;
 
   const refresh = useCallback(async () => {
     try {
       const [c, g] = await Promise.all([getCouncil().catch(() => null), getGovernanceConfig().catch(() => null)]);
-      if (c) setCouncil(c); if (g) setGovConfig(g);
-    } catch {} setLoading(false);
+      if (c) { setCouncil(c); setError(''); }
+      else { setError('Failed to load council data'); }
+      if (g) setGovConfig(g);
+    } catch { setError('Failed to load council data'); } setLoading(false);
   }, []);
 
   useEffect(() => { refresh(); const iv = setInterval(refresh, 30000); return () => clearInterval(iv); }, [refresh]);
@@ -49,7 +52,13 @@ export function CouncilPage() {
     return () => window.removeEventListener('ultradag-network-switch', handler);
   }, [refresh]);
 
-  if (loading) return <div style={{ padding: '18px 26px', color: 'var(--dag-text-faint)', fontSize: 12, fontFamily: "'DM Sans',sans-serif" }}>Loading council...</div>;
+  if (loading && !error) return <div style={{ padding: '18px 26px', color: 'var(--dag-text-faint)', fontSize: 12, fontFamily: "'DM Sans',sans-serif" }}>Loading council...</div>;
+  if (error && !council) return (
+    <div style={{ padding: '18px 26px', fontFamily: "'DM Sans',sans-serif", textAlign: 'center' }}>
+      <p style={{ color: '#EF4444', fontSize: 13, marginBottom: 12 }}>{error}</p>
+      <button onClick={() => { setLoading(true); setError(''); refresh(); }} style={{ padding: '8px 16px', borderRadius: 8, background: 'rgba(0,224,196,0.1)', border: '1px solid rgba(0,224,196,0.2)', color: '#00E0C4', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Retry</button>
+    </div>
+  );
 
   const members = council?.members ?? [];
   const memberCount = council?.member_count ?? members.length;
@@ -62,7 +71,7 @@ export function CouncilPage() {
     <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
-      <PageHeader title="Council of 21" subtitle="The elected governance body that guides UltraDAG" />
+      <PageHeader title="Council of 21" subtitle="The elected governance body that guides UltraDAG" onRefresh={refresh} />
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: m ? 10 : 12, marginBottom: 18, animation: 'slideUp 0.4s ease' }}>

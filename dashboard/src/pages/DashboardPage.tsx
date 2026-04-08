@@ -242,7 +242,7 @@ export function DashboardPage({ status, loading: _loading, network: _network, wa
       `}</style>
 
       {/* Top bar */}
-      <PageHeader title="Dashboard" subtitle="Real-time network overview" />
+      <PageHeader title="Dashboard" subtitle="Real-time network overview" onRefresh={fetchHealth} />
 
       {/* Portfolio */}
       <div style={{

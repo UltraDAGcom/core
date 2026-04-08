@@ -332,7 +332,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
       `}</style>
 
       {/* Header */}
-      <PageHeader title="Streaming Payments" subtitle="Continuous money flow — pay by the second, minute, or month" />
+      <PageHeader title="Streaming Payments" subtitle="Continuous money flow — pay by the second, minute, or month" onRefresh={fetchStreams} />
 
       {/* Stats Row */}
       <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: m ? 10 : 12, marginBottom: 18, animation: 'slideUp 0.4s ease' }}>

@@ -193,6 +193,7 @@ export function BridgePage() {
   const [bridgeReserve, setBridgeReserve] = useState<{ reserve_sats: number; reserve_udag: number } | null>(null);
   const [attestations, setAttestations] = useState<BridgeAttestation[]>([]);
   const [loadingAttestations, setLoadingAttestations] = useState(false);
+  const [attestationError, setAttestationError] = useState('');
   const [showWalletPicker, setShowWalletPicker] = useState(false);
   const isMounted = useRef(true);
 
@@ -267,10 +268,11 @@ export function BridgePage() {
           indices.map(i => getBridgeAttestation(i).catch(() => null))
         );
         const recent = results.filter((att): att is BridgeAttestation => att !== null);
-        if (isMounted.current) setAttestations(recent.reverse());
+        if (isMounted.current) { setAttestations(recent.reverse()); setAttestationError(''); }
         consecutiveErrorsRef.current = 0;
       } catch (e) {
         consecutiveErrorsRef.current += 1;
+        if (isMounted.current) setAttestationError('Unable to fetch recent attestations — retrying...');
       } finally {
         if (isMounted.current) setLoadingAttestations(false);
       }
@@ -1210,7 +1212,12 @@ export function BridgePage() {
               {loadingAttestations && <Loader2 style={{ width: 14, height: 14, color: 'var(--dag-text-muted)', animation: 'spin 1s linear infinite' }} />}
             </div>
             <div style={{ padding: '12px 20px 20px' }}>
-              {attestations.length === 0 ? (
+              {attestationError && attestations.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                  <AlertTriangle style={{ width: 20, height: 20, color: '#FFB800', margin: '0 auto 10px' }} />
+                  <p style={{ fontSize: 12, color: '#FFB800' }}>{attestationError}</p>
+                </div>
+              ) : attestations.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '32px 0' }}>
                   <div style={{
                     width: 40, height: 40, borderRadius: 12,

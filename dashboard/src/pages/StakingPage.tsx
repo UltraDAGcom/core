@@ -132,7 +132,7 @@ export function StakingPage() {
     <div style={{ padding: m ? '12px 14px' : '18px 26px', fontFamily: "'DM Sans',sans-serif" }}>
       <style>{`@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} input:focus,select:focus{border-color:rgba(0,224,196,0.3)!important}`}</style>
 
-      <PageHeader title="Staking" subtitle="Stake UDAG to earn passive rewards — no node required" />
+      <PageHeader title="Staking" subtitle="Stake UDAG to earn passive rewards — no node required" onRefresh={refresh} />
 
       {/* Stats Row */}
       <div style={{ display: 'grid', gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(3,1fr)', gap: m ? 10 : 12, marginBottom: 18, animation: 'slideUp 0.4s ease' }}>

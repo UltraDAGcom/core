@@ -56,6 +56,7 @@ export function NetworkPage() {
       <PageHeader
         title="Node Status"
         subtitle={`Connected to ${getNodeUrl()}`}
+        onRefresh={fetchAll}
         right={
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#00E0C4', animation: 'pulse 2s infinite' }} />

@@ -75,9 +75,17 @@ export function GovernancePage() {
       <PageHeader
         title="Governance"
         subtitle="Vote on proposals that shape the network"
-        right={unlocked && wallets.length > 0 ? (
-          <button onClick={() => setShowCreate(true)} style={{ ...primaryButtonStyle, padding: '8px 16px', fontSize: 12 }}>+ New Proposal</button>
-        ) : undefined}
+        onRefresh={refresh}
+        right={
+          <button
+            onClick={() => unlocked && wallets.length > 0 && setShowCreate(true)}
+            disabled={!unlocked || wallets.length === 0}
+            title={!unlocked ? 'Unlock wallet to create proposals' : wallets.length === 0 ? 'Add a wallet first' : ''}
+            style={{ ...primaryButtonStyle, padding: '8px 16px', fontSize: 12, opacity: unlocked && wallets.length > 0 ? 1 : 0.35, cursor: unlocked && wallets.length > 0 ? 'pointer' : 'not-allowed' }}
+          >
+            + New Proposal
+          </button>
+        }
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: m ? '1fr' : '2fr 1.2fr', gap: m ? 14 : 16, animation: 'slideUp 0.4s ease' }}>

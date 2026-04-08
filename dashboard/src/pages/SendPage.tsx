@@ -191,6 +191,7 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
       const displayTo = isValidAddress(input) ? shortAddr(input) : input;
       const msg = `Sent ${formatUdag(sats)} UDAG to ${displayTo}`;
       setSuccess(msg); toast(msg, 'success');
+      setTimeout(() => setSuccess(''), 5000);
       setTo(''); setAmount(''); setMemo('');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Transaction failed';
@@ -254,13 +255,13 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
 
               <div>
                 <span style={S.label}>Send to</span>
-                <SendToInput value={to} onChange={v => { setTo(v); setError(''); }} onScanQr={() => setShowScanner(true)} />
+                <SendToInput value={to} onChange={v => { setTo(v); setError(''); setSuccess(''); }} onScanQr={() => setShowScanner(true)} />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <span style={S.label}>Amount (UDAG)</span>
-                  <input type="number" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" style={S.input} />
+                  <input type="number" min="0" step="0.01" value={amount} onChange={e => { setAmount(e.target.value); setError(''); setSuccess(''); }} placeholder="0.00" style={S.input} />
                 </div>
                 <div>
                   <span style={S.label}>Fee (UDAG)</span>
@@ -273,7 +274,7 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
                   <span style={S.label}>Memo (optional)</span>
                   <span style={{ fontSize: 10, color: memoBytes > 256 ? '#EF4444' : 'var(--dag-text-faint)' }}>{memoBytes}/256</span>
                 </div>
-                <textarea value={memo} onChange={e => setMemo(e.target.value)} placeholder="Optional message" rows={2}
+                <textarea value={memo} onChange={e => { setMemo(e.target.value); setError(''); setSuccess(''); }} placeholder="Optional message" rows={2}
                   style={{ ...S.input, resize: 'none', maxHeight: 80 } as React.CSSProperties} />
               </div>
 
@@ -312,13 +313,22 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
 
           <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginBottom: 14 }}>Share your address or QR code to receive funds.</p>
 
-          <div style={{ marginBottom: 14 }}>
-            <span style={S.label}>Wallet</span>
-            <WalletSelect idx={receiveIdx} onChange={setReceiveIdx} />
-          </div>
+          {wallets.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '30px 0' }}>
+              <div style={{ fontSize: 28, opacity: 0.1, marginBottom: 10 }}>◎</div>
+              <p style={{ fontSize: 12, color: 'var(--dag-text-muted)' }}>Create a wallet first to receive UDAG</p>
+            </div>
+          ) : (
+            <>
+              <div style={{ marginBottom: 14 }}>
+                <span style={S.label}>Wallet</span>
+                <WalletSelect idx={receiveIdx} onChange={setReceiveIdx} />
+              </div>
 
-          {receiveWallet && (
-            <ReceiveAddress wallet={receiveWallet} />
+              {receiveWallet && (
+                <ReceiveAddress wallet={receiveWallet} />
+              )}
+            </>
           )}
         </div>
       </div>

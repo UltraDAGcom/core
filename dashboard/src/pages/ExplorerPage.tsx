@@ -57,7 +57,7 @@ export function ExplorerPage() {
   useEffect(() => { setLoading(true); fetchRounds(); }, [fetchRounds]);
   useEffect(() => {
     if (ivRef.current) clearInterval(ivRef.current);
-    if (page === 1) ivRef.current = setInterval(fetchRounds, 10000);
+    ivRef.current = setInterval(fetchRounds, 10000);
     return () => { if (ivRef.current) clearInterval(ivRef.current); };
   }, [page, fetchRounds]);
 
@@ -77,6 +77,7 @@ export function ExplorerPage() {
       <PageHeader
         title="Explorer"
         subtitle="Search and browse the DAG"
+        onRefresh={fetchRounds}
         right={<>
           {lag <= 3 && <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#00E0C4', boxShadow: '0 0 6px #00E0C4', animation: 'pulse 2s infinite' }} />
@@ -117,9 +118,9 @@ export function ExplorerPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ color: '#A855F7', fontSize: 14 }}>◉</span>
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Finalized Rounds</span>
-            {page === 1 && <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9.5, color: 'var(--dag-text-faint)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 9.5, color: 'var(--dag-text-faint)' }}>
               <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#00E0C4', animation: 'pulse 1.5s infinite' }} /> Auto-refresh
-            </span>}
+            </span>
           </div>
           <span style={{ fontSize: 10, color: 'var(--dag-text-faint)', ...S.mono }}>Page {page}/{totalPages}</span>
         </div>

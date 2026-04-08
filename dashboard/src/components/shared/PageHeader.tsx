@@ -6,11 +6,13 @@ interface PageHeaderProps {
   subtitle?: string;
   /** Additional right-side content (buttons, etc.) — shown BEFORE the global status */
   right?: React.ReactNode;
+  /** When provided, renders a refresh button next to the title */
+  onRefresh?: () => void;
 }
 
 const SATS = 100_000_000;
 
-export function PageHeader({ title, subtitle, right }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, right, onRefresh }: PageHeaderProps) {
   const m = useIsMobile();
   const status = useAppStatus();
 
@@ -23,9 +25,26 @@ export function PageHeader({ title, subtitle, right }: PageHeaderProps) {
       gap: m ? 10 : 0,
     }}>
       <div>
-        <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, letterSpacing: -0.3, color: 'var(--dag-text)' }}>
-          {title}
-        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h1 style={{ fontSize: m ? 18 : 21, fontWeight: 700, letterSpacing: -0.3, color: 'var(--dag-text)' }}>
+            {title}
+          </h1>
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              title="Refresh"
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+                color: 'var(--dag-text-faint)', fontSize: 15, lineHeight: 1,
+                borderRadius: 6, transition: 'color 0.2s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#00E0C4')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'var(--dag-text-faint)')}
+            >
+              ↻
+            </button>
+          )}
+        </div>
         {subtitle && (
           <p style={{ fontSize: 11.5, color: 'var(--dag-subheading)', marginTop: 2 }}>{subtitle}</p>
         )}
