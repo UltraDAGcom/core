@@ -1,17 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useProfile } from '../hooks/useProfile';
 import { useKeystore } from '../hooks/useKeystore';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
 import { getBalance, normalizeAddress, isValidAddress, getNodeUrl } from '../lib/api';
-import { signAndSubmitSmartOp } from '../lib/webauthn-sign';
 import { UltraIdCard } from '../components/profile/UltraIdCard';
 import { EditProfileModal } from '../components/profile/EditProfileModal';
 import { ProfileActivity } from '../components/profile/ProfileActivity';
 import { PageHeader } from '../components/shared/PageHeader';
 import { DisplayIdentity } from '../components/shared/DisplayIdentity';
-import { primaryButtonStyle, buttonStyle as themeButtonStyle } from '../lib/theme';
+import { CopyButton } from '../components/shared/CopyButton';
+import { buttonStyle as themeButtonStyle } from '../lib/theme';
 
 export function ProfilePage() {
   const { nameOrAddress } = useParams<{ nameOrAddress: string }>();
@@ -21,12 +21,7 @@ export function ProfilePage() {
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
   const [resolving, setResolving] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
-  // Pocket add form
-  const [showAddPocket, setShowAddPocket] = useState(false);
-  const [pocketLabel, setPocketLabel] = useState('');
-  const [pocketLoading, setPocketLoading] = useState(false);
-  const [pocketError, setPocketError] = useState('');
-  const [pocketSuccess, setPocketSuccess] = useState('');
+  const [pockets, setPockets] = useState<Array<{ label: string; address: string; address_bech32: string }>>([]);
 
   // Resolve "me" → current wallet, "@name" → address, hex/bech32 → normalize
   useEffect(() => {
@@ -66,6 +61,19 @@ export function ProfilePage() {
   }, [nameOrAddress, wallets]);
 
   const { profile, badges, loading, error, refresh } = useProfile(resolvedAddress ?? undefined);
+
+  // Fetch pockets from SmartAccount (derived addresses, not in NameProfile).
+  const fetchPockets = useCallback(async () => {
+    if (!resolvedAddress) return;
+    try {
+      const res = await fetch(`${getNodeUrl()}/smart-account/${resolvedAddress}`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const data = await res.json();
+        setPockets(data.pockets ?? []);
+      }
+    } catch { /* offline */ }
+  }, [resolvedAddress]);
+  useEffect(() => { fetchPockets(); }, [fetchPockets]);
 
   // Check if this is the current user's profile
   const pk = getPasskeyWallet();
@@ -109,7 +117,10 @@ export function ProfilePage() {
   return (
     <div style={{ fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ padding: m ? '12px 14px 0' : '18px 26px 0' }}>
-        <PageHeader title="ULTRA ID" subtitle="Your on-chain identity" />
+        <PageHeader
+          title="ULTRA ID"
+          subtitle={isOwnProfile ? 'Your on-chain identity' : profile?.name ? `@${profile.name}'s profile` : 'On-chain identity'}
+        />
       </div>
       <div style={{ padding: m ? '0 14px 14px' : '0 26px 26px', maxWidth: 700, margin: '0 auto' }}>
       {/* ID Card */}
@@ -186,26 +197,41 @@ export function ProfilePage() {
         )}
       </div>
 
-      {/* Pockets — labeled sub-addresses under this name */}
+      {/* Name status + Share + Pockets */}
       {profile?.name && (
         <div style={{
           background: 'var(--dag-card)', border: '1px solid var(--dag-border)', borderRadius: 14,
           padding: '16px 20px', marginBottom: 20,
         }}>
+          {/* Name permanence + share */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: 2, color: 'var(--dag-text-faint)', textTransform: 'uppercase' }}>
-              Pockets
-            </span>
-            {isOwnProfile && unlocked && !showAddPocket && (
-              <button onClick={() => { setShowAddPocket(true); setPocketError(''); setPocketSuccess(''); setPocketLabel(''); }}
-                style={{ ...themeButtonStyle(), padding: '5px 14px', fontSize: 11 }}>
-                + Add Pocket
-              </button>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: 2, color: 'var(--dag-text-faint)', textTransform: 'uppercase' }}>Name</span>
+              {profile.isPerpetualName ? (
+                <span title="Free-tier names (6+ chars) are permanent — no renewal required" style={{
+                  fontSize: 8, fontWeight: 700, letterSpacing: 0.6, padding: '2px 7px', borderRadius: 4,
+                  background: 'rgba(255,184,0,0.12)', color: '#FFB800',
+                }}>★ PERMANENT</span>
+              ) : profile.expiryRound != null ? (
+                <span style={{
+                  fontSize: 8, fontWeight: 700, letterSpacing: 0.6, padding: '2px 7px', borderRadius: 4,
+                  background: 'rgba(0,102,255,0.1)', color: '#0066FF',
+                }}>RENTED · expires round {profile.expiryRound.toLocaleString()}</span>
+              ) : null}
+            </div>
+            <CopyButton
+              text={`https://ultradag.com/dashboard/profile/@${profile.name}`}
+              label="Share Profile"
+            />
           </div>
 
-          {/* Main pocket (the primary name address) */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--dag-border)' }}>
+          {/* Pockets list (read-only — manage on Wallet page) */}
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 2, color: 'var(--dag-text-faint)', textTransform: 'uppercase', marginBottom: 8 }}>
+            Addresses
+          </div>
+
+          {/* Main */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid var(--dag-row-border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: 0.6, padding: '2px 7px', borderRadius: 4, background: 'rgba(0,224,196,0.12)', color: '#00E0C4' }}>MAIN</span>
               <span style={{ fontSize: 11, color: 'var(--dag-text-muted)', fontFamily: "'DM Mono',monospace" }}>@{profile.name}</span>
@@ -213,66 +239,28 @@ export function ProfilePage() {
             <DisplayIdentity address={resolvedAddress!} link size="xs" />
           </div>
 
-          {/* Add pocket form (inline) — one label input, one SmartOp */}
-          {showAddPocket && isOwnProfile && (
-            <div style={{ padding: '14px 0 0', borderTop: '1px solid var(--dag-border)', marginTop: 8 }}>
-              <div style={{ fontSize: 10, color: 'var(--dag-text-faint)', letterSpacing: 1, marginBottom: 8 }}>ADD A POCKET</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div>
-                  <div style={{ fontSize: 10, color: 'var(--dag-text-muted)', marginBottom: 3 }}>Label</div>
-                  <input
-                    type="text" maxLength={32}
-                    value={pocketLabel}
-                    onChange={e => setPocketLabel(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                    placeholder="savings"
-                    style={{ width: '100%', padding: '8px 12px', borderRadius: 8, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)', color: 'var(--dag-text)', fontSize: 12, outline: 'none', fontFamily: "'DM Mono',monospace" }}
-                  />
-                  {pocketLabel && (
-                    <div style={{ fontSize: 10, color: '#00E0C4', marginTop: 3, fontFamily: "'DM Mono',monospace" }}>
-                      @{profile.name}.{pocketLabel}
-                    </div>
-                  )}
-                </div>
-                <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', lineHeight: 1.5, margin: 0 }}>
-                  The pocket address is derived from your account — no extra keys needed. Your passkey controls all pockets. Works on every device you're logged into.
-                </p>
-                {pocketError && <p role="alert" style={{ fontSize: 10.5, color: '#EF4444' }}>{pocketError}</p>}
-                {pocketSuccess && <p style={{ fontSize: 10.5, color: '#00E0C4' }}>{pocketSuccess}</p>}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    disabled={pocketLoading || !pocketLabel}
-                    onClick={async () => {
-                      if (!profile?.name) { setPocketError('No name registered'); return; }
-                      setPocketLoading(true); setPocketError(''); setPocketSuccess('');
-                      try {
-                        // Fetch nonce for the SmartOp.
-                        const balRes = await fetch(`${getNodeUrl()}/balance/${resolvedAddress}`, { signal: AbortSignal.timeout(5000) });
-                        const balData = await balRes.json();
-                        const nonce = balData.nonce ?? 0;
-                        // Submit CreatePocket SmartOp (fee-exempt, signed by passkey).
-                        await signAndSubmitSmartOp(
-                          { CreatePocket: { label: pocketLabel } },
-                          0, nonce,
-                        );
-                        setPocketSuccess(`@${profile.name}.${pocketLabel} created!`);
-                        setPocketLabel('');
-                        refresh();
-                      } catch (e: unknown) {
-                        setPocketError(e instanceof Error ? e.message : 'Failed');
-                      } finally { setPocketLoading(false); }
-                    }}
-                    style={{ ...primaryButtonStyle, padding: '8px 16px', fontSize: 11, opacity: pocketLoading || !pocketLabel ? 0.4 : 1 }}
-                  >
-                    {pocketLoading ? 'Creating...' : 'Create Pocket'}
-                  </button>
-                  <button
-                    onClick={() => setShowAddPocket(false)}
-                    style={{ padding: '8px 16px', borderRadius: 8, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)', color: 'var(--dag-text-muted)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    Cancel
-                  </button>
-                </div>
+          {/* Derived pockets from SmartAccount */}
+          {pockets.map(p => (
+            <div key={p.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid var(--dag-row-border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: 0.6, padding: '2px 7px', borderRadius: 4, background: 'rgba(255,184,0,0.12)', color: '#FFB800' }}>{p.label.toUpperCase()}</span>
+                <span style={{ fontSize: 11, color: 'var(--dag-text-muted)', fontFamily: "'DM Mono',monospace" }}>@{profile.name}.{p.label}</span>
               </div>
+              <DisplayIdentity address={p.address} link size="xs" />
+            </div>
+          ))}
+
+          {pockets.length === 0 && !isOwnProfile && (
+            <p style={{ fontSize: 11, color: 'var(--dag-text-faint)', padding: '8px 0', textAlign: 'center' }}>
+              No pockets — only the main address
+            </p>
+          )}
+
+          {isOwnProfile && (
+            <div style={{ marginTop: 10 }}>
+              <Link to="/wallet" style={{ fontSize: 11, color: '#00E0C4', textDecoration: 'none' }}>
+                {pockets.length > 0 ? 'Manage pockets on the Wallet page →' : '+ Add pockets on the Wallet page →'}
+              </Link>
             </div>
           )}
         </div>

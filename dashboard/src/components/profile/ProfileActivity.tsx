@@ -34,19 +34,9 @@ export function ProfileActivity({ profile }: ProfileActivityProps) {
         ))}
       </div>
 
-      {/* Overview */}
+      {/* Overview — unique stats only (Balance + Staked already shown on ID card above) */}
       {tab === 'overview' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
-          <div style={S.statBox}>
-            <div style={S.statLabel}>BALANCE</div>
-            <div style={S.statValue}>{formatUdag(profile.balance)}</div>
-          </div>
-          <div style={S.statBox}>
-            <div style={S.statLabel}>STAKED</div>
-            <div style={{ ...S.statValue, color: profile.staked > 0 ? '#00E0C4' : 'var(--dag-text-muted)' }}>
-              {profile.staked > 0 ? formatUdag(profile.staked) : '—'}
-            </div>
-          </div>
           <div style={S.statBox}>
             <div style={S.statLabel}>PROPOSALS VOTED</div>
             <div style={S.statValue}>{profile.votedOnProposals}</div>
@@ -59,10 +49,17 @@ export function ProfileActivity({ profile }: ProfileActivityProps) {
             <div style={S.statLabel}>SECURITY KEYS</div>
             <div style={S.statValue}>{profile.keyCount}</div>
           </div>
-          <div style={S.statBox}>
-            <div style={S.statLabel}>SMART ACCOUNT</div>
-            <div style={{ ...S.statValue, fontSize: 13 }}>{profile.isSmartAccount ? 'Yes' : 'No'}</div>
-          </div>
+          {profile.delegated > 0 && (
+            <div style={S.statBox}>
+              <div style={S.statLabel}>DELEGATED</div>
+              <div style={{ ...S.statValue, color: '#A855F7' }}>{formatUdag(profile.delegated)}</div>
+            </div>
+          )}
+          {profile.votedOnProposals === 0 && profile.streamsSentCount + profile.streamsReceivedCount === 0 && profile.keyCount <= 1 && (
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '8px 0', color: 'var(--dag-text-faint)', fontSize: 11 }}>
+              New account — activity will appear here as you use the network
+            </div>
+          )}
         </div>
       )}
 
