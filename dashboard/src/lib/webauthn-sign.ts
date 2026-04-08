@@ -331,6 +331,10 @@ export async function signAndSubmitSmartOp(
     publicKey: {
       challenge: challenge.buffer as ArrayBuffer,
       rpId: window.location.hostname,
+      allowCredentials: [{
+        id: base64urlToBytes(passkey.credentialId).buffer as ArrayBuffer,
+        type: 'public-key',
+      }],
       userVerification: 'required',
       timeout: 60000,
     },
