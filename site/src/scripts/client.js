@@ -19,7 +19,7 @@ async function handleEmailSubmit(e) {
   const u = '7c006c449bd3dc3a523bce11d';
   const id = 'daf1702c98';
   const cbName = 'mc_cb_' + Date.now();
-  const url = `https://ultradagcom.us12.list-manage.com/subscribe/post-json?u=${u}&id=${id}&EMAIL=${encodeURIComponent(email)}&c=${cbName}`;
+  const url = `https://ultradag.us12.list-manage.com/subscribe/post-json?u=${u}&id=${id}&EMAIL=${encodeURIComponent(email)}&f_id=0040e4e0f0&c=${cbName}`;
 
   let responded = false;
 
