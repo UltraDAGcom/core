@@ -13,45 +13,82 @@ async function handleEmailSubmit(e) {
   const origText = btn.innerHTML;
   btn.innerHTML = '<span style="font-size:12px">Joining...</span>';
 
-  // Submit to Mailchimp via fetch (no-cors mode).
-  // JSONP/script-injection is blocked by modern browsers' tracking protection.
-  // With no-cors we can't read the response, but the request goes through
-  // and Mailchimp processes it. We show success optimistically.
+  // Submit to Mailchimp via JSONP (can read success/error response).
+  // Falls back to no-cors fetch after 3s if JSONP is blocked by browser.
   const u = '7c006c449bd3dc3a523bce11d';
   const id = 'daf1702c98';
-  const url = 'https://ultradag.us12.list-manage.com/subscribe/post';
+  const cbName = 'mc_cb_' + Math.random().toString(36).slice(2, 8);
+  const jsonpUrl = `https://ultradag.us12.list-manage.com/subscribe/post-json?u=${u}&id=${id}&EMAIL=${encodeURIComponent(email)}&f_id=0040e4e0f0&c=${cbName}`;
 
-  try {
-    const formData = new FormData();
-    formData.append('u', u);
-    formData.append('id', id);
-    formData.append('EMAIL', email);
-    formData.append('f_id', '0040e4e0f0');
-    // Honeypot field (bot protection) — must be empty for real submissions.
-    formData.append(`b_${u}_${id}`, '');
+  let done = false;
 
-    await fetch(url, { method: 'POST', mode: 'no-cors', body: formData });
-
-    // no-cors means opaque response — we can't read success/error.
-    // If fetch didn't throw, the request was sent successfully.
+  function showSuccess() {
     btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
     btn.style.background = 'var(--success)';
     emailInput.value = '';
     emailInput.placeholder = "You're on the list!";
     emailInput.disabled = true;
-  } catch (err) {
-    console.error('[email] Mailchimp submit failed:', err);
-    btn.innerHTML = '<span style="font-size:11px">Error</span>';
+  }
+
+  function showError(msg) {
+    btn.innerHTML = `<span style="font-size:10px">${msg || 'Try again'}</span>`;
     btn.style.background = 'var(--danger)';
   }
 
-  setTimeout(() => {
-    btn.innerHTML = origText;
-    btn.style.background = '';
-    btn.disabled = false;
-    emailInput.disabled = false;
-    emailInput.placeholder = 'your@email.com';
-  }, 4000);
+  function resetBtn() {
+    setTimeout(() => {
+      btn.innerHTML = origText;
+      btn.style.background = '';
+      btn.disabled = false;
+      emailInput.disabled = false;
+      emailInput.placeholder = 'your@email.com';
+    }, 4000);
+  }
+
+  // Try 1: JSONP (reads Mailchimp's response — knows success vs error)
+  window[cbName] = function(resp) {
+    if (done) return;
+    done = true;
+    if (resp.result === 'success' || (resp.msg && resp.msg.includes('already subscribed'))) {
+      showSuccess();
+    } else {
+      // Show Mailchimp's actual error (e.g., "email looks fake")
+      const msg = resp.msg ? resp.msg.replace(/^\d+ - /, '') : 'Invalid email';
+      showError(msg.length > 40 ? msg.slice(0, 40) + '…' : msg);
+    }
+    resetBtn();
+    try { delete window[cbName]; } catch {}
+    try { document.getElementById(cbName)?.remove(); } catch {}
+  };
+
+  const script = document.createElement('script');
+  script.id = cbName;
+  script.src = jsonpUrl;
+  document.body.appendChild(script);
+
+  // Try 2: if JSONP doesn't fire within 3s (browser blocked it),
+  // fall back to no-cors fetch (can't read response, assume success).
+  setTimeout(async () => {
+    if (done) return;
+    done = true;
+    try { delete window[cbName]; } catch {}
+    try { document.getElementById(cbName)?.remove(); } catch {}
+    try {
+      const formData = new FormData();
+      formData.append('u', u);
+      formData.append('id', id);
+      formData.append('EMAIL', email);
+      formData.append('f_id', '0040e4e0f0');
+      formData.append(`b_${u}_${id}`, '');
+      await fetch('https://ultradag.us12.list-manage.com/subscribe/post', {
+        method: 'POST', mode: 'no-cors', body: formData,
+      });
+      showSuccess();
+    } catch {
+      showError('Network error');
+    }
+    resetBtn();
+  }, 3000);
 
   return false;
 }
