@@ -388,9 +388,9 @@ export function WalletPage({
   webauthnEnrolled,
   onEnrollWebAuthn,
   onRemoveWebAuthn,
-  primaryAddress,
-  onSetPrimary,
-  isPasskeyPrimary,
+  primaryAddress: _primaryAddress,
+  onSetPrimary: _onSetPrimary,
+  isPasskeyPrimary: _isPasskeyPrimary,
 }: WalletPageProps) {
   const [showKsModal, setShowKsModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -618,27 +618,6 @@ export function WalletPage({
       <PageHeader
         title="Wallet"
         subtitle={`${grandTotal > 0 ? fmt(grandTotal) + ' UDAG' : 'Your passkey-secured account'}${pockets.length > 0 ? ` · ${pockets.length} pocket${pockets.length !== 1 ? 's' : ''}` : ''}`}
-        right={
-          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-            {webauthnAvailable && onEnrollWebAuthn && onRemoveWebAuthn && (
-              <button
-                className="header-btn"
-                onClick={async () => {
-                  webauthnEnrolled ? onRemoveWebAuthn() : await onEnrollWebAuthn?.();
-                }}
-                style={S.btn(webauthnEnrolled ? '#00E0C4' : 'var(--dag-text-muted)')}
-              >
-                ◎ {webauthnEnrolled ? 'Biometrics On' : 'Biometrics'}
-              </button>
-            )}
-            <button className="header-btn" onClick={() => setShowPwModal(true)} style={S.btn('var(--dag-text-muted)')}>
-              ⚿ Password
-            </button>
-            <button className="header-btn" onClick={handleExport} style={S.btn('var(--dag-text-muted)')}>
-              ↓ Export
-            </button>
-          </div>
-        }
       />
 
       {/* ── Portfolio Summary ── */}
@@ -776,12 +755,14 @@ export function WalletPage({
                       </div>
                     </div>
 
-                    <BalanceBar
-                      balance={item.balance}
-                      staked={item.staked}
-                      delegated={item.delegated}
-                      total={totalVal}
-                    />
+                    {totalVal > 0 && (
+                      <BalanceBar
+                        balance={item.balance}
+                        staked={item.staked}
+                        delegated={item.delegated}
+                        total={totalVal}
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -863,228 +844,162 @@ export function WalletPage({
               alignSelf: 'start',
             }}
           >
-            {selectedItem ? (
+            {selectedItem ? (() => {
+              const isPocket = selectedItem.type === 'pocket';
+              const isPk = pw?.address === selectedItem.address;
+              const selTotal = selectedItem.balance + selectedItem.staked + selectedItem.delegated;
+              const pocketFullName = isPocket && pw?.name ? `@${pw.name}.${selectedItem.label}` : null;
+              // For main wallet, find the matching keystore entry for nonce etc.
+              const keystoreWallet = !isPocket ? wallets.find(w => w.address === selectedItem.address) : null;
+              const mainBal = keystoreWallet ? balances.get(keystoreWallet.address) : null;
+
+              return (
               <div>
                 {/* Detail Header */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    marginBottom: 18,
-                    paddingBottom: 14,
-                    borderBottom: '1px solid var(--dag-table-border)',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 14,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background:
-                        selectedItem.type === 'pocket' ? 'rgba(255,184,0,0.15)'
-                          : pw?.address === selectedItem.address ? '#00E0C4'
-                          : 'var(--dag-card-hover)',
-                      fontSize: 20,
-                      fontWeight: 800,
-                      color:
-                        selectedItem.type === 'pocket' ? '#FFB800'
-                          : pw?.address === selectedItem.address ? '#080C14'
-                          : 'var(--dag-text)',
-                    }}
-                  >
-                    {selectedItem.type === 'pocket' ? '◈' : selectedItem.name[0]?.toUpperCase()}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid var(--dag-table-border)' }}>
+                  <div style={{
+                    width: 48, height: 48, borderRadius: 14,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: isPocket ? 'rgba(255,184,0,0.15)' : isPk ? '#00E0C4' : 'var(--dag-card-hover)',
+                    fontSize: 20, fontWeight: 800,
+                    color: isPocket ? '#FFB800' : isPk ? '#080C14' : 'var(--dag-text)',
+                  }}>
+                    {isPocket ? '◈' : selectedItem.name[0]?.toUpperCase()}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div
-                      style={{
-                        fontSize: 16,
-                        fontWeight: 700,
-                        color: 'var(--dag-text)',
-                      }}
-                    >
+                    <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--dag-text)' }}>
                       {selectedItem.name}
                     </div>
-                    <div
-                      style={{
-                        marginTop: 2,
-                      }}
-                    >
+                    {/* Show @name.label prominently for pockets */}
+                    {pocketFullName && (
+                      <div style={{ fontSize: 11, color: '#FFB800', fontFamily: "'DM Mono',monospace", marginTop: 1 }}>
+                        {pocketFullName}
+                      </div>
+                    )}
+                    <div style={{ marginTop: 2 }}>
                       <DisplayIdentity address={selectedItem.address} size="xs" />
                     </div>
                   </div>
-                  {pw?.address === selectedItem.address && (
-                    <span
-                      style={{
-                        fontSize: 8.5,
-                        background: 'rgba(0,224,196,0.08)',
-                        color: '#00E0C4',
-                        padding: '3px 8px',
-                        borderRadius: 4,
-                        fontWeight: 700,
-                        letterSpacing: 0.8,
-                      }}
-                    >
-                      PASSKEY
+                  {isPk && !isPocket && (
+                    <span style={{ fontSize: 8.5, background: 'rgba(0,224,196,0.08)', color: '#00E0C4', padding: '3px 8px', borderRadius: 4, fontWeight: 700, letterSpacing: 0.8 }}>
+                      MAIN
+                    </span>
+                  )}
+                  {isPocket && (
+                    <span style={{ fontSize: 8.5, background: 'rgba(255,184,0,0.12)', color: '#FFB800', padding: '3px 8px', borderRadius: 4, fontWeight: 700, letterSpacing: 0.8 }}>
+                      POCKET
                     </span>
                   )}
                 </div>
 
-                {/* Stats grid */}
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: 8,
-                    marginBottom: 14,
-                  }}
-                >
-                  {[
-                    {
-                      l: 'AVAILABLE',
-                      v: fmt(selectedItem.balance),
-                      c: '#00E0C4',
-                      i: '◎',
-                    },
-                    {
-                      l: 'STAKED',
-                      v: fmt(selectedItem.staked),
-                      c: '#0066FF',
-                      i: '⬡',
-                    },
-                    {
-                      l: 'DELEGATED',
-                      v: fmt(selectedItem.delegated),
-                      c: '#A855F7',
-                      i: '◈',
-                    },
-                    {
-                      l: 'NONCE',
-                      v: String(0),
-                      c: 'var(--dag-text)',
-                      i: '#',
-                    },
-                  ].map((x, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        ...S.stat,
-                        border: '1px solid var(--dag-border)',
-                        transition: 'border-color 0.2s',
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          marginBottom: 4,
-                        }}
-                      >
-                        <span style={{ fontSize: 11, color: x.c }}>{x.i}</span>
-                        <span
-                          style={{
-                            fontSize: 8.5,
-                            color: 'var(--dag-text-faint)',
-                            letterSpacing: 1,
-                            fontWeight: 600,
-                          }}
-                        >
-                          {x.l}
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 17,
-                          fontWeight: 700,
-                          color: x.c,
-                          ...S.mono,
-                        }}
-                      >
-                        {x.v}
-                      </div>
-                      {x.l !== 'NONCE' && (
-                        <div
-                          style={{
-                            fontSize: 8.5,
-                            color: 'var(--dag-text-faint)',
-                            marginTop: 2,
-                          }}
-                        >
-                          UDAG
-                        </div>
-                      )}
+                {/* Balance stats */}
+                <div style={{ display: 'grid', gridTemplateColumns: selTotal > 0 ? '1fr 1fr' : '1fr', gap: 8, marginBottom: 14 }}>
+                  <div style={{ ...S.stat, border: '1px solid var(--dag-border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                      <span style={{ fontSize: 11, color: '#00E0C4' }}>◎</span>
+                      <span style={{ fontSize: 8.5, color: 'var(--dag-text-faint)', letterSpacing: 1, fontWeight: 600 }}>AVAILABLE</span>
                     </div>
-                  ))}
-                </div>
-
-                {/* Quick actions */}
-                <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-                  <Link
-                    to="/wallet/send"
-                    className="action-btn"
-                    style={{ ...S.btn(), textDecoration: 'none' }}
-                  >
-                    ⇄ Send
-                  </Link>
-                  <Link
-                    to="/staking"
-                    className="action-btn"
-                    style={{ ...S.btn(), textDecoration: 'none' }}
-                  >
-                    ⬡ Stake
-                  </Link>
-                  <Link
-                    to="/smart-account"
-                    className="action-btn"
-                    style={{ ...S.btn(), textDecoration: 'none' }}
-                  >
-                    ◎ SmartAccount
-                  </Link>
-                </div>
-
-                {/* Copy address + remove */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    paddingTop: 12,
-                    borderTop: '1px solid var(--dag-table-border)',
-                  }}
-                >
-                  <CopyButton text={fullAddr(selectedItem.address)} label="Copy Bech32m Address" />
-                  {sel !== null && onSetPrimary && !isPasskeyPrimary && pw?.address !== selectedItem.address && (
-                    primaryAddress === selectedItem.address ? (
-                      <button
-                        onClick={e => { e.stopPropagation(); onSetPrimary(null); }}
-                        aria-label="Unset as primary wallet"
-                        style={S.btn('#FFB800')}
-                      >
-                        ★ Primary (unset)
-                      </button>
-                    ) : (
-                      <button
-                        onClick={e => { e.stopPropagation(); onSetPrimary(selectedItem.address); }}
-                        aria-label="Set as primary wallet"
-                        style={S.btn('#FFB800')}
-                      >
-                        ☆ Set as Primary
-                      </button>
-                    )
+                    <div style={{ fontSize: 17, fontWeight: 700, color: '#00E0C4', ...S.mono }}>{fmt(selectedItem.balance)}</div>
+                    <div style={{ fontSize: 8.5, color: 'var(--dag-text-faint)', marginTop: 2 }}>UDAG</div>
+                  </div>
+                  {selectedItem.staked > 0 && (
+                    <div style={{ ...S.stat, border: '1px solid var(--dag-border)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, color: '#0066FF' }}>⬡</span>
+                        <span style={{ fontSize: 8.5, color: 'var(--dag-text-faint)', letterSpacing: 1, fontWeight: 600 }}>STAKED</span>
+                      </div>
+                      <div style={{ fontSize: 17, fontWeight: 700, color: '#0066FF', ...S.mono }}>{fmt(selectedItem.staked)}</div>
+                      <div style={{ fontSize: 8.5, color: 'var(--dag-text-faint)', marginTop: 2 }}>UDAG</div>
+                    </div>
                   )}
-                  {sel !== null && (
+                  {selectedItem.delegated > 0 && (
+                    <div style={{ ...S.stat, border: '1px solid var(--dag-border)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, color: '#A855F7' }}>◇</span>
+                        <span style={{ fontSize: 8.5, color: 'var(--dag-text-faint)', letterSpacing: 1, fontWeight: 600 }}>DELEGATED</span>
+                      </div>
+                      <div style={{ fontSize: 17, fontWeight: 700, color: '#A855F7', ...S.mono }}>{fmt(selectedItem.delegated)}</div>
+                      <div style={{ fontSize: 8.5, color: 'var(--dag-text-faint)', marginTop: 2 }}>UDAG</div>
+                    </div>
+                  )}
+                  {!isPocket && mainBal && (
+                    <div style={{ ...S.stat, border: '1px solid var(--dag-border)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, color: 'var(--dag-text-muted)' }}>#</span>
+                        <span style={{ fontSize: 8.5, color: 'var(--dag-text-faint)', letterSpacing: 1, fontWeight: 600 }}>NONCE</span>
+                      </div>
+                      <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--dag-text)', ...S.mono }}>{mainBal.nonce ?? 0}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick actions — adapted per type */}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+                  {isPocket ? (
+                    <>
+                      {/* Copy @name.pocket for sharing */}
+                      {pocketFullName && (
+                        <CopyButton text={pocketFullName} label={`Copy ${pocketFullName}`} />
+                      )}
+                      <Link to="/wallet/send" className="action-btn" style={{ ...S.btn(), textDecoration: 'none' }}>
+                        ⇄ Send to this pocket
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <Link to="/wallet/send" className="action-btn" style={{ ...S.btn(), textDecoration: 'none' }}>
+                        ⇄ Send
+                      </Link>
+                      <Link to="/staking" className="action-btn" style={{ ...S.btn(), textDecoration: 'none' }}>
+                        ⬡ Stake
+                      </Link>
+                      <Link to="/smart-account" className="action-btn" style={{ ...S.btn(), textDecoration: 'none' }}>
+                        ◎ Security
+                      </Link>
+                    </>
+                  )}
+                </div>
+
+                {/* Address actions — copy + type-specific management */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 12, borderTop: '1px solid var(--dag-table-border)', flexWrap: 'wrap' }}>
+                  <CopyButton text={fullAddr(selectedItem.address)} label="Copy Bech32m" />
+
+                  {/* Delete Pocket (RemovePocket SmartOp) — only for pockets */}
+                  {isPocket && pw && (
                     <button
-                      onClick={e => {
+                      onClick={async (e) => {
                         e.stopPropagation();
-                        handleRemove(sel);
+                        if (removeConfirm !== sel) {
+                          setRemoveConfirm(sel);
+                          setTimeout(() => setRemoveConfirm(null), 3000);
+                          return;
+                        }
+                        setRemoveConfirm(null);
+                        try {
+                          const balRes = await fetch(`${getNodeUrl()}/balance/${pw.address}`, { signal: AbortSignal.timeout(5000) });
+                          const balData = await balRes.json();
+                          await signAndSubmitSmartOp({ RemovePocket: { label: selectedItem.label } }, 0, balData.nonce ?? 0);
+                          setSel(null);
+                          await new Promise(r => setTimeout(r, 4000));
+                          await fetchPockets();
+                        } catch { /* ignore */ }
                       }}
                       style={{
                         ...S.btn(removeConfirm === sel ? '#ff3333' : '#EF4444'),
-                        background: removeConfirm === sel ? 'rgba(239,68,68,0.12)' : `#EF444410`,
+                        background: removeConfirm === sel ? 'rgba(239,68,68,0.12)' : '#EF444410',
+                      }}
+                    >
+                      {removeConfirm === sel ? 'Confirm Delete?' : 'Delete Pocket'}
+                    </button>
+                  )}
+
+                  {/* Remove from keystore — only for legacy (non-passkey, non-pocket) wallets */}
+                  {!isPocket && !isPk && sel !== null && sel < wallets.length && (
+                    <button
+                      onClick={e => { e.stopPropagation(); handleRemove(sel); }}
+                      style={{
+                        ...S.btn(removeConfirm === sel ? '#ff3333' : '#EF4444'),
+                        background: removeConfirm === sel ? 'rgba(239,68,68,0.12)' : '#EF444410',
                       }}
                     >
                       {removeConfirm === sel ? 'Confirm Remove?' : 'Remove'}
@@ -1092,76 +1007,24 @@ export function WalletPage({
                   )}
                 </div>
 
-                {/* Advanced section */}
+                {/* Advanced — always available */}
                 <div style={{ marginTop: 14 }}>
-                  <button
-                    onClick={() => setShowAdvanced(!showAdvanced)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--dag-text-faint)',
-                      fontSize: 10,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      padding: 0,
-                    }}
-                  >
-                    <span
-                      style={{
-                        transform: showAdvanced ? 'rotate(90deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.2s',
-                        display: 'inline-block',
-                      }}
-                    >
-                      ▶
-                    </span>
+                  <button onClick={() => setShowAdvanced(!showAdvanced)} style={{ background: 'none', border: 'none', color: 'var(--dag-text-faint)', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, padding: 0 }}>
+                    <span style={{ transform: showAdvanced ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'inline-block' }}>▶</span>
                     Advanced Details
                   </button>
-
                   {showAdvanced && (
-                    <div
-                      style={{
-                        marginTop: 10,
-                        padding: '12px 14px',
-                        background: 'var(--dag-input-bg)',
-                        border: '1px solid var(--dag-border)',
-                        borderRadius: 10,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 10,
-                      }}
-                    >
+                    <div style={{ marginTop: 10, padding: '12px 14px', background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)', borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {[
                         { label: 'Full Bech32m Address', value: fullAddr(selectedItem.address) },
                         { label: 'Hex Address', value: selectedItem.address },
+                        ...(pocketFullName ? [{ label: 'Pocket Name', value: pocketFullName }] : []),
                       ].map((field, i) => (
                         <div key={i}>
-                          <div
-                            style={{
-                              fontSize: 9,
-                              color: 'var(--dag-text-faint)',
-                              marginBottom: 3,
-                              fontWeight: 600,
-                              letterSpacing: 0.5,
-                            }}
-                          >
+                          <div style={{ fontSize: 9, color: 'var(--dag-text-faint)', marginBottom: 3, fontWeight: 600, letterSpacing: 0.5 }}>
                             {field.label}
                           </div>
-                          <div
-                            style={{
-                              fontSize: 10,
-                              color: 'var(--dag-subheading)',
-                              ...S.mono,
-                              wordBreak: 'break-all',
-                              padding: '6px 8px',
-                              background: 'var(--dag-card)',
-                              borderRadius: 6,
-                              border: '1px solid var(--dag-border)',
-                              userSelect: 'all',
-                            }}
-                          >
+                          <div style={{ fontSize: 10, color: 'var(--dag-subheading)', ...S.mono, wordBreak: 'break-all', padding: '6px 8px', background: 'var(--dag-card)', borderRadius: 6, border: '1px solid var(--dag-border)', userSelect: 'all' }}>
                             {field.value}
                           </div>
                         </div>
@@ -1170,60 +1033,49 @@ export function WalletPage({
                   )}
                 </div>
               </div>
-            ) : (
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  minHeight: 280,
-                  gap: 10,
-                }}
-              >
-                <div
-                  style={{
-                    width: 56,
-                    height: 56,
-                    borderRadius: 14,
-                    background: 'linear-gradient(135deg, rgba(0,224,196,0.04), rgba(0,102,255,0.04))',
-                    border: '1px solid rgba(0,224,196,0.06)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 22,
-                    opacity: 0.4,
-                  }}
-                >
+              );
+            })() : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 280, gap: 10 }}>
+                <div style={{ width: 56, height: 56, borderRadius: 14, background: 'linear-gradient(135deg, rgba(0,224,196,0.04), rgba(0,102,255,0.04))', border: '1px solid rgba(0,224,196,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, opacity: 0.4 }}>
                   ◇
                 </div>
-                <p style={{ fontSize: 12, color: 'var(--dag-text-faint)' }}>
-                  Select a wallet to view details
-                </p>
-                <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', opacity: 0.6 }}>
-                  Click any wallet on the left
-                </p>
+                <p style={{ fontSize: 12, color: 'var(--dag-text-faint)' }}>Select an item to view details</p>
+                <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', opacity: 0.6 }}>Click any wallet or pocket on the left</p>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Advanced: legacy wallet import (device-local only) */}
-      <div style={{ textAlign: 'center', marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--dag-border)' }}>
-        <button
-          onClick={() => setShowAddModal(true)}
-          style={{
-            background: 'none', border: 'none', color: 'var(--dag-text-faint)',
-            fontSize: 10.5, cursor: 'pointer', padding: '4px 8px',
-          }}
-        >
-          Advanced: import legacy wallet →
-        </button>
-        <p style={{ fontSize: 9.5, color: 'var(--dag-text-faint)', opacity: 0.6, marginTop: 4 }}>
-          Imported wallets are stored in this browser only and won't appear on other devices.
-          Use pockets instead for sub-accounts that follow your passkey everywhere.
-        </p>
+      {/* Account settings — collapsed at bottom */}
+      <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--dag-border)' }}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+          {webauthnAvailable && onEnrollWebAuthn && onRemoveWebAuthn && (
+            <button
+              onClick={async () => { webauthnEnrolled ? onRemoveWebAuthn() : await onEnrollWebAuthn?.(); }}
+              style={{ ...S.btn(), fontSize: 10.5, padding: '6px 12px' }}
+            >
+              ◎ {webauthnEnrolled ? 'Biometrics On' : 'Enable Biometrics'}
+            </button>
+          )}
+          <button onClick={() => setShowPwModal(true)} style={{ ...S.btn(), fontSize: 10.5, padding: '6px 12px' }}>
+            ⚿ Change Password
+          </button>
+          <button onClick={handleExport} style={{ ...S.btn(), fontSize: 10.5, padding: '6px 12px' }}>
+            ↓ Export Keystore
+          </button>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <button
+            onClick={() => setShowAddModal(true)}
+            style={{ background: 'none', border: 'none', color: 'var(--dag-text-faint)', fontSize: 10, cursor: 'pointer', padding: '4px 8px' }}
+          >
+            Advanced: import legacy wallet →
+          </button>
+          <p style={{ fontSize: 9, color: 'var(--dag-text-faint)', opacity: 0.5, marginTop: 3 }}>
+            Imported wallets are device-local only. Use pockets for cross-device sub-accounts.
+          </p>
+        </div>
       </div>
 
       <AddWalletModal
