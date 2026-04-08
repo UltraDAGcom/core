@@ -94,6 +94,9 @@ const CSS = `
     from { opacity: 0; transform: translateY(10px) }
     to { opacity: 1; transform: translateY(0) }
   }
+  @keyframes spin {
+    to { transform: rotate(360deg) }
+  }
   @keyframes pulse {
     0%, 100% { opacity: 0.4 }
     50% { opacity: 0.15 }
@@ -398,6 +401,7 @@ export function WalletPage({
   const [showPwModal, setShowPwModal] = useState(false);
   const [sel, setSel] = useState<number | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [walletPage, setWalletPage] = useState(1);
   const [removeConfirm, setRemoveConfirm] = useState<number | null>(null);
   const pw = getPasskeyWallet();
@@ -640,33 +644,39 @@ export function WalletPage({
       />
 
       {/* ── Portfolio Summary ── */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: m ? 'repeat(2,1fr)' : 'repeat(4,1fr)',
-          gap: m ? 10 : 12,
-          marginBottom: 18,
-          animation: 'slideUp 0.4s ease',
-        }}
-      >
-        {[
-          { l: 'TOTAL', v: grandTotal, c: '#fff', i: '◈' },
-          { l: 'AVAILABLE', v: totalBal, c: '#00E0C4', i: '◎' },
-          { l: 'STAKED', v: totalStaked, c: '#0066FF', i: '⬡' },
-          { l: 'DELEGATED', v: totalDelegated, c: '#A855F7', i: '◇' },
-        ].map((p, i) => (
-          <div key={i} style={{ ...S.card, padding: '14px 16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <span style={{ color: p.c, fontSize: 14 }}>{p.i}</span>
-              <span style={{ fontSize: 9, color: 'var(--dag-text-muted)', letterSpacing: 1 }}>{p.l}</span>
-            </div>
-            <div style={{ fontSize: m ? 16 : 20, fontWeight: 700, color: p.c, ...S.mono }}>
-              {fmt(p.v)}
-            </div>
-            <div style={{ fontSize: 9, color: 'var(--dag-text-faint)', marginTop: 2 }}>UDAG</div>
+      {(() => {
+        const summaryCards = [
+          { l: 'TOTAL', v: grandTotal, c: '#fff', i: '◈', always: true },
+          { l: 'AVAILABLE', v: totalBal, c: '#00E0C4', i: '◎', always: true },
+          { l: 'STAKED', v: totalStaked, c: '#0066FF', i: '⬡', always: false },
+          { l: 'DELEGATED', v: totalDelegated, c: '#A855F7', i: '◇', always: false },
+        ].filter(c => c.always || c.v > 0);
+        const cols = Math.min(summaryCards.length, m ? 2 : 4);
+        return (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${cols},1fr)`,
+              gap: m ? 10 : 12,
+              marginBottom: 18,
+              animation: 'slideUp 0.4s ease',
+            }}
+          >
+            {summaryCards.map((p, i) => (
+              <div key={i} style={{ ...S.card, padding: '14px 16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <span style={{ color: p.c, fontSize: 14 }}>{p.i}</span>
+                  <span style={{ fontSize: 9, color: 'var(--dag-text-muted)', letterSpacing: 1 }}>{p.l}</span>
+                </div>
+                <div style={{ fontSize: m ? 16 : 20, fontWeight: 700, color: p.c, ...S.mono }}>
+                  {fmt(p.v)}
+                </div>
+                <div style={{ fontSize: 9, color: 'var(--dag-text-faint)', marginTop: 2 }}>UDAG</div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        );
+      })()}
 
       {/* ── Wallet List + Detail ── */}
       {wallets.length === 0 ? (
@@ -711,7 +721,7 @@ export function WalletPage({
 
                 return (
                   <div
-                    key={item.address}
+                    key={item.address || `pending-${item.label}`}
                     className="wallet-card"
                     onClick={() => setSel(active ? null : i)}
                     style={{
@@ -771,17 +781,22 @@ export function WalletPage({
                               </span>
                             )}
                           </div>
-                          <div style={{ marginTop: 2 }}>
-                            <DisplayIdentity address={item.address} size="xs" />
-                          </div>
+                          {item.pending ? (
+                            <div style={{ marginTop: 3, fontSize: 10, color: '#00E0C4', animation: 'pulse 1.5s ease-in-out infinite' }}>
+                              broadcasting to network...
+                            </div>
+                          ) : (
+                            <div style={{ marginTop: 2 }}>
+                              <DisplayIdentity address={item.address} size="xs" />
+                            </div>
+                          )}
                         </div>
                       </div>
 
                       <div style={{ textAlign: 'right' }}>
                         {item.pending ? (
-                          <div style={{ fontSize: 10, color: '#00E0C4', animation: 'pulse 1.5s ease-in-out infinite' }}>
-                            confirming...
-                          </div>
+                          <div style={{ width: 18, height: 18, border: '2px solid rgba(0,224,196,0.2)', borderTop: '2px solid #00E0C4', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+
                         ) : (
                           <>
                             <div style={{ fontSize: 16, fontWeight: 700, color: active ? '#00E0C4' : 'var(--dag-text)', ...S.mono, transition: 'color 0.25s' }}>
@@ -817,10 +832,27 @@ export function WalletPage({
             {pw && (
               <div style={{ marginTop: 8 }}>
                 {!showCreatePocket ? (
-                  <button onClick={() => { setShowCreatePocket(true); setPocketMsg(''); setNewPocketLabel(''); }}
-                    style={{ ...S.btn(), width: '100%', padding: '10px 0', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    ◈ Add Pocket
-                  </button>
+                  <div>
+                    {pockets.length === 0 && pendingPockets.length === 0 && (
+                      <div style={{
+                        ...S.card, padding: '14px 16px', marginBottom: 8,
+                        background: 'linear-gradient(135deg, rgba(255,184,0,0.03), rgba(0,224,196,0.02))',
+                        borderColor: 'rgba(255,184,0,0.1)',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                          <span style={{ fontSize: 14, color: '#FFB800' }}>◈</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)' }}>Add pockets for labeled sub-addresses</span>
+                        </div>
+                        <p style={{ fontSize: 10.5, color: 'var(--dag-text-muted)', lineHeight: 1.5, margin: 0 }}>
+                          Pockets let people send to <span style={{ color: '#FFB800', fontFamily: "'DM Mono',monospace" }}>@{pw.name || 'you'}.savings</span> or <span style={{ color: '#FFB800', fontFamily: "'DM Mono',monospace" }}>@{pw.name || 'you'}.business</span>. Each pocket is a separate address controlled by your passkey — available on every device.
+                        </p>
+                      </div>
+                    )}
+                    <button onClick={() => { setShowCreatePocket(true); setPocketMsg(''); setNewPocketLabel(''); }}
+                      style={{ ...S.btn(), width: '100%', padding: '10px 0', justifyContent: 'center', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      ◈ Add Pocket
+                    </button>
+                  </div>
                 ) : (
                   <div style={{ ...S.card }}>
                     <div style={{ fontSize: 10, color: 'var(--dag-text-faint)', letterSpacing: 1, marginBottom: 8 }}>NEW POCKET</div>
@@ -854,7 +886,7 @@ export function WalletPage({
                             setPocketMsg('');
                             setNewPocketLabel('');
                             setShowCreatePocket(false);
-                            // The 10s auto-refresh will pick up the confirmed pocket and clear the pending state.
+                            // The 5s auto-refresh will pick up the confirmed pocket and clear the pending state.
                           } catch (e: unknown) {
                             setPocketMsg(e instanceof Error ? e.message : 'Failed');
                           } finally { setPocketLoading(false); }
@@ -888,9 +920,29 @@ export function WalletPage({
               const isPk = pw?.address === selectedItem.address;
               const selTotal = selectedItem.balance + selectedItem.staked + selectedItem.delegated;
               const pocketFullName = isPocket && pw?.name ? `@${pw.name}.${selectedItem.label}` : null;
-              // For main wallet, find the matching keystore entry for nonce etc.
               const keystoreWallet = !isPocket ? wallets.find(w => w.address === selectedItem.address) : null;
               const mainBal = keystoreWallet ? balances.get(keystoreWallet.address) : null;
+
+              // Special view for pending (confirming) pockets.
+              if (selectedItem.pending) {
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 280, gap: 14, textAlign: 'center' }}>
+                    <div style={{ width: 48, height: 48, border: '3px solid rgba(0,224,196,0.15)', borderTop: '3px solid #00E0C4', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 4 }}>
+                        Creating {pocketFullName || selectedItem.label}
+                      </div>
+                      <p style={{ fontSize: 11, color: 'var(--dag-text-muted)', lineHeight: 1.5, maxWidth: 260, margin: '0 auto' }}>
+                        Your passkey signed the transaction. Waiting for the network to confirm it — usually takes one round (~5 seconds).
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'rgba(0,224,196,0.04)', border: '1px solid rgba(0,224,196,0.1)' }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#00E0C4', animation: 'pulse 1.5s ease-in-out infinite' }} />
+                      <span style={{ fontSize: 10, color: '#00E0C4', fontWeight: 600 }}>Broadcasting to validators...</span>
+                    </div>
+                  </div>
+                );
+              }
 
               return (
               <div>
@@ -909,7 +961,6 @@ export function WalletPage({
                     <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--dag-text)' }}>
                       {selectedItem.name}
                     </div>
-                    {/* Show @name.label prominently for pockets */}
                     {pocketFullName && (
                       <div style={{ fontSize: 11, color: '#FFB800', fontFamily: "'DM Mono',monospace", marginTop: 1 }}>
                         {pocketFullName}
@@ -1086,35 +1137,44 @@ export function WalletPage({
         </div>
       )}
 
-      {/* Account settings — collapsed at bottom */}
-      <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--dag-border)' }}>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-          {webauthnAvailable && onEnrollWebAuthn && onRemoveWebAuthn && (
-            <button
-              onClick={async () => { webauthnEnrolled ? onRemoveWebAuthn() : await onEnrollWebAuthn?.(); }}
-              style={{ ...S.btn(), fontSize: 10.5, padding: '6px 12px' }}
-            >
-              ◎ {webauthnEnrolled ? 'Biometrics On' : 'Enable Biometrics'}
-            </button>
-          )}
-          <button onClick={() => setShowPwModal(true)} style={{ ...S.btn(), fontSize: 10.5, padding: '6px 12px' }}>
-            ⚿ Change Password
-          </button>
-          <button onClick={handleExport} style={{ ...S.btn(), fontSize: 10.5, padding: '6px 12px' }}>
-            ↓ Export Keystore
-          </button>
-        </div>
-        <div style={{ textAlign: 'center' }}>
-          <button
-            onClick={() => setShowAddModal(true)}
-            style={{ background: 'none', border: 'none', color: 'var(--dag-text-faint)', fontSize: 10, cursor: 'pointer', padding: '4px 8px' }}
-          >
-            Advanced: import legacy wallet →
-          </button>
-          <p style={{ fontSize: 9, color: 'var(--dag-text-faint)', opacity: 0.5, marginTop: 3 }}>
-            Imported wallets are device-local only. Use pockets for cross-device sub-accounts.
-          </p>
-        </div>
+      {/* Account settings — collapsible */}
+      <div style={{ marginTop: 24, textAlign: 'center' }}>
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          style={{ background: 'none', border: 'none', color: 'var(--dag-text-faint)', fontSize: 10.5, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px' }}
+        >
+          <span style={{ transform: showSettings ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'inline-block', fontSize: 8 }}>▶</span>
+          Account Settings
+        </button>
+        {showSettings && (
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--dag-border)', animation: 'slideUp 0.2s ease' }}>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+              {webauthnAvailable && onEnrollWebAuthn && onRemoveWebAuthn && (
+                <button
+                  onClick={async () => { webauthnEnrolled ? onRemoveWebAuthn() : await onEnrollWebAuthn?.(); }}
+                  style={{ ...S.btn(), fontSize: 10.5, padding: '6px 12px' }}
+                >
+                  ◎ {webauthnEnrolled ? 'Biometrics On' : 'Enable Biometrics'}
+                </button>
+              )}
+              <button onClick={() => setShowPwModal(true)} style={{ ...S.btn(), fontSize: 10.5, padding: '6px 12px' }}>
+                ⚿ Change Password
+              </button>
+              <button onClick={handleExport} style={{ ...S.btn(), fontSize: 10.5, padding: '6px 12px' }}>
+                ↓ Export Keystore
+              </button>
+              <button
+                onClick={() => setShowAddModal(true)}
+                style={{ ...S.btn(), fontSize: 10.5, padding: '6px 12px' }}
+              >
+                ↑ Import Legacy Wallet
+              </button>
+            </div>
+            <p style={{ fontSize: 9, color: 'var(--dag-text-faint)', opacity: 0.5 }}>
+              Imported wallets are device-local only. Use pockets for cross-device sub-accounts.
+            </p>
+          </div>
+        )}
       </div>
 
       <AddWalletModal
