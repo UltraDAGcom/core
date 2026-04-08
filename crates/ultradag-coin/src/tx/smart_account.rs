@@ -333,6 +333,11 @@ pub struct SmartAccountConfig {
     pub pending_key_removal: Option<PendingKeyRemoval>,
     /// Round when this SmartAccount was created.
     pub created_at_round: u64,
+    /// Pocket labels — derived sub-addresses controlled by this account's keys.
+    /// Each label derives a deterministic address via `derive_pocket_address(parent, label)`.
+    /// The parent's authorized keys can sign for all pocket addresses.
+    #[serde(default)]
+    pub pockets: Vec<String>,
 }
 
 impl SmartAccountConfig {
@@ -347,6 +352,7 @@ impl SmartAccountConfig {
             pending_vault_transfers: Vec::new(),
             pending_key_removal: None,
             created_at_round,
+            pockets: Vec::new(),
         }
     }
 
@@ -978,16 +984,23 @@ pub enum SmartOpType {
     /// backup YubiKey) where the OS-level passkey sync doesn't apply.
     /// Fee-exempt (account management op).
     AddKey { key_type: KeyType, pubkey: Vec<u8>, label: String },
-    /// Update the name profile (external addresses, metadata, pockets).
+    /// Update the name profile (external addresses, metadata).
     /// The passkey-friendly counterpart to `UpdateProfileTx` (Ed25519-only).
-    /// This variant lets passkey wallets manage their profile and pockets
-    /// without needing an Ed25519 key.
     UpdateProfile {
         name: String,
         external_addresses: Vec<(String, String)>,
         metadata: Vec<(String, String)>,
-        pockets: Vec<crate::tx::name_registry::Pocket>,
     },
+    /// Create a derived pocket under this SmartAccount.
+    /// The pocket address is deterministically derived from the parent address + label.
+    /// No separate keys needed — the parent's authorized keys sign for all pockets.
+    /// Fee-exempt (account management op).
+    CreatePocket { label: String },
+    /// Remove a pocket from this SmartAccount.
+    /// Does NOT destroy the pocket address's balance — funds remain accessible
+    /// until the parent re-creates the pocket or transfers them first.
+    /// Fee-exempt (account management op).
+    RemovePocket { label: String },
 }
 
 /// A generic SmartAccount operation signed with any authorized key (Ed25519 or P256).
@@ -1097,7 +1110,7 @@ impl SmartOpTx {
                 buf.extend_from_slice(&(label.len() as u32).to_le_bytes());
                 buf.extend_from_slice(label.as_bytes());
             }
-            SmartOpType::UpdateProfile { name, external_addresses, metadata, pockets } => {
+            SmartOpType::UpdateProfile { name, external_addresses, metadata } => {
                 buf.push(14);
                 buf.extend_from_slice(&(name.len() as u32).to_le_bytes());
                 buf.extend_from_slice(name.as_bytes());
@@ -1115,14 +1128,16 @@ impl SmartOpTx {
                     buf.extend_from_slice(&(val.len() as u32).to_le_bytes());
                     buf.extend_from_slice(val.as_bytes());
                 }
-                buf.extend_from_slice(&(pockets.len() as u32).to_le_bytes());
-                for p in pockets {
-                    buf.extend_from_slice(&(p.label.len() as u32).to_le_bytes());
-                    buf.extend_from_slice(p.label.as_bytes());
-                    buf.extend_from_slice(&p.address.0);
-                    buf.extend_from_slice(&p.pub_key);
-                    buf.extend_from_slice(&p.proof.0);
-                }
+            }
+            SmartOpType::CreatePocket { label } => {
+                buf.push(15);
+                buf.extend_from_slice(&(label.len() as u32).to_le_bytes());
+                buf.extend_from_slice(label.as_bytes());
+            }
+            SmartOpType::RemovePocket { label } => {
+                buf.push(16);
+                buf.extend_from_slice(&(label.len() as u32).to_le_bytes());
+                buf.extend_from_slice(label.as_bytes());
             }
         }
         buf.extend_from_slice(&self.fee.to_le_bytes());
@@ -1164,6 +1179,8 @@ impl SmartOpTx {
             | SmartOpType::SetCommission { .. }
             | SmartOpType::RegisterName { .. } // Free for 6+ chars
             | SmartOpType::AddKey { .. }       // Account management op
+            | SmartOpType::CreatePocket { .. } // Account management op
+            | SmartOpType::RemovePocket { .. } // Account management op
         )
     }
 }

@@ -306,6 +306,12 @@ pub struct StateEngine {
     /// Active and completed streams: stream_id → Stream.
     /// Included in the supply invariant: deposited - withdrawn funds are locked.
     streams: HashMap<[u8; 32], crate::tx::stream::Stream>,
+    // ── Pocket reverse map ───────────────────────────────
+    /// Derived pocket address → parent SmartAccount address.
+    /// Rebuilt from SmartAccountConfig.pockets on load; maintained in-memory
+    /// on CreatePocket/RemovePocket. Used for O(1) pocket-parent delegation
+    /// in verify_smart_op / verify_smart_transfer.
+    pocket_to_parent: HashMap<Address, Address>,
 }
 
 impl StateEngine {
@@ -350,6 +356,20 @@ impl StateEngine {
             name_created_at: HashMap::new(),
             name_profiles: HashMap::new(),
             streams: HashMap::new(),
+            pocket_to_parent: HashMap::new(),
+        }
+    }
+
+    /// Rebuild the pocket_to_parent reverse map from SmartAccountConfig.pockets.
+    /// Called after loading state from persistence.
+    pub fn rebuild_pocket_map(&mut self) {
+        use crate::tx::name_registry::derive_pocket_address;
+        self.pocket_to_parent.clear();
+        for (parent_addr, config) in &self.smart_accounts {
+            for label in &config.pockets {
+                let pocket_addr = derive_pocket_address(parent_addr, label);
+                self.pocket_to_parent.insert(pocket_addr, *parent_addr);
+            }
         }
     }
 
@@ -2551,16 +2571,28 @@ impl StateEngine {
         self.name_profiles.get(name)
     }
 
-    /// Resolve a pocket under a name. Returns the pocket target address,
-    /// or `None` if the parent name doesn't exist, has no profile, or the
-    /// pocket label isn't registered.
+    /// Resolve a pocket under a name. Returns the derived pocket address,
+    /// or `None` if the parent name doesn't exist or the pocket label isn't registered.
+    ///
+    /// Pockets are now stored on SmartAccountConfig (not NameProfile), and
+    /// addresses are derived deterministically from parent + label.
     pub fn resolve_pocket(&self, parent: &str, label: &str) -> Option<crate::address::Address> {
+        use crate::tx::name_registry::derive_pocket_address;
         // Parent must resolve (checks expiry for paid names, skips for perpetual).
-        self.resolve_name(parent)?;
-        let profile = self.name_profiles.get(parent)?;
-        profile.pockets.iter()
-            .find(|p| p.label == label)
-            .map(|p| p.address)
+        let parent_addr = self.resolve_name(parent)?;
+        let config = self.smart_accounts.get(&parent_addr)?;
+        if config.pockets.iter().any(|l| l == label) {
+            Some(derive_pocket_address(&parent_addr, label))
+        } else {
+            None
+        }
+    }
+
+    /// Reverse-lookup: given an address, check if it's a pocket of any SmartAccount.
+    /// Returns `(parent_address, label)` if found. Used by verification delegation.
+    /// Maintained via the `pocket_to_parent` map which is updated on CreatePocket/RemovePocket.
+    pub fn pocket_parent(&self, addr: &crate::address::Address) -> Option<crate::address::Address> {
+        self.pocket_to_parent.get(addr).copied()
     }
 
     /// Public: ensure a SmartAccount exists for an address (creates if missing).
@@ -2819,32 +2851,6 @@ impl StateEngine {
             }
         }
 
-        // Validate pockets (if any).
-        if tx.pockets.len() > MAX_POCKETS {
-            return Err(CoinError::ValidationError(format!(
-                "too many pockets (max {})", MAX_POCKETS
-            )));
-        }
-        // Check unique labels.
-        {
-            let mut seen_labels = std::collections::HashSet::new();
-            for p in &tx.pockets {
-                if !seen_labels.insert(&p.label) {
-                    return Err(CoinError::ValidationError(format!(
-                        "duplicate pocket label '{}'", p.label
-                    )));
-                }
-            }
-        }
-        // Verify each pocket's ownership proof.
-        for p in &tx.pockets {
-            if let Err(e) = p.verify_proof(&tx.name) {
-                return Err(CoinError::ValidationError(format!(
-                    "pocket '{}' proof invalid: {}", p.label, e
-                )));
-            }
-        }
-
         self.debit(&tx.from, tx.fee)?;
         self.treasury_balance = self.treasury_balance.saturating_add(tx.fee);
         self.increment_nonce(&tx.from);
@@ -2852,7 +2858,7 @@ impl StateEngine {
         self.name_profiles.insert(tx.name.clone(), NameProfile {
             external_addresses: tx.external_addresses.clone(),
             metadata: tx.metadata.clone(),
-            pockets: tx.pockets.clone(),
+            ..Default::default()
         });
 
         Ok(())
@@ -3638,6 +3644,17 @@ impl StateEngine {
             }
         }
 
+        // Third try: pocket-parent delegation.
+        // If tx.from is a derived pocket address, the parent SmartAccount's keys
+        // are authorized to sign for it.
+        if let Some(&parent_addr) = self.pocket_to_parent.get(&tx.from) {
+            if let Some(config) = self.smart_accounts.get(&parent_addr) {
+                if let Some(key) = config.find_key(&tx.signing_key_id) {
+                    return tx.verify_with_key(key);
+                }
+            }
+        }
+
         false
     }
 
@@ -3964,10 +3981,8 @@ impl StateEngine {
                     label,
                 );
             }
-            SmartOpType::UpdateProfile { name, external_addresses, metadata, pockets } => {
-                use crate::tx::name_registry::{NameProfile, MAX_PROFILE_EXTERNAL_ADDRESSES, MAX_PROFILE_METADATA, MAX_PROFILE_KEY_BYTES, MAX_PROFILE_VALUE_BYTES, MAX_POCKETS};
-                // Same validation as apply_update_profile_tx but signed by any
-                // authorized key (P256 or Ed25519) instead of Ed25519-only.
+            SmartOpType::UpdateProfile { name, external_addresses, metadata } => {
+                use crate::tx::name_registry::{NameProfile, MAX_PROFILE_EXTERNAL_ADDRESSES, MAX_PROFILE_METADATA, MAX_PROFILE_KEY_BYTES, MAX_PROFILE_VALUE_BYTES};
                 let owner = self.name_to_address.get(name)
                     .ok_or_else(|| CoinError::ValidationError("name not registered".into()))?;
                 if *owner != tx.from {
@@ -3991,35 +4006,50 @@ impl StateEngine {
                         return Err(CoinError::ValidationError("metadata value too long".into()));
                     }
                 }
-                // Validate pockets.
-                if pockets.len() > MAX_POCKETS {
-                    return Err(CoinError::ValidationError(format!(
-                        "too many pockets (max {})", MAX_POCKETS
-                    )));
-                }
-                {
-                    let mut seen_labels = std::collections::HashSet::new();
-                    for p in pockets {
-                        if !seen_labels.insert(&p.label) {
-                            return Err(CoinError::ValidationError(format!(
-                                "duplicate pocket label '{}'", p.label
-                            )));
-                        }
-                    }
-                }
-                for p in pockets {
-                    if let Err(e) = p.verify_proof(name) {
-                        return Err(CoinError::ValidationError(format!(
-                            "pocket '{}' proof invalid: {}", p.label, e
-                        )));
-                    }
-                }
-
                 self.name_profiles.insert(name.clone(), NameProfile {
                     external_addresses: external_addresses.clone(),
                     metadata: metadata.clone(),
-                    pockets: pockets.clone(),
+                    ..Default::default()
                 });
+            }
+            SmartOpType::CreatePocket { label } => {
+                use crate::tx::name_registry::{validate_pocket_label, derive_pocket_address, MAX_POCKETS};
+                validate_pocket_label(label).map_err(|e| CoinError::ValidationError(e.to_string()))?;
+                let config = self.smart_accounts.get_mut(&tx.from)
+                    .ok_or_else(|| CoinError::ValidationError("smart account not found".into()))?;
+                if config.pockets.len() >= MAX_POCKETS {
+                    return Err(CoinError::ValidationError(format!(
+                        "account already has the maximum {} pockets", MAX_POCKETS
+                    )));
+                }
+                if config.pockets.iter().any(|l| l == label) {
+                    return Err(CoinError::ValidationError(format!(
+                        "pocket label '{}' already exists", label
+                    )));
+                }
+                let pocket_addr = derive_pocket_address(&tx.from, label);
+                config.pockets.push(label.clone());
+                self.pocket_to_parent.insert(pocket_addr, tx.from);
+                tracing::info!(
+                    "CreatePocket: {} created pocket '{}' → {}",
+                    tx.from.to_hex(), label, pocket_addr.to_hex()
+                );
+            }
+            SmartOpType::RemovePocket { label } => {
+                use crate::tx::name_registry::derive_pocket_address;
+                let config = self.smart_accounts.get_mut(&tx.from)
+                    .ok_or_else(|| CoinError::ValidationError("smart account not found".into()))?;
+                let idx = config.pockets.iter().position(|l| l == label)
+                    .ok_or_else(|| CoinError::ValidationError(format!(
+                        "pocket label '{}' not found", label
+                    )))?;
+                config.pockets.remove(idx);
+                let pocket_addr = derive_pocket_address(&tx.from, label);
+                self.pocket_to_parent.remove(&pocket_addr);
+                tracing::info!(
+                    "RemovePocket: {} removed pocket '{}' ({})",
+                    tx.from.to_hex(), label, pocket_addr.to_hex()
+                );
             }
         }
 
@@ -4035,7 +4065,14 @@ impl StateEngine {
                 return tx.verify_with_key(key);
             }
         }
-        // No SmartAccount or key not found — SmartTransfer requires registered key
+        // Pocket-parent delegation: if tx.from is a pocket, parent's keys sign.
+        if let Some(&parent_addr) = self.pocket_to_parent.get(&tx.from) {
+            if let Some(config) = self.smart_accounts.get(&parent_addr) {
+                if let Some(key) = config.find_key(&tx.signing_key_id) {
+                    return tx.verify_with_key(key);
+                }
+            }
+        }
         false
     }
 
@@ -5084,6 +5121,7 @@ impl StateEngine {
             name_created_at: HashMap::new(),
             name_profiles: HashMap::new(),
             streams: HashMap::new(),
+            pocket_to_parent: HashMap::new(),
         })
     }
 
@@ -5272,6 +5310,7 @@ impl StateEngine {
             name_created_at: snapshot.name_created_at.into_iter().collect(),
             name_profiles: snapshot.name_profiles.into_iter().collect(),
             streams: snapshot.streams.into_iter().collect(),
+            pocket_to_parent: HashMap::new(), // Rebuilt via rebuild_pocket_map() after loading
         })
     }
 

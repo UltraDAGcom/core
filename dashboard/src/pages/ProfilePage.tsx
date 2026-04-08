@@ -5,7 +5,7 @@ import { useKeystore } from '../hooks/useKeystore';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
 import { getBalance, normalizeAddress, isValidAddress, getNodeUrl } from '../lib/api';
-import { signPocketClaim } from '../lib/pocket-claim';
+import { signAndSubmitSmartOp } from '../lib/webauthn-sign';
 import { UltraIdCard } from '../components/profile/UltraIdCard';
 import { EditProfileModal } from '../components/profile/EditProfileModal';
 import { ProfileActivity } from '../components/profile/ProfileActivity';
@@ -24,7 +24,6 @@ export function ProfilePage() {
   // Pocket add form
   const [showAddPocket, setShowAddPocket] = useState(false);
   const [pocketLabel, setPocketLabel] = useState('');
-  const [pocketWalletIdx, setPocketWalletIdx] = useState(0);
   const [pocketLoading, setPocketLoading] = useState(false);
   const [pocketError, setPocketError] = useState('');
   const [pocketSuccess, setPocketSuccess] = useState('');
@@ -205,25 +204,16 @@ export function ProfilePage() {
             )}
           </div>
 
-          {/* Existing pockets list */}
-          {(profile.metadata.find(([k]) => k === '__pockets_count')?.[1] ?? '0') !== '0' || (
-            // Profile pockets are served from the /name/info response —
-            // useProfile.ts doesn't fetch them yet, so for now we show
-            // pockets from the profile metadata or query directly.
-            // TODO: wire pockets from /name/info into useProfile
-            null
-          )}
-
           {/* Main pocket (the primary name address) */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--dag-border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: 0.6, padding: '2px 7px', borderRadius: 4, background: 'rgba(0,224,196,0.12)', color: '#00E0C4' }}>MAIN</span>
-              <span style={{ fontSize: 11, color: 'var(--dag-text-muted)' }}>@{profile.name}</span>
+              <span style={{ fontSize: 11, color: 'var(--dag-text-muted)', fontFamily: "'DM Mono',monospace" }}>@{profile.name}</span>
             </div>
             <DisplayIdentity address={resolvedAddress!} link size="xs" />
           </div>
 
-          {/* Add pocket form (inline) */}
+          {/* Add pocket form (inline) — one label input, one SmartOp */}
           {showAddPocket && isOwnProfile && (
             <div style={{ padding: '14px 0 0', borderTop: '1px solid var(--dag-border)', marginTop: 8 }}>
               <div style={{ fontSize: 10, color: 'var(--dag-text-faint)', letterSpacing: 1, marginBottom: 8 }}>ADD A POCKET</div>
@@ -243,63 +233,28 @@ export function ProfilePage() {
                     </div>
                   )}
                 </div>
-                <div>
-                  <div style={{ fontSize: 10, color: 'var(--dag-text-muted)', marginBottom: 3 }}>Target wallet (from your keystore)</div>
-                  {wallets.filter(w => !!w.secret_key).length === 0 ? (
-                    <p style={{ fontSize: 10.5, color: '#FFB800' }}>
-                      No Ed25519 keystore wallets available. Pockets v1 requires an Ed25519 target wallet. Import a wallet first.
-                    </p>
-                  ) : (
-                    <select
-                      value={pocketWalletIdx}
-                      onChange={e => setPocketWalletIdx(Number(e.target.value))}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: 8, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)', color: 'var(--dag-text)', fontSize: 12 }}
-                    >
-                      {wallets.filter(w => !!w.secret_key).map((w, i) => (
-                        <option key={i} value={i} style={{ background: 'var(--dag-bg)' }}>{w.name} ({w.address.slice(0, 8)}...)</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
+                <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', lineHeight: 1.5, margin: 0 }}>
+                  The pocket address is derived from your account — no extra keys needed. Your passkey controls all pockets. Works on every device you're logged into.
+                </p>
                 {pocketError && <p role="alert" style={{ fontSize: 10.5, color: '#EF4444' }}>{pocketError}</p>}
                 {pocketSuccess && <p style={{ fontSize: 10.5, color: '#00E0C4' }}>{pocketSuccess}</p>}
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
-                    disabled={pocketLoading || !pocketLabel || wallets.filter(w => !!w.secret_key).length === 0}
+                    disabled={pocketLoading || !pocketLabel}
                     onClick={async () => {
-                      const targetWallets = wallets.filter(w => !!w.secret_key);
-                      const target = targetWallets[pocketWalletIdx];
-                      if (!target || !profile?.name || !editableWallet) { setPocketError('No valid wallet selected'); return; }
+                      if (!profile?.name) { setPocketError('No name registered'); return; }
                       setPocketLoading(true); setPocketError(''); setPocketSuccess('');
                       try {
-                        // 1. Sign the pocket claim with the TARGET wallet.
-                        const { pubkeyHex, proofHex } = await signPocketClaim(
-                          profile.name, pocketLabel, target.secret_key, target.address,
+                        // Fetch nonce for the SmartOp.
+                        const balRes = await fetch(`${getNodeUrl()}/balance/${resolvedAddress}`, { signal: AbortSignal.timeout(5000) });
+                        const balData = await balRes.json();
+                        const nonce = balData.nonce ?? 0;
+                        // Submit CreatePocket SmartOp (fee-exempt, signed by passkey).
+                        await signAndSubmitSmartOp(
+                          { CreatePocket: { label: pocketLabel } },
+                          0, nonce,
                         );
-                        // 2. Submit UpdateProfile via /profile/update with the pocket.
-                        const res = await fetch(`${getNodeUrl()}/profile/update`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            secret_key: editableWallet.secret_key,
-                            name: profile.name,
-                            metadata: profile.metadata,
-                            external_addresses: profile.externalAddresses,
-                            pockets: [{
-                              label: pocketLabel,
-                              address: target.address,
-                              pub_key: pubkeyHex,
-                              proof: proofHex,
-                            }],
-                            fee: 10000,
-                          }),
-                          signal: AbortSignal.timeout(15000),
-                        });
-                        if (!res.ok) {
-                          const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-                          throw new Error(err.error || `HTTP ${res.status}`);
-                        }
-                        setPocketSuccess(`@${profile.name}.${pocketLabel} → registered!`);
+                        setPocketSuccess(`@${profile.name}.${pocketLabel} created!`);
                         setPocketLabel('');
                         refresh();
                       } catch (e: unknown) {
@@ -308,7 +263,7 @@ export function ProfilePage() {
                     }}
                     style={{ ...primaryButtonStyle, padding: '8px 16px', fontSize: 11, opacity: pocketLoading || !pocketLabel ? 0.4 : 1 }}
                   >
-                    {pocketLoading ? 'Saving...' : 'Add Pocket'}
+                    {pocketLoading ? 'Creating...' : 'Create Pocket'}
                   </button>
                   <button
                     onClick={() => setShowAddPocket(false)}

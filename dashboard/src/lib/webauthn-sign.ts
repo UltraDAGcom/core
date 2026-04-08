@@ -185,13 +185,15 @@ function serializeOperation(op: Record<string, unknown>): Record<string, unknown
     const a = op.AddKey as { key_type: 'p256' | 'ed25519'; pubkey: string; label: string };
     return {
       AddKey: {
-        // Rust enum variants serialize with their exact identifier.
         key_type: a.key_type === 'p256' ? 'P256' : 'Ed25519',
         pubkey: Array.from(hexToBytes(a.pubkey)),
         label: a.label,
       },
     };
   }
+  if ('CreatePocket' in op) return { CreatePocket: op.CreatePocket };
+  if ('RemovePocket' in op) return { RemovePocket: op.RemovePocket };
+  if ('UpdateProfile' in op) return { UpdateProfile: op.UpdateProfile };
   return op;
 }
 
@@ -264,6 +266,40 @@ export async function signAndSubmitSmartOp(
     const op = operation.StreamCancel as { stream_id: string };
     parts.push(new Uint8Array([12])); // discriminant 12
     parts.push(hexToBytes(op.stream_id));
+  } else if ('CreatePocket' in operation) {
+    const op = operation.CreatePocket as { label: string };
+    const labelBytes = new TextEncoder().encode(op.label);
+    parts.push(new Uint8Array([15])); // discriminant 15
+    parts.push(u32ToLE(labelBytes.length));
+    parts.push(labelBytes);
+  } else if ('RemovePocket' in operation) {
+    const op = operation.RemovePocket as { label: string };
+    const labelBytes = new TextEncoder().encode(op.label);
+    parts.push(new Uint8Array([16])); // discriminant 16
+    parts.push(u32ToLE(labelBytes.length));
+    parts.push(labelBytes);
+  } else if ('UpdateProfile' in operation) {
+    const op = operation.UpdateProfile as { name: string; external_addresses: [string, string][]; metadata: [string, string][] };
+    const nameBytes = new TextEncoder().encode(op.name);
+    parts.push(new Uint8Array([14])); // discriminant 14
+    parts.push(u32ToLE(nameBytes.length));
+    parts.push(nameBytes);
+    const ext = op.external_addresses ?? [];
+    parts.push(u32ToLE(ext.length));
+    for (const [chain, addr] of ext) {
+      const cb = new TextEncoder().encode(chain);
+      const ab = new TextEncoder().encode(addr);
+      parts.push(u32ToLE(cb.length)); parts.push(cb);
+      parts.push(u32ToLE(ab.length)); parts.push(ab);
+    }
+    const meta = op.metadata ?? [];
+    parts.push(u32ToLE(meta.length));
+    for (const [key, val] of meta) {
+      const kb = new TextEncoder().encode(key);
+      const vb = new TextEncoder().encode(val);
+      parts.push(u32ToLE(kb.length)); parts.push(kb);
+      parts.push(u32ToLE(vb.length)); parts.push(vb);
+    }
   } else if ('AddKey' in operation) {
     // Byte-exact match to Rust SmartOpType::AddKey signable_bytes encoding.
     // Covered by test_add_key_signable_bytes_stable_encoding in Rust —

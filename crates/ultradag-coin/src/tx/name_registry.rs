@@ -51,11 +51,6 @@ pub const MAX_POCKETS: usize = 10;
 /// (`[a-z0-9-]`, no leading/trailing hyphen), so 32 is comfortable.
 pub const MAX_POCKET_LABEL_BYTES: usize = 32;
 
-/// Domain-separation tag for pocket-ownership challenge signatures.
-/// The target wallet signs blake3(this || parent || label || addr20) with
-/// its own key, proving it consents to being pointed to as a pocket.
-pub const POCKET_CLAIM_DOMAIN: &[u8] = b"ultradag-pocket-claim";
-
 /// Reserved names that cannot be registered.
 const RESERVED_NAMES: &[&str] = &[
     "admin", "system", "null", "bridge", "treasury", "ultradag",
@@ -128,34 +123,6 @@ pub fn validate_name(name: &str) -> Result<(), &'static str> {
 // Data structures
 // ────────────────────────────────────────────────────────────
 
-/// A labeled sub-address under a name.
-///
-/// Lets the owner of `@alice` expose multiple addresses under a single
-/// public name: `@alice` → primary, `@alice.savings` → cold wallet,
-/// `@alice.business` → business wallet, etc.
-///
-/// The target address must *consent* to being listed — otherwise anyone
-/// could point `@alice.foo` at Bob's wallet and confuse Alice's payers.
-/// Consent is proven by a counter-signature from the target wallet over
-/// `blake3(POCKET_CLAIM_DOMAIN || parent_name || label || target_addr_20bytes)`.
-/// Verification is stateless and happens every time the profile is written.
-///
-/// v1 accepts Ed25519 targets only. P256/WebAuthn targets can be added later
-/// by extending `Pocket` with a `KeyType` discriminator and a WebAuthn
-/// envelope; out of scope for the first cut.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Pocket {
-    /// Human-readable label (same charset as names: `[a-z0-9-]`, 1–32 bytes,
-    /// no leading/trailing hyphen). Resolved as `@parent.label`.
-    pub label: String,
-    /// Target address the pocket points to.
-    pub address: Address,
-    /// Target wallet's Ed25519 public key (must hash to `address`).
-    pub pub_key: [u8; 32],
-    /// Target wallet's signature over the pocket-claim challenge bytes.
-    pub proof: Signature,
-}
-
 /// Validate a pocket label. Uses the same charset rules as names (minus the
 /// reserved word check — labels are scoped under a parent name so they can
 /// be called `admin.alice` without polluting the name registry).
@@ -178,48 +145,23 @@ pub fn validate_pocket_label(label: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
-/// Build the bytes that the target wallet signs to prove consent.
+/// Derive a pocket address deterministically from the parent address + label.
 ///
-/// Layout: `POCKET_CLAIM_DOMAIN || parent_name_utf8 || 0x00 || label_utf8 || 0x00 || target_addr_20bytes`
+/// `pocket_addr = blake3("ultradag_pocket" || parent_addr(20) || label_utf8)[..20]`
 ///
-/// The 0x00 separators prevent prefix collision between different
-/// `(parent, label)` pairs (e.g. `ab` + `c` vs `a` + `bc`).
-pub fn pocket_claim_bytes(parent: &str, label: &str, target: &Address) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(
-        POCKET_CLAIM_DOMAIN.len() + parent.len() + 1 + label.len() + 1 + 20,
-    );
-    buf.extend_from_slice(POCKET_CLAIM_DOMAIN);
-    buf.extend_from_slice(parent.as_bytes());
-    buf.push(0);
-    buf.extend_from_slice(label.as_bytes());
-    buf.push(0);
-    buf.extend_from_slice(&target.0);
-    buf
-}
-
-impl Pocket {
-    /// Verify this pocket's ownership proof. Stateless — pure function of
-    /// the pocket contents plus the parent name.
-    ///
-    /// Steps:
-    /// 1. `label` must match the charset rules.
-    /// 2. `pub_key` must hash to `address` (so we know the proof is signed
-    ///    by the key that owns the target wallet, not some random key).
-    /// 3. Ed25519 `proof` must verify against the pocket-claim challenge.
-    pub fn verify_proof(&self, parent_name: &str) -> Result<(), &'static str> {
-        validate_pocket_label(&self.label)?;
-        if Address::from_pubkey(&self.pub_key) != self.address {
-            return Err("pocket pub_key does not match address");
-        }
-        let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(&self.pub_key) else {
-            return Err("pocket pub_key is not a valid Ed25519 point");
-        };
-        let challenge = pocket_claim_bytes(parent_name, &self.label, &self.address);
-        let sig = ed25519_dalek::Signature::from_bytes(&self.proof.0);
-        vk.verify_strict(&challenge, &sig)
-            .map_err(|_| "pocket proof signature invalid")?;
-        Ok(())
-    }
+/// This is a pure function — no randomness, no signing keys. The same
+/// parent + label always produce the same address. The parent SmartAccount's
+/// authorized keys can sign for all derived pocket addresses (via the
+/// pocket-to-parent delegation check in verify_smart_op / verify_smart_transfer).
+pub fn derive_pocket_address(parent: &Address, label: &str) -> Address {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(b"ultradag_pocket");
+    hasher.update(&parent.0);
+    hasher.update(label.as_bytes());
+    let hash = hasher.finalize();
+    let mut addr = [0u8; 20];
+    addr.copy_from_slice(&hash.as_bytes()[..20]);
+    Address(addr)
 }
 
 /// Optional profile data associated with a name.
@@ -229,10 +171,10 @@ pub struct NameProfile {
     pub external_addresses: Vec<(String, String)>,
     /// Public metadata: ("website", "https://..."), ("avatar", "https://..."), etc.
     pub metadata: Vec<(String, String)>,
-    /// Labeled sub-addresses under this name. `@parent.label` resolves here.
-    /// Each pocket carries its own ownership proof (see `Pocket`).
+    /// Legacy field — pockets are now on SmartAccountConfig, not here.
+    /// Kept with serde(default) so old serialized profiles deserialize cleanly.
     #[serde(default)]
-    pub pockets: Vec<Pocket>,
+    pub _pockets_legacy: Vec<serde_json::Value>,
 }
 
 impl Default for NameProfile {
@@ -240,7 +182,7 @@ impl Default for NameProfile {
         Self {
             external_addresses: Vec::new(),
             metadata: Vec::new(),
-            pockets: Vec::new(),
+            _pockets_legacy: Vec::new(),
         }
     }
 }
@@ -377,16 +319,13 @@ impl TransferNameTx {
 }
 
 /// Update cross-chain profile data for a name.
+/// Pockets are no longer managed here — use SmartOpType::CreatePocket instead.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateProfileTx {
     pub from: Address,
     pub name: String,
     pub external_addresses: Vec<(String, String)>,
     pub metadata: Vec<(String, String)>,
-    /// Labeled sub-addresses under this name. Each pocket carries an
-    /// Ed25519 ownership proof from the target wallet — see `Pocket`.
-    #[serde(default)]
-    pub pockets: Vec<Pocket>,
     pub fee: u64,
     pub nonce: u64,
     pub pub_key: [u8; 32],
@@ -414,18 +353,6 @@ impl UpdateProfileTx {
             buf.extend_from_slice(key.as_bytes());
             buf.extend_from_slice(&(val.len() as u32).to_le_bytes());
             buf.extend_from_slice(val.as_bytes());
-        }
-        // Pockets — appended after metadata. When no pockets are present
-        // this is just 4 bytes of zero (u32 count = 0), so clients that
-        // don't use pockets still produce a stable (if slightly longer)
-        // signable_bytes. Each pocket encodes: label_len + label + addr + pubkey + sig.
-        buf.extend_from_slice(&(self.pockets.len() as u32).to_le_bytes());
-        for p in &self.pockets {
-            buf.extend_from_slice(&(p.label.len() as u32).to_le_bytes());
-            buf.extend_from_slice(p.label.as_bytes());
-            buf.extend_from_slice(&p.address.0);
-            buf.extend_from_slice(&p.pub_key);
-            buf.extend_from_slice(&p.proof.0);
         }
         buf.extend_from_slice(&self.fee.to_le_bytes());
         buf.extend_from_slice(&self.nonce.to_le_bytes());
