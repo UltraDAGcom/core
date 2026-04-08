@@ -444,10 +444,10 @@ export function WalletPage({
 
   // Reset selection if wallet is removed
   useEffect(() => {
-    if (sel !== null && sel >= wallets.length) {
+    if (sel !== null && sel >= wallets.length + pockets.length) {
       setSel(null);
     }
-  }, [wallets.length, sel]);
+  }, [wallets.length, pockets.length, sel]);
 
   /* ── Locked / No Store ── */
   if (!unlocked) {
