@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { postTx, postFaucet, formatUdag, shortAddr, fullAddr, isValidAddress, normalizeAddress, getNodeUrl } from '../lib/api';
+import { postTx, postFaucet, formatUdag, shortAddr, fullAddr, isValidAddress, normalizeAddress, getNodeUrl, getBalance } from '../lib/api';
+import { resolvePocket, NameNotFoundError, PocketNotFoundError } from '../lib/names';
 import { DisplayIdentity } from '../components/shared/DisplayIdentity';
 import { getPasskeyInfo, signAndSubmitWithPasskey } from '../lib/webauthn-sign';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
@@ -65,7 +66,7 @@ function SendToInput({ value, onChange, onScanQr }: { value: string; onChange: (
         <div style={{ flex: 1, position: 'relative' }}>
           <input
             type="text" value={value} onChange={e => handleChange(e.target.value)}
-            placeholder={mode === 'name' ? 'Enter ULTRA ID (e.g. alice)' : 'udag1... or tudg1... address'}
+            placeholder="@name, @name.pocket, or tudg1.../udag1... address"
             style={{ ...S.input, paddingRight: 40 }}
           />
           {mode === 'name' && (
@@ -134,22 +135,55 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
     const feeSats = Math.round(parseFloat(fee) * SATS);
     if (isNaN(sats) || sats <= 0) { setError('Amount must be positive'); return; }
     if (isNaN(feeSats) || feeSats < 10000) { setError('Minimum fee is 0.0001 UDAG'); return; }
-    if (!isValidAddress(to.trim())) { setError('Invalid recipient address'); return; }
     if (memoBytes > 256) { setError('Memo exceeds 256 bytes'); return; }
 
     setLoading(true);
     try {
+      // Resolve recipient: accept bech32m/hex addresses, @name, or @name.pocket
+      let resolvedAddr: string;
+      const input = to.trim();
+
+      if (isValidAddress(input)) {
+        // Direct address — use as-is.
+        resolvedAddr = normalizeAddress(input);
+      } else {
+        // Try resolving as a name or name.pocket.
+        try {
+          const resolved = await resolvePocket(input);
+          resolvedAddr = resolved.address;
+        } catch (e) {
+          if (e instanceof NameNotFoundError) {
+            // Fallback: try /balance/{input} which accepts names without @
+            try {
+              const bal = await getBalance(input.replace(/^@/, ''));
+              if (bal?.address) {
+                resolvedAddr = bal.address;
+              } else {
+                setError(`Name "${input}" not found`); setLoading(false); return;
+              }
+            } catch {
+              setError(`Name "${input}" not found`); setLoading(false); return;
+            }
+          } else if (e instanceof PocketNotFoundError) {
+            setError(e.message); setLoading(false); return;
+          } else {
+            setError('Invalid recipient — use an address, @name, or @name.pocket'); setLoading(false); return;
+          }
+        }
+      }
+
       const passkey = getPasskeyInfo();
       if (passkey && wallet.address === passkey.address) {
         const balRes = await fetch(`${getNodeUrl()}/balance/${wallet.address}`, { signal: AbortSignal.timeout(5000) });
         const balData = await balRes.json();
-        await signAndSubmitWithPasskey(normalizeAddress(to.trim()), sats, feeSats, balData.nonce ?? 0, memo.trim() || undefined);
+        await signAndSubmitWithPasskey(resolvedAddr, sats, feeSats, balData.nonce ?? 0, memo.trim() || undefined);
       } else {
-        const body: Record<string, unknown> = { secret_key: wallet.secret_key, to: normalizeAddress(to.trim()), amount: sats, fee: feeSats };
+        const body: Record<string, unknown> = { secret_key: wallet.secret_key, to: resolvedAddr, amount: sats, fee: feeSats };
         if (memo.trim()) body.memo = memo.trim();
         await postTx(body);
       }
-      const msg = `Sent ${formatUdag(sats)} UDAG to ${shortAddr(to)}`;
+      const displayTo = isValidAddress(input) ? shortAddr(input) : input;
+      const msg = `Sent ${formatUdag(sats)} UDAG to ${displayTo}`;
       setSuccess(msg); toast(msg, 'success');
       setTo(''); setAmount(''); setMemo('');
     } catch (e: unknown) {
