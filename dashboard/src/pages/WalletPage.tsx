@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { fullAddr } from '../lib/api';
+import { fullAddr, getNodeUrl } from '../lib/api';
 import { DisplayIdentity } from '../components/shared/DisplayIdentity';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
+import { signAndSubmitSmartOp } from '../lib/webauthn-sign';
 import { CreateKeystoreModal } from '../components/wallet/CreateKeystoreModal';
 import { AddWalletModal } from '../components/wallet/AddWalletModal';
 import { changePassword } from '../lib/keystore';
@@ -10,8 +11,11 @@ import { CopyButton } from '../components/shared/CopyButton';
 import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { PageHeader } from '../components/shared/PageHeader';
+import { primaryButtonStyle } from '../lib/theme';
 import type { Wallet } from '../lib/keystore';
 import type { WalletBalance } from '../hooks/useWalletBalances';
+
+interface PocketInfo { label: string; address: string; address_bech32: string }
 
 const SATS = 100_000_000;
 const fmt = (v: number) =>
@@ -387,6 +391,25 @@ export function WalletPage({
   const pw = getPasskeyWallet();
   const m = useIsMobile();
   const WALLET_PAGE_SIZE = 10;
+  // Pocket state
+  const [pockets, setPockets] = useState<PocketInfo[]>([]);
+  const [showCreatePocket, setShowCreatePocket] = useState(false);
+  const [newPocketLabel, setNewPocketLabel] = useState('');
+  const [pocketLoading, setPocketLoading] = useState(false);
+  const [pocketMsg, setPocketMsg] = useState('');
+
+  const fetchPockets = useCallback(async () => {
+    if (!pw?.address) return;
+    try {
+      const res = await fetch(`${getNodeUrl()}/smart-account/${pw.address}`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const data = await res.json();
+        setPockets(data.pockets ?? []);
+      }
+    } catch { /* offline — keep existing */ }
+  }, [pw?.address]);
+
+  useEffect(() => { fetchPockets(); }, [fetchPockets]);
 
   useEffect(() => {
     setWalletPage(1);
@@ -788,6 +811,98 @@ export function WalletPage({
               totalItems={wallets.length}
               pageSize={WALLET_PAGE_SIZE}
             />
+
+            {/* ── Pockets ── */}
+            {pw && (
+              <div style={{ ...S.card, marginTop: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: pockets.length > 0 || showCreatePocket ? 12 : 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span style={{ color: '#FFB800', fontSize: 13 }}>◈</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--dag-text-secondary)' }}>Pockets</span>
+                    <span style={{ fontSize: 9.5, color: 'var(--dag-text-faint)' }}>{pockets.length}</span>
+                  </div>
+                  {!showCreatePocket && (
+                    <button onClick={() => { setShowCreatePocket(true); setPocketMsg(''); setNewPocketLabel(''); }}
+                      style={S.btn()}>+ Create Pocket</button>
+                  )}
+                </div>
+
+                {pockets.length === 0 && !showCreatePocket && (
+                  <p style={{ fontSize: 11, color: 'var(--dag-text-faint)', textAlign: 'center', padding: '10px 0' }}>
+                    No pockets yet. Create one to have labeled sub-addresses like @{pw.name || 'you'}.savings
+                  </p>
+                )}
+
+                {pockets.map(p => (
+                  <div key={p.label} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '8px 0', borderBottom: '1px solid var(--dag-row-border)',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{
+                        fontSize: 8.5, fontWeight: 700, letterSpacing: 0.6, padding: '2px 7px',
+                        borderRadius: 4, background: 'rgba(255,184,0,0.12)', color: '#FFB800',
+                      }}>{p.label}</span>
+                      {pw.name && (
+                        <span style={{ fontSize: 10, color: 'var(--dag-text-faint)', fontFamily: "'DM Mono',monospace" }}>
+                          @{pw.name}.{p.label}
+                        </span>
+                      )}
+                    </div>
+                    <DisplayIdentity address={p.address} link size="xs" />
+                  </div>
+                ))}
+
+                {showCreatePocket && (
+                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: 10, color: 'var(--dag-text-faint)', letterSpacing: 1 }}>NEW POCKET</div>
+                    <input
+                      type="text" maxLength={32} autoFocus
+                      value={newPocketLabel}
+                      onChange={e => setNewPocketLabel(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                      placeholder="savings"
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 8, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)', color: 'var(--dag-text)', fontSize: 12, outline: 'none', fontFamily: "'DM Mono',monospace" }}
+                    />
+                    {newPocketLabel && pw.name && (
+                      <div style={{ fontSize: 10, color: '#00E0C4', fontFamily: "'DM Mono',monospace" }}>
+                        @{pw.name}.{newPocketLabel}
+                      </div>
+                    )}
+                    <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', lineHeight: 1.5, margin: 0 }}>
+                      Derived from your account — no extra keys. Your passkey controls all pockets.
+                    </p>
+                    {pocketMsg && (
+                      <p role="alert" style={{ fontSize: 10.5, color: pocketMsg.startsWith('✓') ? '#00E0C4' : '#EF4444' }}>{pocketMsg}</p>
+                    )}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        disabled={pocketLoading || !newPocketLabel}
+                        onClick={async () => {
+                          setPocketLoading(true); setPocketMsg('');
+                          try {
+                            const balRes = await fetch(`${getNodeUrl()}/balance/${pw.address}`, { signal: AbortSignal.timeout(5000) });
+                            const balData = await balRes.json();
+                            await signAndSubmitSmartOp({ CreatePocket: { label: newPocketLabel } }, 0, balData.nonce ?? 0);
+                            setPocketMsg(`✓ @${pw.name || ''}.${newPocketLabel} created!`);
+                            setNewPocketLabel('');
+                            fetchPockets();
+                          } catch (e: unknown) {
+                            setPocketMsg(e instanceof Error ? e.message : 'Failed');
+                          } finally { setPocketLoading(false); }
+                        }}
+                        style={{ ...primaryButtonStyle, padding: '7px 14px', fontSize: 11, opacity: pocketLoading || !newPocketLabel ? 0.4 : 1 }}
+                      >
+                        {pocketLoading ? 'Creating...' : 'Create'}
+                      </button>
+                      <button onClick={() => setShowCreatePocket(false)}
+                        style={{ padding: '7px 14px', borderRadius: 8, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)', color: 'var(--dag-text-muted)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* ── Detail Panel ── */}

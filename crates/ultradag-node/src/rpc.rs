@@ -4043,6 +4043,14 @@ ultradag_banned_ips {ban_count}
                                 "executes_at_round": p.executes_at_round,
                             })
                         }),
+                        "pockets": config.pockets.iter().map(|label| {
+                            let pocket_addr = ultradag_coin::tx::name_registry::derive_pocket_address(&addr, label);
+                            serde_json::json!({
+                                "label": label,
+                                "address": pocket_addr.to_hex(),
+                                "address_bech32": pocket_addr.to_bech32(),
+                            })
+                        }).collect::<Vec<_>>(),
                     }))
                 }
                 None => {
