@@ -564,8 +564,8 @@ export function WalletPage({
 
       {/* ── Header ── */}
       <PageHeader
-        title="Wallets"
-        subtitle={`${wallets.length} wallet${wallets.length !== 1 ? 's' : ''} managed${grandTotal > 0 ? ` · ${fmt(grandTotal)} UDAG total` : ''}`}
+        title="Wallet"
+        subtitle={`${grandTotal > 0 ? fmt(grandTotal) + ' UDAG' : 'Your passkey-secured account'}${pockets.length > 0 ? ` · ${pockets.length} pocket${pockets.length !== 1 ? 's' : ''}` : ''}`}
         right={
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
             {webauthnAvailable && onEnrollWebAuthn && onRemoveWebAuthn && (
@@ -584,13 +584,6 @@ export function WalletPage({
             </button>
             <button className="header-btn" onClick={handleExport} style={S.btn('var(--dag-text-muted)')}>
               ↓ Export
-            </button>
-            <button
-              className="header-btn"
-              onClick={() => setShowAddModal(true)}
-              style={{ ...S.btnSolid, boxShadow: '0 2px 12px rgba(0,224,196,0.12)' }}
-            >
-              + Add Wallet
             </button>
           </div>
         }
@@ -637,17 +630,11 @@ export function WalletPage({
             animation: 'slideUp 0.5s ease',
           }}
         >
-          <div style={{ fontSize: 40, opacity: 0.1 }}>◇</div>
-          <p style={{ fontSize: 13, color: 'var(--dag-text-muted)' }}>No wallets yet</p>
+          <div style={{ fontSize: 40, opacity: 0.1 }}>◎</div>
+          <p style={{ fontSize: 13, color: 'var(--dag-text-muted)' }}>Create a wallet to get started</p>
           <p style={{ fontSize: 11, color: 'var(--dag-text-faint)' }}>
-            Add a wallet to manage your UDAG holdings
+            Your passkey secures everything — no seed phrases needed
           </p>
-          <button
-            onClick={() => setShowAddModal(true)}
-            style={{ ...S.btnSolid, boxShadow: '0 4px 20px rgba(0,224,196,0.15)' }}
-          >
-            + Add Wallet
-          </button>
         </div>
       ) : (
         <div
@@ -1259,6 +1246,23 @@ export function WalletPage({
           </div>
         </div>
       )}
+
+      {/* Advanced: legacy wallet import (device-local only) */}
+      <div style={{ textAlign: 'center', marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--dag-border)' }}>
+        <button
+          onClick={() => setShowAddModal(true)}
+          style={{
+            background: 'none', border: 'none', color: 'var(--dag-text-faint)',
+            fontSize: 10.5, cursor: 'pointer', padding: '4px 8px',
+          }}
+        >
+          Advanced: import legacy wallet →
+        </button>
+        <p style={{ fontSize: 9.5, color: 'var(--dag-text-faint)', opacity: 0.6, marginTop: 4 }}>
+          Imported wallets are stored in this browser only and won't appear on other devices.
+          Use pockets instead for sub-accounts that follow your passkey everywhere.
+        </p>
+      </div>
 
       <AddWalletModal
         open={showAddModal}

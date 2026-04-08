@@ -10,7 +10,7 @@ const sections: { label?: string; items: NavItem[] }[] = [
   { items: [{ to: '/', icon: '\u25C8', label: 'Dashboard' }] },
   { label: 'ACCOUNT', items: [
     { to: '/profile/me', icon: '\u25CE', label: 'My ULTRA ID' },
-    { to: '/wallet', icon: '\u25C7', label: 'Wallets' },
+    { to: '/wallet', icon: '\u25C7', label: 'Wallet' },
     { to: '/wallet/send', icon: '\u21C4', label: 'Send & Receive' },
     { to: '/streams', icon: '\u224B', label: 'Streams' },
     { to: '/smart-account', icon: '\u2606', label: 'Security' },
