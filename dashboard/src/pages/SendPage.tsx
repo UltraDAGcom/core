@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { postTx, postFaucet, formatUdag, shortAddr, fullAddr, isValidAddress, normalizeAddress, getNodeUrl, getBalance } from '../lib/api';
 import { resolvePocket, NameNotFoundError, PocketNotFoundError } from '../lib/names';
 import { DisplayIdentity } from '../components/shared/DisplayIdentity';
@@ -102,6 +102,12 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
   const m = useIsMobile();
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [to, setTo] = useState('');
+  // Pre-fill recipient from ?to= query param (e.g., from "Send to this pocket" link).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const prefill = params.get('to');
+    if (prefill) setTo(prefill);
+  }, []);
   const [amount, setAmount] = useState('');
   const [fee, setFee] = useState('0.0001');
   const [memo, setMemo] = useState('');

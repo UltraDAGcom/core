@@ -941,7 +941,7 @@ export function WalletPage({
                       {pocketFullName && (
                         <CopyButton text={pocketFullName} label={`Copy ${pocketFullName}`} />
                       )}
-                      <Link to="/wallet/send" className="action-btn" style={{ ...S.btn(), textDecoration: 'none' }}>
+                      <Link to={`/wallet/send?to=${encodeURIComponent(pocketFullName || fullAddr(selectedItem.address))}`} className="action-btn" style={{ ...S.btn(), textDecoration: 'none' }}>
                         ⇄ Send to this pocket
                       </Link>
                     </>

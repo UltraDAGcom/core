@@ -88,8 +88,11 @@ export async function resolvePocket(input: string): Promise<ResolvedAddress> {
   }
 
   const data = await res.json();
+  // Pockets are top-level on the /name/info response (sourced from
+  // SmartAccountConfig, not from the name profile). The profile only
+  // carries external_addresses + metadata.
   const pockets: Array<{ label: string; address: string; address_bech32?: string }> =
-    data.profile?.pockets ?? [];
+    data.pockets ?? data.profile?.pockets ?? [];
   const availableLabels = pockets.map((p: { label: string }) => p.label);
 
   if (!label) {
