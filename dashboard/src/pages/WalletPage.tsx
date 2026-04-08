@@ -26,6 +26,7 @@ interface WalletItem {
   balance: number;
   staked: number;
   delegated: number;
+  pending?: boolean;   // true while tx is confirming on-chain
 }
 
 const SATS = 100_000_000;
@@ -404,6 +405,7 @@ export function WalletPage({
   const WALLET_PAGE_SIZE = 10;
   // Pocket state
   const [pockets, setPockets] = useState<PocketInfo[]>([]);
+  const [pendingPockets, setPendingPockets] = useState<string[]>([]); // labels being confirmed
   const [showCreatePocket, setShowCreatePocket] = useState(false);
   const [newPocketLabel, setNewPocketLabel] = useState('');
   const [pocketLoading, setPocketLoading] = useState(false);
@@ -428,13 +430,16 @@ export function WalletPage({
         return { ...p, balance: 0, staked: 0, delegated: 0 };
       }));
       setPockets(withBalances);
+      // Clear pending labels that are now confirmed on-chain.
+      const confirmedLabels = new Set(withBalances.map(p => p.label));
+      setPendingPockets(prev => prev.filter(l => !confirmedLabels.has(l)));
     } catch { /* offline — keep existing */ }
   }, [pw?.address]);
 
   useEffect(() => {
     fetchPockets();
-    // Refresh pockets every 10s so newly-created pockets show up after finalization.
-    const iv = setInterval(fetchPockets, 10000);
+    // Refresh pockets every 5s so newly-created pockets confirm quickly.
+    const iv = setInterval(fetchPockets, 5000);
     return () => clearInterval(iv);
   }, [fetchPockets]);
 
@@ -584,7 +589,7 @@ export function WalletPage({
       delegated: b?.delegated ?? 0,
     });
   }
-  // Add derived pockets.
+  // Add confirmed pockets.
   for (const p of pockets) {
     items.push({
       type: 'pocket',
@@ -594,6 +599,20 @@ export function WalletPage({
       balance: p.balance,
       staked: p.staked,
       delegated: p.delegated,
+    });
+  }
+  // Add pending pockets (not yet confirmed on-chain) — shown with animation.
+  for (const label of pendingPockets) {
+    if (pockets.some(p => p.label === label)) continue; // already confirmed
+    items.push({
+      type: 'pocket',
+      name: pw?.name ? `@${pw.name}.${label}` : label,
+      label,
+      address: '', // not yet known
+      balance: 0,
+      staked: 0,
+      delegated: 0,
+      pending: true,
     });
   }
 
@@ -698,11 +717,13 @@ export function WalletPage({
                     style={{
                       ...S.card,
                       cursor: 'pointer',
-                      borderColor: active
-                        ? 'rgba(0,224,196,0.25)'
+                      borderColor: item.pending
+                        ? 'rgba(0,224,196,0.3)'
+                        : active ? 'rgba(0,224,196,0.25)'
                         : 'var(--dag-border)',
-                      background: active
-                        ? 'rgba(0,224,196,0.025)'
+                      background: item.pending
+                        ? 'rgba(0,224,196,0.02)'
+                        : active ? 'rgba(0,224,196,0.025)'
                         : 'var(--dag-card)',
                       transform: active ? 'scale(1.005)' : 'none',
                       boxShadow: active ? '0 0 20px rgba(0,224,196,0.04)' : 'none',
@@ -735,9 +756,18 @@ export function WalletPage({
                                 MAIN
                               </span>
                             )}
-                            {item.type === 'pocket' && (
+                            {item.type === 'pocket' && !item.pending && (
                               <span style={{ fontSize: 8, background: 'rgba(255,184,0,0.12)', color: '#FFB800', padding: '1px 6px', borderRadius: 3, fontWeight: 700, letterSpacing: 0.6 }}>
                                 POCKET
+                              </span>
+                            )}
+                            {item.pending && (
+                              <span style={{
+                                fontSize: 8, padding: '1px 6px', borderRadius: 3, fontWeight: 700, letterSpacing: 0.6,
+                                background: 'rgba(0,224,196,0.1)', color: '#00E0C4',
+                                animation: 'pulse 1.5s ease-in-out infinite',
+                              }}>
+                                CONFIRMING
                               </span>
                             )}
                           </div>
@@ -748,10 +778,18 @@ export function WalletPage({
                       </div>
 
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: active ? '#00E0C4' : 'var(--dag-text)', ...S.mono, transition: 'color 0.25s' }}>
-                          {fmt(totalVal)}
-                        </div>
-                        <div style={{ fontSize: 9, color: 'var(--dag-text-faint)' }}>UDAG</div>
+                        {item.pending ? (
+                          <div style={{ fontSize: 10, color: '#00E0C4', animation: 'pulse 1.5s ease-in-out infinite' }}>
+                            confirming...
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: active ? '#00E0C4' : 'var(--dag-text)', ...S.mono, transition: 'color 0.25s' }}>
+                              {fmt(totalVal)}
+                            </div>
+                            <div style={{ fontSize: 9, color: 'var(--dag-text-faint)' }}>UDAG</div>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -809,13 +847,14 @@ export function WalletPage({
                           try {
                             const balRes = await fetch(`${getNodeUrl()}/balance/${pw.address}`, { signal: AbortSignal.timeout(5000) });
                             const balData = await balRes.json();
-                            await signAndSubmitSmartOp({ CreatePocket: { label: newPocketLabel } }, 0, balData.nonce ?? 0);
                             const createdLabel = newPocketLabel;
-                            setPocketMsg(`✓ @${pw.name || ''}.${createdLabel} created!`);
+                            await signAndSubmitSmartOp({ CreatePocket: { label: createdLabel } }, 0, balData.nonce ?? 0);
+                            // Optimistic: show the pocket immediately in the list as "confirming".
+                            setPendingPockets(prev => [...prev, createdLabel]);
+                            setPocketMsg('');
                             setNewPocketLabel('');
                             setShowCreatePocket(false);
-                            await new Promise(r => setTimeout(r, 4000));
-                            await fetchPockets();
+                            // The 10s auto-refresh will pick up the confirmed pocket and clear the pending state.
                           } catch (e: unknown) {
                             setPocketMsg(e instanceof Error ? e.message : 'Failed');
                           } finally { setPocketLoading(false); }
