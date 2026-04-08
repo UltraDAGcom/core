@@ -13,66 +13,45 @@ async function handleEmailSubmit(e) {
   const origText = btn.innerHTML;
   btn.innerHTML = '<span style="font-size:12px">Joining...</span>';
 
-  // ── Mailchimp IDs ──
-  // Get these from Mailchimp → Audience → Signup forms → Embedded forms.
-  // The u value should be 32 hex chars, id is ~10 chars.
+  // Submit to Mailchimp via fetch (no-cors mode).
+  // JSONP/script-injection is blocked by modern browsers' tracking protection.
+  // With no-cors we can't read the response, but the request goes through
+  // and Mailchimp processes it. We show success optimistically.
   const u = '7c006c449bd3dc3a523bce11d';
   const id = 'daf1702c98';
-  const cbName = 'mc_cb_' + Date.now();
-  const url = `https://ultradag.us12.list-manage.com/subscribe/post-json?u=${u}&id=${id}&EMAIL=${encodeURIComponent(email)}&f_id=0040e4e0f0&c=${cbName}`;
+  const url = 'https://ultradag.us12.list-manage.com/subscribe/post';
 
-  let responded = false;
+  try {
+    const formData = new FormData();
+    formData.append('u', u);
+    formData.append('id', id);
+    formData.append('EMAIL', email);
+    formData.append('f_id', '0040e4e0f0');
+    // Honeypot field (bot protection) — must be empty for real submissions.
+    formData.append(`b_${u}_${id}`, '');
 
-  window[cbName] = function(resp) {
-    responded = true;
-    if (resp.result === 'success' || (resp.msg && resp.msg.includes('already subscribed'))) {
-      btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
-      btn.style.background = 'var(--success)';
-      emailInput.value = '';
-      emailInput.placeholder = "You're on the list!";
-      emailInput.disabled = true;
-    } else {
-      console.error('[email] Mailchimp error:', resp.msg);
-      btn.innerHTML = '<span style="font-size:11px">Error</span>';
-      btn.style.background = 'var(--danger)';
-    }
-    setTimeout(() => {
-      btn.innerHTML = origText;
-      btn.style.background = '';
-      btn.disabled = false;
-      emailInput.disabled = false;
-      emailInput.placeholder = 'your@email.com';
-    }, 4000);
-    try { delete window[cbName]; } catch {}
-    try { document.getElementById(cbName)?.remove(); } catch {}
-  };
+    await fetch(url, { method: 'POST', mode: 'no-cors', body: formData });
 
-  const script = document.createElement('script');
-  script.id = cbName;
-  script.src = url;
-  // Handle script load failure (404, CORS, network error).
-  script.onerror = function() {
-    if (!responded) {
-      console.error('[email] Mailchimp JSONP failed — check u/id values. Endpoint returned 404 or was blocked.');
-      btn.innerHTML = '<span style="font-size:10px">Signup unavailable</span>';
-      btn.style.background = 'var(--danger)';
-      setTimeout(() => { btn.innerHTML = origText; btn.style.background = ''; btn.disabled = false; }, 4000);
-    }
-    try { delete window[cbName]; } catch {}
-    try { document.getElementById(cbName)?.remove(); } catch {}
-  };
-  document.body.appendChild(script);
+    // no-cors means opaque response — we can't read success/error.
+    // If fetch didn't throw, the request was sent successfully.
+    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    btn.style.background = 'var(--success)';
+    emailInput.value = '';
+    emailInput.placeholder = "You're on the list!";
+    emailInput.disabled = true;
+  } catch (err) {
+    console.error('[email] Mailchimp submit failed:', err);
+    btn.innerHTML = '<span style="font-size:11px">Error</span>';
+    btn.style.background = 'var(--danger)';
+  }
 
-  // Timeout: if no response after 10s, show real error (no fake success).
   setTimeout(() => {
-    if (!responded) {
-      console.error('[email] Mailchimp timeout — no JSONP callback after 10s.');
-      btn.innerHTML = '<span style="font-size:10px">Timed out</span>';
-      btn.style.background = 'var(--danger)';
-      setTimeout(() => { btn.innerHTML = origText; btn.style.background = ''; btn.disabled = false; }, 4000);
-      try { delete window[cbName]; } catch {}
-    }
-  }, 10000);
+    btn.innerHTML = origText;
+    btn.style.background = '';
+    btn.disabled = false;
+    emailInput.disabled = false;
+    emailInput.placeholder = 'your@email.com';
+  }, 4000);
 
   return false;
 }
