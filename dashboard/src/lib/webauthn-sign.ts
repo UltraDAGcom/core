@@ -207,14 +207,22 @@ export async function signAndSubmitSmartOp(
    * handoff). Defaults to getPasskeyWallet() for normal post-onboarding use.
    */
   walletOverride?: PasskeyWallet,
+  /**
+   * Optional `from` address override (hex). Used when signing on behalf of
+   * a derived pocket address — the pocket's parent passkey signs, but `from`
+   * must be the pocket address so the engine's delegation check passes and
+   * handlers like StreamWithdraw see the correct sender.
+   */
+  fromAddressOverride?: string,
 ): Promise<{ tx_hash: string }> {
   const passkey = walletOverride ?? getPasskeyWallet();
   if (!passkey) throw new Error('No passkey wallet found');
 
   const networkStr = localStorage.getItem('ultradag_network') === 'mainnet' ? 'ultradag-mainnet-v1' : 'ultradag-testnet-v1';
   const NETWORK_ID = new TextEncoder().encode(networkStr);
-  const fromBytesRaw = hexToBytes(passkey.address);
-  // Address is always 20 bytes — truncate if stored as 32 bytes (full hash)
+  // Use fromAddressOverride for pocket delegation, otherwise the passkey's own address.
+  const fromHex = fromAddressOverride ?? passkey.address;
+  const fromBytesRaw = hexToBytes(fromHex);
   const fromBytes = fromBytesRaw.length > 20 ? fromBytesRaw.slice(0, 20) : fromBytesRaw;
   const keyIdBytes = hexToBytes(passkey.keyId);
 

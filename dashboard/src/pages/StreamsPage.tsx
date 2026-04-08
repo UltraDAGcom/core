@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getNodeUrl, shortAddr } from '../lib/api';
+import { getNodeUrl, shortAddr, isValidAddress, normalizeAddress } from '../lib/api';
 import { getPasskeyWallet } from '../lib/passkey-wallet';
 import { signAndSubmitSmartOp } from '../lib/webauthn-sign';
+import { resolvePocket, NameNotFoundError, PocketNotFoundError } from '../lib/names';
 import { Pagination } from '../components/shared/Pagination';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { PageHeader } from '../components/shared/PageHeader';
@@ -106,7 +107,17 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
   const [senderBalance, setSenderBalance] = useState<number | null>(null);
   const STREAM_PAGE_SIZE = 10;
 
-  const myAddresses = wallets.map(w => w.address.toLowerCase());
+  // Include pocket addresses so streams to @name.pocket show as incoming.
+  const [pocketAddresses, setPocketAddresses] = useState<string[]>([]);
+  useEffect(() => {
+    const pw = getPasskeyWallet();
+    if (!pw?.address) return;
+    fetch(`${getNodeUrl()}/smart-account/${pw.address}`, { signal: AbortSignal.timeout(5000) })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.pockets) setPocketAddresses(d.pockets.map((p: { address: string }) => p.address.toLowerCase())); })
+      .catch(() => {});
+  }, []);
+  const myAddresses = [...wallets.map(w => w.address.toLowerCase()), ...pocketAddresses];
   const outgoing = allStreams.filter(s => myAddresses.includes(s.sender.toLowerCase()));
   const incoming = allStreams.filter(s => myAddresses.includes(s.recipient.toLowerCase()));
   const activeCount = allStreams.filter(s => s.status === 'Active').length;
@@ -237,19 +248,32 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
     setFormError(false);
     setSubmitting(true);
     try {
-      // Resolve recipient to a hex address (handles names, bech32m, hex)
+      // Resolve recipient: accept hex, bech32m, @name, or @name.pocket
       let resolvedRecipient = recipient.trim();
-      if (!/^[0-9a-f]{40}$/i.test(resolvedRecipient)) {
-        // Not a 40-char hex — try resolving via balance endpoint (which handles names/bech32m)
-        const resolveRes = await fetch(`${getNodeUrl()}/balance/${encodeURIComponent(resolvedRecipient)}`, { signal: AbortSignal.timeout(5000) });
-        if (resolveRes.ok) {
-          const resolveData = await resolveRes.json();
-          resolvedRecipient = resolveData.address ?? resolvedRecipient;
-        }
-        // If still not 40-char hex, try stripping to first 40 chars
-        resolvedRecipient = resolvedRecipient.replace(/^0x/, '');
-        if (resolvedRecipient.length > 40 && /^[0-9a-f]+$/i.test(resolvedRecipient)) {
-          resolvedRecipient = resolvedRecipient.slice(0, 40);
+      if (/^[0-9a-f]{40}$/i.test(resolvedRecipient)) {
+        // Already a valid hex address — use as-is.
+      } else if (isValidAddress(resolvedRecipient)) {
+        // Bech32m address — normalize to hex.
+        resolvedRecipient = normalizeAddress(resolvedRecipient);
+      } else {
+        // Try resolving as a name or name.pocket.
+        try {
+          const resolved = await resolvePocket(resolvedRecipient);
+          resolvedRecipient = resolved.address;
+        } catch (e) {
+          if (e instanceof NameNotFoundError || e instanceof PocketNotFoundError) {
+            // Fallback: try /balance/ which resolves bare names.
+            try {
+              const balRes = await fetch(`${getNodeUrl()}/balance/${encodeURIComponent(resolvedRecipient.replace(/^@/, ''))}`, { signal: AbortSignal.timeout(5000) });
+              if (balRes.ok) {
+                const balData = await balRes.json();
+                if (balData.address) { resolvedRecipient = balData.address; }
+                else { setFormMsg(e.message); setFormError(true); setSubmitting(false); return; }
+              } else { setFormMsg(e.message); setFormError(true); setSubmitting(false); return; }
+            } catch { setFormMsg('Could not resolve recipient'); setFormError(true); setSubmitting(false); return; }
+          } else {
+            setFormMsg('Invalid recipient — use address, @name, or @name.pocket'); setFormError(true); setSubmitting(false); return;
+          }
         }
       }
 
@@ -396,7 +420,7 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
             <div style={S.card}>
               <span style={S.label}>Recipient</span>
               <input type="text" value={recipient} onChange={e => { setRecipient(e.target.value); setFormMsg(''); }}
-                placeholder="udag1... or 0x address or name" style={S.input} />
+                placeholder="@name, @name.pocket, or tudg1.../udag1..." style={S.input} />
             </div>
 
             {/* Rate + Frequency */}
@@ -707,9 +731,20 @@ export function StreamsPage({ wallets, network: _network }: StreamsPageProps) {
                       try {
                         const passkey = getPasskeyWallet();
                         if (passkey) {
-                          const balRes = await fetch(`${getNodeUrl()}/balance/${passkey.address.length > 40 ? passkey.address.slice(0, 40) : passkey.address}`, { signal: AbortSignal.timeout(5000) });
+                          // The stream recipient might be the passkey's main address OR a pocket.
+                          // For pockets, we need to sign from the pocket address (delegation).
+                          const recipientLower = s.recipient.toLowerCase();
+                          const isPocketRecipient = pocketAddresses.includes(recipientLower);
+                          const fromAddr = isPocketRecipient ? s.recipient : (passkey.address.length > 40 ? passkey.address.slice(0, 40) : passkey.address);
+                          const balRes = await fetch(`${getNodeUrl()}/balance/${fromAddr}`, { signal: AbortSignal.timeout(5000) });
                           const balData = await balRes.json();
-                          await signAndSubmitSmartOp({ StreamWithdraw: { stream_id: s.id } }, MIN_FEE, balData.nonce ?? 0);
+                          await signAndSubmitSmartOp(
+                            { StreamWithdraw: { stream_id: s.id } },
+                            MIN_FEE,
+                            balData.nonce ?? 0,
+                            undefined, // walletOverride
+                            isPocketRecipient ? s.recipient : undefined, // fromAddressOverride for pocket
+                          );
                         } else {
                           const wallet = wallets.find(w => w.secret_key && w.address.toLowerCase() === s.recipient.toLowerCase());
                           if (!wallet) { toast('No wallet found matching stream recipient', 'error'); return; }
