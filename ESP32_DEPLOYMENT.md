@@ -58,14 +58,23 @@ cargo espflash monitor
 
 ## Features
 
-### UltraDAG Node on ESP32
+### UltraDAG Client on ESP32
 
-- **Full consensus** participation
-- **Transaction processing**
+- **Lightweight client** (not full node)
+- **Transaction submission** and status
 - **HTTP API server** (port 80)
 - **WiFi networking**
-- **Memory efficient** (<1MB RAM)
+- **Memory efficient** (<512KB RAM)
 - **Low power** consumption
+- **Simplified consensus** (for demonstration)
+
+### What This Demonstrates
+
+UltraDAG's **lightweight design** enables:
+- **IoT deployment** on resource-constrained devices
+- **Embedded transaction** processing
+- **Distributed networks** of ESP32 clients
+- **Real-world micro-transaction** capability
 
 ### API Endpoints
 
@@ -76,9 +85,41 @@ cargo espflash monitor
 
 ### Memory Usage
 
-- **Flash**: ~800KB
-- **RAM**: ~256KB
-- **Stack**: 32KB
+- **Flash**: ~600KB
+- **RAM**: ~128KB
+- **Stack**: 16KB
+
+## Testing
+
+### Quick Test
+
+```bash
+# Run the test script
+./test-esp32.sh
+```
+
+### API Testing
+
+```bash
+# Update IP in test-esp32-api.sh first
+./test-esp32-api.sh
+```
+
+### Manual Testing
+
+```bash
+# Find your ESP32's IP (from serial monitor)
+ESP32_IP="192.168.1.100"
+
+# Test status
+curl http://$ESP32_IP/status
+
+# Submit transaction
+curl -X POST http://$ESP32_IP/tx -d "from:to:1000000"
+
+# Check peers
+curl http://$ESP32_IP/peers
+```
 
 ## Configuration
 

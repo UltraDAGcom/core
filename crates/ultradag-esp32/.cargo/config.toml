@@ -1,0 +1,16 @@
+[target.xtensa-esp32-espidf]
+runner = "espflash flash --monitor"
+
+[env]
+ESP_IDF_VERSION = "v5.1.4"
+ESP_IDF_TOOLS_INSTALL_DIR = { value = "~/.espressif" }
+
+[build]
+target = "xtensa-esp32-espidf"
+rustflags = [
+    "-C", "link-arg=-nostartfiles",
+    "-C", "link-arg=-Wl,-Tlink.x",
+]
+
+[target.xtensa-esp32-espidf.dependencies]
+build-std = ["std", "panic_abort"]

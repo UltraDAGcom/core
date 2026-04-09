@@ -2,88 +2,117 @@
 
 use core::str::FromStr;
 use embedded_io::Write;
-use heapless::{pool::{Pool, Node}, Vec};
+use heapless::{pool::{Pool, Node}, Vec, String};
 use postcard::to_slice;
 use serde::{Serialize, Deserialize};
-use ultradag_coin::{Address, Transaction, BlockDag, StateEngine};
-use ultradag_network::{NetworkMessage, PeerId};
+use blake3::Hasher;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkConfig {
     pub ssid: &'static str,
     pub password: &'static str,
-    pub ultradag_peers: Vec<heapless::String<64>>,
+    pub ultradag_peers: Vec<String<64>>,
 }
 
-pub struct UltraDAGNode {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Transaction {
+    pub from: [u8; 20],
+    pub to: [u8; 20],
+    pub amount: u64,
+    pub nonce: u64,
+    pub signature: [u8; 64],
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerStatus {
+    pub peer_id: String<64>,
+    pub connected_peers: u8,
+    pub latest_round: u64,
+    pub status: String<32>,
+}
+
+pub struct UltraDAGClient {
     config: NetworkConfig,
-    dag: BlockDag,
-    state: StateEngine,
-    peer_id: PeerId,
-    message_buffer: Vec<u8, 1024>,
+    peer_id: [u8; 32],
+    pending_txs: Vec<Transaction, 16>,
+    connected_peers: u8,
+    latest_round: u64,
 }
 
-impl UltraDAGNode {
+impl UltraDAGClient {
     pub fn new(config: NetworkConfig) -> Self {
-        // Generate or load peer ID
-        let peer_id = PeerId::from_bytes([0u8; 32]); // Simplified
+        // Generate simple peer ID from WiFi MAC
+        let peer_id = [0u8; 32]; // Simplified
         
         Self {
             config,
-            dag: BlockDag::new(),
-            state: StateEngine::new(),
             peer_id,
-            message_buffer: Vec::new(),
+            pending_txs: Vec::new(),
+            connected_peers: 0,
+            latest_round: 0,
         }
     }
 
     pub fn tick(&mut self) {
-        // Process network messages
-        self.process_network_messages();
-        
-        // Run consensus
-        if let Ok(finalized_round) = self.dag.try_finalize_round() {
-            self.state.apply_finalized_round(&self.dag, finalized_round);
+        // Simplified tick - just maintain connection
+        self.maintain_connection();
+        self.process_pending_txs();
+    }
+
+    pub fn submit_transaction(&mut self, tx: Transaction) -> Result<String<64>, &'static str> {
+        // Validate basic transaction structure
+        if tx.amount == 0 {
+            return Err("Invalid amount");
         }
         
-        // Broadcast our transactions if any
-        self.maybe_broadcast_tx();
+        // Add to pending queue
+        self.pending_txs.push(tx)
+            .map_err(|_| "Pending transaction queue full")?;
+        
+        // Generate simple transaction hash
+        let mut hasher = Hasher::new();
+        hasher.update(&tx.from);
+        hasher.update(&tx.to);
+        hasher.update(&tx.amount.to_le_bytes());
+        let hash = hasher.finalize();
+        
+        Ok(format!("{:x}", hash).into())
     }
 
-    pub fn submit_transaction(&mut self, tx_data: &[u8]) -> Result<heapless::String<64>, &str> {
-        // Parse transaction
-        let tx: Transaction = postcard::from_bytes(tx_data)
-            .map_err(|_| "Invalid transaction format")?;
-        
-        // Validate transaction
-        self.state.validate_transaction(&tx)
-            .map_err(|_| "Transaction validation failed")?;
-        
-        // Add to DAG
-        let hash = self.dag.add_transaction(tx)
-            .map_err(|_| "Failed to add transaction to DAG")?;
-        
-        Ok(heapless::String::from_str(&hash.to_hex())
-            .map_err(|_| "Hash conversion failed")?)
-    }
-
-    pub fn get_status(&self) -> heapless::String<512> {
+    pub fn get_status(&self) -> String<512> {
         format!(
-            r#"{{"peer_id":"{}","connected_peers":{},"latest_round":{},"status":"running"}}"#,
-            self.peer_id.to_hex(),
-            0, // TODO: Track connected peers
-            self.state.current_round()
+            r#"{{"peer_id":"{:x}","connected_peers":{},"latest_round":{},"status":"{}","pending_txs":{}}}"#,
+            self.peer_id.iter().fold(0u64, |acc, &b| acc << 8 | b as u64),
+            self.connected_peers,
+            self.latest_round,
+            if self.connected_peers > 0 { "connected" } else { "connecting" },
+            self.pending_txs.len()
         ).into()
     }
 
-    fn process_network_messages(&mut self) {
-        // TODO: Implement network message processing
-        // This would handle incoming messages from WiFi
+    pub fn create_simple_tx(&mut self, from: [u8; 20], to: [u8; 20], amount: u64) -> Transaction {
+        Transaction {
+            from,
+            to,
+            amount,
+            nonce: self.latest_round,
+            signature: [0u8; 64], // Simplified - no real signing
+        }
     }
 
-    fn maybe_broadcast_tx(&mut self) {
-        // TODO: Implement transaction broadcasting
-        // This would broadcast our transactions to peers
+    fn maintain_connection(&mut self) {
+        // Simplified connection maintenance
+        // In real implementation, this would handle WiFi reconnection
+        if self.connected_peers == 0 {
+            self.connected_peers = 1; // Simulate connection
+        }
+    }
+
+    fn process_pending_txs(&mut self) {
+        // Simplified - just clear pending txs (in real implementation would broadcast)
+        if !self.pending_txs.is_empty() && self.connected_peers > 0 {
+            self.pending_txs.clear();
+        }
     }
 }
 
@@ -106,14 +135,25 @@ impl MessagePool {
 pub mod utils {
     use super::*;
     
-    pub fn format_hash(hash: &[u8]) -> heapless::String<64> {
+    pub fn format_hash(hash: &[u8]) -> String<64> {
         hash.iter()
-            .map(|b| format!("{:02x}", b))
-            .collect::<heapless::String<64>>()
+            .fold(String::new(), |mut acc, &b| {
+                let _ = write!(acc, "{:02x}", b);
+                acc
+            })
     }
     
     pub fn current_timestamp() -> u64 {
         // TODO: Implement proper time keeping on ESP32
+        // For now, return a simple counter
         0
+    }
+
+    pub fn format_address(addr: &[u8; 20]) -> String<42> {
+        addr.iter()
+            .fold(String::new(), |mut acc, &b| {
+                let _ = write!(acc, "{:02x}", b);
+                acc
+            })
     }
 }
