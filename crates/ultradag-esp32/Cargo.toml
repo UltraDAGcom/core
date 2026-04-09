@@ -5,10 +5,9 @@ edition = "2021"
 license = "BUSL-1.1"
 
 [dependencies]
-# ESP32 specific
-esp-idf-hal = "0.44"
-esp-idf-svc = "0.49"
-esp-idf-sys = "0.35"
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+panic-halt = "0.2"
 
 [features]
 default = ["std"]
