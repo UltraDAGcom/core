@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { postTx, postFaucet, formatUdag, shortAddr, fullAddr, isValidAddress, normalizeAddress, getNodeUrl, getBalance } from '../lib/api';
 import { resolvePocket, NameNotFoundError, PocketNotFoundError } from '../lib/names';
 import { DisplayIdentity } from '../components/shared/DisplayIdentity';
@@ -30,62 +30,125 @@ const S = {
 };
 
 function ReceiveAddress({ wallet }: { wallet: Wallet }) {
+  const pk = getPasskeyWallet();
+  const hasName = pk?.name && pk.address === wallet.address;
+  // QR encodes the @name if available (easier to type/share than bech32m).
+  const qrValue = hasName ? `@${pk!.name}` : fullAddr(wallet.address);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+      {/* Primary identifier: @name if available */}
+      {hasName && (
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#00E0C4', fontFamily: "'DM Mono',monospace" }}>
+            @{pk!.name}
+          </div>
+          <p style={{ fontSize: 10.5, color: 'var(--dag-text-faint)', marginTop: 3 }}>
+            Tell the sender to send to this name
+          </p>
+        </div>
+      )}
+
       {/* QR Code */}
       <div style={{ background: '#fff', borderRadius: 12, padding: 12, display: 'inline-block' }}>
-        <QrCode value={fullAddr(wallet.address)} size={200} />
+        <QrCode value={qrValue} size={180} />
+      </div>
+      <div style={{ fontSize: 9, color: 'var(--dag-text-faint)', textAlign: 'center' }}>
+        QR encodes: {hasName ? `@${pk!.name}` : 'bech32m address'}
       </div>
 
-      {/* Primary: ULTRA ID or wallet name */}
+      {/* Address details */}
       <div style={{ width: '100%', textAlign: 'center' }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--dag-text)', marginBottom: 4 }}>{wallet.name}</div>
+        {!hasName && (
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--dag-text)', marginBottom: 4 }}>{wallet.name}</div>
+        )}
         <DisplayIdentity address={wallet.address} advanced copyable size="sm" />
       </div>
-
-      <p style={{ fontSize: 10.5, color: 'var(--dag-text-faint)', textAlign: 'center' }}>
-        Share your ULTRA ID or scan the QR code to receive UDAG.
-      </p>
     </div>
   );
 }
 
 function SendToInput({ value, onChange, onScanQr }: { value: string; onChange: (v: string) => void; onScanQr: () => void }) {
-  const [mode, setMode] = useState<'name' | 'address'>('name');
-  // Auto-detect: if user pastes something that looks like an address, switch to address mode
-  const handleChange = (v: string) => {
-    onChange(v);
-    if (v.startsWith('udag1') || v.startsWith('tudg1') || /^[0-9a-f]{40,64}$/i.test(v)) {
-      setMode('address');
+  const [resolvedPreview, setResolvedPreview] = useState<{ address: string; label: string } | null>(null);
+  const [resolving, setResolving] = useState(false);
+  const [resolveError, setResolveError] = useState('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Live resolution preview — resolves as the user types (debounced).
+  useEffect(() => {
+    setResolvedPreview(null);
+    setResolveError('');
+    const input = value.trim();
+    if (!input || input.length < 3) return;
+
+    // Already a valid address — show it directly.
+    if (isValidAddress(input)) {
+      setResolvedPreview({ address: normalizeAddress(input), label: 'address' });
+      return;
     }
-  };
+
+    // Debounce name resolution.
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setResolving(true);
+      try {
+        const resolved = await resolvePocket(input);
+        setResolvedPreview({
+          address: resolved.address,
+          label: resolved.label ? `@${resolved.parent}.${resolved.label}` : `@${resolved.parent}`,
+        });
+      } catch {
+        // Try /balance fallback for bare names.
+        try {
+          const bal = await getBalance(input.replace(/^@/, ''));
+          if (bal?.address) {
+            setResolvedPreview({ address: bal.address, label: `@${input.replace(/^@/, '')}` });
+          } else {
+            setResolveError('Not found');
+          }
+        } catch {
+          setResolveError('Not found');
+        }
+      } finally {
+        setResolving(false);
+      }
+    }, 500);
+
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [value]);
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-        <div style={{ flex: 1, position: 'relative' }}>
-          <input
-            type="text" value={value} onChange={e => handleChange(e.target.value)}
-            placeholder="@name, @name.pocket, or tudg1.../udag1... address"
-            style={{ ...S.input, paddingRight: 40 }}
-          />
-          {mode === 'name' && (
-            <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: 'var(--dag-text-faint)' }}>@</span>
-          )}
-        </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          type="text" value={value} onChange={e => onChange(e.target.value)}
+          placeholder="@name, @name.pocket, or address"
+          style={{ ...S.input, flex: 1 }}
+        />
         <button onClick={onScanQr} style={{
           padding: '0 12px', borderRadius: 10, background: 'var(--dag-input-bg)', border: '1px solid var(--dag-border)',
           color: 'var(--dag-text-muted)', cursor: 'pointer', fontSize: 16, flexShrink: 0, height: 42,
         }} title="Scan QR">📷</button>
       </div>
 
-      <button onClick={() => setMode(mode === 'name' ? 'address' : 'name')} style={{
-        background: 'none', border: 'none', color: 'var(--dag-text-faint)', fontSize: 10,
-        cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4,
-      }}>
-        <span style={{ fontSize: 8, transform: mode === 'address' ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'inline-block' }}>▶</span>
-        {mode === 'name' ? 'Use address instead' : 'Use ULTRA ID instead'}
-      </button>
+      {/* Live resolution preview */}
+      <div style={{ minHeight: 20, marginTop: 5 }}>
+        {resolving && (
+          <span style={{ fontSize: 10, color: 'var(--dag-text-faint)' }}>Resolving...</span>
+        )}
+        {!resolving && resolvedPreview && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 10, color: '#00E0C4' }}>✓</span>
+            <span style={{ fontSize: 10, color: '#00E0C4', fontWeight: 600 }}>{resolvedPreview.label}</span>
+            <span style={{ fontSize: 10, color: 'var(--dag-text-faint)', fontFamily: "'DM Mono',monospace" }}>
+              → {resolvedPreview.address.slice(0, 10)}...{resolvedPreview.address.slice(-6)}
+            </span>
+          </div>
+        )}
+        {!resolving && resolveError && value.trim().length >= 3 && (
+          <span style={{ fontSize: 10, color: '#EF4444' }}>✗ {resolveError}</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -260,11 +323,26 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
-                  <span style={S.label}>Amount (UDAG)</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={S.label}>Amount (UDAG)</span>
+                    {balance && (
+                      <button
+                        onClick={() => {
+                          const feeSats = Math.round(parseFloat(fee || '0.0001') * SATS);
+                          const max = Math.max(0, (balance.balance ?? 0) - feeSats);
+                          setAmount((max / SATS).toFixed(4));
+                          setError(''); setSuccess('');
+                        }}
+                        style={{ background: 'none', border: 'none', color: '#00E0C4', fontSize: 9.5, cursor: 'pointer', fontWeight: 700, letterSpacing: 0.5, padding: 0 }}
+                      >
+                        MAX
+                      </button>
+                    )}
+                  </div>
                   <input type="number" min="0" step="0.01" value={amount} onChange={e => { setAmount(e.target.value); setError(''); setSuccess(''); }} placeholder="0.00" style={S.input} />
                 </div>
                 <div>
-                  <span style={S.label}>Fee (UDAG)</span>
+                  <span style={S.label}>Fee (min 0.0001)</span>
                   <input type="number" min="0.0001" step="0.0001" value={fee} onChange={e => setFee(e.target.value)} style={S.input} />
                 </div>
               </div>
@@ -281,7 +359,15 @@ export function SendPage({ wallets, balances, unlocked, network }: SendPageProps
               {error && <div style={{ fontSize: 11, color: '#EF4444', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 8, padding: '8px 12px' }}>{error}</div>}
               {success && <div style={{ fontSize: 11, color: '#00E0C4', background: 'rgba(0,224,196,0.06)', border: '1px solid rgba(0,224,196,0.15)', borderRadius: 8, padding: '8px 12px' }}>{success}</div>}
 
-              <button onClick={handleSend} disabled={loading} style={{ ...primaryButtonStyle, width: '100%', padding: '12px 0', opacity: loading ? 0.5 : 1 }}>
+              <button
+                onClick={handleSend}
+                disabled={loading || !to.trim() || !amount || parseFloat(amount) <= 0}
+                style={{
+                  ...primaryButtonStyle, width: '100%', padding: '12px 0',
+                  opacity: loading || !to.trim() || !amount || parseFloat(amount) <= 0 ? 0.35 : 1,
+                  cursor: loading || !to.trim() || !amount ? 'not-allowed' : 'pointer',
+                }}
+              >
                 {loading ? 'Sending...' : pw && wallet?.address === pw.address ? '◎ Send with Biometrics' : '⇄ Send'}
               </button>
             </div>
