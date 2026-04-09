@@ -4051,6 +4051,34 @@ impl StateEngine {
                     tx.from.to_hex(), label, pocket_addr.to_hex()
                 );
             }
+            SmartOpType::RemoveKey { key_id_to_remove } => {
+                use crate::tx::smart_account::{KEY_REMOVAL_DELAY_ROUNDS, PendingKeyRemoval};
+                let config = self.smart_accounts.get_mut(&tx.from)
+                    .ok_or_else(|| CoinError::ValidationError("smart account not found".into()))?;
+                // Cannot remove the last key — would lock the account forever.
+                if config.authorized_keys.len() <= 1 {
+                    return Err(CoinError::ValidationError("cannot remove the last authorized key".into()));
+                }
+                // Target key must exist.
+                if !config.has_key(key_id_to_remove) {
+                    return Err(CoinError::ValidationError("key to remove not found on this SmartAccount".into()));
+                }
+                // Only one pending removal at a time.
+                if config.pending_key_removal.is_some() {
+                    return Err(CoinError::ValidationError("a key removal is already pending".into()));
+                }
+                config.pending_key_removal = Some(PendingKeyRemoval {
+                    key_id: *key_id_to_remove,
+                    initiated_at_round: current_round,
+                    executes_at_round: current_round.saturating_add(KEY_REMOVAL_DELAY_ROUNDS),
+                });
+                tracing::info!(
+                    "SmartAccount {}: SmartOp RemoveKey initiated for {} (executes at round {})",
+                    tx.from.to_hex(),
+                    key_id_to_remove.iter().map(|b| format!("{b:02x}")).collect::<String>(),
+                    current_round.saturating_add(KEY_REMOVAL_DELAY_ROUNDS)
+                );
+            }
         }
 
         Ok(())

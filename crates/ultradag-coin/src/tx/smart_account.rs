@@ -1001,6 +1001,13 @@ pub enum SmartOpType {
     /// until the parent re-creates the pocket or transfers them first.
     /// Fee-exempt (account management op).
     RemovePocket { label: String },
+    /// Initiate time-locked removal of an authorized key.
+    /// The passkey-friendly counterpart to `RemoveKeyTx` (Ed25519-only).
+    /// Signed by any currently-authorized key; the removal executes after
+    /// `KEY_REMOVAL_DELAY_ROUNDS` (same time-lock as RemoveKeyTx). Cannot
+    /// remove the last key — add a replacement first.
+    /// Fee-exempt (account management op).
+    RemoveKey { key_id_to_remove: [u8; 8] },
 }
 
 /// A generic SmartAccount operation signed with any authorized key (Ed25519 or P256).
@@ -1139,6 +1146,10 @@ impl SmartOpTx {
                 buf.extend_from_slice(&(label.len() as u32).to_le_bytes());
                 buf.extend_from_slice(label.as_bytes());
             }
+            SmartOpType::RemoveKey { key_id_to_remove } => {
+                buf.push(17);
+                buf.extend_from_slice(key_id_to_remove);
+            }
         }
         buf.extend_from_slice(&self.fee.to_le_bytes());
         buf.extend_from_slice(&self.nonce.to_le_bytes());
@@ -1179,6 +1190,7 @@ impl SmartOpTx {
             | SmartOpType::SetCommission { .. }
             | SmartOpType::RegisterName { .. } // Free for 6+ chars
             | SmartOpType::AddKey { .. }       // Account management op
+            | SmartOpType::RemoveKey { .. }    // Account management op
             | SmartOpType::CreatePocket { .. } // Account management op
             | SmartOpType::RemovePocket { .. } // Account management op
         )

@@ -3,6 +3,7 @@ members = [
     "crates/ultradag-coin",
     "crates/ultradag-network",
     "crates/ultradag-node",
+    "crates/ultradag-esp32",
     "sdk/rust",
     "crates/ultradag-sim",
 ]
