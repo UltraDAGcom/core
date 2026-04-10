@@ -4020,6 +4020,12 @@ ultradag_banned_ips {ban_count}
                                 ultradag_coin::KeyType::Ed25519 => "ed25519",
                                 ultradag_coin::KeyType::P256 => "p256",
                             },
+                            // Raw public key hex — exposed so the dashboard can
+                            // reconstruct a passkey wallet on a fresh device by
+                            // verifying a WebAuthn assertion against this key.
+                            // Smart account state is already public on-chain;
+                            // exposing the pubkey adds no new privacy surface.
+                            "pubkey": hex_encode(&k.pubkey),
                             "label": k.label,
                             "daily_limit": k.daily_limit,
                         })

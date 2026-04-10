@@ -3,6 +3,8 @@ import { getNodeUrl } from '../../lib/api';
 import { primaryButtonStyle } from '../../lib/theme';
 import type { NetworkType } from '../../lib/api';
 import { signAndSubmitSmartOp } from '../../lib/webauthn-sign';
+import { getPasskeyWallet } from '../../lib/passkey-wallet';
+import { PasskeySignIn } from './PasskeySignIn';
 // savePasskeyWallet is called by WelcomeScreen after backup step completes
 
 interface PasskeyOnboardingProps {
@@ -89,6 +91,8 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
   const [linkingDevice, setLinkingDevice] = useState(false);
   const [linkError, setLinkError] = useState('');
   const [linkedKeyLabel, setLinkedKeyLabel] = useState<string | null>(null);
+  // Whether the welcome screen's "Sign in with existing passkey" panel is open.
+  const [showSignIn, setShowSignIn] = useState(false);
   // Backup-device registration requires SmartOpType::AddKey which doesn't
   // exist in the Rust protocol yet, so the old backup step was removed.
   // Social recovery is surfaced on the final success screen instead.
@@ -453,6 +457,30 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
             ))}
           </div>
 
+          {showSignIn && (
+            <PasskeySignIn
+              onCancel={() => setShowSignIn(false)}
+              onSuccess={(address, name) => {
+                // signInWithPasskey() already wrote the wallet to localStorage.
+                // Build the pendingWallet shape onComplete expects, then hand
+                // off to the parent so it runs the same "open wallet" logic
+                // as a fresh account creation.
+                const saved = getPasskeyWallet();
+                if (!saved) {
+                  setError('Sign-in succeeded but wallet could not be loaded. Please refresh.');
+                  return;
+                }
+                onComplete(address, name, {
+                  credentialId: saved.credentialId,
+                  p256PubkeyHex: saved.p256PubkeyHex,
+                  address: saved.address,
+                  keyId: saved.keyId,
+                  name: saved.name,
+                });
+              }}
+            />
+          )}
+
           <button
             onClick={() => setStep('username')}
             aria-label="Start creating wallet"
@@ -464,15 +492,37 @@ export function PasskeyOnboarding({ onComplete, onFallbackToAdvanced, network, o
             Get Started <span style={{ fontSize: 15 }}>→</span>
           </button>
 
+          {!showSignIn && (
+            <button
+              onClick={() => setShowSignIn(true)}
+              aria-label="Sign in with existing passkey"
+              style={{
+                background: 'none',
+                border: '1px solid var(--dag-border)',
+                color: 'var(--dag-text)',
+                fontSize: 13,
+                cursor: 'pointer',
+                marginTop: 12,
+                padding: '12px 0',
+                width: '100%',
+                borderRadius: 14,
+                fontWeight: 600,
+                fontFamily: "'DM Sans',sans-serif",
+              }}
+            >
+              I already have a passkey — sign in
+            </button>
+          )}
+
           <button
             onClick={onFallbackToAdvanced}
             style={{
               background: 'none', border: 'none', color: 'var(--dag-text-muted)',
-              fontSize: 12, cursor: 'pointer', marginTop: 18, padding: '6px 10px',
+              fontSize: 12, cursor: 'pointer', marginTop: 14, padding: '6px 10px',
               fontWeight: 500,
             }}
           >
-            I already have a wallet →
+            Import with secret key or mnemonic →
           </button>
 
           {/* Network switcher — small and subtle at bottom */}
