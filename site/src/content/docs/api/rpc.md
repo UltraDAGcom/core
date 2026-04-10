@@ -37,24 +37,27 @@ curl http://localhost:10333/status
 
 ### GET /balance/:address
 
-Returns the balance and staking state for an address.
+Returns the balance, staking state, smart-account flag, and bech32m encoding for an address. Accepts either a 40-char hex address, a bech32m address (`tudg1…` / `udg1…`), or a registered `@name`.
 
 ```bash
-curl http://localhost:10333/balance/a1b2c3d4e5f6...
+curl http://localhost:10333/balance/a1b2c3d4e5f60011223344556677889900aabbcc
 ```
 
 ```json
 {
-  "address": "a1b2c3d4e5f6...",
+  "address": "a1b2c3d4e5f60011223344556677889900aabbcc",
+  "address_bech32": "tudg159j0p84uhcqq3yv6x32kvau7yeq42e77m4wcyg",
   "balance": 500000000000,
   "balance_udag": 5000.0,
   "nonce": 7,
-  "staked": 1000000000000,
-  "staked_udag": 10000.0,
-  "delegated": 0,
-  "delegated_udag": 0.0
+  "staked": 200000000000,
+  "staked_udag": 2000.0,
+  "is_council_member": false,
+  "is_smart_account": false
 }
 ```
+
+Addresses are 20 bytes (40 hex chars). The minimum active stake is 2,000 UDAG = 200,000,000,000 sats — anything below that counts as unstaked even if the field is non-zero.
 
 ### GET /health
 
@@ -227,9 +230,11 @@ curl -X POST http://localhost:10333/stake \
   -H "Content-Type: application/json" \
   -d '{
     "secret_key": "9f8e7d6c...",
-    "amount": 1000000000000
+    "amount": 200000000000
   }'
 ```
+
+`amount` is in sats. 200,000,000,000 sats = 2,000 UDAG, the protocol minimum (`MIN_STAKE_SATS`). Any value at or above this is accepted.
 
 ### POST /unstake
 
@@ -254,10 +259,10 @@ curl http://localhost:10333/stake/a1b2c3d4...
 ```json
 {
   "address": "a1b2c3d4...",
-  "staked_amount": 1000000000000,
-  "staked_udag": 10000.0,
+  "staked_amount": 200000000000,
+  "staked_udag": 2000.0,
   "commission_percent": 10,
-  "effective_stake": 1500000000000,
+  "effective_stake": 500000000000,
   "delegator_count": 3,
   "is_active_validator": true
 }

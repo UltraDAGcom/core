@@ -69,8 +69,8 @@ The number isn't arbitrary.
 
 - **BFT threshold:** With 8 validators, the BFT quorum is ceil(2x8/3) = 6. An attacker needs to compromise 6 of 8 validators to control governance. At 4 validators, they only need 3.
 - **Independence:** 8 validators means at least 8 independent staking entities with skin in the game. Combined with the 10% quorum requirement on total votable stake, this prevents any single entity from unilaterally passing proposals.
-- **Achievable:** The minimum stake is 10,000 UDAG. At 1 UDAG/round emission with 5 validators, the network produces enough UDAG to support 8+ validators within the first few months.
-- **Conservative:** For a network targeting machine-to-machine micropayments with a 21-validator cap, 8 represents meaningful decentralization (38% of max capacity) without being unreachable at launch.
+- **Achievable:** The minimum stake is 2,000 UDAG. At 1 UDAG/round emission with 5 validators, the network produces enough UDAG to support 8+ validators within the first few months.
+- **Conservative:** For a network targeting machine-to-machine micropayments with a 100-validator cap, 8 represents meaningful early decentralization — the initial bar for DAO activation, not the ceiling.
 
 ## Why Not a Timer?
 

@@ -66,7 +66,7 @@ curl -X POST http://localhost:10333/faucet -H "Content-Type: application/json" -
 }
 ```
 
-You need at least 10,000 UDAG to stake. Request the faucet multiple times if needed (there may be rate limits).
+You need at least **2,000 UDAG** to stake (the protocol minimum). The example below uses `--auto-stake 10000` to stake 10,000 UDAG — any amount at or above 2,000 works. Request the faucet multiple times if needed (there may be rate limits).
 
 Verify your balance:
 

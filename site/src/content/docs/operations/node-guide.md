@@ -92,7 +92,7 @@ Produces DAG vertices and participates in consensus:
 ultradag-node --port 9333 --validate --pkey YOUR_KEY_HEX
 ```
 
-Requirements: minimum 10,000 UDAG staked, stable network connectivity.
+Requirements: minimum 2,000 UDAG staked (the `MIN_STAKE_SATS` protocol constant), stable network connectivity.
 
 ### Observer
 

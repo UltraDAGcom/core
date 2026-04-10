@@ -5,6 +5,15 @@ category: "Tokenomics"
 summary: "Why UltraDAG's emission schedule changed from 50 UDAG/round to 1 UDAG/round, and the math behind credible tokenomics for a mainnet launch."
 ---
 
+> **Update (2026-04-10):** This post is a historical snapshot from 2026-03-14. Some numbers below are now outdated — specifically:
+> - **Genesis allocation**: mainnet has **zero pre-mine**, not 2,050,000 UDAG. Testnet still has a 1,000,000 UDAG faucet reserve (feature-gated), but nothing else.
+> - **Per-validator emission table**: the original version assumed a 21-validator cap; `MAX_ACTIVE_VALIDATORS` was later raised to 100, and the table below has been recomputed with the current 75% validator / 10% council / 10% treasury / 5% founder split.
+> - **"Year 5.7 supply cap"**: incorrect. With four halvings the schedule hits 93.75%, not 100%. The geometric series converges — full emission continues over tens of halvings until the per-round reward integer-shifts to zero (around halving 27, ~45 years at 5 s/round). The `block_reward()` function returns 0 for `halvings >= 64`.
+>
+> See [tokenomics/supply](/docs/tokenomics/supply) for the current canonical numbers.
+
+---
+
 UltraDAG inherited Bitcoin's halving constants: 50 coins per block, halving every 210,000 blocks, 21 million max supply. Bitcoin produces blocks every 10 minutes. UltraDAG produces rounds every 5 seconds.
 
 That difference -- a factor of 120 -- meant the entire emission schedule would complete in three months instead of a hundred years. We caught it before mainnet launch and redesigned the schedule from first principles.
@@ -79,15 +88,18 @@ Daily emission is 17,280 UDAG (one per round, 17,280 rounds per day). Split amon
 
 | Validators | UDAG/Day Each | UDAG/Year Each |
 |-----------|--------------|----------------|
-| 5 (testnet) | 3,456 | 1,262,304 |
-| 10 | 1,728 | 631,152 |
-| 21 (max active) | 823 | 300,549 |
+| 5 (current testnet) | 2,592 | 946,080 |
+| 10 | 1,296 | 473,040 |
+| 25 | 519 | 189,216 |
+| 100 (max active) | 130 | 47,304 |
 
-At 21 validators, each earns ~823 UDAG/day in the first halving period. This is meaningful enough to incentivize early validators while conservative enough that the schedule doesn't look like an exit scam.
+*Math: 86,400 s/day ÷ 5 s/round = 17,280 rounds/day. Validator pool per day = 17,280 × 0.75 = 12,960 UDAG (the remaining 25% splits 10% council, 10% treasury, 5% founder). Divide equally by N validators for per-node income, before any delegation effects or commission. At the full 100-validator cap each node earns ~130 UDAG/day in the first halving period — meaningful enough to incentivize early validators while conservative enough that the schedule doesn't look like an exit scam.*
+
+> **Historical note:** this table was updated on 2026-04-10 when the active validator cap was raised from 21 to 100 (`MAX_ACTIVE_VALIDATORS = 100`). Earlier versions of this post showed the 21-validator row as the max case.
 
 ## Why Not Exactly Bitcoin's Timeline?
 
-Bitcoin's 4-year halvings at 5-second rounds would require an initial reward of ~0.033 UDAG per round. That's too small to meaningfully reward early validators, especially when split 21 ways. The daily emission per validator would be ~27 UDAG -- less than a single faucet request.
+Bitcoin's 4-year halvings at 5-second rounds would require an initial reward of ~0.033 UDAG per round. That's too small to meaningfully reward early validators, especially when split across up to 100 active nodes. The daily emission per validator would be a fraction of a UDAG — not enough to matter.
 
 1.66-year halvings hit the sweet spot: aggressive enough to reward early participants, conservative enough that the schedule extends over 5+ years of meaningful emission. The supply cap provides a hard ceiling regardless.
 

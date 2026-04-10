@@ -128,7 +128,7 @@ ParameterChange proposals require at least **8 active validators** to execute. T
 
 ### How does the Council of 21 work?
 
-The council has 21 seats across 6 categories (Technical, Business, Legal, Academic, Community, Foundation). Each member has exactly 1 vote regardless of stake. Seats are granted and revoked through `CouncilMembership` proposals.
+The council has 21 seats across 7 categories: Engineering (5), Community (4), Growth (3), Operations (3), Legal (2), Research (2), Security (2). Each member has exactly 1 vote regardless of stake or category. Seats are granted and revoked through `CouncilMembership` proposals. Query live seat availability via `GET /council`.
 
 ---
 
@@ -136,7 +136,7 @@ The council has 21 seats across 6 categories (Technical, Business, Legal, Academ
 
 ### How fast is finality?
 
-**2 rounds**, approximately **10 seconds** at the default 5-second round time. This is deterministic BFT finality, not probabilistic — once finalized, a transaction cannot be reversed.
+**2-3 rounds**, approximately **10-15 seconds** at the default 5-second round time. The descendant-coverage rule finalizes a vertex as soon as ⌈2n/3⌉ distinct validators build on it, and parent-finality recursion can push that up to 3 rounds in the worst case. Deterministic BFT finality, not probabilistic — once finalized, a transaction cannot be reversed.
 
 ### What happens to old data?
 
@@ -190,7 +190,7 @@ Common causes:
 - **Verify nonce**: `curl http://localhost:10333/balance/YOUR_ADDRESS` — nonce must match
 - **Check fee**: minimum 10,000 sats for transfers and governance transactions
 - **Check mempool**: `curl http://localhost:10333/mempool` — is your tx in the pool?
-- **Wait for finality**: transactions are finalized in ~10 seconds under normal conditions
+- **Wait for finality**: transactions are finalized in ~10-15 seconds under normal conditions
 
 ### Balance not updating after transaction
 

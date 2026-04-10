@@ -131,7 +131,7 @@ NETWORK_ID || b"stake" || from(32) || amount(8 LE) || nonce(8 LE)
 
 **Validation rules:**
 
-- `amount >= MIN_STAKE_SATS` (10,000 UDAG = 1,000,000,000,000 sats)
+- `amount >= MIN_STAKE_SATS` (2,000 UDAG = 200,000,000,000 sats)
 - `balance >= amount`
 - Fee is zero (fee-exempt)
 

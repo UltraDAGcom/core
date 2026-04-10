@@ -15,14 +15,14 @@ A comprehensive operational guide for UltraDAG validators covering key managemen
 
 | Requirement | Minimum |
 |------------|---------|
-| Stake | 10,000 UDAG |
+| Stake | 2,000 UDAG |
 | CPU | 1 core |
-| RAM | 128 MB |
-| Disk | 1 GB (with pruning) |
+| RAM | 256 MB |
+| Disk | 1 GB (with default 1000-round pruning) |
 | Network | Stable internet, low latency to peers |
 | Uptime | 99%+ recommended |
 
-<div class="callout callout-info"><div class="callout-title">Lightweight by design</div>UltraDAG is purpose-built for constrained hardware. A $5/month VPS or Raspberry Pi 4 can run a full validator.</div>
+<div class="callout callout-info"><div class="callout-title">Lightweight by design</div>UltraDAG is purpose-built for constrained hardware. A $5/month VPS or a <strong>$15 Raspberry Pi Zero 2 W</strong> can run a full validator. See the <a href="/docs/getting-started/raspberry-pi">Raspberry Pi bringup guide</a> for a complete walkthrough.</div>
 
 ---
 
@@ -60,13 +60,13 @@ chown ultradag:ultradag /etc/ultradag/validator.key
 
 ## Staking Lifecycle
 
-*The staking lifecycle progresses through the following states: starting from Unstaked, a validator stakes at least 10,000 UDAG to become Staked. At the next epoch boundary, if ranked in the top 21 they become Active (otherwise Passive). Active validators run the validator loop and earn rewards each round. Equivocation causes slashing (50% burned). Both Active and Passive validators can submit Unstake to enter the Unstaking state, which completes after a 2,016-round cooldown back to Unstaked.*
+*The staking lifecycle progresses through the following states: starting from Unstaked, a validator stakes at least 2,000 UDAG to become Staked. At the next epoch boundary, if ranked in the top 100 by effective stake (own + delegated) they become Active (otherwise Passive). Active validators run the validator loop and earn rewards each round. Equivocation causes slashing (50% burned). Both Active and Passive validators can submit Unstake to enter the Unstaking state, which completes after a 2,016-round cooldown back to Unstaked.*
 
 ### Step-by-Step
 
-1. **Fund your address**: acquire at least 10,000 UDAG
+1. **Fund your address**: acquire at least 2,000 UDAG
 2. **Stake**: submit a `Stake` transaction
-3. **Wait for epoch boundary**: active set recalculated every 210,000 rounds
+3. **Wait for epoch boundary**: active set recalculated every 210,000 rounds (~12 days at 5s/round)
 4. **Produce vertices**: your node produces one vertex per round
 5. **Earn rewards**: proportional to your effective stake
 6. **Unstake (optional)**: submit `Unstake`, wait 2,016 rounds for cooldown
@@ -95,11 +95,13 @@ $$
 
 ### Passive Staker
 
-If ranked outside top 21, you earn 20% of the active rate:
+If ranked outside the top 100 active set, you earn 50% of the active rate:
 
 $$
-\text{passive\_reward} = \text{active\_equivalent} \times 0.20
+\text{passive\_reward} = \text{active\_equivalent} \times 0.50
 $$
+
+This is the `OBSERVER_REWARD_PERCENT` constant — raised from 20% to 50% to give small validators a meaningful reward while they accumulate enough stake (or delegations) to enter the active set.
 
 ### Commission from Delegations
 
@@ -152,7 +154,7 @@ The only slashing condition is **equivocation**: producing two different vertice
 |--------|--------|
 | Stake burn | 50% of your staked amount (governable 10-100%) |
 | Delegation cascade | All delegators also lose 50% |
-| Active set | Removed if stake falls below 10,000 UDAG |
+| Active set | Removed if stake falls below 2,000 UDAG (minimum) |
 | Supply effect | Slashed amount is burned (deflationary) |
 | Detection | Automatic, deterministic, no appeals |
 

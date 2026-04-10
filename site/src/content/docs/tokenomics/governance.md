@@ -25,19 +25,20 @@ Traditional blockchain governance suffers from plutocratic capture: whoever hold
 
 ## Council Structure
 
-The Council has **21 seats** divided across six categories:
+The Council has **21 seats** divided across seven categories:
 
 | Category | Seats | Purpose |
 |----------|-------|---------|
-| Technical | 7 | Protocol development, security research, cryptography |
-| Business | 4 | Partnerships, ecosystem growth, market strategy |
-| Legal | 3 | Regulatory compliance, legal framework |
-| Academic | 3 | Research, peer review, formal methods |
-| Community | 2 | User advocacy, documentation, outreach |
-| Foundation | 2 | Treasury oversight, organizational management |
+| Engineering | 5 | Protocol development, cryptography, consensus research |
+| Community | 4 | User advocacy, documentation, outreach |
+| Growth | 3 | Partnerships, ecosystem development, market strategy |
+| Operations | 3 | Infrastructure, deployment, release management |
+| Legal | 2 | Regulatory compliance, legal framework |
+| Research | 2 | Formal methods, peer review, academic outreach |
+| Security | 2 | Security audits, incident response, bug bounty |
 | **Total** | **21** | |
 
-Each category has a **fixed maximum** enforced by the protocol. A `CouncilMembership` proposal to add a Technical member will be rejected if all 7 Technical seats are already occupied.
+Each category has a **fixed maximum** enforced by the protocol. A `CouncilMembership` proposal to add an Engineering member will be rejected if all 5 Engineering seats are already occupied. You can query live seat availability via `GET /council` on any node.
 
 ---
 
@@ -134,14 +135,14 @@ The following 10 parameters can be modified via `ParameterChange` proposals:
 
 | Parameter | Default | Min | Max | Description |
 |-----------|---------|-----|-----|-------------|
-| `min_fee_sats` | 10,000 | 1 | 100,000,000 | Minimum transaction fee |
-| `min_stake_to_propose` | 10,000 UDAG | 1 sat | 1,000,000 UDAG | Minimum stake for proposal creation |
-| `quorum_numerator` | 10 | 5 | 100 | Quorum percentage |
+| `min_fee_sats` | 10,000 | 1 | 100,000,000 | Minimum transaction fee (sats) |
+| `min_stake_to_propose` | 2,000 UDAG | 1 sat | 1,000,000 UDAG | Minimum stake for proposal creation |
+| `quorum_numerator` | 10 | 10 | 50 | Quorum percentage (of council members) |
 | `approval_numerator` | 66 | 51 | 100 | Supermajority percentage |
 | `voting_period_rounds` | 120,960 | 1,000 | 1,000,000 | Voting period length |
 | `execution_delay_rounds` | 2,016 | 2,016 | 100,000 | Delay before execution |
 | `max_active_proposals` | 20 | 1 | 100 | Concurrent proposal limit |
-| `observer_reward_percent` | 20 | 0 | 100 | Passive staking reward rate |
+| `observer_reward_percent` | 50 | 0 | 100 | Passive staking reward rate (raised from 20%) |
 | `council_emission_percent` | 10 | 0 | 30 | Council's share of emission |
 | `slash_percent` | 50 | 10 | 100 | Equivocation slash severity |
 
@@ -220,13 +221,13 @@ curl http://localhost:10333/governance/config
 ```json
 {
   "min_fee_sats": 10000,
-  "min_stake_to_propose": 1000000000000,
+  "min_stake_to_propose": 200000000000,
   "quorum_numerator": 10,
   "approval_numerator": 66,
   "voting_period_rounds": 120960,
   "execution_delay_rounds": 2016,
   "max_active_proposals": 20,
-  "observer_reward_percent": 20,
+  "observer_reward_percent": 50,
   "council_emission_percent": 10,
   "slash_percent": 50
 }

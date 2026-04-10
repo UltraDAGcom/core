@@ -86,7 +86,7 @@ The fundamental unit of the DAG. Each vertex contains:
 - `parent_hashes: Vec<[u8; 32]>`: parent vertex hashes (up to `MAX_PARENTS=64`)
 - `block: Block`: contains the coinbase transaction and a list of user transactions
 - `signature: Signature`: Ed25519 signature over the vertex content
-- `topo_level: u64`: topological level (computed on insert, not persisted)
+- `topo_level: u64`: topological level (computed locally on insert, `#[serde(skip)]`, NOT used in ordering — kept only as a diagnostic hint)
 
 The vertex hash is not stored as a field — it is computed via `DagVertex::hash()` using Blake3.
 
