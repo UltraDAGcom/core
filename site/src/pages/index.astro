@@ -284,7 +284,7 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
     <div class="section-inner">
       <p class="section-tag reveal">Why UltraDAG</p>
       <h2 class="reveal">Built for<br /><em>machines.</em></h2>
-      <p class="section-lead reveal">Small enough to run a full validator on a $15 Raspberry Pi Zero 2 W. Simple enough that a $3 ESP32 can hold the key and sign transactions. No VM, no smart contracts, no pre-mine — the minimum viable chain for machine-to-machine payments.</p>
+      <p class="section-lead reveal">Small enough to run a full validator on a $15 Raspberry Pi Zero 2 W. Simple enough that a $3 ESP32 can hold the key and sign transactions. No VM, no smart contracts — the minimum viable chain for machine-to-machine payments.</p>
 
       <div class="features-grid">
         <div class="feature reveal">
@@ -341,7 +341,7 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
     <div class="section-inner">
       <p class="section-tag reveal">Tokenomics</p>
       <h2 class="reveal">Bitcoin-model<br /><em>supply.</em></h2>
-      <p class="section-lead reveal">Fixed supply, halving schedule, 100% emission-based distribution. No pre-mine. No VC funding. No presale.</p>
+      <p class="section-lead reveal">Fixed 21M supply, halving schedule, 7-bucket distribution. 88% emitted through per-round rewards; a single 12% IDO pre-mine bootstraps the private round and Uniswap liquidity.</p>
 
       <div class="token-grid">
         <div class="token-card reveal">
@@ -357,8 +357,8 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
           <div class="token-label">Halving interval (~1.66yr)</div>
         </div>
         <div class="token-card reveal">
-          <div class="token-value">0</div>
-          <div class="token-label">Genesis pre-mine</div>
+          <div class="token-value">2.52M</div>
+          <div class="token-label">IDO genesis pre-mine</div>
         </div>
         <div class="token-card reveal reveal-delay-1">
           <div class="token-value">2,000</div>
@@ -378,14 +378,14 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
         </div>
       </div>
 
-      <!-- Emission Model -->
+      <!-- 7-Bucket Distribution -->
       <div class="emission-disclosure">
-        <div class="emission-tag">Emission Model — Zero Pre-Mine</div>
+        <div class="emission-tag">7-Bucket Distribution</div>
         <p class="emission-text">
-          <strong>Every UDAG is earned through emission.</strong> No genesis allocation. No VC funding. No presale. The founder earns the same way validators do — by running the network.
+          <strong>21M UDAG split across 7 buckets.</strong> Only the IDO distributor (12%) is pre-mined at genesis to fund private-round buyers and seed Uniswap liquidity. All other buckets start at zero and accumulate through per-round protocol emission.
         </p>
         <p class="emission-text-bottom">
-          <strong>Per-round emission split:</strong> 75% to validators &amp; stakers (proportional to stake), 10% to DAO treasury (council-controlled), 10% to Council of 21 members, 5% to founder. All shares are governable — the council can adjust percentages via governance proposals.
+          <strong>Distribution:</strong> 44% validators &amp; stakers (9.24M), 16% DAO treasury (3.36M), 12% IDO / Liquidity <em>(pre-mine)</em> (2.52M), 10% Council of 21 (2.1M), 8% ecosystem (1.68M), 5% founder (1.05M), 5% reserve (1.05M). The six emission buckets sum to 88% of each round's block reward; the remaining 12% is never minted, offsetting the IDO pre-mine so the 21M cap holds exactly.
         </p>
       </div>
     </div>
@@ -434,7 +434,7 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
           <div class="comp-row">
             <div class="comp-name">IOTA 2.0 <span class="comp-badge slow">Heavy</span></div>
             <div class="comp-fail"><strong>Hornet node needs Pi 4+.</strong> Tangle finality is probabilistic confirmation counting, not deterministic BFT. ICO pre-mine baked into genesis.</div>
-            <div class="comp-win"><strong>Pi Zero 2 W full node</strong> ($15). Deterministic 3-round BFT finality. Zero pre-mine — every UDAG is emitted.</div>
+            <div class="comp-win"><strong>Pi Zero 2 W full node</strong> ($15). Deterministic 3-round BFT finality. 88% of supply distributed through per-round emission; only 12% pre-mined for IDO / liquidity.</div>
           </div>
           <div class="comp-row">
             <div class="comp-name">Helium <span class="comp-badge niche">Niche</span></div>

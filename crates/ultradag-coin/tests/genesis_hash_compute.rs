@@ -34,11 +34,11 @@ fn test_compute_genesis_hash() {
     eprintln!("Genesis total_supply = {} sats ({} UDAG)", state.total_supply(),
         state.total_supply() / ultradag_coin::SATS_PER_UDAG);
 
-    let dev_kp = ultradag_coin::constants::dev_keypair();
-    let dev_pubkey = dev_kp.verifying_key().to_bytes();
-    let dev_addr = dev_kp.address();
-    eprintln!("Founder pubkey  = {}", dev_pubkey.iter().map(|b| format!("{:02x}", b)).collect::<String>());
-    eprintln!("Founder address = {}", dev_addr.to_hex());
+    // Founder address is hardcoded in constants.rs as DEV_ADDRESS_BYTES.
+    // (We no longer derive it from dev_keypair() — the seed-derived keypair is
+    // a separate test-only signing identity.)
+    let dev_addr = ultradag_coin::constants::dev_address();
+    eprintln!("Founder address = {} ({})", dev_addr.to_hex(), dev_addr);
 }
 
 #[test]

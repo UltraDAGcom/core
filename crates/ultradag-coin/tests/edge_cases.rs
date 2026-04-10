@@ -85,11 +85,14 @@ fn coinbase_zero_fees() {
     let vertex = make_vertex(&sk, 0, 0, vec![], vec![]);
     state.apply_vertex(&vertex).unwrap();
 
-    // Emission split: 75% validator, 10% treasury, 5% founder (council unminted with no members)
-    let expected_balance = block_reward(0) * 75 / 100;
+    // April 2026 emission split: 44% validator + 10% council + 16% treasury
+    // + 5% founder + 8% ecosystem + 5% reserve = 88% of block_reward.
+    // With an empty council (StateEngine::new has no members), the 10% council
+    // share flows to treasury as residual, so 88% is still minted in total.
+    let br = block_reward(0);
+    let expected_balance = br * 44 / 100;
     assert_eq!(state.balance(&sk.address()), expected_balance);
-    // total_supply = validator + treasury + founder (council 10% not minted)
-    let expected_supply = block_reward(0) * 75 / 100 + block_reward(0) * 10 / 100 + block_reward(0) * 5 / 100;
+    let expected_supply = br * 88 / 100;
     assert_eq!(state.total_supply(), expected_supply);
 }
 
@@ -213,10 +216,14 @@ fn no_overflow_genesis_plus_rounds() {
     // 1000 rounds * INITIAL_REWARD_SATS = 1000 * 10^8 = 10^11
     // Total ~ 1.05 * 10^14, well within u64
     assert!(state.total_supply() < u64::MAX);
-    // Supply invariant: liquid balances + treasury == total_supply
+    // Supply invariant: all liquid balances (incl. new ecosystem/reserve/IDO
+    // addresses introduced in April 2026) + treasury == total_supply.
     let liquid_sum: u64 = (0..4).map(|i| state.balance(&validators[i].address())).sum::<u64>()
         + state.balance(&faucet_keypair().address())
-        + state.balance(&ultradag_coin::dev_address());
+        + state.balance(&ultradag_coin::dev_address())
+        + state.balance(&ultradag_coin::constants::ido_address())
+        + state.balance(&ultradag_coin::constants::ecosystem_address())
+        + state.balance(&ultradag_coin::constants::reserve_address());
     assert_eq!(liquid_sum + state.treasury_balance(), state.total_supply());
 }
 
@@ -238,11 +245,14 @@ fn fee_sum_computed_before_tx_application() {
     state.faucet_credit(&sender_sk.address(), send_amount + fee).unwrap();
 
     let tx = make_signed_tx(&sender_sk, receiver, send_amount, fee, 0);
-    let v1 = make_vertex_with_reward_pct(&proposer_sk, 1, 1, vec![tx], vec![], 75);
+    let v1 = make_vertex_with_reward_pct(&proposer_sk, 1, 1, vec![tx], vec![], 44);
     state.apply_vertex(&v1).unwrap();
 
-    // Proposer should get 75% of block_reward(0) + 75% of block_reward(1) + fee
-    let expected_proposer = block_reward(0) * 75 / 100 + block_reward(1) * 75 / 100 + fee;
+    // Proposer should get validator share (April 2026: 44%) of block_reward(0)
+    // + validator share of block_reward(1) + fee.
+    let val_pct = ultradag_coin::constants::VALIDATOR_EMISSION_PERCENT;
+    let expected_proposer = block_reward(0) * val_pct / 100
+        + block_reward(1) * val_pct / 100 + fee;
     assert_eq!(state.balance(&proposer_sk.address()), expected_proposer);
 }
 
@@ -564,22 +574,30 @@ fn faucet_depletion_graceful_error() {
     let faucet_addr = faucet_sk.address();
     let receiver = SecretKey::generate().address();
 
-    // Give proposer some balance for coinbase.
-    // new_with_genesis() bootstraps 1 council member so validators get 90% of block_reward.
-    let v0 = make_vertex_with_reward_pct(&proposer_sk, 0, 0, vec![], vec![], 90);
+    // Give proposer some balance for coinbase. April 2026 tokenomics: validators
+    // earn 44% of block_reward; the helper's reward_pct argument is for vertex
+    // construction, unrelated to actual emission math.
+    let v0 = make_vertex_with_reward_pct(&proposer_sk, 0, 0, vec![], vec![], 44);
     state.apply_vertex(&v0).unwrap();
 
     let faucet_balance = state.balance(&faucet_addr);
     assert_eq!(faucet_balance, FAUCET_PREFUND_SATS);
 
-    // Try to send more than faucet balance — tx is skipped gracefully
-    // in finalized vertices (nonce advanced, balance unchanged)
-    let tx = make_signed_tx(&faucet_sk, receiver, faucet_balance + 1, 0, 0);
-    let v1 = make_vertex_with_reward_pct(&proposer_sk, 1, 1, vec![tx], vec![], 90);
+    // Try to send more than faucet balance — tx is skipped gracefully in
+    // finalized vertices (nonce advanced, balance unchanged). Use a valid fee
+    // above MIN_FEE_SATS so the tx reaches the balance check (not the fee check).
+    let tx = make_signed_tx(
+        &faucet_sk,
+        receiver,
+        faucet_balance + 1,
+        ultradag_coin::constants::MIN_FEE_SATS,
+        0,
+    );
+    let v1 = make_vertex_with_reward_pct(&proposer_sk, 1, 1, vec![tx], vec![], 44);
     let result = state.apply_vertex(&v1);
     assert!(result.is_ok(), "Finalized vertex with bad tx should succeed (tx skipped)");
 
-    // Faucet balance unchanged (tx was skipped)
+    // Faucet balance unchanged (tx was skipped — insufficient balance).
     assert_eq!(state.balance(&faucet_addr), FAUCET_PREFUND_SATS);
     // Nonce was advanced despite skip
     assert_eq!(state.nonce(&faucet_addr), 1);
@@ -692,16 +710,20 @@ fn supply_invariant_genesis_plus_500_rounds() {
     let faucet_addr = faucet_keypair().address();
     let dev_addr = ultradag_coin::dev_address();
 
-    // new_with_genesis() bootstraps 1 council member (dev_addr) at 10% emission,
-    // so validator coinbase = 90% of block_reward.
+    // April 2026 tokenomics: validator coinbase is always 0 (fees only).
+    // Rewards distributed via distribute_round_rewards during apply_vertex.
     for round in 0u64..500 {
         let sk = &validators[(round % 4) as usize];
-        let vertex = make_vertex_with_reward_pct(sk, round, round, vec![], vec![], 90);
+        let vertex = make_vertex_with_reward_pct(sk, round, round, vec![], vec![], 44);
         state.apply_vertex(&vertex).unwrap();
     }
 
-    // Verify supply invariant: sum(liquid balances) + treasury == total_supply
-    let mut sum = state.balance(&faucet_addr) + state.balance(&dev_addr);
+    // Verify supply invariant: sum(liquid balances including new ecosystem/
+    // reserve/IDO addresses) + treasury == total_supply.
+    let mut sum = state.balance(&faucet_addr) + state.balance(&dev_addr)
+        + state.balance(&ultradag_coin::constants::ido_address())
+        + state.balance(&ultradag_coin::constants::ecosystem_address())
+        + state.balance(&ultradag_coin::constants::reserve_address());
     for sk in &validators {
         sum += state.balance(&sk.address());
     }
@@ -709,11 +731,27 @@ fn supply_invariant_genesis_plus_500_rounds() {
 }
 
 #[test]
-fn no_premine_at_genesis() {
+fn only_ido_premine_at_genesis() {
     let state = StateEngine::new_with_genesis();
     let dev_addr = ultradag_coin::dev_address();
-    // Under emission-only model: founder starts with 0, earns through emission
-    assert_eq!(state.balance(&dev_addr), 0, "Founder should have 0 at genesis (emission-only)");
-    // Treasury also starts at 0
-    assert_eq!(state.treasury_balance(), 0, "Treasury should be 0 at genesis (emission-only)");
+    // April 2026: founder/treasury/council/ecosystem/reserve all start at 0 and
+    // earn through per-round emission. Only the IDO distributor is pre-mined.
+    assert_eq!(state.balance(&dev_addr), 0, "Founder should have 0 at genesis");
+    assert_eq!(state.treasury_balance(), 0, "Treasury should be 0 at genesis");
+    assert_eq!(
+        state.balance(&ultradag_coin::constants::ecosystem_address()),
+        0,
+        "Ecosystem address should be 0 at genesis"
+    );
+    assert_eq!(
+        state.balance(&ultradag_coin::constants::reserve_address()),
+        0,
+        "Reserve address should be 0 at genesis"
+    );
+    // IDO distributor is pre-mined with the full 12% bucket (2.52M UDAG).
+    assert_eq!(
+        state.balance(&ultradag_coin::constants::ido_address()),
+        ultradag_coin::constants::IDO_GENESIS_PREMINE_SATS,
+        "IDO distributor should receive the genesis pre-mine"
+    );
 }

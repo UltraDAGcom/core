@@ -33,6 +33,15 @@ pub struct GovernanceParams {
     /// Founder emission share percentage (param: "founder_emission_percent")
     #[serde(default = "default_founder_emission")]
     pub founder_emission_percent: u64,
+    /// Validator emission share percentage (param: "validator_emission_percent")
+    #[serde(default = "default_validator_emission")]
+    pub validator_emission_percent: u64,
+    /// Ecosystem emission share percentage (param: "ecosystem_emission_percent")
+    #[serde(default = "default_ecosystem_emission")]
+    pub ecosystem_emission_percent: u64,
+    /// Reserve emission share percentage (param: "reserve_emission_percent")
+    #[serde(default = "default_reserve_emission")]
+    pub reserve_emission_percent: u64,
 }
 
 fn default_council_emission() -> u64 {
@@ -51,6 +60,18 @@ fn default_founder_emission() -> u64 {
     FOUNDER_EMISSION_PERCENT
 }
 
+fn default_validator_emission() -> u64 {
+    VALIDATOR_EMISSION_PERCENT
+}
+
+fn default_ecosystem_emission() -> u64 {
+    ECOSYSTEM_EMISSION_PERCENT
+}
+
+fn default_reserve_emission() -> u64 {
+    RESERVE_EMISSION_PERCENT
+}
+
 impl Default for GovernanceParams {
     fn default() -> Self {
         Self {
@@ -66,6 +87,9 @@ impl Default for GovernanceParams {
             slash_percent: SLASH_PERCENTAGE,
             treasury_emission_percent: TREASURY_EMISSION_PERCENT,
             founder_emission_percent: FOUNDER_EMISSION_PERCENT,
+            validator_emission_percent: VALIDATOR_EMISSION_PERCENT,
+            ecosystem_emission_percent: ECOSYSTEM_EMISSION_PERCENT,
+            reserve_emission_percent: RESERVE_EMISSION_PERCENT,
         }
     }
 }
@@ -83,6 +107,9 @@ impl GovernanceParams {
         let old_council = self.council_emission_percent;
         let old_treasury = self.treasury_emission_percent;
         let old_founder = self.founder_emission_percent;
+        let old_validator = self.validator_emission_percent;
+        let old_ecosystem = self.ecosystem_emission_percent;
+        let old_reserve = self.reserve_emission_percent;
 
         match param {
             "min_fee_sats" => {
@@ -188,10 +215,9 @@ impl GovernanceParams {
             }
             "treasury_emission_percent" => {
                 // Floor: 0% — treasury gets nothing (disabled)
-                // Ceiling: 20% — prevents treasury from capturing too much emission
-                // Combined with council (10%) + founder (5%) leaves at least 65% for validators.
-                if value > 20 {
-                    return Err("treasury_emission_percent must be 0-20".to_string());
+                // Ceiling: 25% — prevents treasury from capturing too much emission
+                if value > 25 {
+                    return Err("treasury_emission_percent must be 0-25".to_string());
                 }
                 self.treasury_emission_percent = value;
             }
@@ -203,24 +229,60 @@ impl GovernanceParams {
                 }
                 self.founder_emission_percent = value;
             }
+            "validator_emission_percent" => {
+                // Floor: 30% — validators must always earn a meaningful share or
+                // staking incentives collapse and the network loses security.
+                // Ceiling: 80% — prevents governance from starving other buckets entirely.
+                if !(30..=80).contains(&value) {
+                    return Err("validator_emission_percent must be 30-80".to_string());
+                }
+                self.validator_emission_percent = value;
+            }
+            "ecosystem_emission_percent" => {
+                // Floor: 0% — can be sunset once bootstrap is complete.
+                // Ceiling: 20% — prevents ecosystem multisig from capturing too much.
+                if value > 20 {
+                    return Err("ecosystem_emission_percent must be 0-20".to_string());
+                }
+                self.ecosystem_emission_percent = value;
+            }
+            "reserve_emission_percent" => {
+                // Floor: 0% — can be sunset.
+                // Ceiling: 15% — strategic reserve shouldn't dominate emission.
+                if value > 15 {
+                    return Err("reserve_emission_percent must be 0-15".to_string());
+                }
+                self.reserve_emission_percent = value;
+            }
             _ => {
                 return Err(format!("Unknown governable parameter: '{}'", param));
             }
         }
 
-        // Cross-parameter validation: total non-validator emission cannot exceed 60%
-        let total_non_validator = self.council_emission_percent
+        // Cross-parameter validation: the six emission buckets must sum to at
+        // most 100% of the nominal block reward. The default configuration sums
+        // to 88% — the remaining 12% is uncreated, matching the 12% IDO genesis
+        // pre-mine so total supply converges to exactly 21M UDAG. Governance can
+        // tune individual buckets but the sum is hard-capped at 100 to prevent
+        // over-minting beyond the supply curve.
+        let total_emission = self.validator_emission_percent
+            .saturating_add(self.council_emission_percent)
             .saturating_add(self.treasury_emission_percent)
-            .saturating_add(self.founder_emission_percent);
-        if total_non_validator > 60 {
+            .saturating_add(self.founder_emission_percent)
+            .saturating_add(self.ecosystem_emission_percent)
+            .saturating_add(self.reserve_emission_percent);
+        if total_emission > 100 {
             // Revert emission params to pre-mutation state
             self.council_emission_percent = old_council;
             self.treasury_emission_percent = old_treasury;
             self.founder_emission_percent = old_founder;
+            self.validator_emission_percent = old_validator;
+            self.ecosystem_emission_percent = old_ecosystem;
+            self.reserve_emission_percent = old_reserve;
             return Err(format!(
-                "combined emission shares would be {}% (council + treasury + founder) — \
-                 cannot exceed 60%, at least 40% must go to validators",
-                total_non_validator,
+                "combined emission shares would be {}% (validator + council + treasury \
+                 + founder + ecosystem + reserve) — cannot exceed 100%",
+                total_emission,
             ));
         }
 
@@ -242,6 +304,9 @@ impl GovernanceParams {
             "slash_percent",
             "treasury_emission_percent",
             "founder_emission_percent",
+            "validator_emission_percent",
+            "ecosystem_emission_percent",
+            "reserve_emission_percent",
         ]
     }
 }

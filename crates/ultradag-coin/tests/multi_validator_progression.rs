@@ -379,7 +379,8 @@ fn test_state_correctness_with_transactions() {
     // Emission split: 10% council (no members → unminted), 10% treasury, 5% founder, 75% validators.
     // Canonical remainder (pool % n) goes to first address in sorted order.
     let full_reward = ultradag_coin::constants::block_reward(1);
-    let reward = full_reward * 75 / 100; // validator pool = 75%
+    // April 2026 tokenomics: validators get 44% of block_reward as a pool.
+    let reward = full_reward * ultradag_coin::constants::VALIDATOR_EMISSION_PERCENT / 100;
     let per_producer = reward / num_v;
     let remainder = reward.saturating_sub(per_producer.saturating_mul(num_v));
     let mut sorted_addrs = vec![addr_a, addr_b, addr_c];
@@ -397,11 +398,19 @@ fn test_state_correctness_with_transactions() {
     }
 
     let supply_after_r1 = state.total_supply();
-    // total_supply = validator pool (75%) + treasury (10%) + founder (5%) [council unminted]
-    let treasury_share = full_reward * 10 / 100;
-    let founder_share = full_reward * 5 / 100;
-    assert_eq!(supply_after_r1, per_producer * num_v + remainder + treasury_share + founder_share,
-        "Total supply should be sum of all emission shares including remainder");
+    // total_supply = validator (44%) + treasury (16%) + founder (5%) + ecosystem (8%)
+    // + reserve (5%) + council residual (10% — empty council). Sum = 88% of block_reward.
+    let treasury_share = full_reward * ultradag_coin::constants::TREASURY_EMISSION_PERCENT / 100;
+    let founder_share = full_reward * ultradag_coin::constants::FOUNDER_EMISSION_PERCENT / 100;
+    let ecosystem_share = full_reward * ultradag_coin::constants::ECOSYSTEM_EMISSION_PERCENT / 100;
+    let reserve_share = full_reward * ultradag_coin::constants::RESERVE_EMISSION_PERCENT / 100;
+    let council_residual = full_reward * ultradag_coin::constants::COUNCIL_EMISSION_PERCENT / 100;
+    assert_eq!(
+        supply_after_r1,
+        per_producer * num_v + remainder + treasury_share + founder_share
+            + ecosystem_share + reserve_share + council_residual,
+        "Total supply should be sum of all emission shares including remainder"
+    );
     
     // Round 3: Account A sends 1000 to Account B
     let tx1 = make_signed_tx(&sk_a, addr_b, 1000, 10, 0);
@@ -455,10 +464,14 @@ fn test_state_correctness_with_transactions() {
     assert_eq!(state.balance(&addr_b), expected_b, "Account B balance incorrect");
     assert_eq!(state.balance(&addr_c), expected_c, "Account C balance incorrect");
 
-    // Verify total supply: 3 rounds × (validator_pool + treasury + founder)
-    // Council has no members so council share is not minted.
+    // Verify total supply: rounds × sum of all bucket shares. With an empty
+    // council, the council share still mints (routed to treasury as residual),
+    // so the total matches the full 88% of block_reward per round.
     let final_supply = state.total_supply();
-    let expected_supply = (per_producer * num_v + remainder + treasury_share + founder_share) * rounds_applied;
+    let per_round_emission = per_producer * num_v + remainder
+        + treasury_share + founder_share
+        + ecosystem_share + reserve_share + council_residual;
+    let expected_supply = per_round_emission * rounds_applied;
     assert_eq!(final_supply, expected_supply, "Total supply should be conserved");
     
     println!("State correctness verified!");

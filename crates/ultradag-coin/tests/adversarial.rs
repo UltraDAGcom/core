@@ -323,10 +323,10 @@ fn b1_faucet_genesis_prefund() {
     let faucet_addr = faucet_keypair().address();
 
     assert_eq!(state.balance(&faucet_addr), FAUCET_PREFUND_SATS);
-    // Genesis total_supply = faucet only (no pre-mine under emission-only model)
+    // Genesis total_supply = faucet + IDO pre-mine (April 2026 tokenomics).
     assert_eq!(
         state.total_supply(),
-        FAUCET_PREFUND_SATS
+        FAUCET_PREFUND_SATS + ultradag_coin::constants::IDO_GENESIS_PREMINE_SATS
     );
 }
 

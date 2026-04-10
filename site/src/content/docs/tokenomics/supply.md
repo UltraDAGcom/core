@@ -1,13 +1,13 @@
 ---
 title: "Supply & Emission"
-description: "Fixed 21M supply with Bitcoin-style halving, per-round emission, and deflationary slashing"
+description: "Fixed 21M supply, 7-bucket distribution, Bitcoin-style halving, deflationary slashing"
 order: 1
 section: "tokenomics"
 ---
 
 # Supply & Emission
 
-UltraDAG has a fixed maximum supply of 21 million UDAG with a Bitcoin-style halving schedule. Zero pre-mine — all tokens distributed through per-round emission. This page covers the emission curve, distribution model, and supply enforcement.
+UltraDAG has a fixed maximum supply of 21 million UDAG. The distribution model uses **7 buckets**: 6 are distributed through per-round protocol emission (validators, council, treasury, founder, ecosystem, reserve), and 1 is a genesis pre-mine (IDO / liquidity) to bootstrap the private round and Uniswap liquidity. This page covers the emission curve, the bucket split, and supply enforcement.
 
 ---
 
@@ -53,80 +53,89 @@ $$
 
 ### Full Emission Timeline
 
-The emission curve follows a geometric series. Over 64 halvings (~106 years), the total minted supply asymptotically approaches 21,000,000 UDAG:
+The nominal emission curve follows a geometric series summing to 21M UDAG over 64 halvings (~106 years). Because each round only mints 88% of the nominal reward (the six emission buckets — see below), the **actual protocol-emitted supply** converges to **18.48M UDAG**, and the remaining **2.52M UDAG** is the IDO genesis pre-mine — together totalling exactly 21M.
 
 ```
-Era  1: +10,500,000.00 UDAG  (50.00% of max)
-Era  2:  +5,250,000.00 UDAG  (75.00% of max)
-Era  3:  +2,625,000.00 UDAG  (87.50% of max)
-Era  4:  +1,312,500.00 UDAG  (93.75% of max)
-Era  5:    +656,250.00 UDAG  (96.88% of max)
-...
-Era 64:          < 1 sat      (100.00% of max)
+Nominal curve:
+  Era  1: +10,500,000.00 UDAG  (50.00% of max)
+  Era  2:  +5,250,000.00 UDAG  (75.00% of max)
+  Era  3:  +2,625,000.00 UDAG  (87.50% of max)
+  Era  4:  +1,312,500.00 UDAG  (93.75% of max)
+  ...
+  Era 64:          < 1 sat     (100.00% of max)
+
+Actual per round:
+  0.88 × nominal  →  emitted to the 6 buckets
+  0.12 × nominal  →  offset by 2.52M IDO pre-mine at genesis
 ```
 
 <div class="callout callout-info"><div class="callout-title">Reward precision</div>When the halved reward drops below 1 sat (the smallest representable unit), the reward becomes 0 and emission stops permanently. This occurs after approximately 64 halvings.</div>
 
 ---
 
-## Emission-Only Genesis (Zero Pre-Mine)
+## Genesis Allocation & Emission Buckets
 
-**No genesis allocations.** Total supply starts at 0 on mainnet. Every UDAG enters circulation through per-round protocol emission:
+| Bucket | Share | UDAG | Delivery |
+|---|---|---|---|
+| **Validators / Staking** | 44% | 9,240,000 | Per-round emission, proportional to effective stake |
+| **Council of 21** | 10% | 2,100,000 | Per-round emission, equal split among seated members |
+| **DAO Treasury** | 16% | 3,360,000 | Per-round emission, spent via `TreasurySpend` proposals |
+| **Founder** | 5% | 1,050,000 | Per-round emission, liquid balance |
+| **Ecosystem** | 8% | 1,680,000 | Per-round emission to ecosystem multisig (airdrops, grants) |
+| **Reserve** | 5% | 1,050,000 | Per-round emission to reserve multisig (strategic use) |
+| **IDO / Liquidity** | 12% | 2,520,000 | **Genesis pre-mine** to IDO distributor (private round + Uniswap seed) |
+| **Total** | 100% | 21,000,000 | |
 
-| Recipient | Share | Mechanism |
-|-----------|-------|-----------|
-| Validators & Stakers | 75% | Proportional to effective stake (own + delegated) |
-| DAO Treasury | 10% | Governed by Council proposals (TreasurySpend) |
-| Council of 21 | 10% | Equal split among seated council members |
-| Founder | 5% | Protocol development, earned through emission |
+<div class="callout callout-note"><div class="callout-title">Only one pre-mine</div>Of all seven buckets, only the IDO distributor is pre-minted at genesis (2.52M UDAG). Every other bucket starts at zero and accumulates through per-round emission. This preserves the fair-launch spirit for protocol participants while still allowing a working day-1 market for private-round buyers and Uniswap liquidity providers.</div>
 
-<div class="callout callout-note"><div class="callout-title">Testnet faucet</div>Testnet builds include a 1,000,000 UDAG faucet reserve for testing. This is feature-gated and excluded from mainnet genesis. On mainnet, all participants (founder, treasury, council) start at 0 and earn through emission.</div>
+<div class="callout callout-note"><div class="callout-title">Testnet faucet</div>Testnet builds add a 1,000,000 UDAG faucet reserve for testing. This is feature-gated and excluded from mainnet genesis.</div>
 
 ---
 
 ## Reward Distribution
 
-Each round, newly minted UDAG is distributed as follows:
+Each round, the nominal block reward is split across the six emission buckets as follows:
 
 ### Distribution Flow
 
-*The round reward (1 UDAG) is split into a Validator Pool (75%), Council Pool (10%), DAO Treasury (10%), and Founder (5%). The Validator Pool is then distributed among active validators. The Council Pool is split equally among council seats.*
+*The nominal round reward is split: Validator Pool 44%, Council Pool 10%, DAO Treasury 16%, Founder 5%, Ecosystem 8%, Reserve 5% (sum = 88%). The Validator Pool is distributed proportionally to effective stake; the Council Pool is split equally among the 21 seats (unfilled seats flow to treasury); the other four go to fixed protocol addresses.*
 
 ### Validator Rewards
 
-The validator pool (75% of round reward) is distributed to validators:
+The validator pool (44% of the nominal round reward) is distributed to validators:
 
 - **Active validators** (producing vertices): receive rewards proportional to effective stake
-- **Passive stakers** (staked but not in top 100): receive 50% of what an equivalent active validator would earn
+- **Passive stakers** (staked but not in the top-100 active set): receive 50% of what an equivalent active validator would earn
 
 $$
-\text{validator\_reward}_i = \text{round\_reward} \times (1 - \frac{\text{council\_emission\_percent}}{100}) \times \frac{\text{effective\_stake}_i}{\sum \text{effective\_stakes}}
+\text{validator\_reward}_i = \text{round\_reward} \times \frac{\text{validator\_emission\_percent}}{100} \times \frac{\text{effective\_stake}_i}{\sum \text{effective\_stakes}}
 $$
 
 ### Council Rewards
 
-10% of the round reward (default, governable 0-30%) goes to the Council of 21:
+10% of the nominal round reward (default, governable 0–30%) is allocated to the Council of 21, split using a **fixed denominator**: each seat earns `council_total / 21` regardless of how many seats are filled. Unfilled-seat residual flows to the DAO treasury.
 
 $$
-\text{council\_share} = \text{round\_reward} \times 0.1
+\text{council\_share}_i = \frac{\text{round\_reward} \times \text{council\_emission\_percent}}{100 \times 21}
 $$
-
-This is distributed equally among occupied council seats.
 
 ---
 
 ## Per-Round Protocol Distribution
 
-<div class="callout callout-warning"><div class="callout-title">Per-round, not per-vertex</div>Rewards are minted **once per finalized round**, not once per vertex. In a round with multiple finalized vertices from different validators, the protocol mints exactly one round reward. This prevents inflation variance based on the number of vertices produced.</div>
+<div class="callout callout-warning"><div class="callout-title">Per-round, not per-vertex</div>Rewards are minted <strong>once per finalized round</strong>, not once per vertex. In a round with multiple finalized vertices from different validators, the protocol distributes exactly one round reward across the six buckets. This prevents inflation variance based on the number of vertices produced.</div>
 
 The distribution sequence each round:
 
-1. Calculate the current era's reward: `reward = initial_reward >> (round / halving_interval)`
+1. Calculate the nominal era reward: `reward = initial_reward >> (round / halving_interval)`
 2. Cap at remaining supply: `reward = min(reward, MAX_SUPPLY - total_supply)`
-3. Mint `reward` sats into existence (increment `total_supply`)
-4. Distribute `(100 - council_emission_percent)%` to validator pool (proportional to effective stake)
-5. Distribute `council_emission_percent%` to council pool (equal per seat)
-6. Verify supply invariant
+3. Credit `reward × council_emission_percent / 100` to council (seated members) + residual to treasury
+4. Credit `reward × treasury_emission_percent / 100` to treasury
+5. Credit `reward × founder_emission_percent / 100` to founder address
+6. Credit `reward × ecosystem_emission_percent / 100` to ecosystem address
+7. Credit `reward × reserve_emission_percent / 100` to reserve address
+8. Credit `reward × validator_emission_percent / 100` to validators proportional to effective stake
+9. Verify supply invariant (`sum of balances + treasury == total_supply`)
 
 ---
 
@@ -164,10 +173,10 @@ If `total_supply` equals `MAX_SUPPLY_SATS`, no new UDAG is minted. The protocol 
 After every state transition:
 
 $$
-\text{liquid} + \text{staked} + \text{delegated} + \text{treasury} = \text{total\_supply} \leq \text{MAX\_SUPPLY}
+\text{liquid} + \text{staked} + \text{delegated} + \text{treasury} + \text{bridge} + \text{streamed} = \text{total\_supply} \leq \text{MAX\_SUPPLY}
 $$
 
-Violation triggers immediate node halt (exit code 101).
+Where `liquid` includes the IDO pre-mine address, ecosystem and reserve multisig addresses, and all validator/founder balances. Violation triggers immediate node halt (exit code 101).
 
 ### Slashing is Deflationary
 

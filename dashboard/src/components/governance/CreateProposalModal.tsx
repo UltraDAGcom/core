@@ -13,7 +13,12 @@ const PARAM_OPTIONS = [
   'execution_delay_rounds',
   'max_active_proposals',
   'observer_reward_percent',
+  'validator_emission_percent',
   'council_emission_percent',
+  'treasury_emission_percent',
+  'founder_emission_percent',
+  'ecosystem_emission_percent',
+  'reserve_emission_percent',
   'slash_percent',
 ];
 

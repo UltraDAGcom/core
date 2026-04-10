@@ -132,7 +132,7 @@ function Card({ label, value, sub, icon, accent = '#00E0C4', spark, children }: 
 function EmBar({ splits, colors }: { splits: number[]; colors: string[] }) {
   const [a, setA] = useState(0);
   useEffect(() => { const t0 = performance.now(); const run = (now: number) => { const p = Math.min((now - t0) / 1200, 1); setA(1 - Math.pow(1 - p, 3)); if (p < 1) requestAnimationFrame(run); }; requestAnimationFrame(run); }, []);
-  const lbl = ['Validators', 'Council', 'Treasury', 'Founder'];
+  const lbl = ['Validators', 'Treasury', 'IDO', 'Council', 'Ecosystem', 'Founder', 'Reserve'];
   return (
     <div>
       <div style={{ display: 'flex', borderRadius: 5, overflow: 'hidden', height: 7, background: 'var(--dag-input-bg)' }}>
@@ -327,7 +327,7 @@ export function DashboardPage({ status, loading: _loading, network: _network, wa
               </div>
             ))}
           </div>
-          <EmBar splits={[75, 10, 10, 5]} colors={['#00E0C4', '#0066FF', '#FFB800', '#A855F7']} />
+          <EmBar splits={[44, 16, 12, 10, 8, 5, 5]} colors={['#00E0C4', '#FFB800', '#FF6B35', '#0066FF', '#22C55E', '#A855F7', '#64748B']} />
         </div>
       </div>
 

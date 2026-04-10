@@ -17,7 +17,7 @@ UltraDAG is a lightweight DAG-BFT cryptocurrency purpose-built for machine-to-ma
 
 ### How is UltraDAG different from other blockchains?
 
-UltraDAG is the smallest production DAG-BFT chain: a full validator in a sub-4 MB binary with bounded storage, deterministic BFT finality, and proper staking/slashing. No VM, no smart contracts, no pre-mine — the minimum viable chain for machine-to-machine payments. Unlike IOTA 2.0 (heavier node, probabilistic confirmation), Helium (LoRa-only), or IoTeX (100+ MB EVM node), UltraDAG is minimal by design.
+UltraDAG is the smallest production DAG-BFT chain: a full validator in a sub-4 MB binary with bounded storage, deterministic BFT finality, and proper staking/slashing. No VM, no smart contracts, and only a single small genesis allocation (the 12% IDO distributor bucket for private round + Uniswap liquidity) — everything else is distributed through per-round protocol emission. Minimum viable chain for machine-to-machine payments. Unlike IOTA 2.0 (heavier node, probabilistic confirmation), Helium (LoRa-only), or IoTeX (100+ MB EVM node), UltraDAG is minimal by design.
 
 ### Does a full node run on an ESP32?
 

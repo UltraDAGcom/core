@@ -203,14 +203,14 @@ fn test_31_reward_proportions_sum_to_full_pool() {
     state.distribute_round_rewards(100, &producers).unwrap();
     check_supply_invariant(&state);
 
-    let total_minted = state.total_supply() - supply_before;
-    // Genesis has 1 council member, so council gets 10% emission too.
-    // Council emission = block_reward * 10% / 1 member = 10M (minted to council member).
-    // Validator pool = block_reward * 90% = 90M.
-    // Total minted = council emission + validator rewards.
-    let council_emission = block_reward(100) * 10 / 100;
-    let validator_pool = block_reward(100) * 90 / 100;
-    let validator_minted = total_minted - council_emission;
+    // Validator minting = total minted minus everything credited to other buckets.
+    // Compute directly from validators' balance deltas to avoid bucket accounting.
+    let val1_balance = state.balance(&val1);
+    let val2_balance = state.balance(&val2);
+    let validator_minted = val1_balance + val2_balance;
+
+    let params = state.governance_params();
+    let validator_pool = block_reward(100) * params.validator_emission_percent / 100;
 
     // All producers active, no observers. Validator minted should equal validator_pool
     // minus integer rounding dust (at most a few sats per validator).
@@ -221,6 +221,7 @@ fn test_31_reward_proportions_sum_to_full_pool() {
         validator_minted, dust_tolerance, validator_pool,
         validator_pool.saturating_sub(validator_minted)
     );
+    let _ = supply_before; // silences unused-var if supply invariant check removed
 }
 
 // ============================================================================
@@ -237,8 +238,8 @@ fn test_32_compute_validator_reward_matches_distribution() {
     let del_sk = SecretKey::generate();
     let val = val_sk.address();
 
-    state.faucet_credit(&val, MIN_STAKE_SATS * 3);
-    state.faucet_credit(&del_sk.address(), MIN_DELEGATION_SATS * 2);
+    state.faucet_credit(&val, MIN_STAKE_SATS * 3).unwrap();
+    state.faucet_credit(&del_sk.address(), MIN_DELEGATION_SATS * 2).unwrap();
     state.apply_stake_tx(&make_stake_tx(&val_sk, MIN_STAKE_SATS, 0)).unwrap();
     state.apply_delegate_tx(&make_delegate_tx(&del_sk, val, MIN_DELEGATION_SATS, 0)).unwrap();
 
@@ -246,18 +247,22 @@ fn test_32_compute_validator_reward_matches_distribution() {
     state.apply_undelegate_tx(&make_undelegate_tx(&del_sk, 1), 100).unwrap();
 
     // compute_validator_reward should return a value consistent with the state
-    // (i.e., not inflated by undelegating amounts in the denominator)
+    // (i.e., not inflated by undelegating amounts in the denominator).
     let reward = state.compute_validator_reward(&val, 100, 1);
 
-    // The validator is the only staker with effective stake. After undelegation starts,
-    // effective_stake_of = own_stake only (delegation is undelegating).
+    // The validator is the only staker with effective stake. After undelegation
+    // starts, effective_stake_of = own_stake only (delegation is undelegating).
     // So they should get 100% of the validator pool.
-    let validator_pool = block_reward(100) * 90 / 100;
+    //
+    // Validator pool is block_reward × validator_emission_percent / 100, taken
+    // directly from the governance parameter (not residual).
+    let params = state.governance_params();
+    let validator_pool = block_reward(100) * params.validator_emission_percent / 100;
     assert_eq!(
         reward, validator_pool,
         "Validator should get full pool when they're the only effective staker. \
-         Got {} vs pool {}",
-        reward, validator_pool
+         Got {} vs pool {} (validator_pct={})",
+        reward, validator_pool, params.validator_emission_percent
     );
 }
 
@@ -433,21 +438,24 @@ fn test_37_zero_stakers_pre_staking_fallback() {
     check_supply_invariant(&state);
 
     let total_minted = state.total_supply() - supply_before;
-    // Emission split: 10% council, 10% treasury, 5% founder, 75% validator pool
-    // Genesis has 1 council member → council share minted
+    // Emission split (April 2026): 44% validators + 10% council + 16% treasury
+    // + 5% founder + 8% ecosystem + 5% reserve = 88% of block_reward.
     let br = block_reward(0);
-    let council_emission = br * 10 / 100;
-    let treasury_emission = br * 10 / 100;
-    let founder_emission = br * 5 / 100;
-    let validator_pool = br - council_emission - treasury_emission - founder_emission; // 75%
+    let params = state.governance_params();
+    let council_emission = br * params.council_emission_percent / 100;
+    let treasury_emission = br * params.treasury_emission_percent / 100;
+    let founder_emission = br * params.founder_emission_percent / 100;
+    let ecosystem_emission = br * params.ecosystem_emission_percent / 100;
+    let reserve_emission = br * params.reserve_emission_percent / 100;
+    let validator_pool = br * params.validator_emission_percent / 100;
 
-    // Per-producer reward = validator_pool / configured_count = validator_pool / 4
-    // Only 1 producer, so validator_minted = validator_pool / 4
+    // Per-producer reward in pre-staking fallback = validator_pool / configured_count
     let expected_validator = validator_pool / 4;
-    let expected_total = council_emission + treasury_emission + founder_emission + expected_validator;
+    let expected_total = council_emission + treasury_emission + founder_emission
+        + ecosystem_emission + reserve_emission + expected_validator;
     assert_eq!(
         total_minted, expected_total,
-        "Pre-staking fallback: council+treasury+founder+1-of-4 producer. Got {} expected {}",
+        "Pre-staking fallback: all buckets + 1-of-4 producer. Got {} expected {}",
         total_minted, expected_total
     );
 }
@@ -463,17 +471,20 @@ fn test_38_zero_producers_no_rewards() {
     let producers: HashSet<Address> = HashSet::new();
     state.distribute_round_rewards(0, &producers).unwrap();
 
-    // Council, treasury, and founder emission still happen (no producers doesn't block them)
-    // But validator rewards require producers in pre-staking mode
+    // Council, treasury, founder, ecosystem, and reserve emission still happen
+    // (no producers doesn't block them). Validator rewards require producers in
+    // pre-staking mode, so validator_pool is NOT minted with 0 producers.
     let minted = state.total_supply() - supply_before;
     let br = block_reward(0);
-    let council_emission = br * 10 / 100;
-    let treasury_emission = br * 10 / 100;
-    let founder_emission = br * 5 / 100;
-    let expected = council_emission + treasury_emission + founder_emission;
+    let params = state.governance_params();
+    let expected = br * params.council_emission_percent / 100
+        + br * params.treasury_emission_percent / 100
+        + br * params.founder_emission_percent / 100
+        + br * params.ecosystem_emission_percent / 100
+        + br * params.reserve_emission_percent / 100;
     assert_eq!(
         minted, expected,
-        "With 0 producers, council+treasury+founder emission minted. Got {} expected {}",
+        "With 0 producers, non-validator buckets minted. Got {} expected {}",
         minted, expected
     );
 }
@@ -681,4 +692,372 @@ fn test_44_observer_reward_percent_zero() {
 
     let passive_earned = state.balance(&passive) - passive_bal_before;
     assert_eq!(passive_earned, 0, "With observer_reward_percent=0, passive should earn nothing");
+}
+
+// ============================================================================
+// Fixed-denominator council emission (Option C, 2026-04-10)
+// ============================================================================
+//
+// These tests verify that the council emission budget is split into
+// COUNCIL_MAX_MEMBERS (21) equal shares regardless of how many seats are
+// filled, and that the residual (unfilled seats + integer dust) flows to
+// the treasury — NOT to validators, NOT to the founder, NOT silently dropped.
+//
+// Three invariants must hold across all seat counts:
+//
+//   (A) **Fair per-member share**: the amount credited to each seated member
+//       in a single round is identical across all seat counts. A solo member
+//       must not earn 21x what a member in a full council earns.
+//
+//   (B) **Full council budget accounted for**: the sum of (credited to
+//       members) + (residual to treasury) equals the council budget exactly
+//       (`block_reward * council_emission_percent / 100`). No sats are
+//       silently dropped.
+//
+//   (C) **Supply invariant holds**: `liquid + staked + delegated + treasury
+//       == total_supply` after every distribute_round_rewards call.
+
+fn setup_council_test_state() -> StateEngine {
+    // Build a minimal state with a small active validator set so that
+    // distribute_round_rewards has something to distribute the 75% validator
+    // pool to.
+    //
+    // `new_with_genesis` gives us a testnet faucet prefund (1,000,000 UDAG)
+    // AND automatically seats the dev address as the first Operations council
+    // member. We want a clean council slate for these tests (empty council
+    // cases, full 21-member cases), so we explicitly remove the dev member
+    // immediately after genesis. The faucet prefund is left in place.
+    let mut state = StateEngine::new_with_genesis();
+    let dev_addr = ultradag_coin::constants::dev_address();
+    state.remove_council_member(&dev_addr);
+    assert_eq!(
+        state.council_member_count(), 0,
+        "test helper expects a clean council after removing the genesis dev seat"
+    );
+
+    // Fund + stake three validators to give distribute_round_rewards a real
+    // validator pool to work with. Uses the testnet faucet prefund.
+    for i in 0..3u8 {
+        let sk = SecretKey::from_bytes([i + 1; 32]);
+        let addr = sk.address();
+        state.faucet_credit(&addr, MIN_STAKE_SATS * 2).unwrap();
+        let stake_tx = make_stake_tx(&sk, MIN_STAKE_SATS, 0);
+        state.apply_stake_tx(&stake_tx).unwrap();
+    }
+    state
+}
+
+fn seat_n_council_members(state: &mut StateEngine, n: usize) -> Vec<Address> {
+    // Seat `n` distinct council members. Uses deterministic seeds starting
+    // at 0x80 so they don't collide with the validator seeds in
+    // setup_council_test_state. Seats fill categories in a fixed order that
+    // respects each category's max capacity (Engineering 5 / Community 4 /
+    // Growth 3 / Operations 3 / Legal 2 / Research 2 / Security 2 = 21), so
+    // we can seat anywhere from 0 to the full 21 without hitting capacity
+    // errors. Returns the seated addresses in insertion order (NOT the same
+    // as sorted-address-order — distribute_round_rewards sorts internally).
+    use ultradag_coin::governance::CouncilSeatCategory;
+    let plan: &[(CouncilSeatCategory, usize)] = &[
+        (CouncilSeatCategory::Engineering, 5),
+        (CouncilSeatCategory::Community, 4),
+        (CouncilSeatCategory::Growth, 3),
+        (CouncilSeatCategory::Operations, 3),
+        (CouncilSeatCategory::Legal, 2),
+        (CouncilSeatCategory::Research, 2),
+        (CouncilSeatCategory::Security, 2),
+    ];
+    // Flatten the plan into a 21-element list of category assignments.
+    let mut assignments: Vec<CouncilSeatCategory> = Vec::with_capacity(21);
+    for (cat, max) in plan {
+        for _ in 0..*max {
+            assignments.push(*cat);
+        }
+    }
+    assert_eq!(assignments.len(), 21, "seat plan must total COUNCIL_MAX_MEMBERS");
+
+    let mut seated = Vec::with_capacity(n);
+    for i in 0..n {
+        let sk = SecretKey::from_bytes([0x80 + i as u8; 32]);
+        let addr = sk.address();
+        // Make sure the account exists before distribute_round_rewards credits
+        // it. A 1-sat faucet transfer is the cheapest way to instantiate the
+        // account entry without affecting balances meaningfully.
+        state.faucet_credit(&addr, 1).unwrap();
+        state.add_council_member(addr, assignments[i]).unwrap();
+        seated.push(addr);
+    }
+    seated
+}
+
+fn council_budget(round: u64, council_percent: u64) -> u64 {
+    block_reward(round).saturating_mul(council_percent) / 100
+}
+
+/// (A) Fair per-member share: a solo council member earns exactly the same
+/// amount as a member of a full 21-seat council. This was the headline bug
+/// in the old seated-count-denominator model — with 1 member the `/1` division
+/// gave them 21x the fair share.
+#[test]
+fn council_fixed_denominator_fair_share_solo_vs_full() {
+    let per_member_solo = {
+        let mut state = setup_council_test_state();
+        let seated = seat_n_council_members(&mut state, 1);
+        let bal_before = state.balance(&seated[0]);
+        let mut producers = HashSet::new();
+        // Use at least one validator as a producer so the validator pool
+        // isn't stuck in pre-staking fallback.
+        producers.insert(SecretKey::from_bytes([1u8; 32]).address());
+        state.distribute_round_rewards(100, &producers).unwrap();
+        check_supply_invariant(&state);
+        state.balance(&seated[0]) - bal_before
+    };
+
+    let per_member_full = {
+        let mut state = setup_council_test_state();
+        let seated = seat_n_council_members(&mut state, 21);
+        // Pick one member we'll measure — any seat should have the same per-member credit.
+        let mut sorted = seated.clone();
+        sorted.sort();
+        let measured = sorted[7]; // arbitrary middle seat
+        let bal_before = state.balance(&measured);
+        let mut producers = HashSet::new();
+        producers.insert(SecretKey::from_bytes([1u8; 32]).address());
+        state.distribute_round_rewards(100, &producers).unwrap();
+        check_supply_invariant(&state);
+        state.balance(&measured) - bal_before
+    };
+
+    assert_eq!(
+        per_member_solo, per_member_full,
+        "fixed-denominator model must pay the same per-member amount \
+         regardless of seated count (solo={} vs full={})",
+        per_member_solo, per_member_full
+    );
+    assert!(per_member_solo > 0, "per-member credit should be positive at round 100");
+}
+
+/// (B) Empty-council emission flows to treasury, not silently dropped.
+/// This was the bug the user raised: under the old model, `council_count == 0`
+/// caused the council block to skip entirely, and 10% of every round's
+/// emission went nowhere.
+///
+/// The test uses all 3 stakers as producers so there's no observer-penalty
+/// haircut on the validator pool — making the supply growth cleanly equal
+/// to the full block reward when the fix is working.
+#[test]
+fn council_empty_routes_residual_to_treasury() {
+    let mut state = setup_council_test_state();
+    assert_eq!(state.council_members().count(), 0, "preconditions: no council");
+
+    let treasury_before = state.treasury_balance();
+    let supply_before = state.total_supply();
+    let round = 100;
+    let budget = council_budget(round, state.governance_params().council_emission_percent);
+
+    // Make all 3 stakers producers so the full validator pool is minted
+    // (no observer-penalty haircut).
+    let mut producers = HashSet::new();
+    for i in 0..3u8 {
+        producers.insert(SecretKey::from_bytes([i + 1; 32]).address());
+    }
+    state.distribute_round_rewards(round, &producers).unwrap();
+    check_supply_invariant(&state);
+
+    // Treasury grew by at least the full council budget (all 10% becomes
+    // residual with 0 seated members), PLUS the normal treasury share.
+    let treasury_growth = state.treasury_balance() - treasury_before;
+    assert!(
+        treasury_growth >= budget,
+        "empty council: treasury growth {} should be >= council budget {}",
+        treasury_growth, budget
+    );
+
+    // Under the fix, the council residual lands in treasury and is minted into
+    // supply. Under the OLD broken behavior, the council share was silently
+    // skipped. Assert we got the full sum of bucket percentages (88% under the
+    // April 2026 model), modulo tiny integer dust from proportional splits.
+    let supply_growth = state.total_supply() - supply_before;
+    let full_reward = block_reward(round);
+    let params = state.governance_params();
+    let bucket_sum_pct = params.validator_emission_percent
+        + params.council_emission_percent
+        + params.treasury_emission_percent
+        + params.founder_emission_percent
+        + params.ecosystem_emission_percent
+        + params.reserve_emission_percent;
+    let expected_growth = full_reward * bucket_sum_pct / 100;
+    let old_broken_growth = full_reward
+        * (bucket_sum_pct - params.council_emission_percent)
+        / 100;
+    assert!(
+        supply_growth > old_broken_growth,
+        "empty council: supply growth {} should exceed the old-broken model's {} \
+         (if this fails, the council residual is not being routed to treasury)",
+        supply_growth, old_broken_growth
+    );
+    // Should be within dust of the expected 88% bucket sum.
+    assert!(
+        expected_growth.saturating_sub(supply_growth) <= 100,
+        "empty council: supply growth {} should be within dust of expected {} ({}% of reward)",
+        supply_growth, expected_growth, bucket_sum_pct
+    );
+}
+
+/// (B) Partial council: seated members get their fair share, unfilled seats
+/// flow to treasury. This is the bootstrap steady state we actually expect to
+/// see on mainnet for the first few months.
+#[test]
+fn council_partial_routes_unfilled_seats_to_treasury() {
+    let mut state = setup_council_test_state();
+    // Seat 11 of 21 — about half the council.
+    let seated = seat_n_council_members(&mut state, 11);
+
+    let treasury_before = state.treasury_balance();
+    let member_balances_before: Vec<u64> =
+        seated.iter().map(|a| state.balance(a)).collect();
+
+    let round = 100;
+    let council_pct = state.governance_params().council_emission_percent;
+    let budget = council_budget(round, council_pct);
+
+    let mut producers = HashSet::new();
+    producers.insert(SecretKey::from_bytes([1u8; 32]).address());
+    state.distribute_round_rewards(round, &producers).unwrap();
+    check_supply_invariant(&state);
+
+    // Sum the credits to seated members.
+    let member_credits: u64 = seated
+        .iter()
+        .zip(member_balances_before.iter())
+        .map(|(a, before)| state.balance(a) - before)
+        .sum();
+
+    // Every seated member should have been credited `budget / 21`.
+    let max_members = ultradag_coin::constants::COUNCIL_MAX_MEMBERS as u64;
+    let expected_per_member = budget / max_members;
+    let expected_to_members = expected_per_member * 11;
+    assert_eq!(
+        member_credits, expected_to_members,
+        "partial council: expected {} to members ({} × 11), got {}",
+        expected_to_members, expected_per_member, member_credits
+    );
+
+    // The treasury received at least the unfilled-seat residual, plus its
+    // normal 10% share.
+    let treasury_growth = state.treasury_balance() - treasury_before;
+    let council_residual = budget - expected_to_members;
+    assert!(
+        treasury_growth >= council_residual,
+        "partial council: treasury growth {} should be >= council residual {}",
+        treasury_growth, council_residual
+    );
+}
+
+/// (B) Full council (21 members): the residual is only integer dust from
+/// the `council_total / 21` division. Every member gets the fair share; any
+/// remainder flows to treasury.
+#[test]
+fn council_full_residual_is_only_dust() {
+    let mut state = setup_council_test_state();
+    let seated = seat_n_council_members(&mut state, 21);
+
+    let member_balances_before: Vec<u64> =
+        seated.iter().map(|a| state.balance(a)).collect();
+    let treasury_before = state.treasury_balance();
+
+    let round = 100;
+    let council_pct = state.governance_params().council_emission_percent;
+    let budget = council_budget(round, council_pct);
+
+    let mut producers = HashSet::new();
+    producers.insert(SecretKey::from_bytes([1u8; 32]).address());
+    state.distribute_round_rewards(round, &producers).unwrap();
+    check_supply_invariant(&state);
+
+    let max_members = ultradag_coin::constants::COUNCIL_MAX_MEMBERS as u64;
+    let expected_per_member = budget / max_members;
+    let expected_distributed = expected_per_member * max_members;
+    let expected_dust = budget - expected_distributed;
+
+    // Every seated member got exactly `expected_per_member`.
+    for (addr, before) in seated.iter().zip(member_balances_before.iter()) {
+        let credited = state.balance(addr) - before;
+        assert_eq!(
+            credited, expected_per_member,
+            "full council: member {} should be credited {} exactly, got {}",
+            addr.to_hex(), expected_per_member, credited
+        );
+    }
+
+    // Treasury got at least the dust (may be 0 at round 100 if the division
+    // is exact — at 1 UDAG/round and 10% council, council_total is
+    // 10_000_000 sats, 10_000_000 / 21 = 476_190 with dust 10, so we should
+    // see dust > 0 in practice).
+    let treasury_growth = state.treasury_balance() - treasury_before;
+    assert!(
+        treasury_growth >= expected_dust,
+        "full council: treasury growth {} should include at least the dust {}",
+        treasury_growth, expected_dust
+    );
+}
+
+/// (C) Supply growth invariance: across 0, 1, 11, 21 seated members, the
+/// total supply growth per round is identical (modulo tiny integer dust).
+/// The council residual mechanism must never silently drop emission, so
+/// supply should grow by the full block reward regardless of how many
+/// council seats are filled. Uses all stakers as producers to avoid the
+/// observer-reward haircut.
+#[test]
+fn council_supply_growth_invariant_across_seat_counts() {
+    let round = 100;
+    let full_reward = block_reward(round);
+
+    // All 3 stakers are producers, so the full validator pool mints cleanly.
+    let mut producers = HashSet::new();
+    for i in 0..3u8 {
+        producers.insert(SecretKey::from_bytes([i + 1; 32]).address());
+    }
+
+    let mut growth_by_count = Vec::new();
+    for seat_count in &[0usize, 1, 11, 21] {
+        let mut state = setup_council_test_state();
+        seat_n_council_members(&mut state, *seat_count);
+        let supply_before = state.total_supply();
+        state.distribute_round_rewards(round, &producers).unwrap();
+        check_supply_invariant(&state);
+        let growth = state.total_supply() - supply_before;
+        growth_by_count.push((*seat_count, growth));
+    }
+
+    // All growth amounts should be within a small integer-dust delta of
+    // each other — specifically, all equal to `full_reward` minus whatever
+    // integer truncation happens in the per-member council split and the
+    // proportional validator split.
+    let max = growth_by_count.iter().map(|(_, g)| *g).max().unwrap();
+    let min = growth_by_count.iter().map(|(_, g)| *g).min().unwrap();
+    let max_allowed_delta = 100u64;
+    assert!(
+        max - min <= max_allowed_delta,
+        "supply growth should be ~constant across seat counts: {:?} (max - min = {})",
+        growth_by_count, max - min
+    );
+
+    // Each growth should be close to the bucket sum × full_reward (within dust).
+    // Under April 2026 tokenomics, buckets sum to 88% of the block reward.
+    let state = setup_council_test_state();
+    let params = state.governance_params();
+    let bucket_sum_pct = params.validator_emission_percent
+        + params.council_emission_percent
+        + params.treasury_emission_percent
+        + params.founder_emission_percent
+        + params.ecosystem_emission_percent
+        + params.reserve_emission_percent;
+    let expected_growth = full_reward * bucket_sum_pct / 100;
+    for (seats, growth) in &growth_by_count {
+        assert!(
+            expected_growth.saturating_sub(*growth) <= max_allowed_delta,
+            "seat_count={} supply growth {} should be within {} sats of expected {} ({}% of reward)",
+            seats, growth, max_allowed_delta, expected_growth, bucket_sum_pct
+        );
+    }
 }

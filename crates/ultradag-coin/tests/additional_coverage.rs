@@ -307,8 +307,10 @@ fn test_deterministic_tiebreaking_in_active_set_selection() {
     state.recalculate_active_set();
     let active2: Vec<_> = state.active_validators().to_vec();
 
-    assert_eq!(active1.len(), 21); // Should have 21 validators (max)
-    assert_eq!(active2.len(), 21);
+    // Active set should include all 22 stakers (MAX_ACTIVE_VALIDATORS was
+    // raised from 21 to 100 for better decentralization).
+    assert_eq!(active1.len(), 22);
+    assert_eq!(active2.len(), 22);
     assert_eq!(active1, active2);
 }
 

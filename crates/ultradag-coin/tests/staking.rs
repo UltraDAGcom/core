@@ -25,15 +25,11 @@ fn make_unstake_tx(sk: &SecretKey, nonce: u64) -> UnstakeTx {
     tx
 }
 
-/// Compute the validator reward pool after council emission deduction.
-/// Genesis bootstraps 1 council member with 10% emission, so validators get 90%.
+/// Compute the validator reward pool using the explicit validator_emission_percent.
+/// April 2026 tokenomics: validators 44%, council 10%, treasury 16%, founder 5%,
+/// ecosystem 8%, reserve 5% (sum = 88%). The 12% gap corresponds to the IDO pre-mine.
 fn validator_pool(round: u64) -> u64 {
-    // Emission split: 10% council, 10% treasury, 5% founder → 75% to validators
-    let br = block_reward(round);
-    let council = br * 10 / 100;
-    let treasury = br * 10 / 100;
-    let founder = br * 5 / 100;
-    br - council - treasury - founder // 75%
+    block_reward(round) * ultradag_coin::constants::VALIDATOR_EMISSION_PERCENT / 100
 }
 
 fn make_vertex(
@@ -318,8 +314,8 @@ fn test_13_zero_stake_fallback_uses_equal_split() {
     let mut state = StateEngine::new_with_genesis();
     let sk = SecretKey::generate();
 
-    // No staking — equal split fallback (apply_vertex defaults to count=1)
-    // Genesis has 1 council member, so validator gets 90% of block_reward
+    // No staking — equal split fallback (apply_vertex defaults to count=1).
+    // Under April 2026 tokenomics, validator pool = 44% of block reward.
     let reward = validator_pool(0);
     let vertex = make_vertex(&sk, 0, 0, vec![], reward);
     state.apply_vertex(&vertex).unwrap();
@@ -798,8 +794,8 @@ fn test_26_epoch_boundary_at_genesis_with_no_stakers() {
     state.recalculate_active_set();
     assert!(state.active_validators().is_empty(), "No stakers means no active validators");
 
-    // Apply genesis vertex (no staking, pre-staking fallback)
-    // Genesis has 1 council member, so validator gets 90% of block_reward
+    // Apply genesis vertex (no staking, pre-staking fallback).
+    // Under April 2026 tokenomics, validator pool = 44% of block reward.
     let sk = SecretKey::generate();
     let reward = validator_pool(0);
     let v = make_vertex(&sk, 0, 0, vec![], reward);

@@ -151,8 +151,9 @@ fn epoch_just_changed_detects_boundary() {
 fn max_active_validators_caps_set() {
     let mut state = StateEngine::new_with_genesis();
 
-    // Stake 30 validators (more than MAX_ACTIVE_VALIDATORS = 21)
-    let sks: Vec<SecretKey> = (0..30).map(|_| SecretKey::generate()).collect();
+    // Stake one more than MAX_ACTIVE_VALIDATORS to exercise the cap.
+    let count = MAX_ACTIVE_VALIDATORS + 10;
+    let sks: Vec<SecretKey> = (0..count).map(|_| SecretKey::generate()).collect();
     for (i, sk) in sks.iter().enumerate() {
         let amount = MIN_STAKE_SATS + (i as u64 * COIN); // varying stakes
         state.faucet_credit(&sk.address(), amount).unwrap();
@@ -167,6 +168,6 @@ fn max_active_validators_caps_set() {
         "Active set should be capped at MAX_ACTIVE_VALIDATORS"
     );
 
-    // Top staker (index 29, highest additional stake) should be in the set
-    assert!(state.is_active_validator(&sks[29].address()));
+    // Top staker (highest additional stake) should be in the set
+    assert!(state.is_active_validator(&sks[count - 1].address()));
 }

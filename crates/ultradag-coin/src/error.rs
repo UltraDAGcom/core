@@ -271,7 +271,7 @@ impl CoinError {
     /// All other errors are validation failures and can be handled gracefully.
     ///
     /// # Usage
-    /// ```rust
+    /// ```rust,ignore
     /// match result {
     ///     Err(e) if e.is_fatal() => {
     ///         // Save state and halt immediately

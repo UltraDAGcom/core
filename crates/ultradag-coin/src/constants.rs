@@ -12,26 +12,36 @@ pub fn sats_to_udag(sats: u64) -> f64 {
     sats as f64 / SATS_PER_UDAG as f64
 }
 
-/// Initial block reward: 1 UDAG per round (split among validators, council, treasury, founder)
+/// Nominal block reward: 1 UDAG per round. This is the curve basis — the actual
+/// minted amount per round is 88% of this (the sum of all bucket percentages
+/// below), with the remaining 12% matching the IDO_GENESIS_PREMINE.
 ///
-/// Emission timeline (at 5s/round):
-/// - Genesis pre-mine: 0 UDAG (all tokens distributed through emission)
-/// - Epoch 0: 1 UDAG/round × 10.5M rounds = 10,500,000 UDAG (~1.66 years)
-/// - Epoch 1: 0.5 UDAG/round × 10.5M rounds = 5,250,000 UDAG
-/// - Epoch 2: 0.25 UDAG/round × 10.5M rounds = 2,625,000 UDAG
-/// - Geometric series sum: INITIAL_REWARD × HALVING_INTERVAL × 2 = 21M UDAG
+/// Emission timeline (at 5s/round), nominal curve:
+/// - Epoch 0: 1 UDAG/round × 10.5M rounds = 10,500,000 UDAG nominal
+/// - Epoch 1: 0.5 UDAG/round × 10.5M rounds = 5,250,000 UDAG nominal
+/// - Epoch 2: 0.25 UDAG/round × 10.5M rounds = 2,625,000 UDAG nominal
+/// - Geometric series sum: INITIAL_REWARD × HALVING_INTERVAL × 2 = 21M nominal
+/// - Actual emitted = 88% of nominal curve = 18.48M UDAG
+/// - Plus IDO genesis pre-mine = 2.52M UDAG
+/// - Total supply cap = 21M UDAG
 /// - Full emission over ~106 years
 ///
-/// Per-round split:
-/// - 75% validators/stakers (proportional to effective stake)
+/// Per-round split (sums to 88% — the remaining 12% is not minted, matching
+/// the genesis IDO pre-mine so total supply converges to exactly 21M):
+/// - 44% validators/stakers (proportional to effective stake)
 /// - 10% council (equal split among seated members)
-/// - 10% treasury (controlled by Council of 21 via TreasurySpend proposals)
+/// - 16% treasury (controlled by Council of 21 via TreasurySpend proposals)
 /// -  5% founder (liquid balance, can spend/stake/delegate normally)
+/// -  8% ecosystem (liquid balance at ecosystem multisig address)
+/// -  5% reserve (liquid balance at reserve multisig address)
+///
+/// Genesis pre-mine:
+/// - 2,520,000 UDAG to IDO distributor address (private round + Uniswap seed)
 pub const INITIAL_REWARD_SATS: u64 = COIN;
 
 /// Reward halves every 10,500,000 rounds (~1.66 years at 5s rounds).
-/// Geometric series: reward × interval × 2 = 21M UDAG total theoretical emission.
-/// No genesis pre-mine — all 21M UDAG distributed through emission.
+/// Geometric series of the nominal curve: reward × interval × 2 = 21M UDAG.
+/// Actual emitted = 88% of that = 18.48M, plus 2.52M IDO pre-mine = 21M cap.
 pub const HALVING_INTERVAL: u64 = 10_500_000;
 
 /// Genesis timestamp
@@ -84,6 +94,12 @@ pub const NETWORK_ID: &[u8] = b"ultradag-testnet-v1";
 #[cfg(feature = "mainnet")]
 pub const NETWORK_ID: &[u8] = b"ultradag-mainnet-v1";
 
+/// Validator emission share: percentage of each round's block reward distributed to
+/// validators/stakers proportional to effective stake. Explicitly configured (not
+/// computed as residual) so governance can tune individual buckets independently.
+/// Governable via ParameterChange proposals (param: "validator_emission_percent", bounds: 30-80%).
+pub const VALIDATOR_EMISSION_PERCENT: u64 = 44;
+
 /// Founder emission share: percentage of each round's block reward credited to the founder address.
 /// The founder starts with 0 balance and earns through emission like everyone else.
 /// 5% of each round's reward is credited as liquid balance (can spend/stake/delegate normally).
@@ -92,24 +108,73 @@ pub const FOUNDER_EMISSION_PERCENT: u64 = 5;
 
 /// Treasury emission share: percentage of each round's block reward credited to the treasury.
 /// The treasury starts at 0 and grows through emission, controlled by Council of 21 via
-/// TreasurySpend proposals. 10% of each round's reward is added to treasury_balance.
-/// Governable via ParameterChange proposals (param: "treasury_emission_percent", bounds: 0-20%).
-pub const TREASURY_EMISSION_PERCENT: u64 = 10;
+/// TreasurySpend proposals. 16% of each round's reward is added to treasury_balance.
+/// Governable via ParameterChange proposals (param: "treasury_emission_percent", bounds: 0-25%).
+pub const TREASURY_EMISSION_PERCENT: u64 = 16;
 
-/// Developer allocation address.
-/// 
-/// # Security Notice
-/// 
-/// For TESTNET: Uses a deterministic address for reproducibility.
-/// For MAINNET: MUST be set via ULTRADAG_DEV_KEY environment variable or key file.
-/// The private key must be generated offline and stored in a hardware wallet.
-/// 
-/// # Mainnet Key Requirements
-/// 
-/// - Generate key offline using: `ultradag-node --generate-key`
-/// - Store in hardware wallet (Ledger/Trezor) for production
-/// - Never commit private key to source control
-/// - Set ULTRADAG_DEV_KEY environment variable at runtime
+/// Ecosystem emission share: percentage of each round's block reward credited to
+/// the ecosystem multisig address. Used for airdrops, grants, early-adopter rewards.
+/// The ecosystem address is a normal account; credits behave like liquid balance.
+/// Governable via ParameterChange proposals (param: "ecosystem_emission_percent", bounds: 0-20%).
+pub const ECOSYSTEM_EMISSION_PERCENT: u64 = 8;
+
+/// Reserve emission share: percentage of each round's block reward credited to the
+/// reserve multisig address. Strategic reserve for future use, community-governed.
+/// The reserve address is a normal account; credits behave like liquid balance.
+/// Governable via ParameterChange proposals (param: "reserve_emission_percent", bounds: 0-15%).
+pub const RESERVE_EMISSION_PERCENT: u64 = 5;
+
+/// Genesis pre-mine to the IDO distributor address: 2,520,000 UDAG (12% of total supply).
+///
+/// This is the ONLY pre-mined allocation in the system. All other buckets are
+/// distributed through per-round emission. The IDO distributor is a multisig
+/// responsible for:
+///   1. Distributing tokens to private-round participants.
+///   2. Seeding Uniswap liquidity via the UDAG bridge (bridge/src/UDAGToken.sol).
+///
+/// The 12% pre-mine is offset by the 12% gap in per-round emission: buckets
+/// sum to 88% of `block_reward()`, so total supply converges to exactly 21M UDAG.
+pub const IDO_GENESIS_PREMINE_SATS: u64 = 2_520_000 * COIN;
+
+/// Compile-time assertion: the six emission buckets sum to exactly 88% of block_reward.
+/// The remaining 12% corresponds to the IDO genesis pre-mine, maintaining the 21M cap.
+const _: () = assert!(
+    VALIDATOR_EMISSION_PERCENT
+        + COUNCIL_EMISSION_PERCENT
+        + TREASURY_EMISSION_PERCENT
+        + FOUNDER_EMISSION_PERCENT
+        + ECOSYSTEM_EMISSION_PERCENT
+        + RESERVE_EMISSION_PERCENT
+        == 88,
+    "Emission bucket percentages must sum to 88 (12% reserved for IDO pre-mine)"
+);
+
+/// Founder / developer address — 5% of per-round emission lands here.
+/// bech32m: `udag1nqcz7h7xe9kh2fvjnqflwjc7zxnvdyy309lt5t` (@founder, 2026-04-10).
+///
+/// This is the canonical protocol-level founder address, baked into the binary
+/// so every node agrees on where founder emission is credited. The private key
+/// is held off-network by the founder (hardware wallet); nodes only need the
+/// public 20-byte address to route credits.
+///
+/// Environment variable `ULTRADAG_DEV_ADDRESS` can override this for local
+/// development and alternate networks, but the default below is the canonical
+/// protocol value for both mainnet and testnet.
+pub const DEV_ADDRESS_BYTES: [u8; 20] = [
+    0x98, 0x30, 0x2f, 0x5f, 0xc6, 0xc9, 0x6d, 0x75, 0x25, 0x92,
+    0x98, 0x13, 0xf7, 0x4b, 0x1e, 0x11, 0xa6, 0xc6, 0x90, 0x91,
+];
+
+/// Testnet seed for the legacy `dev_keypair()` convenience signer.
+///
+/// This seed is **unrelated** to the canonical `DEV_ADDRESS_BYTES` above — it
+/// exists only to provide a deterministic Ed25519 keypair for testnet and SDK
+/// integration tests that need *some* stable signing identity. Transactions
+/// signed by this key land at the seed-derived address, NOT at the founder
+/// address, so `dev_keypair().address() != dev_address()` by design.
+///
+/// Production code (node, RPC, consensus) never calls `dev_keypair()` — only
+/// test fixtures and SDK determinism checks do.
 #[cfg(not(feature = "mainnet"))]
 pub const DEV_ADDRESS_SEED: [u8; 32] = [
     0x8a, 0x3d, 0x7e, 0x2f, 0x91, 0xc4, 0xb5, 0x6e,
@@ -118,7 +183,8 @@ pub const DEV_ADDRESS_SEED: [u8; 32] = [
     0x62, 0xd5, 0x8c, 0x1e, 0xa7, 0x3b, 0x9f, 0x4c,
 ];
 
-/// Mainnet: dev seed must not be hardcoded - runtime check enforced.
+/// Mainnet: the legacy dev seed is unused — left as `[0u8; 32]` for compilation
+/// compatibility. `dev_keypair()` is not available on mainnet builds.
 #[cfg(feature = "mainnet")]
 pub const DEV_ADDRESS_SEED: [u8; 32] = [0u8; 32];
 
@@ -131,64 +197,35 @@ const _: () = assert!(
 /// Return the developer/founder address.
 ///
 /// DETERMINISM: The address is resolved ONCE at first call and cached via OnceLock.
-/// All nodes compute the same address from the same env vars / seed, and the result
-/// never changes during the process lifetime. This prevents state divergence if env
-/// vars were hypothetically modified mid-run.
+/// All nodes compute the same address, and the result never changes during the
+/// process lifetime. This prevents state divergence if env vars were
+/// hypothetically modified mid-run.
+///
+/// Resolution order:
+/// - `ULTRADAG_DEV_ADDRESS` env var (hex or bech32m) — optional override
+/// - Hardcoded `DEV_ADDRESS_BYTES` constant (canonical default)
 ///
 /// Nodes only need the ADDRESS (public) to route emission — never the private key.
-/// - Checks ULTRADAG_DEV_ADDRESS env var first (40-hex address, recommended)
-/// - Falls back to ULTRADAG_DEV_KEY env var (64-hex secret key, derives address)
-/// - Falls back to hardcoded DEV_ADDRESS_SEED (testnet only)
-///
-/// SECURITY: Use ULTRADAG_DEV_ADDRESS on production nodes. Never put private keys
-/// on network-facing machines.
 pub fn dev_address() -> crate::address::Address {
     static CACHED: std::sync::OnceLock<crate::address::Address> = std::sync::OnceLock::new();
     *CACHED.get_or_init(|| {
-        // Preferred: public address only (no secret key on node)
-        if let Ok(addr_hex) = std::env::var("ULTRADAG_DEV_ADDRESS") {
-            if let Some(addr) = crate::address::Address::from_hex(&addr_hex) {
+        if let Ok(s) = std::env::var("ULTRADAG_DEV_ADDRESS") {
+            if let Some(addr) = crate::address::Address::parse(&s) {
                 return addr;
             }
         }
-
-        // Fallback: derive from secret key (backward compatible, less secure)
-        if let Ok(key_hex) = std::env::var("ULTRADAG_DEV_KEY") {
-            if key_hex.len() == 64 {
-                let mut bytes = [0u8; 32];
-                let mut valid = true;
-                for (i, chunk) in key_hex.as_bytes().chunks(2).enumerate() {
-                    if let Ok(hex_str) = std::str::from_utf8(chunk) {
-                        if let Ok(b) = u8::from_str_radix(hex_str, 16) {
-                            bytes[i] = b;
-                        } else { valid = false; break; }
-                    } else { valid = false; break; }
-                }
-                if valid {
-                    return crate::address::SecretKey::from_bytes(bytes).address();
-                }
-                // Invalid hex in ULTRADAG_DEV_KEY — fall through to testnet fallback
-            }
-        }
-
-        // Testnet hardcoded fallback
-        #[cfg(not(feature = "mainnet"))]
-        {
-            return crate::address::SecretKey::from_bytes(DEV_ADDRESS_SEED).address();
-        }
-
-        #[cfg(feature = "mainnet")]
-        {
-            panic!(
-                "MAINNET SECURITY: Set ULTRADAG_DEV_ADDRESS (40-hex founder address) \
-                 or ULTRADAG_DEV_KEY (64-hex secret, less secure) environment variable"
-            );
-        }
+        crate::address::Address(DEV_ADDRESS_BYTES)
     })
 }
 
-/// Get the developer keypair (testnet only — for convenience endpoints).
-/// On mainnet, this is not available. Use client-side signing via SDKs.
+/// Get the testnet convenience keypair (testnet builds only).
+///
+/// **Important:** this keypair is derived from `DEV_ADDRESS_SEED`, which is
+/// unrelated to the canonical `DEV_ADDRESS_BYTES` / `dev_address()`. The address
+/// returned by `dev_keypair().address()` is NOT the founder address — it's a
+/// stable test-only identity for SDK integration tests and local signing.
+///
+/// Production node code never calls this. Mainnet builds don't expose it.
 #[cfg(not(feature = "mainnet"))]
 pub fn dev_keypair() -> crate::address::SecretKey {
     if let Ok(key_hex) = std::env::var("ULTRADAG_DEV_KEY") {
@@ -278,16 +315,28 @@ pub const CHECKPOINT_INTERVAL: u64 = 100;
 #[cfg(not(feature = "mainnet"))]
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [0u8; 32];
 
-/// Mainnet genesis checkpoint hash — computed 2026-03-24 during key ceremony.
-/// Genesis: 0 UDAG (no pre-mine), all tokens distributed through emission.
-/// Founder address: 89fb8ca267f2358a17e34f76ce16b1236d45adeb
-/// Recompute: ULTRADAG_DEV_KEY=<key> cargo test --features mainnet test_compute_genesis_hash -- --nocapture
+/// Mainnet genesis checkpoint hash — computed 2026-04-10 for the April 2026
+/// 7-bucket tokenomics update (hard fork from the original zero-pre-mine model).
+///
+/// Genesis state:
+/// - total_supply = 2,520,000 UDAG (12% IDO pre-mine only, no faucet on mainnet)
+/// - IDO distributor credited `IDO_GENESIS_PREMINE_SATS` at `IDO_ADDRESS_BYTES`
+/// - Founder, ecosystem, reserve, treasury, council all start at 0
+/// - Per-round emission: 44/10/16/5/8/5 buckets (see `INITIAL_REWARD_SATS` docs)
+///
+/// All four protocol addresses (founder, IDO, ecosystem, reserve) are hardcoded
+/// constants in this file, so the genesis hash is fully deterministic from the
+/// source tree — no environment variables required.
+///
+/// To recompute (if you change any genesis-affecting constant):
+///   cargo test --features mainnet test_compute_genesis_hash -- --nocapture
+/// then paste the printed hash here and rebuild.
 #[cfg(feature = "mainnet")]
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
-    0x93, 0xd8, 0xaa, 0x5d, 0x28, 0x4e, 0x22, 0x30,
-    0xf5, 0xd4, 0x51, 0x1a, 0x38, 0x5f, 0xfa, 0xbc,
-    0x2c, 0xce, 0x70, 0x16, 0xc0, 0xe4, 0xee, 0x04,
-    0x5c, 0x9a, 0x6b, 0x6e, 0xd1, 0xed, 0xa8, 0x83,
+    0xf2, 0x15, 0x7d, 0x73, 0x68, 0x2d, 0x6b, 0x7b,
+    0x04, 0x7c, 0x5b, 0x25, 0xee, 0xbb, 0x1a, 0xcd,
+    0xac, 0x9d, 0x03, 0x97, 0x95, 0x99, 0x1d, 0x09,
+    0x3a, 0xeb, 0x25, 0xf7, 0xed, 0xcd, 0xb3, 0x7a,
 ];
 
 /// Compile-time assertion: GENESIS_CHECKPOINT_HASH must not be the placeholder on mainnet.
@@ -366,6 +415,88 @@ pub fn faucet_keypair() -> crate::address::SecretKey {
 #[cfg(feature = "mainnet")]
 pub fn faucet_keypair() -> crate::address::SecretKey {
     panic!("MAINNET SECURITY: Faucet is disabled on mainnet. faucet_keypair() must never be called.");
+}
+
+// ===== BUCKET ADDRESSES (IDO, ECOSYSTEM, RESERVE) =====
+//
+// Each bucket has a dedicated recipient address hardcoded at the protocol level
+// so every node (testnet and mainnet) agrees on exactly where the genesis
+// pre-mine and per-round emission land. These are held by off-chain multisigs;
+// nodes only need the public 20-byte address to route credits.
+//
+// Environment variable overrides (`ULTRADAG_IDO_ADDRESS`, etc.) are supported
+// for local development and alternate networks, but the mainnet/testnet
+// defaults below are the canonical protocol values.
+//
+// Source (provided 2026-04-10):
+//   @liquidity  udag1rvdfs928eu7trrc33wj2edwctdkt08gdkmhppx
+//   @ecosystem  udag17z5yull0zrhrmkvw6337f3hdh3rfs7mgnhmvfz
+//   @reserve    udag1rs22h8y2ack0285efhe4g57hm8kr8z7a4gkxp8
+
+/// IDO distributor address — 2,520,000 UDAG pre-mined at genesis.
+/// bech32m: `udag1rvdfs928eu7trrc33wj2edwctdkt08gdkmhppx`
+pub const IDO_ADDRESS_BYTES: [u8; 20] = [
+    0x1b, 0x1a, 0x98, 0x15, 0x47, 0xcf, 0x3c, 0xb1, 0x8f, 0x11,
+    0x8b, 0xa4, 0xac, 0xb5, 0xd8, 0x5b, 0x6c, 0xb7, 0x9d, 0x0d,
+];
+
+/// Ecosystem multisig address — earns 8% of per-round emission.
+/// bech32m: `udag17z5yull0zrhrmkvw6337f3hdh3rfs7mgnhmvfz`
+pub const ECOSYSTEM_ADDRESS_BYTES: [u8; 20] = [
+    0xf0, 0xa8, 0x4e, 0x7f, 0xef, 0x10, 0xee, 0x3d, 0xd9, 0x8e,
+    0xd4, 0x63, 0xe4, 0xc6, 0xed, 0xbc, 0x46, 0x98, 0x7b, 0x68,
+];
+
+/// Reserve multisig address — earns 5% of per-round emission.
+/// bech32m: `udag1rs22h8y2ack0285efhe4g57hm8kr8z7a4gkxp8`
+pub const RESERVE_ADDRESS_BYTES: [u8; 20] = [
+    0x1c, 0x14, 0xab, 0x9c, 0x8a, 0xee, 0x2c, 0xf5, 0x1e, 0x99,
+    0x4d, 0xf3, 0x54, 0x53, 0xd7, 0xd9, 0xec, 0x33, 0x8b, 0xdd,
+];
+
+/// Return the IDO distributor address.
+///
+/// DETERMINISM: Resolved ONCE at first call and cached via OnceLock, same as
+/// `dev_address()`. All nodes compute the same address.
+///
+/// - Checks `ULTRADAG_IDO_ADDRESS` env var first (40-hex or bech32m, optional override)
+/// - Falls back to hardcoded `IDO_ADDRESS_BYTES`
+pub fn ido_address() -> crate::address::Address {
+    static CACHED: std::sync::OnceLock<crate::address::Address> = std::sync::OnceLock::new();
+    *CACHED.get_or_init(|| {
+        if let Ok(s) = std::env::var("ULTRADAG_IDO_ADDRESS") {
+            if let Some(addr) = crate::address::Address::parse(&s) {
+                return addr;
+            }
+        }
+        crate::address::Address(IDO_ADDRESS_BYTES)
+    })
+}
+
+/// Return the ecosystem multisig address. Same resolution rules as `ido_address()`.
+pub fn ecosystem_address() -> crate::address::Address {
+    static CACHED: std::sync::OnceLock<crate::address::Address> = std::sync::OnceLock::new();
+    *CACHED.get_or_init(|| {
+        if let Ok(s) = std::env::var("ULTRADAG_ECOSYSTEM_ADDRESS") {
+            if let Some(addr) = crate::address::Address::parse(&s) {
+                return addr;
+            }
+        }
+        crate::address::Address(ECOSYSTEM_ADDRESS_BYTES)
+    })
+}
+
+/// Return the reserve multisig address. Same resolution rules as `ido_address()`.
+pub fn reserve_address() -> crate::address::Address {
+    static CACHED: std::sync::OnceLock<crate::address::Address> = std::sync::OnceLock::new();
+    *CACHED.get_or_init(|| {
+        if let Ok(s) = std::env::var("ULTRADAG_RESERVE_ADDRESS") {
+            if let Some(addr) = crate::address::Address::parse(&s) {
+                return addr;
+            }
+        }
+        crate::address::Address(RESERVE_ADDRESS_BYTES)
+    })
 }
 
 /// Calculate round reward for a given round height.

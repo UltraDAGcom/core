@@ -37,18 +37,21 @@ Transaction ordering is deterministic: finalized vertices are sorted by (round, 
 ## Tokenomics
 
 - **Max supply**: 21,000,000 UDAG (hard cap enforced in state engine)
-- **Emission-only**: Zero genesis pre-mine. All tokens distributed through per-round emission.
+- **7-bucket distribution**: 88% per-round emission + 12% IDO genesis pre-mine
+  - 44% validators/stakers (9.24M, proportional to effective stake)
+  - 16% DAO treasury (3.36M, spent via Council `TreasurySpend` proposals)
+  - 12% IDO / Liquidity (2.52M, **genesis pre-mine** to IDO distributor multisig — private round + Uniswap seed)
+  - 10% Council of 21 (2.1M, equal split among seated members)
+  - 8% ecosystem (1.68M, multisig for airdrops/grants)
+  - 5% founder (1.05M, earned through emission, starts at 0)
+  - 5% reserve (1.05M, strategic multisig)
 - **Halving**: every 10,500,000 rounds (~1.66 years at 5s rounds)
-- **Initial block reward**: 1 UDAG per round total, split by protocol:
-  - 75% validators/stakers (proportional to effective stake)
-  - 10% DAO treasury (council-controlled via TreasurySpend proposals)
-  - 10% Council of 21 (equal split among seated members)
-  - 5% founder (earned through emission, starts at 0)
+- **Initial nominal block reward**: 1 UDAG per round. The six emission buckets take 88% of this; the remaining 12% is never minted and offsets the IDO pre-mine so the 21M cap holds exactly.
 - **Faucet reserve**: 1,000,000 UDAG at genesis (testnet only, excluded from mainnet)
 - **Validator rewards**: Proportional to stake when staking is active
-  - Pre-staking fallback: 1 UDAG/round split equally among configured validators
+  - Pre-staking fallback: validator pool (44% of block reward) split equally among configured validators
   - Post-staking: validator pool split proportionally by effective stake + delegations
-- **Minimum stake**: 10,000 UDAG to become validator
+- **Minimum stake**: 2,000 UDAG
 - **Unstaking cooldown**: 2,016 rounds (~2.8 hours at 5s rounds)
 - **Slashing**: 50% stake burn on equivocation (governable 10-100%)
 

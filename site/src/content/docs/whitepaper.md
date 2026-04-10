@@ -264,20 +264,23 @@ Ordering deliberately does **not** use `topo_level` (ancestor count), because `t
 | Halving interval | Every 10,500,000 finalized rounds (~1.66 years at 5s rounds) |
 | Default round time | 5 seconds |
 
-### 10.2 Emission-Only Distribution
+### 10.2 7-Bucket Distribution
 
-**Zero pre-mine. Zero genesis allocations.** Total supply starts at 0. Every UDAG enters circulation through per-round protocol emission:
+UltraDAG uses a **7-bucket distribution model**. Six buckets are distributed through per-round protocol emission (starting from zero at genesis); one bucket — the IDO distributor — is pre-mined at genesis to bootstrap the private round and Uniswap liquidity. Total supply is capped at 21,000,000 UDAG.
 
-| Recipient | Share | Mechanism |
-|-----------|-------|-----------|
-| Validators & Stakers | **75%** | Proportional to effective stake (own + delegated) |
-| DAO Treasury | 10% | Governed by Council proposals (TreasurySpend) |
-| Council of 21 | 10% | Equal split among seated council members |
-| Founder | 5% | Protocol development, earned through emission |
+| Bucket | Share | UDAG | Delivery |
+|---|---|---|---|
+| Validators & Stakers | **44%** | 9,240,000 | Per-round emission, proportional to effective stake |
+| DAO Treasury | 16% | 3,360,000 | Per-round emission, spent via Council `TreasurySpend` proposals |
+| IDO / Liquidity | 12% | 2,520,000 | **Genesis pre-mine** to IDO distributor multisig |
+| Council of 21 | 10% | 2,100,000 | Per-round emission, equal split among seated members |
+| Ecosystem | 8% | 1,680,000 | Per-round emission to ecosystem multisig (airdrops, grants) |
+| Founder | 5% | 1,050,000 | Per-round emission, liquid balance |
+| Reserve | 5% | 1,050,000 | Per-round emission to reserve multisig (strategic use) |
 
 **Council vs. Validators:** The Council of 21 is a **governance body** separate from the validator set. Council members are appointed via `CouncilMembership` proposals and do not require UDAG stake — their authority comes from their seat, not their stake. Validators are the top 100 stakers by effective stake. A person may be both a council member and a validator, but the roles are independent.
 
-**No Pre-Mine:** There are no genesis allocations. No developer pre-mine, no VC funding, no presale. All tokens are distributed through per-round emission starting from round 1. The founder earns 5% of each round's reward on the same timeline as validators. Auditable from block 0.
+**One Pre-Mine, Six Emitted:** Of the seven buckets, only the IDO distributor (12%, 2.52M UDAG) is credited at genesis. It funds private-round buyers and seeds Uniswap liquidity on Arbitrum via the UDAG bridge. Every other bucket — validators, council, treasury, founder, ecosystem, reserve — starts at zero and earns through per-round emission, auditable from block 0. The founder has no vesting contract and no liquid pre-allocation; they accumulate the founder share via the same emission path as validators.
 
 ### 10.3 Validator Staking
 
@@ -300,7 +303,7 @@ Ordering deliberately does **not** use `topo_level` (ancestor count), because `t
 reward(r) = floor(1 * 10^8 / 2^(r / 10500000))
 ```
 
-Distributed per round by the protocol (not per vertex). 75% to validators/stakers proportional to effective stake, 10% to DAO treasury, 10% to Council of 21, 5% to founder. Coinbase contains only transaction fees. The reward effectively reaches 0 at **halving 27** (~44.8 years), when `floor(10^8 / 2^27) = 0` satoshis due to integer division. The code guards against shift overflow by returning 0 for halvings >= 64. Slashed stake is burned.
+Distributed per round by the protocol (not per vertex). The six emission buckets split the nominal block reward as follows: 44% validators/stakers (proportional to effective stake), 16% DAO treasury, 10% Council of 21, 8% ecosystem multisig, 5% founder, 5% reserve multisig. Sum = 88% of nominal reward; the remaining 12% is never minted and offsets the 2.52M UDAG IDO genesis pre-mine, keeping total supply capped at exactly 21M. Coinbase contains only transaction fees. The reward effectively reaches 0 at **halving 27** (~44.8 years), when `floor(10^8 / 2^27) = 0` satoshis due to integer division. The code guards against shift overflow by returning 0 for halvings >= 64. Slashed stake is burned.
 
 ---
 

@@ -411,15 +411,14 @@ impl StateEngine {
     ) -> u64 {
         let total_round_reward = crate::constants::block_reward(round);
 
-        // Deduct council emission share from validator reward pool
-        let council_percent = self.governance_params.council_emission_percent;
-        let council_count = self.council_members.len() as u64;
-        let validator_pool = if council_count > 0 && council_percent > 0 {
-            // Validators get (100 - council_percent)% of block reward
-            total_round_reward.saturating_mul(100u64.saturating_sub(council_percent)) / 100
-        } else {
-            total_round_reward
-        };
+        // The validator pool is explicitly validator_emission_percent of the
+        // nominal block reward — not the residual after other buckets. This
+        // matches `distribute_round_rewards`, where every bucket (including
+        // validators) is computed from its own governance-tunable percentage,
+        // and the sum of all buckets is ≤ 100 (default 88, with the 12% gap
+        // corresponding to the IDO genesis pre-mine).
+        let validator_percent = self.governance_params.validator_emission_percent;
+        let validator_pool = total_round_reward.saturating_mul(validator_percent) / 100;
 
         // Total effective stake must match distribute_round_rewards denominator:
         // sum of effective_stake_of() for all stakers, which excludes undelegating amounts.
@@ -459,22 +458,54 @@ impl StateEngine {
         }
     }
 
-    /// Compute the total council emission for a round.
-    /// Returns (per_member_amount, total_council_amount).
+    /// Compute the total council emission for a round under the fixed-denominator
+    /// model. Returns `(per_member_amount, total_paid_to_seated_members)`.
     ///
-    /// The per-round council budget = `block_reward(round) * council_emission_percent / 100`,
-    /// split equally among seated council members. Used by the `/council` RPC endpoint
-    /// for display purposes. Actual emission happens in `distribute_round_rewards()`.
+    /// Under the fixed-denominator model (see `distribute_round_rewards`), the
+    /// per-member share is `council_total / COUNCIL_MAX_MEMBERS (21)` regardless
+    /// of how many seats are filled. This means:
+    ///
+    ///   - Each seated member always earns the same fair share, independent of
+    ///     how populated the council is.
+    ///   - Unfilled seats' shares (plus integer dust) flow to the treasury, not
+    ///     to other members.
+    ///
+    /// The returned `total_paid_to_seated_members` is `per_member * seated_count`
+    /// — NOT the full council budget. To get the amount that ends up in the
+    /// treasury as residual, callers can compute `full_council_budget(round) -
+    /// total_paid_to_seated_members`. This function is used by the `/council`
+    /// RPC endpoint for display. Actual emission happens in
+    /// `distribute_round_rewards()`.
     pub fn compute_council_emission(&self, round: u64) -> (u64, u64) {
-        let council_count = self.council_members.len() as u64;
         let council_percent = self.governance_params.council_emission_percent;
-        if council_count == 0 || council_percent == 0 {
+        if council_percent == 0 {
+            return (0, 0);
+        }
+        let max_members = crate::constants::COUNCIL_MAX_MEMBERS as u64;
+        if max_members == 0 {
             return (0, 0);
         }
         let total_round_reward = crate::constants::block_reward(round);
         let council_total = total_round_reward.saturating_mul(council_percent) / 100;
-        let per_member = council_total / council_count;
+        let per_member = council_total / max_members;
+        let council_count = self.council_members.len() as u64;
         (per_member, per_member.saturating_mul(council_count))
+    }
+
+    /// Compute the full council emission budget for a round (before residual split).
+    /// Returns the total sats allocated to "council" as a bucket, regardless of
+    /// how many seats are filled. Equal to `block_reward(round) * council_emission_percent / 100`.
+    ///
+    /// Used by display / RPC code that wants to show the full council budget
+    /// and separately compute what went to members vs what went to the treasury
+    /// as residual.
+    pub fn council_budget_for_round(&self, round: u64) -> u64 {
+        let council_percent = self.governance_params.council_emission_percent;
+        if council_percent == 0 {
+            return 0;
+        }
+        let total_round_reward = crate::constants::block_reward(round);
+        total_round_reward.saturating_mul(council_percent) / 100
     }
 
     /// Distribute the round's block reward to ALL stakers proportionally.
@@ -518,52 +549,102 @@ impl StateEngine {
         // and the supply invariant check (SupplyInvariantBroken → process exit) catches it.
         // The member list is sorted by address for deterministic credit ordering.
         // --- Compute emission splits ---
-        // Council: council_emission_percent (default 10%)
-        // Treasury: treasury_emission_percent (default 10%)
-        // Founder: founder_emission_percent (default 5%)
-        // Validators: remainder (default 75%)
+        // Each bucket is an explicit percentage of the nominal block reward.
+        // Default configuration sums to 88% — the remaining 12% is never minted,
+        // matching the 12% IDO genesis pre-mine so total supply converges to 21M.
+        //
+        // Validator: validator_emission_percent (default 44%)
+        // Council:   council_emission_percent   (default 10%)
+        // Treasury:  treasury_emission_percent  (default 16%)
+        // Founder:   founder_emission_percent   (default  5%)
+        // Ecosystem: ecosystem_emission_percent (default  8%)
+        // Reserve:   reserve_emission_percent   (default  5%)
+        let validator_percent = self.governance_params.validator_emission_percent;
         let council_percent = self.governance_params.council_emission_percent;
         let treasury_percent = self.governance_params.treasury_emission_percent;
         let founder_percent = self.governance_params.founder_emission_percent;
+        let ecosystem_percent = self.governance_params.ecosystem_emission_percent;
+        let reserve_percent = self.governance_params.reserve_emission_percent;
 
         let council_total = total_round_reward.saturating_mul(council_percent) / 100;
         let treasury_total = total_round_reward.saturating_mul(treasury_percent) / 100;
         let founder_total = total_round_reward.saturating_mul(founder_percent) / 100;
-        let validator_pool = total_round_reward
-            .saturating_sub(council_total)
-            .saturating_sub(treasury_total)
-            .saturating_sub(founder_total);
+        let ecosystem_total = total_round_reward.saturating_mul(ecosystem_percent) / 100;
+        let reserve_total = total_round_reward.saturating_mul(reserve_percent) / 100;
+        let validator_pool = total_round_reward.saturating_mul(validator_percent) / 100;
 
-        // --- Council emission ---
+        // --- Council emission (fixed-denominator model) ---
+        //
+        // The council budget is ALWAYS split into COUNCIL_MAX_MEMBERS (21) equal
+        // shares, regardless of how many seats are currently filled. Shares for
+        // unfilled seats — plus any integer truncation dust — flow to the
+        // treasury, where the council can later redirect them via a
+        // `TreasurySpend` proposal. This fixes two bootstrap pathologies the
+        // old "council_total / seated_count" model exposed:
+        //
+        //   (1) **Empty council drop**: with 0 seated members, the old model
+        //       computed a council_total but never minted it — 10% of every
+        //       round's emission was silently skipped until someone was seated.
+        //
+        //   (2) **Solo-member windfall**: with 1 seated member, the old model
+        //       divided by 1, giving that single address COUNCIL_MAX_MEMBERS
+        //       (21x) their eventual fair share. A founder who seated
+        //       themselves first got a massive head start.
+        //
+        // The fixed denominator keeps each seat's share constant as the
+        // council fills, and routes the residual to treasury (not to the
+        // founder, not to validators) so governance decides what to do with
+        // unclaimed bootstrap emission.
+        let max_members: u64 = crate::constants::COUNCIL_MAX_MEMBERS as u64;
         let council_count = self.council_members.len() as u64;
-        if council_count > 0 && council_total > 0 {
-            let per_member = council_total / council_count;
-            if per_member > 0 {
-                let council_mint = per_member.saturating_mul(council_count).min(remaining_supply);
-                let capped_per = council_mint / council_count;
-                if capped_per > 0 {
-                    // Sort members by address for deterministic credit ordering
-                    let mut members: Vec<Address> = self.council_members.keys().copied().collect();
-                    members.sort();
-                    for member in &members {
-                        if let Err(e) = self.credit(member, capped_per) {
-                            return Err(CoinError::SupplyInvariantBroken(
-                                format!("council emission credit failed: {}", e),
-                            ));
-                        }
+        let per_member = if max_members > 0 { council_total / max_members } else { 0 };
+
+        let mut council_credited_to_members: u64 = 0;
+        if council_count > 0 && per_member > 0 {
+            let want_mint = per_member.saturating_mul(council_count);
+            let council_mint = want_mint.min(remaining_supply);
+            // If the supply cap bites mid-distribution, scale each member's
+            // share down equally. In practice the cap only kicks in ~106
+            // years post-genesis, but we keep the guard for correctness.
+            let capped_per = council_mint / council_count;
+            if capped_per > 0 {
+                // Sort members by address for deterministic credit ordering.
+                let mut members: Vec<Address> = self.council_members.keys().copied().collect();
+                members.sort();
+                for member in &members {
+                    if let Err(e) = self.credit(member, capped_per) {
+                        return Err(CoinError::SupplyInvariantBroken(
+                            format!("council emission credit failed: {}", e),
+                        ));
                     }
-                    let actually_minted = capped_per.saturating_mul(members.len() as u64);
-                    // Canonical remainder: assign truncation dust to first member in sorted order.
-                    let council_remainder = council_mint.saturating_sub(actually_minted);
-                    if council_remainder > 0 {
-                        if let Err(e) = self.credit(&members[0], council_remainder) {
-                            return Err(CoinError::SupplyInvariantBroken(
-                                format!("council remainder credit failed: {}", e),
-                            ));
-                        }
-                    }
-                    self.total_supply = self.total_supply.saturating_add(actually_minted.saturating_add(council_remainder));
                 }
+                let actually_minted = capped_per.saturating_mul(members.len() as u64);
+                self.total_supply = self.total_supply.saturating_add(actually_minted);
+                council_credited_to_members = actually_minted;
+            }
+        }
+
+        // --- Council residual → treasury ---
+        //
+        // Every sat the council budget notionally allocated but did NOT credit
+        // to a member flows to the treasury. This covers:
+        //   - Empty council: full council_total → treasury
+        //   - Partial council: (max_members - seated) × per_member → treasury
+        //   - Integer dust from `council_total / max_members`
+        //   - Supply-cap truncation of the per-member mint (edge case)
+        //
+        // The residual is accounted BEFORE the fixed treasury share, so on a
+        // bootstrap network the treasury effectively receives up to 20% of
+        // emission (10% its own share + 10% unfilled council share). That
+        // extra 10% drains as council seats fill; at full capacity (21/21)
+        // the residual is just integer dust and treasury is back to 10%.
+        let council_residual = council_total.saturating_sub(council_credited_to_members);
+        if council_residual > 0 {
+            let remaining_after_council = crate::constants::MAX_SUPPLY_SATS.saturating_sub(self.total_supply);
+            let capped_residual = council_residual.min(remaining_after_council);
+            if capped_residual > 0 {
+                self.treasury_balance = self.treasury_balance.saturating_add(capped_residual);
+                self.total_supply = self.total_supply.saturating_add(capped_residual);
             }
         }
 
@@ -590,6 +671,38 @@ impl StateEngine {
                     ));
                 }
                 self.total_supply = self.total_supply.saturating_add(capped_founder);
+            }
+        }
+
+        // --- Ecosystem emission ---
+        // Ecosystem credits go to a normal account at ecosystem_address(), held
+        // by a multisig and spent off-chain for airdrops, grants, early adopters.
+        if ecosystem_total > 0 {
+            let remaining_after_founder = crate::constants::MAX_SUPPLY_SATS.saturating_sub(self.total_supply);
+            let capped_ecosystem = ecosystem_total.min(remaining_after_founder);
+            if capped_ecosystem > 0 {
+                if let Err(e) = self.credit(&crate::constants::ecosystem_address(), capped_ecosystem) {
+                    return Err(crate::error::CoinError::SupplyInvariantBroken(
+                        format!("ecosystem emission credit failed: {}", e),
+                    ));
+                }
+                self.total_supply = self.total_supply.saturating_add(capped_ecosystem);
+            }
+        }
+
+        // --- Reserve emission ---
+        // Reserve credits go to a normal account at reserve_address(), held by
+        // a multisig for strategic future use (governance-directed deployments).
+        if reserve_total > 0 {
+            let remaining_after_ecosystem = crate::constants::MAX_SUPPLY_SATS.saturating_sub(self.total_supply);
+            let capped_reserve = reserve_total.min(remaining_after_ecosystem);
+            if capped_reserve > 0 {
+                if let Err(e) = self.credit(&crate::constants::reserve_address(), capped_reserve) {
+                    return Err(crate::error::CoinError::SupplyInvariantBroken(
+                        format!("reserve emission credit failed: {}", e),
+                    ));
+                }
+                self.total_supply = self.total_supply.saturating_add(capped_reserve);
             }
         }
 
@@ -788,12 +901,25 @@ impl StateEngine {
     /// Create a new StateEngine with genesis state.
     /// All nodes must call this to start with identical initial state.
     ///
-    /// No pre-mine: all tokens are distributed through per-round emission.
-    /// - Mainnet: total_supply = 0 (completely clean genesis)
-    /// - Testnet: total_supply = FAUCET_PREFUND_SATS (faucet for testing)
-    /// - Founder, treasury, and council all start at 0 and earn through emission.
+    /// Genesis allocations:
+    /// - IDO distributor address receives 2,520,000 UDAG (12% of total supply).
+    ///   This is the only pre-mine, used for private-round distribution and
+    ///   Uniswap liquidity seeding via the Arbitrum bridge.
+    /// - Founder, treasury, council, ecosystem, and reserve all start at 0 and
+    ///   earn through per-round emission (summing to 88% of nominal block reward).
+    /// - Testnet only: faucet receives FAUCET_PREFUND_SATS for testing.
+    ///
+    /// Total supply at genesis:
+    /// - Mainnet: IDO_GENESIS_PREMINE_SATS (2.52M UDAG)
+    /// - Testnet: IDO_GENESIS_PREMINE_SATS + FAUCET_PREFUND_SATS
     pub fn new_with_genesis() -> Self {
         let mut engine = Self::new();
+
+        // IDO genesis pre-mine — credited to the IDO distributor address on BOTH
+        // testnet and mainnet. The distributor is a multisig responsible for
+        // private-round payouts and bridging to Arbitrum for Uniswap seeding.
+        let ido_addr = crate::constants::ido_address();
+        let _ = engine.credit(&ido_addr, crate::constants::IDO_GENESIS_PREMINE_SATS);
 
         // Faucet reserve (testnet only — excluded from mainnet genesis)
         #[cfg(not(feature = "mainnet"))]
@@ -821,14 +947,15 @@ impl StateEngine {
         );
 
         // total_supply tracks all credited amounts + treasury
-        // No pre-mine: only faucet (testnet) contributes to genesis supply.
+        // Genesis supply = IDO pre-mine (both networks) + faucet (testnet only).
         #[cfg(not(feature = "mainnet"))]
         {
-            engine.total_supply = crate::constants::FAUCET_PREFUND_SATS;
+            engine.total_supply = crate::constants::IDO_GENESIS_PREMINE_SATS
+                .saturating_add(crate::constants::FAUCET_PREFUND_SATS);
         }
         #[cfg(feature = "mainnet")]
         {
-            engine.total_supply = 0;
+            engine.total_supply = crate::constants::IDO_GENESIS_PREMINE_SATS;
         }
 
         engine
@@ -5914,15 +6041,28 @@ mod tests {
         let vertex = make_vertex_for(&proposer, 0, 0, vec![], &proposer_sk);
         state.apply_vertex(&vertex).unwrap();
 
-        // Per-round emission split: 75% validators, 10% treasury, 10% council, 5% founder
-        // With no council members, council share is not minted.
+        // Per-round emission split (April 2026 tokenomics update): 44% validators,
+        // 10% council, 16% treasury, 5% founder, 8% ecosystem, 5% reserve = 88%.
+        // The remaining 12% is unminted and matches the 12% IDO genesis pre-mine,
+        // keeping total supply capped at 21M.
+        //
+        // Under the fixed-denominator council model, when the council is empty
+        // the 10% council share flows to the treasury as residual — so the full
+        // 88% is still minted every round, regardless of council seat count.
         let total_reward = crate::constants::block_reward(0);
-        let validator_share = total_reward * 75 / 100; // 75% to validator pool
-        assert_eq!(state.balance(&proposer), validator_share);
-        // total_supply = validator + treasury (10%) + founder (5%) [council 10% unminted]
-        let treasury_share = total_reward * 10 / 100;
+        let validator_share = total_reward * 44 / 100;
+        let treasury_share = total_reward * 16 / 100;
+        let council_residual = total_reward * 10 / 100; // empty council → treasury
         let founder_share = total_reward * 5 / 100;
-        assert_eq!(state.total_supply(), validator_share + treasury_share + founder_share);
+        let ecosystem_share = total_reward * 8 / 100;
+        let reserve_share = total_reward * 5 / 100;
+
+        assert_eq!(state.balance(&proposer), validator_share);
+        // StateEngine::new() starts empty (no IDO pre-mine applied — that only
+        // happens in new_with_genesis). Expected total = 88% of block_reward.
+        let expected_round_emission = validator_share + treasury_share + council_residual
+            + founder_share + ecosystem_share + reserve_share;
+        assert_eq!(state.total_supply(), expected_round_emission);
         assert_eq!(state.last_finalized_round(), Some(0));
     }
 
@@ -5933,11 +6073,11 @@ mod tests {
         let proposer = proposer_sk.address();
         let receiver = SecretKey::generate().address();
 
-        // First vertex gives proposer some coins (75% of block reward)
+        // First vertex gives proposer some coins (44% of block reward)
         let v0 = make_vertex_for(&proposer, 0, 0, vec![], &proposer_sk);
         state.apply_vertex(&v0).unwrap();
 
-        let reward0 = crate::constants::block_reward(0) * 75 / 100;
+        let reward0 = crate::constants::block_reward(0) * 44 / 100;
         let amount = 100;
         let fee = 10;
 
@@ -5946,7 +6086,7 @@ mod tests {
         let v1 = make_vertex_for(&proposer, 1, 1, vec![tx], &proposer_sk);
         state.apply_vertex(&v1).unwrap();
 
-        let reward1 = crate::constants::block_reward(1) * 75 / 100;
+        let reward1 = crate::constants::block_reward(1) * 44 / 100;
         // Proposer: reward0 - (amount + fee) + (reward1 + fee)
         let expected_proposer = reward0 - (amount + fee) + reward1 + fee;
         assert_eq!(state.balance(&proposer), expected_proposer);
@@ -5999,8 +6139,8 @@ mod tests {
         assert!(result.is_ok(), "Vertex should apply despite bad nonce");
         // Receiver should NOT have received the transfer
         assert_eq!(state.balance(&receiver), 0);
-        // Proposer gets 75% of block reward (emission split) — skipped tx has no fee effect
-        let reward = crate::constants::block_reward(1) * 75 / 100;
+        // Proposer gets 44% of block reward (emission split) — skipped tx has no fee effect
+        let reward = crate::constants::block_reward(1) * 44 / 100;
         assert!(state.balance(&proposer) >= balance_after_v0 + reward - 10);
     }
 
@@ -6078,20 +6218,24 @@ mod tests {
 
         state.apply_finalized_vertices(&[v0, v1, v2]).unwrap();
 
-        // Per-round emission: 75% validator, 10% treasury, 5% founder (council unminted)
-        let r0 = crate::constants::block_reward(0) * 75 / 100;
-        let r1 = crate::constants::block_reward(1) * 75 / 100;
-        let r2 = crate::constants::block_reward(2) * 75 / 100;
+        // Per-round emission (April 2026): 44% validators + 10% council + 16%
+        // treasury + 5% founder + 8% ecosystem + 5% reserve = 88% of block_reward.
+        // With no council members seated, the 10% council share flows to treasury
+        // as residual, so 88% of the nominal reward is still minted every round.
+        let r0 = crate::constants::block_reward(0) * 44 / 100;
+        let r1 = crate::constants::block_reward(1) * 44 / 100;
+        let r2 = crate::constants::block_reward(2) * 44 / 100;
 
         assert_eq!(state.balance(&sk1.address()), r0);
         assert_eq!(state.balance(&sk2.address()), r1);
         assert_eq!(state.balance(&sk3.address()), r2);
-        // total_supply includes validator (75%) + treasury (10%) + founder (5%) per round
-        let per_round_total = |h: u64| {
-            let br = crate::constants::block_reward(h);
-            br * 75 / 100 + br * 10 / 100 + br * 5 / 100
-        };
-        assert_eq!(state.total_supply(), per_round_total(0) + per_round_total(1) + per_round_total(2));
+
+        // StateEngine::new() starts empty — per-round emission only (no IDO pre-mine).
+        let per_round_emission = |h: u64| crate::constants::block_reward(h) * 88 / 100;
+        assert_eq!(
+            state.total_supply(),
+            per_round_emission(0) + per_round_emission(1) + per_round_emission(2)
+        );
         assert_eq!(state.last_finalized_round(), Some(2));
     }
 

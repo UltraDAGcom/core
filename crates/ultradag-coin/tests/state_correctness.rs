@@ -132,9 +132,9 @@ fn test_multi_round_transaction_sequence() {
     }
     
     // Initial balances — with canonical remainder, first sorted address gets +1 per round
-    // Emission split: 75% to validator pool (10% council unminted + 10% treasury + 5% founder)
+    // April 2026 tokenomics: validator pool = 44% of block_reward.
     let full_reward = ultradag_coin::constants::block_reward(1);
-    let reward = full_reward * 75 / 100; // validator pool
+    let reward = full_reward * ultradag_coin::constants::VALIDATOR_EMISSION_PERCENT / 100;
     let per_producer = reward / n;
     let remainder = reward.saturating_sub(per_producer.saturating_mul(n));
     let mut sorted_addrs = vec![addr_a, addr_b, addr_c];
@@ -277,17 +277,27 @@ fn test_multi_round_transaction_sequence() {
     assert_eq!(state.balance(&addr_b), expected_b, "Account B balance incorrect");
     assert_eq!(state.balance(&addr_c), expected_c, "Account C balance incorrect");
 
-    // Verify total supply: includes validator pool + treasury + founder per round (council unminted)
+    // Verify total supply: April 2026 tokenomics = 44% validators + 10% council
+    // (routed to treasury when empty) + 16% treasury + 5% founder + 8% ecosystem
+    // + 5% reserve = 88% of block_reward per round.
     let final_supply = state.total_supply();
-    let treasury_per_round = full_reward * 10 / 100;
-    let founder_per_round = full_reward * 5 / 100;
-    let expected_supply = (per_producer * n + remainder + treasury_per_round + founder_per_round) * total_rounds;
+    let treasury_per_round = full_reward * ultradag_coin::constants::TREASURY_EMISSION_PERCENT / 100;
+    let founder_per_round = full_reward * ultradag_coin::constants::FOUNDER_EMISSION_PERCENT / 100;
+    let ecosystem_per_round = full_reward * ultradag_coin::constants::ECOSYSTEM_EMISSION_PERCENT / 100;
+    let reserve_per_round = full_reward * ultradag_coin::constants::RESERVE_EMISSION_PERCENT / 100;
+    let council_residual_per_round = full_reward * ultradag_coin::constants::COUNCIL_EMISSION_PERCENT / 100;
+    let per_round_emission = per_producer * n + remainder + treasury_per_round
+        + founder_per_round + ecosystem_per_round + reserve_per_round
+        + council_residual_per_round;
+    let expected_supply = per_round_emission * total_rounds;
     assert_eq!(final_supply, expected_supply, "Total supply should be conserved");
 
-    // Verify sum of liquid balances + treasury + dev_address = total supply
-    // (treasury_balance is not in liquid accounts)
+    // Verify sum of liquid balances + treasury + all bucket addresses = total supply
     let sum_balances = state.balance(&addr_a) + state.balance(&addr_b) + state.balance(&addr_c)
-        + state.treasury_balance() + state.balance(&ultradag_coin::constants::dev_address());
+        + state.treasury_balance()
+        + state.balance(&ultradag_coin::constants::dev_address())
+        + state.balance(&ultradag_coin::constants::ecosystem_address())
+        + state.balance(&ultradag_coin::constants::reserve_address());
     assert_eq!(sum_balances, final_supply, "Sum of all balances should equal total supply");
     
     println!("✓ Multi-round transaction sequence verified");
@@ -495,13 +505,14 @@ fn test_fee_accounting() {
     // Round 3 finalized: heights 4, 5
     // Round 4 not finalized yet (need round 5)
     
-    // Emission split: 75% to validator pool (no council members → unminted)
-    let r0 = ultradag_coin::constants::block_reward(0) * 75 / 100 / n;
-    let r1 = ultradag_coin::constants::block_reward(1) * 75 / 100 / n;
-    let r2 = ultradag_coin::constants::block_reward(2) * 75 / 100 / n;
-    let r3 = ultradag_coin::constants::block_reward(3) * 75 / 100 / n;
-    let r4 = ultradag_coin::constants::block_reward(4) * 75 / 100 / n;
-    let r5 = ultradag_coin::constants::block_reward(5) * 75 / 100 / n;
+    // April 2026 tokenomics: validator pool = 44% of block_reward.
+    let val_pct = ultradag_coin::constants::VALIDATOR_EMISSION_PERCENT;
+    let r0 = ultradag_coin::constants::block_reward(0) * val_pct / 100 / n;
+    let r1 = ultradag_coin::constants::block_reward(1) * val_pct / 100 / n;
+    let r2 = ultradag_coin::constants::block_reward(2) * val_pct / 100 / n;
+    let r3 = ultradag_coin::constants::block_reward(3) * val_pct / 100 / n;
+    let r4 = ultradag_coin::constants::block_reward(4) * val_pct / 100 / n;
+    let r5 = ultradag_coin::constants::block_reward(5) * val_pct / 100 / n;
     
     println!("r0={}, r1={}, r2={}, r3={}, r4={}, r5={}", r0, r1, r2, r3, r4, r5);
     

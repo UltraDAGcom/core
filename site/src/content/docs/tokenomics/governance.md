@@ -143,10 +143,15 @@ The following 10 parameters can be modified via `ParameterChange` proposals:
 | `execution_delay_rounds` | 2,016 | 2,016 | 100,000 | Delay before execution |
 | `max_active_proposals` | 20 | 1 | 100 | Concurrent proposal limit |
 | `observer_reward_percent` | 50 | 0 | 100 | Passive staking reward rate (raised from 20%) |
+| `validator_emission_percent` | 44 | 30 | 80 | Validator share of emission |
 | `council_emission_percent` | 10 | 0 | 30 | Council's share of emission |
+| `treasury_emission_percent` | 16 | 0 | 25 | Treasury's share of emission |
+| `founder_emission_percent` | 5 | 0 | 10 | Founder's share of emission |
+| `ecosystem_emission_percent` | 8 | 0 | 20 | Ecosystem multisig's share of emission |
+| `reserve_emission_percent` | 5 | 0 | 15 | Reserve multisig's share of emission |
 | `slash_percent` | 50 | 10 | 100 | Equivocation slash severity |
 
-<div class="callout callout-danger"><div class="callout-title">Parameter change safety</div>All parameters have enforced minimum and maximum bounds. Even a compromised council cannot set fees to `u64::MAX` or slash percentages to 0%.</div>
+<div class="callout callout-danger"><div class="callout-title">Parameter change safety</div>All parameters have enforced minimum and maximum bounds. Even a compromised council cannot set fees to <code>u64::MAX</code> or slash percentages to 0%. The six emission-bucket percentages are additionally gated by a cross-parameter check: their sum cannot exceed 100% of the nominal block reward. The default configuration sums to 88%; the remaining 12% is the IDO genesis pre-mine offset.</div>
 
 ---
 

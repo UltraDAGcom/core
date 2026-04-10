@@ -5,10 +5,12 @@ category: "Tokenomics"
 summary: "Why UltraDAG's emission schedule changed from 50 UDAG/round to 1 UDAG/round, and the math behind credible tokenomics for a mainnet launch."
 ---
 
-> **Update (2026-04-10):** This post is a historical snapshot from 2026-03-14. Some numbers below are now outdated — specifically:
-> - **Genesis allocation**: mainnet has **zero pre-mine**, not 2,050,000 UDAG. Testnet still has a 1,000,000 UDAG faucet reserve (feature-gated), but nothing else.
-> - **Per-validator emission table**: the original version assumed a 21-validator cap; `MAX_ACTIVE_VALIDATORS` was later raised to 100, and the table below has been recomputed with the current 75% validator / 10% council / 10% treasury / 5% founder split.
-> - **"Year 5.7 supply cap"**: incorrect. With four halvings the schedule hits 93.75%, not 100%. The geometric series converges — full emission continues over tens of halvings until the per-round reward integer-shifts to zero (around halving 27, ~45 years at 5 s/round). The `block_reward()` function returns 0 for `halvings >= 64`.
+> **Update (2026-04-10):** This post is a historical snapshot from 2026-03-14 covering the switch from 50 UDAG/round to 1 UDAG/round. Since then the distribution model was overhauled again:
+>
+> - **7-bucket model, not 4-bucket**: the per-round split is now 44% validators / 10% council / 16% treasury / 5% founder / 8% ecosystem / 5% reserve = **88%** of the nominal reward. The remaining **12% is never minted** — it's offset by a 2,520,000 UDAG IDO genesis pre-mine that bootstraps the private round and Uniswap liquidity. Total supply cap is unchanged at 21M.
+> - **Only one pre-mine**: the IDO distributor address. All other buckets (validators, council, treasury, founder, ecosystem, reserve) still start at zero and earn through per-round emission.
+> - **Per-validator emission table**: `MAX_ACTIVE_VALIDATORS` is 100, and the table below has been recomputed with the 44% validator share of the nominal reward.
+> - **"Year 5.7 supply cap"**: incorrect. The geometric series converges over tens of halvings until the per-round reward integer-shifts to zero (around halving 27, ~45 years at 5 s/round). The `block_reward()` function returns 0 for `halvings >= 64`.
 >
 > See [tokenomics/supply](/docs/tokenomics/supply) for the current canonical numbers.
 
@@ -84,18 +86,18 @@ Supply cap reached at approximately **year 5.7**. After that, validators earn on
 
 ## Validator Economics
 
-Daily emission is 17,280 UDAG (one per round, 17,280 rounds per day). Split among validators:
+Daily nominal reward is 17,280 UDAG (one per round × 17,280 rounds per day). The validator pool is 44% of that — 7,603.2 UDAG/day. Split among validators:
 
 | Validators | UDAG/Day Each | UDAG/Year Each |
 |-----------|--------------|----------------|
-| 5 (current testnet) | 2,592 | 946,080 |
-| 10 | 1,296 | 473,040 |
-| 25 | 519 | 189,216 |
-| 100 (max active) | 130 | 47,304 |
+| 5 (current testnet) | 1,520 | 555,000 |
+| 10 | 760 | 277,500 |
+| 25 | 304 | 111,000 |
+| 100 (max active) | 76 | 27,750 |
 
-*Math: 86,400 s/day ÷ 5 s/round = 17,280 rounds/day. Validator pool per day = 17,280 × 0.75 = 12,960 UDAG (the remaining 25% splits 10% council, 10% treasury, 5% founder). Divide equally by N validators for per-node income, before any delegation effects or commission. At the full 100-validator cap each node earns ~130 UDAG/day in the first halving period — meaningful enough to incentivize early validators while conservative enough that the schedule doesn't look like an exit scam.*
+*Math: 86,400 s/day ÷ 5 s/round = 17,280 rounds/day. Validator pool per day = 17,280 × 0.44 = 7,603.2 UDAG. Divide equally by N validators for per-node income, before any delegation effects or commission. At the full 100-validator cap each node earns ~76 UDAG/day in the first halving period. The remaining 44% of the nominal reward is split 10% council + 16% treasury + 5% founder + 8% ecosystem + 5% reserve; the final 12% is uncreated, matching the IDO genesis pre-mine.*
 
-> **Historical note:** this table was updated on 2026-04-10 when the active validator cap was raised from 21 to 100 (`MAX_ACTIVE_VALIDATORS = 100`). Earlier versions of this post showed the 21-validator row as the max case.
+> **Historical note:** this table was updated on 2026-04-10 when the distribution model changed from the 75% validator / 10% council / 10% treasury / 5% founder split to the current 7-bucket model. Earlier versions of this post showed higher per-validator daily numbers based on the 75% validator share.
 
 ## Why Not Exactly Bitcoin's Timeline?
 

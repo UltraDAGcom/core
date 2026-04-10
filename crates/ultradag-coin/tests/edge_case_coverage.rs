@@ -731,10 +731,16 @@ fn test_governance_param_slash_percent_bounds() {
 }
 
 /// GovernanceParams rejects council_emission_percent above 30.
+/// Under April 2026 tokenomics the default bucket sum is 88%, so raising a
+/// single bucket enough to hit the ceiling requires first lowering another
+/// to make room under the 100% cross-parameter cap.
 #[test]
 fn test_governance_param_council_emission_ceiling() {
     let mut params = GovernanceParams::default();
     assert!(params.apply_change("council_emission_percent", "31").is_err());
+    // Setting to 30 would push the sum to 108%, which exceeds the cross-param cap.
+    // First drop validator_emission_percent to 30 to make room.
+    assert!(params.apply_change("validator_emission_percent", "30").is_ok());
     assert!(params.apply_change("council_emission_percent", "30").is_ok());
     assert!(params.apply_change("council_emission_percent", "0").is_ok());
 }
