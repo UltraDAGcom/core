@@ -79,7 +79,7 @@ cd ultradag
 cargo build --release -p ultradag-node
 ```
 
-The binary is at `target/release/ultradag-node` (< 2 MB). You can copy it anywhere:
+The binary is at `target/release/ultradag-node` (~2.9 MB stripped). You can copy it anywhere:
 
 ```bash
 cp target/release/ultradag-node /usr/local/bin/

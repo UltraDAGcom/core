@@ -139,8 +139,8 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
         <div class="stat-label">Default round time</div>
       </div>
       <div class="stat">
-        <div class="stat-value">&lt;2<span>MB</span></div>
-        <div class="stat-label">Binary size</div>
+        <div class="stat-value">&lt;3<span>MB</span></div>
+        <div class="stat-label">Stripped binary</div>
       </div>
     </div>
   </div>
@@ -284,23 +284,23 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
     <div class="section-inner">
       <p class="section-tag reveal">Why UltraDAG</p>
       <h2 class="reveal">Built for<br /><em>machines.</em></h2>
-      <p class="section-lead reveal">While IOTA, Helium, and IoTeX claimed "built for IoT", UltraDAG is the first to actually deliver: minimal binary, bounded storage, predictable finality, and runs on real embedded devices.</p>
+      <p class="section-lead reveal">Small enough to run a full validator on a $15 Raspberry Pi Zero 2 W. Simple enough that a $3 ESP32 can hold the key and sign transactions. No VM, no smart contracts, no pre-mine — the minimum viable chain for machine-to-machine payments.</p>
 
       <div class="features-grid">
         <div class="feature reveal">
           <div class="feature-icon">Storage</div>
           <h3>Bounded Storage</h3>
-          <p>Automatic pruning keeps only last 500 rounds (configurable). Memory usage stays constant after sync. Unlike IOTA/Byteball's unbounded growth, UltraDAG works on IoT devices with limited flash/RAM.</p>
+          <p>Pruning horizon of 500 rounds (governable) keeps DAG state constant after sync — full nodes settle at ~100 MB on disk. Unlike Byteball's unbounded Tangle, UltraDAG stays small forever. Old vertices can still be verified via BFT-signed checkpoints.</p>
         </div>
         <div class="feature reveal reveal-delay-1">
           <div class="feature-icon">Finality</div>
           <h3>Predictable Fast Finality</h3>
-          <p>BFT finality in 3 rounds (~5-15 seconds). No centralized coordinator like IOTA. No slow block times like IoTeX. Sensors can confirm payments in &lt;10 seconds without human intervention.</p>
+          <p>Deterministic BFT finality in 3 rounds (~10-15 s). No coordinator node, no probabilistic confirmation counting. A sensor can hand off payment and know it's settled before a human would reach for their phone.</p>
         </div>
         <div class="feature reveal reveal-delay-2">
           <div class="feature-icon">Binary Size</div>
           <h3>Minimal Footprint</h3>
-          <p>&lt;2 MB release binary, ~2,800 LOC consensus core. Fits on ESP32, Raspberry Pi Zero, industrial sensors. EVM chains require 100+ MB binaries—too large for embedded devices.</p>
+          <p>&lt;3 MB stripped release binary (2.87 MB at v0.9). ~7,000 SLOC of consensus runtime. Runs on a $15 Raspberry Pi Zero 2 W — small enough for solar-powered edge deployments, nowhere near the 100+ MB of an EVM node.</p>
         </div>
         <div class="feature reveal">
           <div class="feature-icon">Throughput</div>
@@ -432,29 +432,29 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
             <div>UltraDAG Advantage</div>
           </div>
           <div class="comp-row">
-            <div class="comp-name">IOTA <span class="comp-badge slow">Delayed</span></div>
-            <div class="comp-fail"><strong>No predictable finality.</strong> Coordinator still centralized. Sensors can't confirm payments autonomously.</div>
-            <div class="comp-win"><strong>3-round finality (~10s).</strong> Fully leaderless. No coordinator needed.</div>
+            <div class="comp-name">IOTA 2.0 <span class="comp-badge slow">Heavy</span></div>
+            <div class="comp-fail"><strong>Hornet node needs Pi 4+.</strong> Tangle finality is probabilistic confirmation counting, not deterministic BFT. ICO pre-mine baked into genesis.</div>
+            <div class="comp-win"><strong>Pi Zero 2 W full node</strong> ($15). Deterministic 3-round BFT finality. Zero pre-mine — every UDAG is emitted.</div>
           </div>
           <div class="comp-row">
             <div class="comp-name">Helium <span class="comp-badge niche">Niche</span></div>
-            <div class="comp-fail"><strong>LoRa-only network.</strong> Can't handle general-purpose micropayments between arbitrary devices.</div>
-            <div class="comp-win"><strong>General-purpose L1.</strong> Any device, any payment type. TCP P2P.</div>
+            <div class="comp-fail"><strong>LoRa-only network.</strong> Can't handle general-purpose micropayments between arbitrary devices. Token model overhauled multiple times.</div>
+            <div class="comp-win"><strong>General-purpose L1.</strong> Any device, any payment type. TCP P2P over WiFi/Ethernet.</div>
           </div>
           <div class="comp-row">
             <div class="comp-name">IoTeX <span class="comp-badge slow">Slow</span></div>
-            <div class="comp-fail"><strong>15s+ block time</strong> plus confirmations. 100+ MB binary. Higher fees for micro-tx.</div>
-            <div class="comp-win"><strong>&lt;2 MB binary.</strong> Fee 0.0001 UDAG. Fits on ESP32.</div>
+            <div class="comp-fail"><strong>5s+ blocks plus confirmations.</strong> 100+ MB binary — an EVM node with extra steps. Gas estimation required for every transaction.</div>
+            <div class="comp-win"><strong>&lt;3 MB binary.</strong> Flat 0.0001 UDAG fee. No VM, no gas estimation — just signed transfers.</div>
           </div>
           <div class="comp-row">
             <div class="comp-name">Ethereum L2 <span class="comp-badge slow">Complex</span></div>
-            <div class="comp-fail"><strong>Requires bridge</strong>, smart contracts, gas estimation. Far too complex for embedded firmware.</div>
-            <div class="comp-win"><strong>Native L1.</strong> Simple signed transactions. No bridge, no VM, no gas.</div>
+            <div class="comp-fail"><strong>Bridges, smart contracts, gas estimation.</strong> Far too complex for embedded firmware to interact with directly.</div>
+            <div class="comp-win"><strong>Native L1.</strong> A 256-byte transaction, one Ed25519 signature, done. ESP32-class devices can build and sign transactions without an SDK.</div>
           </div>
           <div class="comp-row">
             <div class="comp-name">Byteball <span class="comp-badge dead">Dead</span></div>
-            <div class="comp-fail"><strong>Unbounded storage.</strong> DAG grows forever. Impossible for IoT devices with limited flash.</div>
-            <div class="comp-win"><strong>Bounded storage.</strong> Automatic pruning. Runs indefinitely on constrained hardware.</div>
+            <div class="comp-fail"><strong>Unbounded storage.</strong> DAG grows forever. Becomes unrunnable on any hardware eventually.</div>
+            <div class="comp-win"><strong>Bounded storage.</strong> 500-round pruning horizon. Steady-state ~100 MB on a full validator.</div>
           </div>
         </div>
       </div>

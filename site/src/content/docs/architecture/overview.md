@@ -15,11 +15,11 @@ UltraDAG is a lightweight DAG-BFT cryptocurrency designed from first principles 
 
 Three principles guide every design decision in UltraDAG:
 
-1. **Simplicity** — Every component must justify its complexity. The entire node compiles to a sub-2 MB binary. No virtual machine, no smart contracts, no account abstraction layers. Just a DAG-based ledger optimized for value transfer.
+1. **Simplicity** — Every component must justify its complexity. The entire node compiles to a sub-3 MB stripped binary (~2.9 MB at v0.9). No virtual machine, no smart contracts, no account abstraction layers. Just a DAG-based ledger optimized for value transfer.
 
 2. **Community-first governance** — The Council of 21 uses one-vote-per-seat governance with no stake requirement. Technical, business, legal, academic, and community seats ensure diverse representation. Stake does not buy governance power.
 
-3. **Real decentralization** — The node runs on a $5/month VPS. A Raspberry Pi can be a full validator. If only well-funded entities can run nodes, the network is not decentralized. UltraDAG makes participation economically accessible.
+3. **Real decentralization** — The node runs on a $5/month VPS, or a $15 Raspberry Pi Zero 2 W. If only well-funded entities can run nodes, the network is not decentralized. UltraDAG makes participation economically accessible — the binary is small enough, the storage bounded enough, and the CPU requirements modest enough that a single USB power bank can keep a validator online.
 
 ---
 

@@ -20,7 +20,7 @@ Validators produce DAG vertices, participate in BFT finality, and earn block rew
 - Minimum stake: **2,000 UDAG**
 - Stable internet connection
 - Low-latency network path to other validators
-- Hardware: any machine capable of running the < 2 MB binary (1 CPU core, 128 MB RAM minimum)
+- Hardware: any Linux SBC that can run the ~2.9 MB stripped binary (1 CPU core, 256 MB RAM minimum — Raspberry Pi Zero 2 W works)
 
 ---
 

@@ -1,11 +1,11 @@
 ---
 title: "UltraDAG Whitepaper v1.2"
-description: "A Leaderless DAG-BFT Cryptocurrency — Minimal correct consensus in ~2,800 lines of Rust"
+description: "A Leaderless DAG-BFT Cryptocurrency — A minimal correct BFT DAG cryptocurrency"
 order: 0
 section: "whitepaper"
 ---
 
-**UltraDAG is a minimal cryptocurrency built on a leaderless DAG-BFT consensus protocol.** The entire consensus core is five files of Rust. The protocol achieves Byzantine fault tolerance through descendant coverage finality — a vertex is finalized when 2f+1 distinct validators have built on top of it. This implicit voting mechanism eliminates leader election, view changes, and explicit vote messages. The system has been validated through 805+ automated tests (all passing) and a 5-node Fly.io testnet. UltraDAG demonstrates that a complete, working cryptocurrency with a 21 million supply cap, halving schedule, and validator staking can be built with radical simplicity.
+**UltraDAG is a minimal cryptocurrency built on a leaderless DAG-BFT consensus protocol.** The consensus module is five core files of Rust; its runtime execution lives in a single state engine. The protocol achieves Byzantine fault tolerance through descendant coverage finality — a vertex is finalized when ⌈2n/3⌉ distinct validators have built on top of it. This implicit voting mechanism eliminates leader election, view changes, and explicit vote messages. The system has been validated through 1,000+ automated tests (all passing), TLA+ model checking across 32.6 million states, and a multi-node Fly.io testnet. UltraDAG demonstrates that a complete, working cryptocurrency with a 21 million supply cap, halving schedule, and validator staking can be built with radical simplicity — a stripped release binary under 3 MB.
 
 ---
 
@@ -47,7 +47,7 @@ Note that sentence 2 encodes two constraints: the quorum threshold (⌈2n/3⌉ d
 
 ### 2.2 Consensus Core Size
 
-The complete consensus implementation is contained in five files totaling **2,769 lines** of Rust (production + tests):
+The consensus module (`crates/ultradag-coin/src/consensus/`) contains the five primitive files that define the protocol — vertex/DAG structure, quorum-based finality, deterministic ordering, and the active validator set — plus auxiliary files for checkpointing and epoch boundaries:
 
 | File | Lines |
 |------|-------|
@@ -56,16 +56,21 @@ The complete consensus implementation is contained in five files totaling **2,76
 | `finality.rs` | 473 |
 | `ordering.rs` | 180 |
 | `validator_set.rs` | 254 |
-| **Total** | **2,769** |
+| `checkpoint.rs` | 748 |
+| `epoch.rs` | 125 |
+| `persistence.rs` + `mod.rs` | 85 |
+| **consensus/ total** | **3,727** |
 
-| System | Approx. Consensus Lines |
+However, *consensus execution* — applying vertices, advancing finality, distributing round rewards, and mutating account state — happens in `state/engine.rs`, which is **~6,500 lines**. An honest audit of UltraDAG's consensus runtime therefore covers **consensus/ + state/engine.rs ≈ 10,200 lines** (~7,300 SLOC excluding comments and blanks).
+
+| System | Approx. Consensus Lines (runtime) |
 |--------|----------------------|
 | Narwhal/Tusk | ~15,000 |
 | Bullshark | ~20,000 |
 | Shoal++ | ~30,000 |
-| **UltraDAG** | **~2,800** |
+| **UltraDAG** | **~10,200** |
 
-*Line counts for competing protocols are estimates based on their published reference implementations (consensus modules only, excluding networking, storage, and client code). UltraDAG's count includes both production code and inline tests. These comparisons are approximate — different projects draw module boundaries differently.*
+*Line counts for competing protocols are estimates based on their published reference implementations. UltraDAG's count covers the complete consensus runtime — the protocol primitives AND the state engine that executes them. These comparisons are approximate: different projects draw module boundaries differently. The smaller number frequently quoted for "UltraDAG consensus" (~2,800 SLOC) refers only to the protocol primitives in `consensus/`, excluding the state engine. Both numbers are defensible; we prefer the larger one because it reflects what a reviewer actually has to read to understand what happens when a vertex arrives.*
 
 ### 2.3 What Was Deliberately Omitted
 
@@ -381,9 +386,10 @@ A 5-node Fly.io testnet runs continuously:
 | Metric | Value |
 |--------|-------|
 | Active Validators | 5 |
-| Tests Passing | 805+ |
+| Tests Passing | 1,000+ |
 | Avg Round Time | 5.0s |
 | UDAG Supply Cap | 21M |
+| Stripped Binary | 2.87 MB (v0.9) |
 
 ---
 
@@ -423,7 +429,7 @@ These are theoretical upper bounds assuming all validators produce full vertices
 | Finality | 3 phases | 2 phases | Pipeline | Wave-based | Separate | 2 rounds | 1 round | **Desc. coverage** |
 | Votes | Explicit | Explicit | Threshold | Implicit | Mixed | Implicit | Implicit | **Implicit** |
 | Messages | O(n^2) | O(n^2) | O(n) | O(n) | O(n) | O(n) | O(n) | **O(n)** |
-| Consensus lines | ~5k | ~10k | ~8k | ~10k | ~15k | ~20k | ~30k | **~2,800** |
+| Consensus runtime lines | ~5k | ~10k | ~8k | ~10k | ~15k | ~20k | ~30k | **~10k** |
 | 3-sentence rule | No | No | No | No | No | No | No | **Yes** |
 | Separate mempool | No | No | No | No | Yes | Yes | Yes | **No** |
 | Waves / anchors | N/A | N/A | N/A | 4-round | N/A | 2-round | Pipelined | **None** |
@@ -443,9 +449,9 @@ These are theoretical upper bounds assuming all validators produce full vertices
 
 UltraDAG demonstrates that a complete, working cryptocurrency can be built on a leaderless DAG-BFT consensus protocol with minimal complexity. The entire consensus core — five Rust files — implements DAG construction, BFT finality via descendant coverage, deterministic ordering, validator management, and Ed25519-signed vertices.
 
-The protocol's safety relies on the standard BFT quorum intersection property applied to an implicit voting mechanism where DAG topology replaces explicit vote messages. The system has been validated through **805+ automated tests** (all passing) and a 5-node Fly.io testnet.
+The protocol's safety relies on the standard BFT quorum intersection property applied to an implicit voting mechanism where DAG topology replaces explicit vote messages. The system has been validated through **1,000+ automated tests** (all passing), TLA+ model checking across 32.6 million states, and a multi-node Fly.io testnet.
 
-**UltraDAG is not the fastest DAG-BFT protocol. It is the simplest correct one.** For networks where auditability, small binary size, and minimal attack surface matter more than maximum throughput — IoT micropayments, embedded systems, resource-constrained validators — this is the right tradeoff.
+**UltraDAG is not the fastest DAG-BFT protocol. It is the simplest correct one.** For networks where auditability, small binary size, and minimal attack surface matter more than maximum throughput — machine-to-machine micropayments, resource-constrained Linux SBCs (Raspberry Pi Zero 2 W and up), fleet deployments where every node must be trivially reproducible — this is the right tradeoff.
 
 ---
 

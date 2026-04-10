@@ -13,11 +13,17 @@ section: "other"
 
 ### What is UltraDAG?
 
-UltraDAG is a lightweight DAG-BFT cryptocurrency purpose-built for IoT and machine-to-machine micropayments. It delivers deterministic finality in two rounds (~10 seconds), runs on hardware as small as a $5/month VPS, and ships as a single binary under 2 MB.
+UltraDAG is a lightweight DAG-BFT cryptocurrency purpose-built for machine-to-machine micropayments. It delivers deterministic BFT finality in ~3 rounds (~10-15 seconds), runs full validators on hardware as small as a $15 Raspberry Pi Zero 2 W, and ships as a single stripped binary under 3 MB.
 
 ### How is UltraDAG different from other blockchains?
 
-UltraDAG is the only chain where a full validator fits in a sub-2 MB binary with bounded storage, fast finality, and proper staking/slashing. Unlike IOTA (no predictable finality), Helium (LoRa-only), or IoTeX (heavy EVM), UltraDAG is minimal by design.
+UltraDAG is the smallest production DAG-BFT chain: a full validator in a sub-3 MB binary with bounded storage, deterministic BFT finality, and proper staking/slashing. No VM, no smart contracts, no pre-mine — the minimum viable chain for machine-to-machine payments. Unlike IOTA 2.0 (heavier node, probabilistic confirmation), Helium (LoRa-only), or IoTeX (100+ MB EVM node), UltraDAG is minimal by design.
+
+### Does a full node run on an ESP32?
+
+No — and anyone who tells you otherwise is selling something. An ESP32-WROOM-32 has 520 KB of SRAM and 4 MB of flash, with most of it consumed by ESP-IDF, WiFi, LWIP, and mbedTLS before any application code runs. You can't fit BFT consensus, a mempool, peer networking, and pruned DAG storage in what's left.
+
+What an ESP32 **can** do is act as a hardware wallet: hold an Ed25519 key, sign transactions locally, and talk to a real UltraDAG node over HTTPS. UltraDAG's transaction format is simple enough that this works without an SDK. Full validators belong on Raspberry Pi Zero 2 W ($15) or larger — a real Linux SBC with real memory.
 
 ### What is the target use case?
 
@@ -72,9 +78,9 @@ For mainnet, sign transactions client-side using an [SDK](/docs/api/sdks) and su
 
 ### What are the system requirements?
 
-- **Minimum**: 1 CPU core, 128 MB RAM, 1 GB disk
+- **Minimum**: 1 CPU core, 256 MB RAM, 1 GB disk (Raspberry Pi Zero 2 W works)
 - **Recommended**: 1 CPU core, 512 MB RAM, 5 GB disk
-- The node binary is under 2 MB
+- The stripped node binary is ~2.9 MB (v0.9) — runs on any Linux SBC with at least 256 MB RAM
 
 ---
 
