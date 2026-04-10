@@ -77,3 +77,10 @@ mkdocs-site/site/
 /test-esp32*.sh
 /esp32-*.sh
 /ESP32_*.md
+
+# Catch-all for any node_modules anywhere in the tree. The specific
+# site/node_modules/, sdk/javascript/node_modules/, etc. rules above are
+# kept for clarity, but this backstop catches accidental runs of `npm`,
+# `astro`, or `vite` from the wrong cwd (previously leaked a stub
+# node_modules/.astro/ and node_modules/.vite/ at the repo root).
+**/node_modules/
