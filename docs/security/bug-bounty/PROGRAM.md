@@ -221,8 +221,15 @@ A: No limit, but we reserve the right to adjust for extraordinary circumstances.
 
 ## Contact
 
-- **Security Issues:** GitHub Security Advisory (preferred)
-- **Questions:** Create a GitHub Discussion
+- **Security Issues (private):**
+  <https://github.com/UltraDAGcom/core/security/advisories/new>
+  or click the green "Report a vulnerability" button at
+  <https://github.com/UltraDAGcom/core/security>. See
+  [`SECURITY.md`](../../../SECURITY.md) in the repo root for the full
+  disclosure policy and response SLAs.
+- **General questions (public):** Create a GitHub Discussion at
+  <https://github.com/UltraDAGcom/core/discussions>. Do NOT post
+  vulnerability details there.
 
 ## Legal
 
