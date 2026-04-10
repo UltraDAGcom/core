@@ -10,7 +10,10 @@ fn test_compute_genesis_hash() {
         std::env::set_var("ULTRADAG_DEV_KEY", "0000000000000000000000000000000000000000000000000000000000000001");
     }
     
-    let state = ultradag_coin::StateEngine::new_with_genesis();
+    // Use the _no_check variant so the runtime check doesn't short-circuit
+    // this tool when the current constant is stale — computing the new hash
+    // is the whole point of running this.
+    let state = ultradag_coin::StateEngine::new_with_genesis_no_check();
     let snapshot = state.snapshot();
     let state_root = ultradag_coin::consensus::checkpoint::compute_state_root(&snapshot);
 
@@ -49,7 +52,10 @@ fn genesis_hash_matches_constant() {
         std::env::set_var("ULTRADAG_DEV_KEY", "0000000000000000000000000000000000000000000000000000000000000001");
     }
 
-    let state = ultradag_coin::StateEngine::new_with_genesis();
+    // Use the _no_check variant so the runtime check doesn't short-circuit
+    // this tool when the current constant is stale — computing the new hash
+    // is the whole point of running this.
+    let state = ultradag_coin::StateEngine::new_with_genesis_no_check();
     let snapshot = state.snapshot();
     let state_root = ultradag_coin::consensus::checkpoint::compute_state_root(&snapshot);
 

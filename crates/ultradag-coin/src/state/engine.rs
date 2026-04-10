@@ -901,6 +901,13 @@ impl StateEngine {
     /// Create a new StateEngine with genesis state.
     /// All nodes must call this to start with identical initial state.
     ///
+    /// This wraps `new_with_genesis_no_check()` and then runs
+    /// `verify_genesis_matches_constant()` to catch any drift between the
+    /// current binary's runtime state and the hardcoded
+    /// `GENESIS_CHECKPOINT_HASH` constant **before** anything is written to
+    /// disk. On mainnet a mismatch is fatal (panic). On testnet the check
+    /// is skipped while `GENESIS_CHECKPOINT_HASH == [0u8; 32]` (placeholder).
+    ///
     /// Genesis allocations:
     /// - IDO distributor address receives 2,520,000 UDAG (12% of total supply).
     ///   This is the only pre-mine, used for private-round distribution and
@@ -913,6 +920,18 @@ impl StateEngine {
     /// - Mainnet: IDO_GENESIS_PREMINE_SATS (2.52M UDAG)
     /// - Testnet: IDO_GENESIS_PREMINE_SATS + FAUCET_PREFUND_SATS
     pub fn new_with_genesis() -> Self {
+        let engine = Self::new_with_genesis_no_check();
+        engine.verify_genesis_matches_constant();
+        engine
+    }
+
+    /// Same as `new_with_genesis()` but WITHOUT the runtime genesis-hash
+    /// verification. Used by tools that need to compute the new hash in order
+    /// to paste it into the constant — running the check before we know the
+    /// new hash would be a chicken-and-egg problem.
+    ///
+    /// **Production code must call `new_with_genesis()`**, not this variant.
+    pub fn new_with_genesis_no_check() -> Self {
         let mut engine = Self::new();
 
         // IDO genesis pre-mine — credited to the IDO distributor address on BOTH
@@ -959,6 +978,101 @@ impl StateEngine {
         }
 
         engine
+    }
+
+    /// Verify that the genesis this engine was just constructed with matches
+    /// the hardcoded `GENESIS_CHECKPOINT_HASH` constant in `constants.rs`.
+    ///
+    /// This is the runtime defense-in-depth for the class of bug that bit us
+    /// on 2026-04-10: a stale Fly secret (`ULTRADAG_DEV_ADDRESS`) overrode the
+    /// hardcoded dev address at runtime, so the actual on-chain genesis
+    /// differed from what the constant claimed. Without this check, nothing
+    /// compared the hardcoded hash against reality — checkpoint-chain
+    /// verification only kicks in when a new node joins via fast-sync, which
+    /// could be weeks later.
+    ///
+    /// Call this immediately after `new_with_genesis_no_check()` on the
+    /// fresh-start path. It's wired into `new_with_genesis()` automatically.
+    ///
+    /// **Mainnet**: panics with a detailed diagnostic on mismatch. Abort
+    /// happens BEFORE any state is persisted, so there's no on-chain damage.
+    ///
+    /// **Testnet**: skipped while `GENESIS_CHECKPOINT_HASH == [0u8; 32]`
+    /// (the placeholder). If the testnet hash is ever populated, the check
+    /// will activate there too.
+    pub fn verify_genesis_matches_constant(&self) {
+        let expected = crate::constants::GENESIS_CHECKPOINT_HASH;
+        if expected == [0u8; 32] {
+            // Testnet placeholder — skip.
+            return;
+        }
+
+        let snapshot = self.snapshot();
+        let state_root = crate::consensus::checkpoint::compute_state_root(&snapshot);
+        let genesis_checkpoint = crate::consensus::checkpoint::Checkpoint {
+            round: 0,
+            state_root,
+            dag_tip: [0u8; 32],
+            total_supply: self.total_supply,
+            prev_checkpoint_hash: [0u8; 32],
+            signatures: vec![],
+        };
+        let computed = crate::consensus::checkpoint::compute_checkpoint_hash(&genesis_checkpoint);
+
+        if computed != expected {
+            let computed_hex: String = computed
+                .iter()
+                .map(|b| format!("0x{:02x}", b))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let expected_hex: String = expected
+                .iter()
+                .map(|b| format!("0x{:02x}", b))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let dev_addr = crate::constants::dev_address();
+            panic!(
+                "\n\n\
+                 ============================================================\n\
+                 FATAL: GENESIS_CHECKPOINT_HASH mismatch at startup\n\
+                 ============================================================\n\
+                 \n\
+                 The genesis state this binary just computed does NOT match\n\
+                 the hardcoded GENESIS_CHECKPOINT_HASH in constants.rs.\n\
+                 \n\
+                 Computed: [{}]\n\
+                 Expected: [{}]\n\
+                 \n\
+                 Resolved founder (dev) address at runtime:\n\
+                   {}  ({})\n\
+                 \n\
+                 Likely causes:\n\
+                   1. An environment variable is overriding a hardcoded\n\
+                      address at runtime. Check the shell or Fly secrets for\n\
+                      ULTRADAG_DEV_ADDRESS. If it's stale, unset it:\n\
+                        fly secrets unset ULTRADAG_DEV_ADDRESS -a <app>\n\
+                   2. A genesis-affecting constant (tokenomics, addresses,\n\
+                      bucket percentages, council categories, etc.) was\n\
+                      changed without recomputing GENESIS_CHECKPOINT_HASH.\n\
+                      Recompute via:\n\
+                        cargo test --features mainnet \\\n\
+                            -p ultradag-coin --test genesis_hash_compute \\\n\
+                            test_compute_genesis_hash -- --nocapture\n\
+                      and paste the printed hash into constants.rs.\n\
+                   3. A platform-specific nondeterminism in the serialization\n\
+                      path (HashMap iteration order, float formatting, etc.)\n\
+                      — should not happen; snapshot() sorts all Vecs.\n\
+                 \n\
+                 This check fired BEFORE state was persisted. No on-chain\n\
+                 damage done. The node is aborting to prevent a silently-wrong\n\
+                 genesis from going live.\n\
+                 ============================================================\n",
+                computed_hex,
+                expected_hex,
+                dev_addr.to_hex(),
+                dev_addr,
+            );
+        }
     }
 
     pub fn balance(&self, address: &Address) -> u64 {
