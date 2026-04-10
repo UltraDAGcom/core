@@ -217,7 +217,7 @@ RUN curl -L -o /usr/local/bin/ultradag-node \
 ENTRYPOINT ["ultradag-node"]
 ```
 
-The resulting image is minimal — it contains only the ~2.9 MB stripped binary plus base system libraries. Deployment takes ~60 seconds per node (vs 15+ minutes with source compilation).
+The resulting image is minimal — it contains only the ~3.5 MB stripped binary (on Linux aarch64) plus base system libraries. Deployment takes ~60 seconds per node (vs 15+ minutes with source compilation).
 
 ---
 

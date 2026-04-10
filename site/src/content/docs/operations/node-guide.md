@@ -25,7 +25,7 @@ chmod +x ultradag-node-linux-x86_64
 mv ultradag-node-linux-x86_64 /usr/local/bin/ultradag-node
 ```
 
-The binary is under 3 MB (~2.9 MB stripped at v0.9) and has zero runtime dependencies.
+The binary is under 4 MB (3.5 MB stripped on Linux aarch64 at v0.9; 2.87 MB on macOS arm64) and has zero runtime dependencies beyond standard glibc.
 
 ### Build from Source
 

@@ -5,7 +5,7 @@ order: 0
 section: "whitepaper"
 ---
 
-**UltraDAG is a minimal cryptocurrency built on a leaderless DAG-BFT consensus protocol.** The consensus module is five core files of Rust; its runtime execution lives in a single state engine. The protocol achieves Byzantine fault tolerance through descendant coverage finality — a vertex is finalized when ⌈2n/3⌉ distinct validators have built on top of it. This implicit voting mechanism eliminates leader election, view changes, and explicit vote messages. The system has been validated through 1,000+ automated tests (all passing), TLA+ model checking across 32.6 million states, and a multi-node Fly.io testnet. UltraDAG demonstrates that a complete, working cryptocurrency with a 21 million supply cap, halving schedule, and validator staking can be built with radical simplicity — a stripped release binary under 3 MB.
+**UltraDAG is a minimal cryptocurrency built on a leaderless DAG-BFT consensus protocol.** The consensus module is five core files of Rust; its runtime execution lives in a single state engine. The protocol achieves Byzantine fault tolerance through descendant coverage finality — a vertex is finalized when ⌈2n/3⌉ distinct validators have built on top of it. This implicit voting mechanism eliminates leader election, view changes, and explicit vote messages. The system has been validated through 1,000+ automated tests (all passing), TLA+ model checking across 32.6 million states, and a multi-node Fly.io testnet. UltraDAG demonstrates that a complete, working cryptocurrency with a 21 million supply cap, halving schedule, and validator staking can be built with radical simplicity — a stripped release binary under 4 MB (3.5 MB on Linux aarch64).
 
 ---
 
@@ -389,7 +389,9 @@ A 5-node Fly.io testnet runs continuously:
 | Tests Passing | 1,000+ |
 | Avg Round Time | 5.0s |
 | UDAG Supply Cap | 21M |
-| Stripped Binary | 2.87 MB (v0.9) |
+| Stripped Binary (macOS arm64) | 2.87 MB (v0.9) |
+| Stripped Binary (Linux aarch64) | 3.5 MB (v0.9) |
+| Default Pruning Horizon | 1000 rounds (~83 min @ 5s) |
 
 ---
 

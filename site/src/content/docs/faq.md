@@ -13,11 +13,11 @@ section: "other"
 
 ### What is UltraDAG?
 
-UltraDAG is a lightweight DAG-BFT cryptocurrency purpose-built for machine-to-machine micropayments. It delivers deterministic BFT finality in ~3 rounds (~10-15 seconds), runs full validators on hardware as small as a $15 Raspberry Pi Zero 2 W, and ships as a single stripped binary under 3 MB.
+UltraDAG is a lightweight DAG-BFT cryptocurrency purpose-built for machine-to-machine micropayments. It delivers deterministic BFT finality in ~3 rounds (~10-15 seconds), runs full validators on hardware as small as a $15 Raspberry Pi Zero 2 W, and ships as a single stripped binary under 4 MB (3.5 MB on Linux aarch64, 2.87 MB on macOS arm64 at v0.9).
 
 ### How is UltraDAG different from other blockchains?
 
-UltraDAG is the smallest production DAG-BFT chain: a full validator in a sub-3 MB binary with bounded storage, deterministic BFT finality, and proper staking/slashing. No VM, no smart contracts, no pre-mine — the minimum viable chain for machine-to-machine payments. Unlike IOTA 2.0 (heavier node, probabilistic confirmation), Helium (LoRa-only), or IoTeX (100+ MB EVM node), UltraDAG is minimal by design.
+UltraDAG is the smallest production DAG-BFT chain: a full validator in a sub-4 MB binary with bounded storage, deterministic BFT finality, and proper staking/slashing. No VM, no smart contracts, no pre-mine — the minimum viable chain for machine-to-machine payments. Unlike IOTA 2.0 (heavier node, probabilistic confirmation), Helium (LoRa-only), or IoTeX (100+ MB EVM node), UltraDAG is minimal by design.
 
 ### Does a full node run on an ESP32?
 
@@ -80,7 +80,7 @@ For mainnet, sign transactions client-side using an [SDK](/docs/api/sdks) and su
 
 - **Minimum**: 1 CPU core, 256 MB RAM, 1 GB disk (Raspberry Pi Zero 2 W works)
 - **Recommended**: 1 CPU core, 512 MB RAM, 5 GB disk
-- The stripped node binary is ~2.9 MB (v0.9) — runs on any Linux SBC with at least 256 MB RAM
+- The stripped node binary is 3.5 MB on Linux aarch64 (v0.9) — runs on any Linux SBC with at least 256 MB RAM, verified against Debian bookworm arm64 via cross-compile
 
 ---
 
