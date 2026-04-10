@@ -59,3 +59,21 @@ site/.astro/
 
 # MkDocs build output
 mkdocs-site/site/
+
+# Root-level Astro content-collection cache (older Astro runs dropped it here
+# before we configured site/ as the working dir — don't re-track if it reappears).
+/.astro/
+
+# Stale site archives kept out of tree.
+/_archives/
+
+# Claude Code plugin settings (personal, not repo-relevant).
+/.claude/
+
+# Abandoned ESP32 experiments at the repo root. The real implementation lives
+# in crates/ultradag-esp32 — anything dropped at the repo root is scratch.
+/esp32-arduino/
+/deploy-esp32-manual.sh
+/test-esp32*.sh
+/esp32-*.sh
+/ESP32_*.md

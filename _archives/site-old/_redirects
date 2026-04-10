@@ -1,7 +1,0 @@
-# Handle docs directory - serve from docs/ directory
-/docs/ /docs/index.html 200
-/docs/* /docs/:splat 200
-
-# Handle dashboard directory - SPA routing
-/dashboard/* /dashboard/index.html 200
-/dashboard /dashboard/index.html 200
