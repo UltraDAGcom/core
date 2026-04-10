@@ -1,0 +1,5 @@
+[toolchain]
+# The Espressif Rust fork installed by `espup install --targets esp32`.
+# It is NOT a regular rustup target on upstream Rust — it is a separate
+# toolchain with Xtensa codegen backend and a patched rust-src.
+channel = "esp"

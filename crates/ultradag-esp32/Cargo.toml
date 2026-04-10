@@ -3,14 +3,65 @@ name = "ultradag-esp32"
 version = "0.1.0"
 edition = "2021"
 license = "BUSL-1.1"
+rust-version = "1.77"
+description = "UltraDAG light client for ESP32-WROOM-32 (std-on-ESP-IDF). Polls an UltraDAG node's HTTP RPC over WiFi and reports finality + balance. This is NOT a full node — see README for hardware constraints."
 
+[[bin]]
+name = "ultradag-esp32"
+path = "src/main.rs"
+harness = false
+
+# ── Profile tuning ─────────────────────────────────────────────────────────
+# opt-level = "s" squeezes flash footprint without tanking perf; the ESP32
+# has 4 MB flash with only ~1.9 MB for the app partition by default.
+[profile.release]
+opt-level = "s"
+lto = "thin"
+codegen-units = 1
+strip = true
+debug = false
+overflow-checks = false
+
+[profile.dev]
+debug = true
+opt-level = "s"
+
+# ── Dependencies ───────────────────────────────────────────────────────────
 [dependencies]
-cortex-m = "0.7"
-cortex-m-rt = "0.7"
-panic-halt = "0.2"
+log = { version = "0.4", default-features = false }
+# Minimal feature set — `std` gives us std lib on ESP-IDF, `binstart` wires
+# the `_start` entry point so cargo builds a bootable binary. Do NOT enable
+# `embassy-time-driver` here: it pulls in embassy-executor which requires
+# the consumer to link an `__pender` symbol that we don't provide (we use
+# std::thread::sleep in the main loop, not an async executor).
+esp-idf-svc = { version = "0.51", default-features = false, features = [
+    "std",
+    "binstart",
+] }
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Cryptography for local transaction signing. These compile cleanly for
+# xtensa-esp32-espidf via the esp Rust fork — they're the same crates the
+# UltraDAG node uses, so signable-bytes reproduction is byte-exact.
+ed25519-dalek = { version = "2", default-features = false, features = [
+    "std",       # we're on a std target; skip the no_std dance
+    "fast",      # slightly larger code, meaningfully faster signing
+] }
+blake3 = { version = "1", default-features = false, features = ["std"] }
+hex = { version = "0.4", default-features = false, features = ["std"] }
+# Optional OLED display. The firmware tries to initialize a 128x32 or
+# 128x64 SSD1306 on I²C at address 0x3C (SDA=GPIO21, SCL=GPIO22). If no
+# display is wired up the init fails silently and the firmware runs
+# headless — same binary, same flash image.
+#
+# IMPORTANT: the `graphics` feature must be enabled (it's the default,
+# but if you ever switch to default-features=false you MUST re-add it).
+# Without it, ssd1306 doesn't pull in embedded-graphics-core and the
+# `DrawTarget` impl for `BufferedGraphicsMode` is compiled out entirely,
+# which produces very confusing "trait not implemented" errors.
+ssd1306 = { version = "0.9", features = ["graphics"] }
+embedded-graphics = { version = "0.8" }
 
-[features]
-default = ["std"]
-std = []
-no_std = []
-
+[build-dependencies]
+embuild = "0.33"

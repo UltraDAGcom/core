@@ -3,11 +3,15 @@ members = [
     "crates/ultradag-coin",
     "crates/ultradag-network",
     "crates/ultradag-node",
-    "crates/ultradag-esp32",
     "sdk/rust",
     "crates/ultradag-sim",
 ]
-exclude = ["crates/ultradag-coin/fuzz"]
+# ultradag-esp32 is excluded from the workspace because it targets
+# xtensa-esp32-espidf with the Espressif Rust fork (installed via espup)
+# and uses -Z build-std / esp-idf-sys, which are incompatible with the
+# host-targeted workspace build. Build it standalone from inside
+# crates/ultradag-esp32 with `cargo +esp build --release`.
+exclude = ["crates/ultradag-coin/fuzz", "crates/ultradag-esp32"]
 resolver = "2"
 
 [workspace.package]

@@ -1,0 +1,32 @@
+# ── ESP-IDF kconfig overrides ──────────────────────────────────────────────
+# These are applied on top of ESP-IDF's default sdkconfig during the build.
+# They shape the resulting firmware — enabling/disabling subsystems, tuning
+# stack sizes, enabling TLS root-cert bundling, etc.
+
+# Main task needs more stack than default (3.5 KB) because esp-idf-svc's
+# HTTP client builds response buffers on the stack.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+
+# Enable the mbedTLS root certificate bundle so the HTTP client can validate
+# HTTPS server certs for public endpoints (e.g. *.fly.dev) without us
+# shipping a custom root store. Adds ~60 KB of flash for the bundle.
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+
+# Shrink log level to Info in release — fewer format strings → smaller flash.
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_DEFAULT_LEVEL=3
+
+# Watchdog — keep it on, but give the main task a generous window.
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=30
+
+# We never need Bluetooth — disable it to save ~100 KB flash.
+CONFIG_BT_ENABLED=
+# (Leave WiFi enabled — default.)
+
+# lwIP tuning: we do short-lived HTTP requests only, so give lwIP small
+# buffers to save RAM. Raise TCP_MSS for better throughput on LAN.
+CONFIG_LWIP_MAX_SOCKETS=10
+
+# Disable PSRAM support — we don't have any on WROOM-32.
+CONFIG_SPIRAM=

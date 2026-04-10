@@ -1,14 +1,30 @@
-[target.xtensa-esp32-espidf]
-runner = "espflash flash --monitor"
-
-[env]
-ESP_IDF_VERSION = "v5.1.4"
-ESP_IDF_TOOLS_INSTALL_DIR = { value = "~/.espressif" }
-
 [build]
 target = "xtensa-esp32-espidf"
+
+[target.xtensa-esp32-espidf]
+linker = "ldproxy"
+# When you plug in the board, `cargo run --release` will build and flash it.
+runner = "espflash flash --monitor"
 rustflags = [
-    "-C", "link-arg=-nostartfiles",
-    "-C", "link-arg=-Wl,-Tlink.x",
+    # Enable 64-bit time_t so SNTP and TLS certificate validity checks work
+    # past 2038. ESP-IDF v5.x defaults to 64-bit time but the Rust bindings
+    # still need this cfg to pick the right libc struct layouts.
+    "--cfg", "espidf_time64",
 ]
 
+# build-std is required for the Xtensa target because upstream Rust doesn't
+# ship precompiled std for it — only the Espressif fork does. The `esp`
+# channel installed by `espup` provides rust-src so we can compile std
+# on the fly.
+[unstable]
+build-std = ["std", "panic_abort"]
+
+[env]
+MCU = "esp32"
+# Pin to an ESP-IDF release branch. v5.1.4 is a recent LTS; v5.2/v5.3 also
+# work but each minor version has subtle sdkconfig differences.
+ESP_IDF_VERSION = "v5.1.4"
+# Let `embuild` manage its own ESP-IDF install under target/.embuild
+# (the default). Do NOT set ESP_IDF_TOOLS_INSTALL_DIR — "fromenv" would
+# require a pre-activated IDF environment (IDF_PATH, idf.py on $PATH),
+# which we don't want as a hard prereq.
