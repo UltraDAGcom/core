@@ -543,48 +543,59 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
 <span class="kw">curl</span> <span class="str">http://localhost:10333/status</span></pre>
       </div>
 
-      <!-- Mainnet Instructions -->
+      <!-- Mainnet Access Policy (currently closed during hardening phase) -->
       <div class="code-section reveal">
         <div class="code-header">
           <div class="code-dots"><div class="code-dot"></div><div class="code-dot"></div><div class="code-dot"></div></div>
-          <span class="code-label">Mainnet Validator Setup</span>
+          <span class="code-label">Mainnet — Closed During Hardening Phase</span>
         </div>
-        <pre><span class="cm"># 1. Generate keys OFFLINE using the SDK (never expose private keys to a server)</span>
-<span class="cm">#    Use the Python, JavaScript, Rust, or Go SDK to generate an Ed25519 keypair locally.</span>
+        <pre><span class="cm"># Mainnet is RUNNING but closed to external participation.</span>
+<span class="cm"># The 5 founder-operated validators are producing rounds, finalizing,</span>
+<span class="cm"># and crediting the 7-bucket emission, but external hosts cannot join</span>
+<span class="cm"># the P2P mesh (the Noise handshake port is not exposed to the public</span>
+<span class="cm"># internet on any mainnet node).</span>
 
-<span class="cm"># 2. Start your node with your private key</span>
-<span class="kw">./ultradag-node</span> --port 9333 --validate --pkey <span class="str">YOUR_PRIVATE_KEY_HEX</span>
+<span class="cm"># Why?</span>
+<span class="cm">#   We want the bug bounty program to harden every consensus, state,</span>
+<span class="cm">#   network, and cryptographic path against real adversaries BEFORE</span>
+<span class="cm">#   letting third-party validators stake real value. Mainnet is our</span>
+<span class="cm">#   production-shaped but non-user-facing environment until then.</span>
 
-<span class="cm"># 3. Fund your address with at least 2,000 UDAG (acquire via exchange or transfer)</span>
+<span class="cm"># What you can still do with mainnet:</span>
+<span class="cm">#   1. Query read-only RPC for transparency:</span>
+<span class="kw">curl</span> <span class="str">https://ultradag-mainnet-1.fly.dev/status</span>
+<span class="cm">#   2. Inspect any address balance or name:</span>
+<span class="kw">curl</span> <span class="str">https://ultradag-mainnet-1.fly.dev/balance/udag1...</span>
+<span class="cm">#   3. Watch the chain progress via /round/:N and /vertex/:hash</span>
 
-<span class="cm"># 4. Stake by submitting a pre-signed StakeTx via the SDK</span>
-<span class="cm">#    POST /stake is disabled on mainnet — private keys must never transit the network.</span>
-<span class="cm">#    Use the SDK to sign a StakeTx locally, then submit via /tx/submit:</span>
-<span class="kw">curl</span> -X POST <span class="str">http://localhost:10333/tx/submit</span> \
-  -d <span class="str">'&#123;"transaction": "SIGNED_STAKE_TX_HEX"&#125;'</span>
+<span class="cm"># Where to test, find bugs, and earn UDAG:</span>
+<span class="cm">#   → Testnet (instructions above) — 5 public validators, open mesh,</span>
+<span class="cm">#     full faucet, every RPC path enabled, full bug bounty scope.</span>
+<span class="cm">#     See docs/security/bug-bounty/PROGRAM.md for rewards + rules.</span>
 
-<span class="cm"># 5. Check your node status</span>
-<span class="kw">curl</span> <span class="str">http://localhost:10333/status</span></pre>
+<span class="cm"># When will mainnet open?</span>
+<span class="cm">#   Gated on bounty program results. No fixed date — we'll announce</span>
+<span class="cm">#   when we're confident enough adversarial testing has happened.</span></pre>
       </div>
 
       <!-- Additional Info -->
       <div class="node-info reveal">
-        <div class="node-info-tag">What You Get</div>
+        <div class="node-info-tag">Mainnet Access Policy</div>
         <div class="node-info-grid">
           <div>
             <p>
-              ✓ <strong>Automatic sync</strong> from bootstrap nodes<br />
-              ✓ <strong>Earn rewards</strong> proportional to your stake<br />
-              ✓ <strong>HTTP RPC</strong> on port 10333<br />
-              ✓ <strong>Bounded storage</strong> (~100MB after sync)
+              ✓ <strong>Read-only RPC</strong> public on port 10333<br />
+              ✓ <strong>Full transparency</strong> — all state queryable<br />
+              ✗ <strong>P2P mesh</strong> closed to external nodes<br />
+              ✗ <strong>Public staking</strong> disabled until bounty review
             </p>
           </div>
           <div>
             <p>
-              ✓ <strong>No configuration</strong> files needed<br />
-              ✓ <strong>Automatic peer</strong> discovery<br />
-              ✓ <strong>Fast finality</strong> in ~10 seconds<br />
-              ✓ <strong>Passive staking</strong> earns without running a node
+              ✓ <strong>Bug bounty</strong> runs on testnet (open mesh)<br />
+              ✓ <strong>Pre-launch tokens</strong> on Arbitrum (ERC-20)<br />
+              ✓ <strong>Restartable</strong> — Arbitrum holders insulated<br />
+              ✓ <strong>Open date</strong> gated on bounty results
             </p>
           </div>
         </div>
