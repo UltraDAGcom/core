@@ -129,17 +129,36 @@ Create a GitHub Security Advisory with:
 
 ## Reward Distribution
 
-### Testnet Phase (Now)
-1. **Immediate testnet UDAG:** Sent to your testnet address within 24h of validation
-2. **Bounty ledger entry:** Your reward is recorded in [`LEDGER.md`](./LEDGER.md)
-3. **Signed promise:** GPG-signed commitment for mainnet conversion
+### What you receive at validation (within 24h)
+1. **Courtesy testnet UDAG payment** to the testnet address you included in
+   your report — a visible "we took this seriously" signal plus a working
+   balance for further testing. **This is NOT the binding commitment.** See
+   [`LEDGER.md` → Testnet Reset Safety](./LEDGER.md#testnet-reset-safety)
+   for why.
+2. **Append-only entry in [`LEDGER.md`](./LEDGER.md)** — the actual binding
+   commitment. Git-tracked, signed by the maintainer commit, survives any
+   testnet reset.
+3. **Acknowledgment reply on the private GitHub Security Advisory** with
+   the severity assessment, reward range, and planned timeline.
 
-### Mainnet Launch
-1. **1:1 Conversion:** Testnet bounty UDAG → Mainnet UDAG
-2. **Vesting Schedule:**
-   - 25% unlocked at mainnet launch
-   - 75% vested linearly over 12 months
-3. **Claim Process:** Prove ownership of testnet address via signature
+### Mainnet conversion (applies to all ledger entries)
+Mainnet launched **2026-04-10**. Every entry in the ledger converts 1:1 to
+mainnet UDAG under the following rules:
+
+1. **Vesting schedule:** 25% unlocked at the vesting anchor (immediate), 75%
+   vested linearly over the 12 months following.
+2. **Vesting anchor date:**
+   - Pre-mainnet reports (2026-03-08 through 2026-04-10): anchor = 2026-04-10
+   - Post-mainnet reports: anchor = validation date
+3. **Claim process:** the hunter signs a maintainer-supplied challenge with
+   the Ed25519 secret key (or passkey) behind their testnet address. This
+   proves ownership without needing the testnet address to hold any balance
+   or for the testnet to even still be running.
+
+**Testnet reset safety:** testnet `--clean` restarts do not affect any ledger
+entry. The commitments live in git, not on the testnet chain. See the
+[testnet reset safety](./LEDGER.md#testnet-reset-safety) section in
+`LEDGER.md` for the full explanation.
 
 ## Rules and Guidelines
 

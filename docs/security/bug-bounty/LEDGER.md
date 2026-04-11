@@ -67,21 +67,83 @@ Signature: [GPG signature]
 
 ## Mainnet Conversion Tracking
 
-At mainnet launch, all rewards in this ledger will be converted 1:1 to mainnet UDAG with the following vesting schedule:
+Mainnet launched **2026-04-10**. All rewards recorded in this ledger —
+whether filed before or after that date — convert 1:1 to mainnet UDAG
+under the same vesting schedule:
 
-- **25% unlocked** at mainnet launch (immediate)
-- **75% vested** linearly over 12 months
+- **25% unlocked** at the vesting anchor date (immediate)
+- **75% vested** linearly over the 12 months following the anchor
+
+**Vesting anchor date** (when the 25% / 12-month clock starts):
+
+- **Pre-mainnet reports** (program start 2026-03-08 through mainnet launch 2026-04-10): anchor = **2026-04-10** (mainnet launch day)
+- **Post-mainnet reports** (2026-04-10 and later): anchor = **date the bounty was validated** (the `Date:` field on the ledger entry)
 
 ### Vesting Formula
 ```
-unlocked_amount = total_reward * 0.25 + (total_reward * 0.75 * days_since_launch / 365)
+# Any day on or after the anchor date:
+unlocked_amount = total_reward * 0.25 +
+                  total_reward * 0.75 * min(1, days_since_anchor / 365)
 ```
 
 ### Claim Process
-1. Hunter proves ownership of testnet address via signature
-2. Provides mainnet address for distribution
-3. Tokens distributed according to vesting schedule
-4. Entry marked as "Claimed"
+1. Hunter proves ownership of the testnet address recorded in the ledger entry.
+   Proof is a signature over a maintainer-supplied challenge, using the Ed25519
+   secret key (or WebAuthn passkey) behind that address. **This is a
+   cryptographic challenge-response — it does NOT depend on the testnet address
+   still having any on-chain balance**, and it does NOT depend on the testnet
+   chain even still existing.
+2. Hunter provides a mainnet address for distribution.
+3. Maintainer submits a `TreasurySpend` governance proposal for the unlocked
+   amount (or a direct mainnet `SmartTransfer` if the bounty pool is held by
+   the founder rather than the treasury).
+4. Entry in this file is updated with `Status: Claimed` and the paid tx hash.
+
+## Testnet Reset Safety
+
+**A testnet reset (`--clean` deploy, state wipe, nuclear restart, etc.)
+does NOT affect any bounty promise in this ledger.** This is by design:
+
+| Layer | Testnet reset behavior |
+|---|---|
+| Hunter's testnet UDAG balance (on-chain) | 💀 Gone. Resets to zero. |
+| Hunter's testnet address bytes (20-byte Address) | ✅ Unchanged. Derived deterministically from the secret key. |
+| Hunter's secret key / passkey | ✅ Unchanged. Held by the hunter on their own device — never depended on chain state. |
+| **Ledger entry (this file, in git)** | ✅ **Unchanged. This is the authoritative commitment.** |
+
+The testnet UDAG transfer we send to the hunter at validation time is a
+**courtesy payment** — visible evidence that we took the report seriously,
+a usable balance for further testnet testing, and an on-chain timestamp.
+It is **not** the commitment. The binding commitment is the append-only
+entry in this git-tracked ledger plus the hunter's ability to sign a
+challenge with the key that derives their address.
+
+**Operational discipline that keeps this promise honest:**
+
+- `LEDGER.md` is **append-only**. Every bounty payout lands as a new
+  commit that adds a line under "Active Bounties". Entries are never
+  deleted or rewritten. A status change (Validated → Fixed → Claimed) is
+  added as a subsequent line below the original, not an in-place edit.
+- `git log docs/security/bug-bounty/LEDGER.md` is the hunter's audit
+  trail. Anyone can run it and see exactly when each entry was added
+  and by whom.
+- Pushes to `origin/main` are the point of no return. Once an entry is
+  pushed, it's the maintainer's public commitment.
+- Maintainers **must not** force-push branches containing ledger entries.
+  `git push --force-with-lease` on any branch that touches `LEDGER.md` is
+  a policy violation.
+
+**What the hunter must do to protect their own claim:**
+
+- **Back up the testnet secret key** (32-byte hex or passkey credential)
+  immediately after generating it. The ONLY way to prove address ownership
+  at claim time is with this key. Lose the key → lose the payout. No recovery.
+- **Record your testnet address in every report you submit**, in the
+  "Testnet Address" field of the advisory template. The maintainer will
+  copy it into the ledger entry.
+- **Prefer a long-lived address** (not a throwaway) for your reports.
+  Using the same testnet address across multiple reports batches your
+  claim at mainnet conversion time.
 
 ---
 

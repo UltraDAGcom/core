@@ -5,6 +5,17 @@ Quick start guide for security researchers participating in the UltraDAG bug bou
 ## Getting Started (5 minutes)
 
 ### 1. Get Testnet UDAG
+
+> **⚠️ Back up your testnet secret key before doing anything else.** The only
+> way to prove address ownership at mainnet conversion time is a cryptographic
+> signature from the key behind the address you put in your bounty report.
+> Lose the key → lose any future payout, permanently. Testnet UDAG balances
+> can be wiped by a `--clean` restart, but the key + `LEDGER.md` entry
+> together are what bind the commitment — see
+> [testnet reset safety](./LEDGER.md#testnet-reset-safety) in `LEDGER.md`
+> for the full explanation. Prefer a long-lived testnet address used across
+> multiple reports; don't generate a fresh throwaway per report.
+
 ```bash
 # Generate a test address (or use existing wallet). `amount` is in sats —
 # 10_000_000_000 sats = 100 UDAG, which is the per-request maximum.
@@ -235,8 +246,10 @@ curl -X POST https://ultradag-node-1.fly.dev/... \
 ### Suggested Fix
 [Optional - your recommendation]
 
-### Testnet Address
-[Your address for bounty: udag1...]
+### Testnet Address (REQUIRED — this is how you'll be paid)
+[Your tudg1... address. This goes into the ledger as your claim identity.
+You'll need to sign a challenge with the key behind this address to claim
+the mainnet UDAG reward. Make sure you have the secret key backed up.]
 ```
 
 ## Reward Examples
