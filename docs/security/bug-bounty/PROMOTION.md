@@ -54,11 +54,13 @@ Rewards:
 - Medium: 1k-5k UDAG
 - Low: 100-1k UDAG
 
-Scope: Consensus, P2P, State, Staking, RPC
-Testnet: Live and ready for testing
-Docs: [link to security/bug-bounty/PROGRAM.md]
+Scope: Consensus, P2P, State, Staking, RPC, SmartAccount
+Testnet: Live and ready for testing (mainnet is closed during hardening)
+Docs: github.com/UltraDAGcom/core/blob/main/docs/security/bug-bounty/PROGRAM.md
 
-All rewards tracked publicly and convertible to mainnet tokens at launch.
+All rewards tracked in an append-only git ledger and convertible 1:1
+to mainnet UDAG per the vesting schedule — testnet resets do NOT
+affect the commitment.
 ```
 
 #### 3. **GitHub**

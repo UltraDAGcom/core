@@ -1,26 +1,32 @@
 # UltraDAG
 
 [![Bug Bounty](https://img.shields.io/badge/Bug%20Bounty-500k%20UDAG-success)](./docs/security/bug-bounty/PROGRAM.md)
-[![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./docs/security/POLICY.md)
-[![Testnet](https://img.shields.io/badge/Testnet-Live-green)](https://ultradag-node-1.fly.dev/status)
-[![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-informational)](./LICENSE)
+[![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./SECURITY.md)
+[![Testnet](https://img.shields.io/badge/Testnet-Live-brightgreen)](https://ultradag-node-1.fly.dev/status)
+[![Mainnet](https://img.shields.io/badge/Mainnet-Closed%20(Hardening)-orange)](./docs/security/bug-bounty/PROGRAM.md#mainnet-access-policy-current-phase)
+[![License](https://img.shields.io/badge/License-BUSL--1.1-yellow)](./LICENSE)
+[![Rust](https://img.shields.io/badge/Rust-1.75%2B-orange?logo=rust)](https://www.rust-lang.org)
 
-A DAG-BFT cryptocurrency for permissioned networks and IoT applications. Built in Rust.
+**Minimal DAG-BFT blockchain in Rust.** Sub-4 MB full-node binary, 2–3 round deterministic finality, passkey-native wallets, runs on a $15 Raspberry Pi Zero 2 W. Built for IoT and machine-to-machine micropayments. Live testnet + active bug bounty.
 
-**Ed25519 signatures. DAG-BFT consensus. Blake3 hashing. 21M max supply. Validator staking.**
+> **Ed25519 signatures · DAG-BFT consensus · BLAKE3 hashing · 21M max supply · 7-bucket emission · WebAuthn smart accounts**
 
 ## 🔒 Security & Bug Bounty
 
-**Active Bug Bounty Program:** We're offering up to **50,000 UDAG** for critical vulnerabilities!
+**Active Bug Bounty Program — 500,000 UDAG pool.** Find a vulnerability, get paid.
 
-- 🔴 **Critical:** 10,000 - 50,000 UDAG
-- 🟠 **High:** 5,000 - 10,000 UDAG  
-- 🟡 **Medium:** 1,000 - 5,000 UDAG
-- 🟢 **Low:** 100 - 1,000 UDAG
+| Severity | Reward Range |
+|---|---|
+| 🔴 **Critical** | 10,000 – 50,000 UDAG |
+| 🟠 **High** | 5,000 – 10,000 UDAG |
+| 🟡 **Medium** | 1,000 – 5,000 UDAG |
+| 🟢 **Low** | 100 – 1,000 UDAG |
 
-**[View Full Program →](./docs/security/bug-bounty/PROGRAM.md)** | **[Quick Start Guide →](./docs/security/bug-bounty/GUIDE.md)**
+**All testing happens on [testnet](https://ultradag-node-1.fly.dev/status)** — mainnet is currently closed to external participation while the bounty program hardens the code. See [`PROGRAM.md`](./docs/security/bug-bounty/PROGRAM.md#mainnet-access-policy-current-phase) for the mainnet access policy.
 
-All rewards tracked publicly and convertible to mainnet tokens at launch.
+Reports are private via GitHub Security Advisories. Testnet resets **do not** affect any reward commitment — the append-only [`LEDGER.md`](./docs/security/bug-bounty/LEDGER.md) is the binding record, not on-chain balances. See [`LEDGER.md → Testnet Reset Safety`](./docs/security/bug-bounty/LEDGER.md#testnet-reset-safety) for why.
+
+**[View Full Program →](./docs/security/bug-bounty/PROGRAM.md)** · **[Hunter's Guide →](./docs/security/bug-bounty/GUIDE.md)** · **[Report a Vulnerability →](https://github.com/UltraDAGcom/core/security/advisories/new)**
 
 ## What is UltraDAG
 
