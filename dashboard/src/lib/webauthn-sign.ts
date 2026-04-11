@@ -191,6 +191,14 @@ function serializeOperation(op: Record<string, unknown>): Record<string, unknown
       },
     };
   }
+  if ('RemoveKey' in op) {
+    const r = op.RemoveKey as { key_id_to_remove: string };
+    return {
+      RemoveKey: {
+        key_id_to_remove: Array.from(hexToBytes(r.key_id_to_remove)),
+      },
+    };
+  }
   if ('CreatePocket' in op) return { CreatePocket: op.CreatePocket };
   if ('RemovePocket' in op) return { RemovePocket: op.RemovePocket };
   if ('UpdateProfile' in op) return { UpdateProfile: op.UpdateProfile };
@@ -321,6 +329,17 @@ export async function signAndSubmitSmartOp(
     parts.push(pubkeyBytes);
     parts.push(u32ToLE(labelBytes.length));
     parts.push(labelBytes);
+  } else if ('RemoveKey' in operation) {
+    // Byte-exact match to Rust SmartOpType::RemoveKey signable_bytes encoding.
+    // Covered by test_remove_key_signable_bytes_stable_encoding in Rust —
+    // any change here must update that test.
+    const op = operation.RemoveKey as { key_id_to_remove: string };
+    const keyIdBytes = hexToBytes(op.key_id_to_remove);
+    if (keyIdBytes.length !== 8) {
+      throw new Error(`RemoveKey: key_id_to_remove must be 8 bytes, got ${keyIdBytes.length}`);
+    }
+    parts.push(new Uint8Array([17])); // discriminant 17
+    parts.push(keyIdBytes);
   } else {
     throw new Error('Unsupported SmartOp type');
   }

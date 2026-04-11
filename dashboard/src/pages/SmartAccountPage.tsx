@@ -7,6 +7,16 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import { PageHeader } from '../components/shared/PageHeader';
 import { primaryButtonStyle, buttonStyle as themeButtonStyle } from '../lib/theme';
 
+/**
+ * Fetch the current nonce for the wallet address. Used before any SmartOp
+ * submission so the tx lands at the expected sequence number.
+ */
+async function fetchNonce(nodeUrl: string, addr: string): Promise<number> {
+  const res = await fetch(`${nodeUrl}/balance/${addr}`, { signal: AbortSignal.timeout(5000) });
+  const data = await res.json();
+  return data.nonce ?? 0;
+}
+
 interface AuthorizedKey { key_id: string; key_type: string; label: string; daily_limit: number | null }
 interface SmartAccountInfo {
   address: string; created_at_round: number; authorized_keys: AuthorizedKey[];
@@ -69,6 +79,17 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
   const [nameSubmitting, setNameSubmitting] = useState(false);
   const [nameError, setNameError] = useState('');
 
+  // Link another device (AddKey SmartOp) — create a cross-platform passkey on
+  // the scanning device, then register its P256 pubkey on-chain.
+  const [linking, setLinking] = useState(false);
+  const [linkMsg, setLinkMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  // Remove Key — per-row 3-second confirm flow. confirmRemoveKeyId holds the
+  // key being confirmed; removeKeyId holds the in-flight removal target.
+  const [confirmRemoveKeyId, setConfirmRemoveKeyId] = useState<string | null>(null);
+  const [removingKeyId, setRemovingKeyId] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState('');
+
   const pw = getPasskeyWallet();
   const localName = pw?.name || null;
 
@@ -128,6 +149,106 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
       }
     } catch {} finally { setNameChecking(false); }
   }, [nodeUrl]);
+
+  /**
+   * Link another device by creating a cross-platform passkey and registering
+   * its P256 pubkey on-chain via SmartOpType::AddKey. Mirrors the onboarding
+   * handleLinkDevice flow but uses the already-persisted wallet.
+   */
+  const handleLinkDevice = useCallback(async () => {
+    if (!walletAddress || !pw) return;
+    setLinkMsg(null);
+    setLinking(true);
+    try {
+      if (!window.PublicKeyCredential) {
+        throw new Error('WebAuthn is not supported on this device.');
+      }
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: { name: 'UltraDAG Wallet', id: window.location.hostname },
+          user: {
+            id: crypto.getRandomValues(new Uint8Array(16)),
+            name: pw.name ? `ultradag-${pw.name}-backup-${Date.now()}` : `ultradag-backup-${Date.now()}`,
+            displayName: pw.name ? `UltraDAG @${pw.name} (Backup)` : 'UltraDAG Backup',
+          },
+          pubKeyCredParams: [{ alg: -7, type: 'public-key' }],
+          authenticatorSelection: {
+            authenticatorAttachment: 'cross-platform',
+            userVerification: 'required',
+            residentKey: 'preferred',
+          },
+          timeout: 120000,
+        },
+      }) as PublicKeyCredential | null;
+      if (!credential) { setLinkMsg({ kind: 'err', text: 'Cancelled.' }); return; }
+
+      // Extract compressed SEC1 P256 pubkey (33 bytes).
+      const attestation = credential.response as AuthenticatorAttestationResponse;
+      const pubkeyCose = attestation.getPublicKey?.();
+      if (!pubkeyCose) throw new Error('Could not extract public key from new device.');
+      const spkiKey = new Uint8Array(pubkeyCose);
+      const cryptoKey = await crypto.subtle.importKey('spki', spkiKey, { name: 'ECDSA', namedCurve: 'P-256' }, true, ['verify']);
+      const rawKey = new Uint8Array(await crypto.subtle.exportKey('raw', cryptoKey));
+      let compressed: Uint8Array;
+      if (rawKey.length === 65 && rawKey[0] === 0x04) {
+        compressed = new Uint8Array(33);
+        compressed[0] = (rawKey[64] & 1) === 0 ? 0x02 : 0x03;
+        compressed.set(rawKey.slice(1, 33), 1);
+      } else if (rawKey.length === 33) {
+        compressed = rawKey;
+      } else {
+        throw new Error('Unexpected key format from new device.');
+      }
+      const hexNewPubkey = Array.from(compressed).map(b => b.toString(16).padStart(2, '0')).join('');
+
+      const nonce = await fetchNonce(nodeUrl, walletAddress);
+      const label = `Backup ${new Date().toLocaleDateString()}`;
+      await signAndSubmitSmartOp(
+        { AddKey: { key_type: 'p256', pubkey: hexNewPubkey, label } },
+        0, // fee-exempt
+        nonce,
+      );
+      setLinkMsg({ kind: 'ok', text: `Linked "${label}". It will appear once the tx finalizes.` });
+      // Give the network a moment, then refresh.
+      setTimeout(() => { fetchInfo(); }, 1500);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      if (msg.includes('NotAllowed') || msg.toLowerCase().includes('cancelled')) {
+        setLinkMsg({ kind: 'err', text: 'Cancelled. No key was added.' });
+      } else {
+        setLinkMsg({ kind: 'err', text: `Could not link device: ${msg}` });
+      }
+    } finally {
+      setLinking(false);
+    }
+  }, [walletAddress, pw, nodeUrl, fetchInfo]);
+
+  /**
+   * Initiate time-locked key removal via SmartOpType::RemoveKey. The actual
+   * removal executes after KEY_REMOVAL_DELAY_ROUNDS (~2.8h). The engine
+   * refuses to remove the last remaining key.
+   */
+  const handleRemoveKey = useCallback(async (keyIdHex: string) => {
+    if (!walletAddress) return;
+    setRemoveError('');
+    setRemovingKeyId(keyIdHex);
+    try {
+      const nonce = await fetchNonce(nodeUrl, walletAddress);
+      await signAndSubmitSmartOp(
+        { RemoveKey: { key_id_to_remove: keyIdHex } },
+        0, // fee-exempt
+        nonce,
+      );
+      setConfirmRemoveKeyId(null);
+      setTimeout(() => { fetchInfo(); }, 1500);
+    } catch (e: unknown) {
+      setRemoveError(e instanceof Error ? e.message : 'Failed to remove key');
+    } finally {
+      setRemovingKeyId(null);
+    }
+  }, [walletAddress, nodeUrl, fetchInfo]);
 
   if (!walletAddress) return <div style={{ padding: '18px 26px', color: 'var(--dag-text-muted)', fontSize: 13, fontFamily: "'DM Sans',sans-serif" }}>Create a wallet first.</div>;
   if (loading) return <div style={{ padding: '18px 26px', color: 'var(--dag-text-muted)', fontSize: 13, fontFamily: "'DM Sans',sans-serif", animation: 'pulse 1.5s infinite' }}>Loading SmartAccount...</div>;
@@ -204,33 +325,125 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
         </Section>
 
         {/* ── Keys ── */}
-        <Section icon="◇" color="#0066FF" title="Authorized Keys">
+        {/*
+         * The "+ Link Another Device" button is shown whenever the user has a
+         * primary passkey wallet locally (`pw !== null`), regardless of whether
+         * the SmartAccount has any keys registered on-chain yet. The AddKey
+         * SmartOp envelope carries the primary's `p256_pubkey` for auto-
+         * registration, so the first AddKey call from a fresh address correctly
+         * registers BOTH the primary and the new backup device in a single tx.
+         *
+         * Earlier versions of this page gated the button on
+         * `info && info.authorized_keys.length > 0`, which meant users whose
+         * SmartAccount hadn't been activated yet had no way to add a backup —
+         * exactly when they'd want to most.
+         */}
+        <Section icon="◇" color="#0066FF" title="Authorized Keys"
+          action={pw ? (
+            <button
+              onClick={handleLinkDevice}
+              disabled={linking}
+              style={{ ...S.btn(), opacity: linking ? 0.5 : 1, cursor: linking ? 'wait' : 'pointer' }}
+              title="Create a new passkey on another device and register it on-chain"
+            >
+              {linking ? 'Linking…' : '+ Link Another Device'}
+            </button>
+          ) : undefined}>
           {info && info.authorized_keys.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {info.authorized_keys.slice((keyPage - 1) * SA_PAGE_SIZE, keyPage * SA_PAGE_SIZE).map(key => (
-                <div key={key.key_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--dag-card)', borderRadius: 10, padding: '10px 13px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: key.key_type === 'p256' ? 'rgba(168,85,247,0.12)' : 'rgba(0,102,255,0.12)', fontSize: 14 }}>
-                      {key.key_type === 'p256' ? '◎' : '◇'}
+              {info.authorized_keys.slice((keyPage - 1) * SA_PAGE_SIZE, keyPage * SA_PAGE_SIZE).map(key => {
+                const isOnlyKey = info.authorized_keys.length <= 1;
+                const isPending = info.pending_key_removal?.key_id === key.key_id;
+                const isConfirming = confirmRemoveKeyId === key.key_id;
+                const isRemoving = removingKeyId === key.key_id;
+                return (
+                  <div key={key.key_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, background: 'var(--dag-card)', borderRadius: 10, padding: '10px 13px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                      <div style={{ width: 32, height: 32, flexShrink: 0, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: key.key_type === 'p256' ? 'rgba(168,85,247,0.12)' : 'rgba(0,102,255,0.12)', fontSize: 14 }}>
+                        {key.key_type === 'p256' ? '◎' : '◇'}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{key.label}</div>
+                        <div style={{ fontSize: 10, color: 'var(--dag-text-faint)', ...S.mono }}>{key.key_id.slice(0, 12)}… ({key.key_type === 'p256' ? 'Passkey' : 'Ed25519'})</div>
+                      </div>
                     </div>
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--dag-text)' }}>{key.label}</div>
-                      <div style={{ fontSize: 10, color: 'var(--dag-text-faint)', ...S.mono }}>{key.key_id.slice(0, 12)}… ({key.key_type === 'p256' ? 'Passkey' : 'Ed25519'})</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <div style={{ fontSize: 10, color: 'var(--dag-subheading)' }}>{key.daily_limit ? `${fmt(key.daily_limit)}/day` : 'No limit'}</div>
+                      {isPending ? (
+                        <span style={{ fontSize: 9.5, color: '#FFB800', background: 'rgba(255,184,0,0.1)', padding: '3px 7px', borderRadius: 6, fontWeight: 600 }}>REMOVING</span>
+                      ) : isConfirming ? (
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button
+                            onClick={() => handleRemoveKey(key.key_id)}
+                            disabled={isRemoving}
+                            style={{ padding: '5px 9px', borderRadius: 6, background: '#EF4444', color: '#fff', border: 'none', fontSize: 10, fontWeight: 700, cursor: isRemoving ? 'wait' : 'pointer', opacity: isRemoving ? 0.6 : 1 }}
+                          >
+                            {isRemoving ? 'Signing…' : 'Confirm Remove'}
+                          </button>
+                          <button
+                            onClick={() => { setConfirmRemoveKeyId(null); setRemoveError(''); }}
+                            disabled={isRemoving}
+                            style={{ padding: '5px 9px', borderRadius: 6, background: 'transparent', color: 'var(--dag-text-muted)', border: '1px solid var(--dag-border)', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setConfirmRemoveKeyId(key.key_id); setRemoveError(''); }}
+                          disabled={isOnlyKey || !!info.pending_key_removal}
+                          title={isOnlyKey ? 'Cannot remove the only key — add another first' : info.pending_key_removal ? 'Another key removal is already pending' : 'Start time-locked removal'}
+                          style={{ padding: '5px 9px', borderRadius: 6, background: 'transparent', color: isOnlyKey || info.pending_key_removal ? 'var(--dag-text-faint)' : '#EF4444', border: `1px solid ${isOnlyKey || info.pending_key_removal ? 'var(--dag-border)' : 'rgba(239,68,68,0.3)'}`, fontSize: 10, fontWeight: 600, cursor: isOnlyKey || info.pending_key_removal ? 'not-allowed' : 'pointer' }}
+                        >
+                          Remove
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <div style={{ fontSize: 10, color: 'var(--dag-subheading)' }}>{key.daily_limit ? `${fmt(key.daily_limit)}/day` : 'No limit'}</div>
-                </div>
-              ))}
+                );
+              })}
               {info.pending_key_removal && (
                 <div style={{ fontSize: 10.5, color: '#FFB800', background: 'rgba(255,184,0,0.06)', border: '1px solid rgba(255,184,0,0.15)', borderRadius: 8, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  ◷ Key removal pending (round {info.pending_key_removal.executes_at_round})
+                  ◷ Key removal pending — executes at round {info.pending_key_removal.executes_at_round.toLocaleString()} (~2.8h time-lock)
+                </div>
+              )}
+              {linkMsg && (
+                <div role="status" style={{
+                  fontSize: 10.5,
+                  color: linkMsg.kind === 'ok' ? '#00E0C4' : '#EF4444',
+                  background: linkMsg.kind === 'ok' ? 'rgba(0,224,196,0.06)' : 'rgba(239,68,68,0.06)',
+                  border: `1px solid ${linkMsg.kind === 'ok' ? 'rgba(0,224,196,0.15)' : 'rgba(239,68,68,0.15)'}`,
+                  borderRadius: 8, padding: '8px 12px',
+                }}>
+                  {linkMsg.text}
+                </div>
+              )}
+              {removeError && (
+                <div role="alert" style={{ fontSize: 10.5, color: '#EF4444', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 8, padding: '8px 12px' }}>
+                  {removeError}
                 </div>
               )}
               <Pagination page={keyPage} totalPages={Math.ceil(info.authorized_keys.length / SA_PAGE_SIZE)} onPageChange={setKeyPage} totalItems={info.authorized_keys.length} pageSize={SA_PAGE_SIZE} />
-              <p style={{ fontSize: 10, color: 'var(--dag-text-faint)' }}>Add a backup device by scanning a QR from another wallet.</p>
             </div>
           ) : (
-            <p style={{ fontSize: 11.5, color: 'var(--dag-text-faint)' }}>{info ? 'Key auto-registers on first transaction.' : 'SmartAccount activates when you send or receive.'}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <p style={{ fontSize: 11.5, color: 'var(--dag-text-faint)' }}>
+                {info
+                  ? 'No keys registered on-chain yet. Your primary passkey auto-registers on your first transaction — or tap + Link Another Device above to add a backup device now (both primary and backup will register in the same transaction).'
+                  : 'SmartAccount activates when you send or receive a transaction, OR when you tap + Link Another Device above to add a backup passkey.'}
+              </p>
+              {linkMsg && (
+                <div role="status" style={{
+                  fontSize: 10.5,
+                  color: linkMsg.kind === 'ok' ? '#00E0C4' : '#EF4444',
+                  background: linkMsg.kind === 'ok' ? 'rgba(0,224,196,0.06)' : 'rgba(239,68,68,0.06)',
+                  border: `1px solid ${linkMsg.kind === 'ok' ? 'rgba(0,224,196,0.15)' : 'rgba(239,68,68,0.15)'}`,
+                  borderRadius: 8, padding: '8px 12px',
+                }}>
+                  {linkMsg.text}
+                </div>
+              )}
+            </div>
           )}
         </Section>
 
@@ -253,6 +466,14 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
             </div>
           ) : showRecoveryForm ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* Preview notice — shown FIRST so users know this form isn't live
+                  before they invest effort filling it out. */}
+              <div role="note" style={{ fontSize: 10.5, color: '#FFB800', background: 'rgba(255,184,0,0.06)', border: '1px solid rgba(255,184,0,0.15)', borderRadius: 8, padding: '8px 12px' }}>
+                ⚠ <strong>Preview only.</strong> Social recovery requires a protocol update
+                (<code style={{ fontSize: 10 }}>SmartOpType::SetRecovery</code> variant). Submit
+                is disabled until the Rust variant lands — feel free to explore the UI.
+              </div>
+
               {/* Explainer */}
               <div style={{ background: 'rgba(168,85,247,0.04)', border: '1px solid rgba(168,85,247,0.1)', borderRadius: 10, padding: '12px 14px' }}>
                 <div style={{ fontSize: 11.5, fontWeight: 600, color: '#A855F7', marginBottom: 6 }}>How recovery works</div>
@@ -285,10 +506,6 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
                 </select>
               </div>
 
-              <div role="note" style={{ fontSize: 10.5, color: '#FFB800', background: 'rgba(255,184,0,0.06)', border: '1px solid rgba(255,184,0,0.15)', borderRadius: 8, padding: '8px 12px' }}>
-                ⚠ Social recovery requires a protocol update (<code style={{ fontSize: 10 }}>SmartOpType::SetRecovery</code> variant).
-                The form is a preview only — submit is disabled until the Rust variant and signable_bytes handler land.
-              </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button disabled style={{ ...primaryButtonStyle, opacity: 0.35, cursor: 'not-allowed' }}>Save Guardians</button>
                 <button onClick={() => setShowRecoveryForm(false)} style={S.btn('var(--dag-text-muted)')}>Cancel</button>
@@ -325,21 +542,33 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
             </div>
           ) : showPolicyForm ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* Preview notice — shown FIRST so users know this form isn't live
+                  before they invest effort filling it out. */}
+              <div role="note" style={{ fontSize: 10.5, color: '#FFB800', background: 'rgba(255,184,0,0.06)', border: '1px solid rgba(255,184,0,0.15)', borderRadius: 8, padding: '8px 12px' }}>
+                ⚠ <strong>Preview only.</strong> Spending policy requires a protocol update
+                (<code style={{ fontSize: 10 }}>SmartOpType::SetPolicy</code> variant). Submit
+                is disabled until the Rust variant lands — feel free to explore the UI.
+              </div>
               <div>
                 <span style={{ ...S.label, display: 'block' }}>Instant limit (UDAG)</span>
                 <input type="number" placeholder="1" value={policyInstant} onChange={e => setPolicyInstant(e.target.value)} style={S.input} />
+                <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginTop: 4 }}>
+                  Transfers at or below this amount send immediately, no delay.
+                </p>
               </div>
               <div>
                 <span style={{ ...S.label, display: 'block' }}>Vault threshold (UDAG)</span>
                 <input type="number" placeholder="100" value={policyVault} onChange={e => setPolicyVault(e.target.value)} style={S.input} />
+                <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginTop: 4 }}>
+                  Transfers above this amount are held in a vault for ~2.8h before executing — cancellable with any key.
+                </p>
               </div>
               <div>
                 <span style={{ ...S.label, display: 'block' }}>Daily cap (UDAG)</span>
                 <input type="number" placeholder="10" value={policyDaily} onChange={e => setPolicyDaily(e.target.value)} style={S.input} />
-              </div>
-              <div role="note" style={{ fontSize: 10.5, color: '#FFB800', background: 'rgba(255,184,0,0.06)', border: '1px solid rgba(255,184,0,0.15)', borderRadius: 8, padding: '8px 12px' }}>
-                ⚠ Spending policy requires a protocol update (<code style={{ fontSize: 10 }}>SmartOpType::SetPolicy</code> variant).
-                The form is a preview only — submit is disabled until the Rust variant and signable_bytes handler land.
+                <p style={{ fontSize: 10, color: 'var(--dag-text-faint)', marginTop: 4 }}>
+                  Total outgoing amount allowed per 24h window — resets at the first transfer past the boundary.
+                </p>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button disabled style={{ ...primaryButtonStyle, opacity: 0.35, cursor: 'not-allowed' }}>Save (2.8hr time-lock)</button>

@@ -177,7 +177,7 @@ fn test_remove_key_signable_bytes_stable_encoding() {
 
     // Layout: NETWORK_ID || "smart_op" || from(20) || 17 || key_id(8)
     //   || fee_le(8) || nonce_le(8) || signing_key_id(8)
-    let network = ultradag_coin::NETWORK_ID_SLICE;
+    let network: &[u8] = ultradag_coin::constants::NETWORK_ID;
     assert!(bytes.starts_with(network));
     let tail = &bytes[network.len()..];
     assert!(tail.starts_with(b"smart_op"));
