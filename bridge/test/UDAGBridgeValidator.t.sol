@@ -35,9 +35,11 @@ contract UDAGBridgeValidatorTest is Test {
         uint256 govNonce = vm.getNonce(governor);
         address predictedBridge = vm.computeCreateAddress(governor, govNonce + 1);
 
-        // Deploy token with predicted bridge address
+        // Deploy token with predicted bridge address.
+        // No genesis allocation here — bridge-only tests should start from
+        // a zero supply and rely on the bridge minting test balances.
         vm.startPrank(governor);
-        token = new UDAGToken(governor, predictedBridge);
+        token = new UDAGToken(governor, predictedBridge, address(0), 0);
 
         // Deploy bridge
         bridge = new UDAGBridgeValidator(address(token), governor);

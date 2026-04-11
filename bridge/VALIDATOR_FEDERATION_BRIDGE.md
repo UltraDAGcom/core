@@ -280,8 +280,8 @@ cargo test --package ultradag-coin --test bridge_integration
 
 ## References
 
-- [Bridge Comparison](./BRIDGE_COMPARISON.md)
-- [Relayer Operator Setup](./RELAYER_OPERATOR_SETUP.md)
 - [Deployment Guide](./DEPLOYMENT_GUIDE.md)
-- [Solidity Contract](../../bridge/src/UDAGBridgeValidator.sol)
-- [Rust Implementation](../../crates/ultradag-coin/src/bridge/)
+- [Solidity token](./src/UDAGToken.sol)
+- [Solidity bridge](./src/UDAGBridgeValidator.sol)
+- [Rust bridge module](../crates/ultradag-coin/src/bridge/mod.rs)
+- [Rust deposit/release transactions](../crates/ultradag-coin/src/tx/bridge.rs)

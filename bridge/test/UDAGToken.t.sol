@@ -11,8 +11,11 @@ contract UDAGTokenTest is Test {
     address public bridge = address(0xD);
 
     function setUp() public {
+        // Default: deploy with no genesis allocation so the legacy tests keep
+        // their "zero total supply at deploy" expectations. The genesis-mint
+        // behaviour is exercised in a dedicated test block below.
         vm.prank(admin);
-        token = new UDAGToken(admin, bridge);
+        token = new UDAGToken(admin, bridge, address(0), 0);
     }
 
     function test_name() public view {
@@ -163,14 +166,109 @@ contract UDAGTokenTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(UDAGToken.ZeroAddress.selector, "admin")
         );
-        new UDAGToken(address(0), bridge);
+        new UDAGToken(address(0), bridge, address(0), 0);
     }
 
     function test_constructorRejectsZeroBridge() public {
         vm.expectRevert(
             abi.encodeWithSelector(UDAGToken.ZeroAddress.selector, "bridge")
         );
-        new UDAGToken(admin, address(0));
+        new UDAGToken(admin, address(0), address(0), 0);
+    }
+
+    // ─── Genesis allocation ───
+
+    /// @notice Happy path: full 2.52M IDO pre-mine credited to the liquidity
+    ///         address and reflected in totalSupply / balanceOf / remainingSupply.
+    function test_genesisAllocation_fullIdoBucket() public {
+        address liquidity = address(0xBEEF);
+        uint256 amount = 2_520_000 * 10 ** 8; // exactly MAX_GENESIS_ALLOCATION
+
+        vm.prank(admin);
+        UDAGToken t = new UDAGToken(admin, bridge, liquidity, amount);
+
+        assertEq(t.genesisAllocation(), amount);
+        assertEq(t.genesisRecipient(), liquidity);
+        assertEq(t.balanceOf(liquidity), amount);
+        assertEq(t.totalSupply(), amount);
+        assertEq(t.remainingSupply(), t.MAX_SUPPLY() - amount);
+    }
+
+    /// @notice Partial allocations are allowed (below the 2.52M cap).
+    function test_genesisAllocation_partial() public {
+        address liquidity = address(0xBEEF);
+        uint256 amount = 1_000_000 * 10 ** 8;
+
+        vm.prank(admin);
+        UDAGToken t = new UDAGToken(admin, bridge, liquidity, amount);
+
+        assertEq(t.balanceOf(liquidity), amount);
+        assertEq(t.genesisAllocation(), amount);
+    }
+
+    /// @notice Allocations above the 12% cap must revert.
+    function test_genesisAllocation_rejectsAboveCap() public {
+        address liquidity = address(0xBEEF);
+        uint256 tooMuch = 2_520_000 * 10 ** 8 + 1;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                UDAGToken.GenesisAllocationTooLarge.selector,
+                tooMuch,
+                2_520_000 * 10 ** 8
+            )
+        );
+        new UDAGToken(admin, bridge, liquidity, tooMuch);
+    }
+
+    /// @notice Zero recipient with non-zero allocation must revert.
+    function test_genesisAllocation_rejectsZeroRecipient() public {
+        vm.expectRevert(UDAGToken.GenesisRecipientRequired.selector);
+        new UDAGToken(admin, bridge, address(0), 1_000);
+    }
+
+    /// @notice After the constructor mint, the bridge is still the sole
+    ///         minter — admin cannot mint additional tokens.
+    function test_genesisAllocation_doesNotGrantAdminMint() public {
+        address liquidity = address(0xBEEF);
+        uint256 amount = 2_520_000 * 10 ** 8;
+
+        vm.prank(admin);
+        UDAGToken t = new UDAGToken(admin, bridge, liquidity, amount);
+
+        vm.prank(admin);
+        vm.expectRevert();
+        t.mint(user, 1);
+    }
+
+    /// @notice Genesis allocation counts against MAX_SUPPLY — subsequent
+    ///         bridge mints can only mint (MAX_SUPPLY - genesisAllocation).
+    function test_genesisAllocation_countsAgainstMaxSupply() public {
+        address liquidity = address(0xBEEF);
+        uint256 allocation = 2_520_000 * 10 ** 8;
+
+        vm.prank(admin);
+        UDAGToken t = new UDAGToken(admin, bridge, liquidity, allocation);
+
+        uint256 remaining = t.remainingSupply();
+        assertEq(remaining, t.MAX_SUPPLY() - allocation);
+
+        // Mint the full remainder via the bridge — must succeed.
+        vm.prank(bridge);
+        t.mint(user, remaining);
+
+        // One more sat must exceed the cap.
+        vm.prank(bridge);
+        vm.expectRevert(
+            abi.encodeWithSelector(UDAGToken.ExceedsMaxSupply.selector, 1, 0)
+        );
+        t.mint(user, 1);
+    }
+
+    /// @notice The genesis immutables default to zero when no allocation is requested.
+    function test_genesisAllocation_defaultsToZero() public view {
+        assertEq(token.genesisAllocation(), 0);
+        assertEq(token.genesisRecipient(), address(0));
     }
 
     /// @notice isMinter view function works

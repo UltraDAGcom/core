@@ -24,6 +24,13 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 ///        - A timelock-gated bridge migration path remains available so a compromised
 ///          bridge can be replaced without redeploying the token.
 ///        - renounceAdminRole() is the final decentralisation step and is irreversible.
+///
+///      Genesis allocation (one-shot, constructor-only):
+///        - The native UDAG chain reserves 12% (2.52M UDAG) of the 21M cap as a
+///          genesis pre-mine for IDO / Uniswap liquidity. That allocation is
+///          NOT minted via emission on the native side, so the Arbitrum ERC-20
+///          must mirror it: a single mint in the constructor, capped at the
+///          same 12%, after which no non-bridge mint path exists.
 contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable {
 
     // ─── Role Definitions ───────────────────────────────────────────────
@@ -37,6 +44,19 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable {
     // ─── Supply Configuration ───────────────────────────────────────────
     /// @notice Maximum supply: 21,000,000 UDAG with 8 decimal places.
     uint256 public constant MAX_SUPPLY = 21_000_000 * 10 ** 8;
+
+    /// @notice Hard cap on the constructor-only genesis allocation.
+    /// @dev Mirrors the 12% IDO pre-mine on the native chain (2,520,000 UDAG).
+    ///      The constructor MAY mint zero up to this amount, and never again.
+    uint256 public constant MAX_GENESIS_ALLOCATION = 2_520_000 * 10 ** 8;
+
+    /// @notice The amount minted in the constructor as the IDO pre-mine.
+    /// @dev Set once, never mutated. Exposed as a view for auditors.
+    uint256 public immutable genesisAllocation;
+
+    /// @notice The address that received the genesis allocation.
+    /// @dev Set once, never mutated. Zero address when `genesisAllocation == 0`.
+    address public immutable genesisRecipient;
 
     // ─── Bridge State ───────────────────────────────────────────────────
     address public bridgeAddress;
@@ -58,6 +78,7 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable {
     event EmergencyPause(address indexed pausedBy, string reason);
     event EmergencyUnpause(address indexed unpausedBy);
     event AdminRoleRenounced(address indexed formerAdmin);
+    event GenesisAllocationMinted(address indexed recipient, uint256 amount);
 
     // ─── Errors ─────────────────────────────────────────────────────────
     error ZeroAddress(string param);
@@ -68,13 +89,22 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable {
     error NoPendingMigration();
     error MigrationTimelockNotElapsed(uint256 executableAfter, uint256 currentTime);
     error MigrationAlreadyPending();
+    error GenesisAllocationTooLarge(uint256 requested, uint256 maximum);
+    error GenesisRecipientRequired();
 
     /// @notice Constructor - sets up initial roles and configuration.
-    /// @param admin  Address that will hold DEFAULT_ADMIN_ROLE (should be a timelock / multisig).
-    /// @param bridge Address of the bridge contract (sole minter).
+    /// @param admin              DEFAULT_ADMIN_ROLE holder (should be a timelock / multisig).
+    /// @param bridge             Bridge contract address (sole minter going forward).
+    /// @param _genesisRecipient  Address receiving the one-shot IDO pre-mine.
+    ///                           Pass `address(0)` with `_genesisAllocation == 0` to skip.
+    /// @param _genesisAllocation Amount to mint once in the constructor. Capped at
+    ///                           `MAX_GENESIS_ALLOCATION` (12% of `MAX_SUPPLY`).
+    ///                           Set to 0 to disable the pre-mine entirely.
     constructor(
         address admin,
-        address bridge
+        address bridge,
+        address _genesisRecipient,
+        uint256 _genesisAllocation
     )
         ERC20("UltraDAG", "UDAG")
         ERC20Permit("UltraDAG")
@@ -95,8 +125,27 @@ contract UDAGToken is ERC20, ERC20Permit, AccessControl, Pausable {
         _setRoleAdmin(MINTER_ROLE, DEAD_ROLE);
 
         bridgeAddress = bridge;
-
         emit BridgeUpdated(address(0), bridge);
+
+        // ─── Genesis allocation (one-shot IDO pre-mine) ─────────────────
+        // After the constructor returns there is no other code path that
+        // touches `_mint` except `mint()` (MINTER_ROLE-gated to the bridge),
+        // so this allocation can never be repeated.
+        if (_genesisAllocation > 0) {
+            if (_genesisAllocation > MAX_GENESIS_ALLOCATION) {
+                revert GenesisAllocationTooLarge(_genesisAllocation, MAX_GENESIS_ALLOCATION);
+            }
+            if (_genesisRecipient == address(0)) {
+                revert GenesisRecipientRequired();
+            }
+            // MAX_GENESIS_ALLOCATION < MAX_SUPPLY, so the max-supply invariant
+            // still holds after this mint — no additional check needed here.
+            _mint(_genesisRecipient, _genesisAllocation);
+            emit GenesisAllocationMinted(_genesisRecipient, _genesisAllocation);
+        }
+
+        genesisAllocation = _genesisAllocation;
+        genesisRecipient  = _genesisRecipient;
     }
 
     // ─── ERC-20 Overrides ───────────────────────────────────────────────

@@ -1,259 +1,373 @@
 # UltraDAG Bridge Deployment Guide
 
-Complete guide for deploying the UltraDAG bridge to Arbitrum.
+Complete walkthrough for deploying the UltraDAG validator-federation bridge to
+Arbitrum (Sepolia and mainnet), with notes on the presale-first deployment
+variant.
+
+> **Architecture note**: this bridge is secured by the UltraDAG DAG validator
+> set itself. There is **no external relayer network**. Every withdrawal claim
+> on Arbitrum is verified against the BFT signature threshold of the registered
+> validator set. See [`VALIDATOR_FEDERATION_BRIDGE.md`](./VALIDATOR_FEDERATION_BRIDGE.md)
+> for the architectural details.
 
 ## Prerequisites
 
-- Foundry installed (`curl -L https://foundry.paradigm.xyz | bash`)
-- Arbitrum RPC endpoint
-- UltraDAG node RPC endpoint
-- 5 relayer operators recruited
-- External audit completed
+- [Foundry](https://book.getfoundry.sh/getting-started/installation) (`forge` 1.5+)
+- An Arbitrum RPC endpoint (Infura, Alchemy, or a self-hosted node)
+- Funded deployer address (gas on the target network)
+- Governor address (will own the 1-day `TimelockController` that administers
+  the token and the bridge) — **recommend a Safe multisig**, not an EOA
+- For the full bi-directional bridge: at least 3 registered UltraDAG validators
+  with published secp256k1 bridge addresses
 
-## Phase 1: Testnet Deployment
-
-### 1.1 Configure Environment
+## Phase 0: Install Dependencies
 
 ```bash
 cd bridge
-
-# Copy example environment file
-cp .env.example .env
-
-# Edit .env with your values
+forge install openzeppelin/openzeppelin-contracts
+forge install foundry-rs/forge-std
+forge build
+forge test
 ```
 
-### 1.2 Environment Variables
+All 42 tests must pass before going further.
+
+## Phase 1: Testnet (Arbitrum Sepolia)
+
+### 1.1 Environment Variables
+
+Create `.env`:
 
 ```bash
-# Deployment
+# ── Required ─────────────────────────────────────────────────────────
 RPC_URL=https://sepolia-rollup.arbitrum.io/rpc
-DEPLOYER_KEY=0x...  # Deployer private key
-GOVERNOR_KEY=0x...  # Governor/admin address (will own timelock)
+DEPLOYER_KEY=0x<deployer_private_key>
+GOVERNOR_ADDRESS=0x<safe_or_timelock_owner>
 
-# Genesis allocations
-DEV_ADDRESS=0x...   # Developer allocation recipient
-TREASURY_ADDRESS=0x...  # Treasury allocation recipient
+# ── Optional: IDO / Presale Pre-mine ─────────────────────────────────
+# If set, the token constructor mints the IDO allocation in one shot to
+# GENESIS_RECIPIENT. Capped at 2,520,000 UDAG (12% of MAX_SUPPLY).
+# Amount is in 8-decimal sats: 1 UDAG = 100_000_000 sats.
+#
+# Example: mint the full 2.52M UDAG IDO bucket to the liquidity multisig
+# GENESIS_RECIPIENT=0x<liquidity_multisig_address>
+# GENESIS_ALLOCATION=252000000000000
 
-# Relayers (5 keys for 3-of-5 multi-sig)
-RELAYER_KEYS=key1,key2,key3,key4,key5
-
-# Bridge (after deployment)
-BRIDGE_ADDRESS=0x...  # Will be filled after deployment
+# ── Filled after deployment ──────────────────────────────────────────
+BRIDGE_ADDRESS=
+TOKEN_ADDRESS=
+TIMELOCK_ADDRESS=
 ```
 
-### 1.3 Deploy Contracts
+Load it: `source .env` (or use `forge script`'s automatic `.env` loading).
+
+### 1.2 Deploy
 
 ```bash
-# Run deployment script
 forge script script/Deploy.s.sol:DeployScript \
-  --rpc-url $RPC_URL \
-  --private-key $DEPLOYER_KEY \
+  --rpc-url "$RPC_URL" \
+  --private-key "$DEPLOYER_KEY" \
   --broadcast \
   --verify \
   -vvvv
 ```
 
-### 1.4 Verify Deployment
+The script deploys, in one transaction batch:
 
-```bash
-# Check token
-cast call $TOKEN_ADDRESS "name()(string)"
-# Expected: "UltraDAG"
+1. `TimelockController` with a 1-day delay, `GOVERNOR_ADDRESS` as the sole
+   proposer and executor.
+2. `UDAGToken`, with:
+   - `admin = TimelockController`
+   - `bridge = <CREATE-predicted bridge address>`
+   - `genesisRecipient = $GENESIS_RECIPIENT` (or `0x0` to skip)
+   - `genesisAllocation = $GENESIS_ALLOCATION` (or `0` to skip)
+3. `UDAGBridgeValidator(token, timelock)`.
 
-# Check bridge
-cast call $BRIDGE_ADDRESS "bridgeActive()(bool)"
-# Expected: false (starts inactive)
+Deployment artifacts are written to `deployment-output.json`:
 
-# Check relayers
-cast call $BRIDGE_ADDRESS "relayerCount()(uint256)"
-# Expected: 5
-
-# Check threshold
-cast call $BRIDGE_ADDRESS "requiredSignatures()(uint256)"
-# Expected: 3
+```json
+{
+  "network": 421614,
+  "token": "0x...",
+  "bridge": "0x...",
+  "timelock": "0x...",
+  "governor": "0x...",
+  "timelockDelay": 86400,
+  "genesisRecipient": "0x...",
+  "genesisAllocation": 252000000000000
+}
 ```
 
-### 1.5 Test Bridge Operations
-
-#### Test Arbitrum → Native
+### 1.3 Verify Deployment
 
 ```bash
-# 1. Approve bridge
-cast send $TOKEN_ADDRESS \
-  "approve(address,uint256)" \
-  $BRIDGE_ADDRESS 100000000 \
-  --private-key $USER_KEY
+# Token basics
+cast call "$TOKEN_ADDRESS" "name()(string)" --rpc-url "$RPC_URL"
+cast call "$TOKEN_ADDRESS" "symbol()(string)" --rpc-url "$RPC_URL"
+cast call "$TOKEN_ADDRESS" "decimals()(uint8)" --rpc-url "$RPC_URL"
+cast call "$TOKEN_ADDRESS" "MAX_SUPPLY()(uint256)" --rpc-url "$RPC_URL"
 
-# 2. Bridge to native
-cast send $BRIDGE_ADDRESS \
-  "bridgeToNative(bytes20,uint256)" \
-  0xaabbccddee00112233445566778899aabbccddee 100000000 \
-  --private-key $USER_KEY
+# Genesis allocation (should equal GENESIS_ALLOCATION if set)
+cast call "$TOKEN_ADDRESS" "genesisAllocation()(uint256)" --rpc-url "$RPC_URL"
+cast call "$TOKEN_ADDRESS" "genesisRecipient()(address)" --rpc-url "$RPC_URL"
+cast call "$TOKEN_ADDRESS" "totalSupply()(uint256)" --rpc-url "$RPC_URL"
 
-# 3. Check request created
-cast call $BRIDGE_ADDRESS \
-  "bridgeRequests(uint256)(address,bytes20,uint256,uint256,bool,bool)" \
-  0
+# Bridge is sole minter
+cast call "$TOKEN_ADDRESS" "isMinter(address)(bool)" "$BRIDGE_ADDRESS" --rpc-url "$RPC_URL"
+
+# Bridge starts disabled (no validators yet)
+cast call "$BRIDGE_ADDRESS" "bridgeEnabled()(bool)" --rpc-url "$RPC_URL"
+cast call "$BRIDGE_ADDRESS" "getValidatorCount()(uint256)" --rpc-url "$RPC_URL"
 ```
 
-#### Test Native → Arbitrum
+### 1.4 Register Initial Validators
+
+The bridge starts disabled. It auto-enables the moment the third validator is
+registered. Each validator's on-chain address is the Ethereum address derived
+from their Ed25519-derived secp256k1 bridge key (see
+`crates/ultradag-coin/src/bridge/mod.rs::eth_address_from_secp_key`).
 
 ```bash
-# This requires relayer infrastructure
-# See RELAYER_GUIDE.md for setup
+export BRIDGE_ADDRESS="0x..."
+export GOVERNOR_KEY="0x..."                         # proposer on the TimelockController
+export VALIDATOR_ADDRESSES="0xv1,0xv2,0xv3"         # ≥ 3 comma-separated addresses
+
+forge script script/ConfigureBridge.s.sol:ConfigureBridgeScript \
+  --rpc-url "$RPC_URL" \
+  --private-key "$GOVERNOR_KEY" \
+  --broadcast \
+  -vvvv
 ```
 
-### 1.6 Run Testnet for 2-4 Weeks
+> **NB**: `ConfigureBridge.s.sol` calls `addValidator()` directly as the
+> bridge's governor. In a production deployment where the governor is the
+> TimelockController, each `addValidator` call must instead be scheduled
+> through the timelock (1-day delay). Either batch them via a single
+> `schedule` / `execute` pair, or use a Safe + Zodiac timelock module.
 
-- Monitor bridge operations
-- Test all edge cases
-- Verify relayer infrastructure
-- Collect metrics
+### 1.5 Smoke Tests
 
-## Phase 2: Mainnet Deployment
+After validators are registered and `bridgeEnabled() == true`:
+
+```bash
+# Native → Arbitrum (claimWithdrawal) — requires a real BridgeProof from the
+# UltraDAG node. The raw workflow is in VALIDATOR_FEDERATION_BRIDGE.md.
+
+# Arbitrum → Native (deposit)
+cast send "$TOKEN_ADDRESS" "approve(address,uint256)" \
+  "$BRIDGE_ADDRESS" 100000000 \
+  --rpc-url "$RPC_URL" --private-key "$USER_KEY"
+
+cast send "$BRIDGE_ADDRESS" \
+  "deposit(bytes20,uint256)" \
+  0x<20_byte_native_address> 100000000 \
+  --rpc-url "$RPC_URL" --private-key "$USER_KEY"
+```
+
+Tail the event stream:
+
+```bash
+cast logs --address "$BRIDGE_ADDRESS" --from-block latest --rpc-url "$RPC_URL"
+```
+
+You should see `DepositMade`. UltraDAG validators observing the Arbitrum
+event will each submit a `BridgeReleaseTx` on the native chain; once
+`⌈2n/3⌉` agreeing votes are in, the recipient on the native side is credited.
+
+### 1.6 Run on Testnet for 2–4 Weeks
+
+- Monitor bridge uptime, latency, and volume.
+- Exercise every rate-limit edge case (per-tx cap, daily cap rollover).
+- Test `pause()` / `unpause()`, governor transfer, validator add/remove.
+- Dry-run the `proposeBridgeMigration` / `executeBridgeMigration` recovery path.
+- Exercise the off-chain relayer daemon (see the **Off-chain integration**
+  section below; this is the part of the system that does not yet ship in
+  this repo).
+
+## Phase 2: Mainnet (Arbitrum One)
 
 ### 2.1 Pre-Deployment Checklist
 
-- [ ] Testnet deployment successful (2-4 weeks)
-- [ ] External audit completed
-- [ ] 5 relayer operators recruited and trained
-- [ ] Monitoring and alerting configured
-- [ ] Emergency procedures documented
-- [ ] Bug bounty program launched
+- [ ] Testnet ran cleanly for ≥ 2 weeks with representative traffic.
+- [ ] External audit complete. Fixes merged and re-audited as needed.
+- [ ] Bug bounty program launched.
+- [ ] Monitoring and alerting live.
+- [ ] Emergency runbook documented (pause, migrate, refund).
+- [ ] Governor is a Safe multisig, not an EOA.
+- [ ] Deployer address is gas-funded on Arbitrum One.
 
-### 2.2 Deploy to Mainnet
+### 2.2 Deploy
 
 ```bash
-# Update .env for mainnet
-RPC_URL=https://arb1.arbitrum.io/rpc
+export RPC_URL="https://arb1.arbitrum.io/rpc"
+# ... rest of .env identical except mainnet values ...
 
-# Deploy
 forge script script/Deploy.s.sol:DeployScript \
-  --rpc-url $RPC_URL \
-  --private-key $DEPLOYER_KEY \
+  --rpc-url "$RPC_URL" \
+  --private-key "$DEPLOYER_KEY" \
   --broadcast \
   --verify \
   -vvvv
 ```
 
+Save the `deployment-output.json`.
+
 ### 2.3 Post-Deployment Verification
 
-```bash
-# Save deployment output
-cat deployment-output.json
+- All verification commands from §1.3, against mainnet.
+- Contracts verified on Arbiscan.
+- If a genesis allocation was configured, confirm on-chain:
+  - `totalSupply()` equals `GENESIS_ALLOCATION`.
+  - `balanceOf(GENESIS_RECIPIENT)` equals `GENESIS_ALLOCATION`.
+  - `isMinter(admin) == false` (admin cannot mint, only the bridge can).
+- Transfer `DEFAULT_ADMIN_ROLE` to the production Safe / timelock if it is
+  not already there.
 
-# Verify on Arbiscan
-# Token: https://arbiscan.io/token/$TOKEN_ADDRESS
-# Bridge: https://arbiscan.io/address/$BRIDGE_ADDRESS
-```
+### 2.4 Register Mainnet Validators
 
-### 2.4 Activate Bridge
+Same command as §1.4, now via the production timelock / Safe multisig and
+using the **production** validator secp256k1 addresses.
 
-**IMPORTANT**: Only activate after:
-- All relayers are operational
-- Monitoring is configured
-- Team is ready to respond to issues
+### 2.5 Monitor Go-Live
 
-```bash
-# Activate bridge
-forge script script/ActivateBridge.s.sol:ActivateBridgeScript \
-  --rpc-url $RPC_URL \
-  --private-key $GOVERNOR_KEY \
-  --broadcast \
-  -vvvv
-```
+- First `DepositMade` event → confirm the native chain credits the recipient
+  within the expected time budget.
+- First `WithdrawalClaimed` event → confirm the submitted `BridgeProof` hash
+  matches the Rust `solidity_message_hash()` exactly (one mismatched byte =
+  dead bridge).
 
-### 2.5 Monitor Activation
+## Presale-First Deployment (Bridge Unregistered)
 
-```bash
-# Check bridge status
-cast call $BRIDGE_ADDRESS "bridgeActive()(bool)"
-# Expected: true
+If the goal is to get UDAG tradable on a DEX *before* the native DAG chain is
+publicly reachable:
 
-# Monitor first transactions
-cast logs --address $BRIDGE_ADDRESS --from-block latest
-```
+1. Deploy with `GENESIS_RECIPIENT` = liquidity distributor multisig and
+   `GENESIS_ALLOCATION` = the desired pre-mine (up to 2,520,000 UDAG).
+2. **Do not register any validators yet.** The bridge remains disabled; its
+   `deposit()` and `claimWithdrawal()` functions revert with `BridgeNotEnabled`.
+3. The ERC-20 is still fully transferable — `bridgeEnabled` only gates
+   bridge-specific methods, not standard ERC-20 transfers.
+4. The distributor seeds a Uniswap v3 (or v4) pool from the genesis allocation.
+5. When you are ready to bring the bridge online, register the validator set
+   via `ConfigureBridge.s.sol`. Once `≥ 3` validators are registered, the
+   bridge auto-enables and bi-directional transfers begin.
 
-## Phase 3: Operations
+This workflow keeps the 21M supply cap intact across both chains: the 12%
+Solidity pre-mine is exactly the 12% IDO bucket from the native 7-bucket
+tokenomics, and neither chain ever mints that bucket via emission.
 
-### 3.1 Daily Operations
+## Off-chain Integration (Not Yet Shipped in This Repo)
 
-- Monitor relayer uptime
-- Check pending bridge requests
-- Verify daily volume cap
-- Review error logs
+The contracts and the Rust state engine both expose the primitives needed for
+the bridge, but the glue is not yet committed:
 
-### 3.2 Weekly Operations
+| Direction            | Missing component                                                                 |
+| -------------------- | --------------------------------------------------------------------------------- |
+| Arbitrum → Native    | A validator-operated daemon that reads `DepositMade` events from Arbitrum,       |
+|                      | constructs a signed `BridgeReleaseTx`, and submits it to the UltraDAG RPC.       |
+| Native → Arbitrum    | A helper (CLI or server-side) that queries the UltraDAG RPC for a finalized      |
+|                      | `BridgeProof`, encodes the threshold signatures, and submits                     |
+|                      | `claimWithdrawal()` on Arbitrum. This can be end-user-initiated.                 |
 
-- Review bridge metrics
-- Check relayer performance
-- Audit completed transactions
-- Update documentation
+Both pieces are small in terms of code but are **security-critical**: any bug
+in either direction can strand or double-spend funds. They must be built and
+audited before mainnet traffic flows.
 
-### 3.3 Monthly Operations
+## Operations
 
-- Rotate relayer keys (if needed)
-- Review and update procedures
-- Test emergency procedures
-- Report to stakeholders
+### Daily
+- Monitor validator uptime and bridge signature coverage.
+- Watch for rate-limit approaches (`getDailyDepositRemaining`,
+  `getDailyWithdrawalRemaining`).
+- Alert on any `BridgePaused` event.
+
+### Weekly
+- Reconcile on-chain `bridge_reserve` (native) against escrow balance (Arbitrum).
+- Review daily volume histograms against configured limits.
+- Audit the relayer daemon logs for signature failures.
+
+### Monthly
+- Rotate individual validator bridge keys if any operator requests it (add
+  new, remove old, both via governor with proper timelock).
+- Test the emergency pause / unpause drill.
+- Review security posture against new disclosed vulnerabilities.
 
 ## Emergency Procedures
 
-### Pause Bridge
-
-Any relayer can pause:
+### Pause the Bridge
 
 ```bash
-cast send $BRIDGE_ADDRESS "pause()" --private-key $RELAYER_KEY
+cast send "$BRIDGE_ADDRESS" "pause()" \
+  --rpc-url "$RPC_URL" --private-key "$GOVERNOR_KEY"
 ```
 
-### Unpause Bridge
+Only the governor can pause. Once paused, `deposit()` and `claimWithdrawal()`
+both revert.
 
-Only governor can unpause:
+### Unpause the Bridge
 
 ```bash
-cast send $BRIDGE_ADDRESS "unpause()" --private-key $GOVERNOR_KEY
+cast send "$BRIDGE_ADDRESS" "unpause()" \
+  --rpc-url "$RPC_URL" --private-key "$GOVERNOR_KEY"
 ```
 
-### Refund Stuck Transactions
+### Migrate to a New Bridge Contract
 
-After 7 days, users can refund:
+If the current bridge is compromised:
 
-```bash
-cast send $BRIDGE_ADDRESS \
-  "refundBridge(uint256)" \
-  $BRIDGE_NONCE \
-  --private-key $USER_KEY
-```
+1. `bridge.pause()` — halt further damage.
+2. Deploy a new `UDAGBridgeValidator`.
+3. `bridge.migrateToNewBridge(newBridge, <escrow_balance>)` — moves the
+   escrowed UDAG to the new bridge. Only callable while paused.
+4. `token.proposeBridgeMigration(newBridge)` — start the 2-day timelock.
+5. After 2 days: `token.executeBridgeMigration()` — swaps `MINTER_ROLE`
+   from the old bridge to the new one.
+6. Re-register validators on the new bridge via `ConfigureBridge.s.sol`.
 
 ## Troubleshooting
 
-### Deployment Fails
+### `BridgeNotEnabled`
 
-Check:
-- Sufficient ETH for gas
-- RPC endpoint is accessible
-- Private keys are valid
-- Network is not congested
+The bridge has fewer than 3 registered validators. Register more via
+`ConfigureBridge.s.sol` until the auto-enable threshold fires.
 
-### Bridge Not Activating
+### `TooFewSignatures(provided, required)`
 
-Check:
-- Caller is governor
-- Bridge not already active
-- Timelock delay has passed (if applicable)
+The `BridgeProof` didn't contain enough validator signatures. Required count
+is the current `threshold()`, i.e. `⌊2n/3⌋ + 1` for `n` validators.
 
-### Relayer Not Signing
+### `SignerNotValidator(index, signer)`
 
-Check:
-- Relayer service is running
-- Private key is valid
-- RPC endpoints are accessible
-- Bridge contract address is correct
+One of the signatures in the proof recovered to an address that is not on
+the registered validator list. Common causes:
+- The validator was removed between signing and submission.
+- The Rust-side `eth_address_from_secp_key` output does not match the address
+  that was passed to `addValidator()`.
+- The signer used a different secp256k1 key for signing than for registration.
+
+### `SignersNotSorted(index, current, previous)`
+
+Signatures must be sorted in strictly ascending order by recovered
+Ethereum address. The Rust helper
+`BridgeProof::encode_signatures()` handles this automatically — if you see
+this error, the off-chain assembler is probably not using the helper.
+
+### `MalleableSignature(index)`
+
+The submitted signature's `s` value is in the upper half of the curve order.
+Use `sign_for_bridge()` from the Rust module; it always produces low-s
+signatures via `sign_prehash_recoverable()`.
+
+### `AmountAboveMaximum` / `DailyLimitExceeded`
+
+Hit the rate limits: 100,000 UDAG/tx or 500,000 UDAG per rolling 24h window.
+These are intentionally tight for the initial rollout. They can be raised by
+governance once the bridge has accumulated operational history, but doing so
+without a pressing business reason simply widens the blast radius of any
+exploit.
 
 ## Support
 
-- **Documentation**: https://ultradag.com/docs/bridge
-- **Discord**: https://discord.gg/ultradag
-- **Email**: ops@ultradag.com
+- Documentation: https://ultradag.com/docs/bridge
+- Security contact: see [`SECURITY.md`](../SECURITY.md) at the repo root for
+  the private vulnerability disclosure path.

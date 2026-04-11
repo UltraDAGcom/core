@@ -12,9 +12,16 @@ import "@openzeppelin/contracts/governance/TimelockController.sol";
 ///     --private-key $DEPLOYER_KEY --broadcast --verify -vvvv
 ///
 /// Environment variables required:
-///   RPC_URL: Arbitrum RPC endpoint
-///   DEPLOYER_KEY: Deployer private key (for signing transactions)
+///   RPC_URL:          Arbitrum RPC endpoint
+///   DEPLOYER_KEY:     Deployer private key (for signing transactions)
 ///   GOVERNOR_ADDRESS: Governor/admin address (timelock or multisig)
+///
+/// Environment variables optional (IDO / presale pre-mine):
+///   GENESIS_RECIPIENT:  Address that receives the constructor-only pre-mine.
+///                       Leave unset (or zero) to skip the allocation entirely.
+///   GENESIS_ALLOCATION: Amount of UDAG (in 8-decimal sats) to mint once.
+///                       Capped at 2,520,000 UDAG (12% of MAX_SUPPLY).
+///                       Leave unset (0) to skip.
 contract DeployScript is Script {
     // Configuration
     uint256 public constant MIN_DELAY = 1 days; // Timelock delay
@@ -31,6 +38,10 @@ contract DeployScript is Script {
         // Get deployer address from private key
         uint256 deployerKey = vm.envUint("DEPLOYER_KEY");
         address deployer = vm.addr(deployerKey);
+
+        // Optional genesis allocation (IDO / presale pre-mine)
+        address genesisRecipient  = vm.envOr("GENESIS_RECIPIENT",  address(0));
+        uint256 genesisAllocation = vm.envOr("GENESIS_ALLOCATION", uint256(0));
 
         // Zero address checks
         require(governor != address(0), "Deploy: zero governor");
@@ -92,9 +103,21 @@ contract DeployScript is Script {
         // Token will be deployed at current nonce, bridge at nonce+1
         address predictedBridge = vm.computeCreateAddress(deployer, deployerNonce + 1);
 
-        // Step 2: Deploy UDAG Token with predicted bridge address
-        tokenAddress = address(new UDAGToken(timelockAddress, predictedBridge));
+        // Step 2: Deploy UDAG Token with predicted bridge address.
+        // Genesis allocation is optional: when GENESIS_RECIPIENT/GENESIS_ALLOCATION
+        // are set, the token constructor mints the IDO pre-mine in one shot and
+        // the pair is immutably recorded on-chain.
+        tokenAddress = address(new UDAGToken(
+            timelockAddress,
+            predictedBridge,
+            genesisRecipient,
+            genesisAllocation
+        ));
         console.log("UDAGToken deployed:", tokenAddress);
+        if (genesisAllocation > 0) {
+            console.log("  Genesis allocation:", genesisAllocation);
+            console.log("  Genesis recipient:", genesisRecipient);
+        }
 
         // Step 3: Deploy UDAG Bridge (Validator Federation)
         bridgeAddress = address(new UDAGBridgeValidator(
@@ -127,13 +150,17 @@ contract DeployScript is Script {
 
     function _saveDeploymentArtifacts(address governor) internal {
         // Create deployment output file
+        address genesisRecipient  = vm.envOr("GENESIS_RECIPIENT",  address(0));
+        uint256 genesisAllocation = vm.envOr("GENESIS_ALLOCATION", uint256(0));
         string memory deploymentInfo = string.concat(
             '{"network":', vm.toString(block.chainid),
             ',"token":"', vm.toString(tokenAddress), '"',
             ',"bridge":"', vm.toString(bridgeAddress), '"',
             ',"timelock":"', vm.toString(timelockAddress), '"',
             ',"governor":"', vm.toString(governor), '"',
-            ',"timelockDelay":', vm.toString(MIN_DELAY), '}'
+            ',"timelockDelay":', vm.toString(MIN_DELAY),
+            ',"genesisRecipient":"', vm.toString(genesisRecipient), '"',
+            ',"genesisAllocation":', vm.toString(genesisAllocation), '}'
         );
 
         // Write to file (for CI/CD integration)
