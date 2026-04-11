@@ -198,6 +198,34 @@ For a presale-first launch (before the native DAG chain is open to the public):
 5. Once the native chain opens and the bridge's validator set is registered,
    ERC-20 holders can bridge to native at will.
 
+### Fast path: `./deploy-presale.sh`
+
+For the presale-first deployment, use the wrapper script instead of
+invoking `forge script` directly:
+
+```bash
+export DEPLOYER_KEY="0x..."
+export GOVERNOR_ADDRESS="0x..."           # Safe multisig recommended
+export GENESIS_RECIPIENT="0x..."          # liquidity distributor multisig
+export GENESIS_ALLOCATION="252000000000000"  # 2.52M UDAG in 8-decimal sats
+export ARBISCAN_API_KEY="..."             # optional, enables --verify
+
+# Dry run first (no broadcast)
+./deploy-presale.sh sepolia
+
+# Broadcast to Arbitrum Sepolia
+./deploy-presale.sh sepolia --broadcast
+
+# Mainnet (requires typed confirmation prompt)
+./deploy-presale.sh mainnet --broadcast
+```
+
+The wrapper validates all required env vars, rejects genesis allocations
+above the 12% cap, gates mainnet deploys behind an explicit typed
+confirmation, invokes `forge script` with the right flags, and prints a
+post-deploy checklist with the `cast call` commands to verify the
+allocation actually landed on-chain.
+
 This matches the 7-bucket tokenomics on the native side, where the 12% IDO
 bucket is explicitly a genesis pre-mine and is **not** minted via per-round
 emission. The Solidity pre-mine mirrors the native pre-mine so the 21M cap is
