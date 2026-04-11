@@ -6,95 +6,119 @@ Quick start guide for security researchers participating in the UltraDAG bug bou
 
 ### 1. Get Testnet UDAG
 ```bash
-# Generate a test address (or use existing wallet)
+# Generate a test address (or use existing wallet). `amount` is in sats —
+# 10_000_000_000 sats = 100 UDAG, which is the per-request maximum.
 curl -X POST https://ultradag-node-1.fly.dev/faucet \
   -H "Content-Type: application/json" \
-  -d '{"address":"your_udag_address_here"}'
+  -d '{"address":"tudg1your_testnet_address_here","amount":10000000000}'
 ```
 
-You'll receive 10,000 testnet UDAG to start testing.
+You'll receive up to 100 testnet UDAG per request. Rate-limited to 1 request per 10 minutes. Use the output address from any wallet — testnet addresses use the `tudg1…` bech32m prefix.
 
 ### 2. Explore the Testnet
 ```bash
-# Check node status
-curl https://ultradag-node-1.fly.dev/status | jq
+# Check node status (current round, validator count, supply, peers)
+curl -s https://ultradag-node-1.fly.dev/status | jq
 
-# View recent rounds
-curl https://ultradag-node-1.fly.dev/round/100 | jq
+# Query a recent round. Round numbers older than ~1000 rounds are pruned;
+# grab a current number from /status first.
+ROUND=$(curl -s https://ultradag-node-1.fly.dev/status | jq '.last_finalized_round')
+curl -s "https://ultradag-node-1.fly.dev/round/$ROUND" | jq
 
-# Check your balance
-curl https://ultradag-node-1.fly.dev/balance/your_address | jq
+# Check your balance (accepts `tudg1…`, 40-hex, or a registered @name)
+curl -s https://ultradag-node-1.fly.dev/balance/tudg1your_testnet_address | jq
 ```
+
+All 5 testnet nodes are interchangeable: `https://ultradag-node-[1-5].fly.dev`.
 
 ### 3. Review the Codebase
 ```bash
-git clone https://github.com/ultradag/ultradag.git
+git clone https://github.com/UltraDAGcom/core.git ultradag
 cd ultradag
-cargo test  # Run test suite
+cargo test  # Run the full test suite
 ```
 
 ## Attack Vectors to Explore
 
 ### 🎯 High-Value Targets
 
-**1. Consensus Mechanism** (`crates/ultradag-coin/src/dag/`)
+**1. Consensus / DAG** (`crates/ultradag-coin/src/consensus/`)
 - Try to create conflicting finalized transactions
-- Attempt to stall the network
+- Attempt to stall the network (equivocation, stuck parents, partition)
 - Test validator quorum bypasses
-- Look for round synchronization issues
+- Look for finality race conditions (2-3 round BFT finality)
 
-**2. State Engine** (`crates/ultradag-coin/src/state.rs`)
+**2. State Engine** (`crates/ultradag-coin/src/state/`)
 - Balance overflow/underflow
 - Nonce manipulation
 - Fee bypass
-- Supply inflation
+- Supply inflation (look for any path that credits without a matching total_supply bump)
+- Supply invariant violations — these are FATAL on the node (exit code 101), so any path that slips past validation is critical
 
-**3. Staking System** (`crates/ultradag-coin/src/tx/stake.rs`)
-- Unauthorized unstaking
-- Reward manipulation
-- Stake without locking funds
-- Double-staking
+**3. Transactions** (`crates/ultradag-coin/src/tx/`)
+- Transfer (`tx/transaction.rs`)
+- Staking (`tx/stake.rs`): unauthorized unstaking, reward manipulation, stake without locking funds, double-staking
+- Delegation (`tx/stake.rs`): commission sandwich attacks, delegation slashing bypass
+- SmartAccount / WebAuthn (`tx/smart_account.rs`): passkey signature bypass, AddKey/RemoveKey race conditions, pocket derivation collisions
+- Name registry (`tx/name_registry.rs`): name squatting, expiry manipulation
+- Bridge (`tx/bridge.rs`): attestation replay, release nonce reuse, chain-ID confusion
+- Governance (`governance/`): quorum manipulation, proposal execution bypass, council-seat abuse
 
 **4. P2P Network** (`crates/ultradag-network/`)
 - Eclipse attacks
 - Partition attacks
-- Message replay
-- Peer flooding
+- Message replay (Noise handshake, postcard decode)
+- Peer flooding / orphan buffer overflow
+- Equivocation gossip
 
 **5. RPC Endpoints** (`crates/ultradag-node/src/rpc.rs`)
 - Rate limiting bypass
-- Input validation
+- Input validation (address parsing, bech32m, numeric overflow)
 - DoS attacks
-- Information leakage
+- Information leakage in error messages
 
 ### 🔧 Testing Tools
 
 **Fuzzing:**
 ```bash
-# Run existing fuzz tests
-./scripts/fuzzing_test.sh
+# Run the fuzz harness
+./tools/development/testing/security/fuzzing-test.sh
 
-# Create custom fuzz inputs
-cargo fuzz run fuzz_target_name
+# Run adversarial tests
+./tools/development/testing/security/adversarial-test.sh
+
+# Rate-limit tests
+./tools/development/testing/security/rate-limiting-test.sh
+
+# Custom cargo-fuzz targets (if you want to fuzz a specific parser):
+# cd crates/<crate>/fuzz && cargo fuzz run <target>
 ```
 
 **Load Testing:**
 ```bash
-# Spam transactions
-for i in {1..1000}; do
-  curl -X POST https://ultradag-node-1.fly.dev/tx \
+# Spam transactions via the testnet /tx endpoint (accepts secret-key-in-body;
+# this format is DISABLED on mainnet — only /tx/submit with pre-signed txs
+# is accepted there). For high-volume load tests, use:
+./tools/development/testing/performance/tps-test.sh
+
+# Or a quick inline loop:
+for i in {1..100}; do
+  curl -s -X POST https://ultradag-node-1.fly.dev/tx \
     -H "Content-Type: application/json" \
-    -d '{"secret_key":"...","to":"...","amount":1000,"fee":10000}'
+    -d '{"secret_key":"<your_testnet_hex>","to":"tudg1...","amount":1000,"fee":10000}'
 done
 ```
 
 **Network Testing:**
 ```bash
-# Monitor all 4 nodes
-./scripts/monitor.sh
+# Quick multi-node health sweep (all 5 testnet nodes):
+for i in 1 2 3 4 5; do
+  curl -s --max-time 5 "https://ultradag-node-$i.fly.dev/status" \
+    | jq -c '{n:'\''node-'$i\''', round:.dag_round, fin:.last_finalized_round, peers:.peer_count}'
+done
 
-# Extended monitoring
-./scripts/extended_monitor.sh
+# Prometheus-style metrics:
+curl -s https://ultradag-node-1.fly.dev/metrics/json | jq
 ```
 
 ## Common Vulnerability Patterns
@@ -256,40 +280,52 @@ curl -X POST https://ultradag-node-1.fly.dev/... \
 ## Resources
 
 ### Documentation
-- [BUG_BOUNTY.md](../BUG_BOUNTY.md) - Full program details
-- [SECURITY.md](../SECURITY.md) - Security policy
-- [CLAUDE.md](../CLAUDE.md) - Technical documentation
-- [BOUNTY_LEDGER.md](../BOUNTY_LEDGER.md) - Reward tracking
+- [`PROGRAM.md`](./PROGRAM.md) — Full bug bounty program details
+- [`../../../SECURITY.md`](../../../SECURITY.md) — Security policy & disclosure channel
+- [`../../reference/api/rpc-endpoints.md`](../../reference/api/rpc-endpoints.md) — RPC API reference
+- [`LEDGER.md`](./LEDGER.md) — Reward tracking + mainnet conversion schedule
+- [`PROMOTION.md`](./PROMOTION.md) — Outreach channels (for program maintainers)
 
 ### Code Locations
-- Consensus: `crates/ultradag-coin/src/dag/`
-- State: `crates/ultradag-coin/src/state.rs`
+- Consensus / DAG: `crates/ultradag-coin/src/consensus/`
+- State engine: `crates/ultradag-coin/src/state/`
 - Transactions: `crates/ultradag-coin/src/tx/`
+- Governance: `crates/ultradag-coin/src/governance/`
 - Network: `crates/ultradag-network/`
 - RPC: `crates/ultradag-node/src/rpc.rs`
-- Validator: `crates/ultradag-node/src/validator.rs`
+- Validator loop: `crates/ultradag-node/src/validator.rs`
+- Bridge (Arbitrum): `bridge/`
 
 ### Test Suites
 ```bash
-# Run all tests
+# Run the full workspace test suite
 cargo test
 
-# Specific test suites
-cargo test --test fuzzing_tests
-cargo test --test consensus_tests
-cargo test --test staking_tests
+# Run ultradag-coin tests only (fastest feedback for consensus/state work)
+cargo test -p ultradag-coin
+
+# Run a specific integration test file by name (see
+# crates/ultradag-coin/tests/ for the full list):
+cargo test -p ultradag-coin --test adversarial
+cargo test -p ultradag-coin --test dag_bft_finality
+cargo test -p ultradag-coin --test staking
+cargo test -p ultradag-coin --test supply_invariant_fatal
+cargo test -p ultradag-coin --test economics_audit
+cargo test -p ultradag-coin --test cross_batch_equivocation
 ```
 
 ### Monitoring
 ```bash
-# Real-time monitoring
-./scripts/monitor.sh
+# Quick multi-node health sweep:
+for i in 1 2 3 4 5; do
+  curl -s --max-time 5 "https://ultradag-node-$i.fly.dev/status" \
+    | jq -c '{n:'\''node-'$i\''', round:.dag_round, fin:.last_finalized_round, peers:.peer_count, mempool:.mempool_size}'
+done
 
-# Extended 24-hour monitoring
-./scripts/extended_monitor.sh
-
-# Check specific node
-curl https://ultradag-node-1.fly.dev/status | jq
+# Single node with full detail:
+curl -s https://ultradag-node-1.fly.dev/status | jq
+curl -s https://ultradag-node-1.fly.dev/health/detailed | jq
+curl -s https://ultradag-node-1.fly.dev/metrics/json | jq
 ```
 
 ## FAQ
@@ -314,9 +350,15 @@ A: We'll explain why. You can appeal or resubmit with more evidence.
 
 ## Contact
 
-- **Submit bugs:** GitHub Security Advisory
-- **Questions:** GitHub Discussions
-- **Emergency:** [Contact method for critical issues]
+- **Submit bugs (private):** <https://github.com/UltraDAGcom/core/security/advisories/new>
+  or click the green "Report a vulnerability" button at
+  <https://github.com/UltraDAGcom/core/security>
+- **General questions (public):** <https://github.com/UltraDAGcom/core/discussions>
+- **Critical issues:** for anything that could threaten the running mainnet
+  — use the private advisory URL above. The acknowledgment SLA per
+  [`SECURITY.md`](../../../SECURITY.md) is 24 hours for Critical/High severity.
+  Do NOT post exploit details on Twitter, Discord, Telegram, or the public
+  issue tracker.
 
 ---
 

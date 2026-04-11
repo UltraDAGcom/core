@@ -70,8 +70,8 @@ All rewards tracked publicly and convertible to mainnet tokens at launch.
 
 **README.md badge:**
 ```markdown
-[![Bug Bounty](https://img.shields.io/badge/Bug%20Bounty-Active-success)](./security/bug-bounty/PROGRAM.md)
-[![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./security/POLICY.md)
+[![Bug Bounty](https://img.shields.io/badge/Bug%20Bounty-Active-success)](./docs/security/bug-bounty/PROGRAM.md)
+[![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./SECURITY.md)
 ```
 
 #### 4. **HackerOne**
@@ -100,27 +100,24 @@ All rewards tracked publicly and convertible to mainnet tokens at launch.
 - Blockchain security groups
 - Ethereum security
 - General security researcher communities
+- Bug bounty hunter communities
+- Crypto developer groups
 - Your own Telegram group (@ultra_dag)
 
 **Message template:**
 ```
 🚨 Bug Bounty Alert 🚨
 
-UltraDAG is offering up to 50k UDAG for critical vulnerabilities in our 
-testnet. DAG-based blockchain with fast finality - interesting consensus 
-model to test!
+UltraDAG is offering up to 50k UDAG for critical vulnerabilities.
+DAG-BFT blockchain with 2-3 round finality — interesting consensus
+model to test. Mainnet is live (5 validators) but all testing must
+happen against the public testnet (attacking mainnet is out of scope).
 
-Live testnet + immediate rewards + mainnet promises
-Details: [link]
+Live testnet + immediate testnet payouts + mainnet conversion schedule.
+Details: https://github.com/UltraDAGcom/core/blob/main/SECURITY.md
 ```
 
-#### 7. **Telegram Groups**
-**Groups to post in:**
-- Blockchain security groups
-- Bug bounty hunter communities
-- Crypto developer groups
-
-#### 8. **LinkedIn**
+#### 7. **LinkedIn**
 **Reach:** Professional security researchers  
 **Action:** Post announcement targeting:
 - Security professionals
@@ -129,7 +126,7 @@ Details: [link]
 
 **Use hashtags:** #BugBounty #CyberSecurity #Blockchain #Security
 
-#### 9. **Dev.to / Medium**
+#### 8. **Dev.to / Medium**
 **Action:** Write a detailed blog post
 **Title:** "Why We're Offering 500k UDAG for Bug Bounties (And How You Can Earn It)"
 
@@ -140,7 +137,7 @@ Details: [link]
 - How the bounty program works
 - Success stories (once you have them)
 
-#### 10. **Hacker News**
+#### 9. **Hacker News**
 **Platform:** Tech-savvy audience  
 **Action:** Submit as "Show HN: UltraDAG Bug Bounty - 500k UDAG for Testnet Vulnerabilities"
 
@@ -151,13 +148,13 @@ Details: [link]
 
 ### 🎯 Tertiary Channels (Lower Priority but Worth Trying)
 
-#### 11. **YouTube**
+#### 10. **YouTube**
 **Action:** Create a video walkthrough
 - "How to participate in UltraDAG bug bounty"
 - Demo of testnet testing
 - Explanation of reward structure
 
-#### 12. **Security Conferences (Virtual)**
+#### 11. **Security Conferences (Virtual)**
 **Events to target:**
 - DEF CON groups
 - OWASP chapters
@@ -166,7 +163,7 @@ Details: [link]
 
 **Action:** Submit talk or sponsor announcement
 
-#### 13. **Security Researcher Outreach**
+#### 12. **Security Researcher Outreach**
 **Direct outreach to:**
 - Top HackerOne researchers
 - Known blockchain security experts
@@ -197,7 +194,7 @@ Best,
 [Your name]
 ```
 
-#### 14. **Podcasts**
+#### 13. **Podcasts**
 **Target podcasts:**
 - Blockchain security podcasts
 - General security podcasts
@@ -293,11 +290,15 @@ Best,
 Thanks for the interest! 🎯
 
 Quick start:
-1. Read the guide: [link]
-2. Get testnet UDAG: curl -X POST https://ultradag-node-1.fly.dev/faucet
-3. Test and report via GitHub Security Advisory
+1. Read the guide: github.com/UltraDAGcom/core/blob/main/docs/security/bug-bounty/GUIDE.md
+2. Get testnet UDAG:
+   curl -X POST https://ultradag-node-1.fly.dev/faucet \
+     -H "Content-Type: application/json" \
+     -d '{"address":"tudg1...","amount":10000000000}'
+   (amount is in sats; max 100 UDAG per request)
+3. Test and report privately at github.com/UltraDAGcom/core/security/advisories/new
 
-Questions? Drop them here or in GitHub Discussions!
+Questions? GitHub Discussions!
 ```
 
 ### Reddit Comment Template

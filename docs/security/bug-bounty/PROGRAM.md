@@ -1,12 +1,13 @@
 # UltraDAG Bug Bounty Program
 
-**Status:** Active (Testnet Phase)  
+**Status:** Active — Mainnet + Testnet  
 **Launch Date:** March 8, 2026  
-**Total Pool:** 500,000 UDAG (mainnet allocation)
+**Mainnet Launch:** April 10, 2026  
+**Total Pool:** 500,000 UDAG
 
 ## Overview
 
-UltraDAG is offering rewards for security researchers and developers who discover and responsibly disclose vulnerabilities in our testnet. All rewards are tracked and will be honored with mainnet UDAG tokens at launch.
+UltraDAG is offering rewards for security researchers who discover and responsibly disclose vulnerabilities in the UltraDAG codebase. Testing is done against the **public testnet** — attacking mainnet is not in scope and is illegal. Valid reports are rewarded in UDAG, paid to the reporter's testnet address and (for post-mainnet findings) convertible 1:1 to mainnet UDAG per the schedule in [`LEDGER.md`](./LEDGER.md).
 
 ## Scope
 
@@ -130,7 +131,7 @@ Create a GitHub Security Advisory with:
 
 ### Testnet Phase (Now)
 1. **Immediate testnet UDAG:** Sent to your testnet address within 24h of validation
-2. **Bounty ledger entry:** Your reward is recorded in `BOUNTY_LEDGER.md`
+2. **Bounty ledger entry:** Your reward is recorded in [`LEDGER.md`](./LEDGER.md)
 3. **Signed promise:** GPG-signed commitment for mainnet conversion
 
 ### Mainnet Launch
@@ -177,9 +178,9 @@ Create a GitHub Security Advisory with:
 ## Testing Resources
 
 ### Testnet Access
-- **Nodes:** https://ultradag-node-[1-4].fly.dev
-- **Faucet:** `curl -X POST https://ultradag-node-1.fly.dev/faucet -d '{"address":"udag1..."}'`
-- **RPC Docs:** See `CLAUDE.md` for endpoint documentation
+- **Nodes:** `https://ultradag-node-[1-5].fly.dev` (5 nodes, use any for queries)
+- **Faucet:** `curl -X POST https://ultradag-node-1.fly.dev/faucet -H "Content-Type: application/json" -d '{"address":"tudg1...","amount":10000000000}'` (amount is in sats; 10,000,000,000 sats = 100 UDAG, the per-request max; rate-limited to 1 request per 10 minutes)
+- **RPC Docs:** [`docs/reference/api/rpc-endpoints.md`](../../reference/api/rpc-endpoints.md)
 
 
 ### Example Attacks to Test
@@ -193,11 +194,11 @@ Create a GitHub Security Advisory with:
 ## Bounty Statistics
 
 **Total Allocated:** 500,000 UDAG  
-**Total Awarded:** 0 UDAG (as of March 8, 2026)  
+**Total Awarded:** 0 UDAG (as of April 11, 2026)  
 **Active Hunters:** 0  
 **Vulnerabilities Fixed:** 0  
 
-Updated monthly in `BOUNTY_LEDGER.md`
+Updated monthly in [`LEDGER.md`](./LEDGER.md).
 
 ## FAQ
 
@@ -214,7 +215,7 @@ A: Yes, but only for collaboration on the submission. No public sharing.
 A: We'll provide detailed reasoning. You can appeal or resubmit with more evidence.
 
 **Q: How do I get testnet UDAG to start testing?**  
-A: Use the faucet endpoint. You'll receive 10,000 testnet UDAG per request (rate limited).
+A: Use the faucet endpoint. Cap is 100 UDAG (10,000,000,000 sats) per request, rate-limited to 1 request per 10 minutes. See [`GUIDE.md`](./GUIDE.md) for the exact curl command.
 
 **Q: Is there a maximum reward per person?**  
 A: No limit, but we reserve the right to adjust for extraordinary circumstances.
@@ -241,6 +242,6 @@ A: No limit, but we reserve the right to adjust for extraordinary circumstances.
 
 ---
 
-**Last Updated:** March 8, 2026  
-**Program Version:** 1.0  
-**Next Review:** April 8, 2026
+**Last Updated:** April 11, 2026  
+**Program Version:** 1.1  
+**Next Review:** May 11, 2026

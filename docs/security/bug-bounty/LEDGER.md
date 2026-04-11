@@ -46,6 +46,17 @@ Signature: [GPG signature]
 - Rewards: 0 UDAG
 - Unique hunters: 0
 
+### April 2026
+- Submissions: 0 valid + 1 pending (received 2026-04-10, disclosure channel was offline at the time)
+- Validated: 0
+- Rewards: 0 UDAG
+- Unique hunters: 0
+
+### Mainnet launched: 2026-04-10
+- All reward entries from this date onward are paid in live mainnet UDAG
+  (not converted from testnet promises). See "Mainnet Conversion Tracking"
+  below for how earlier testnet-promise entries are honored.
+
 ---
 
 ## Top Contributors
@@ -85,5 +96,5 @@ All changes to this ledger are tracked in git history. Each reward entry include
 ---
 
 **Ledger Maintainer:** UltraDAG Core Team  
-**Last Updated:** March 8, 2026  
-**Next Audit:** April 8, 2026
+**Last Updated:** April 11, 2026  
+**Next Audit:** May 11, 2026
