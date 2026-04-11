@@ -1,13 +1,26 @@
 # UltraDAG Bug Bounty Program
 
-**Status:** Active — Mainnet + Testnet  
+**Status:** Active — Testnet (mainnet is closed while the bounty program hardens the code)  
 **Launch Date:** March 8, 2026  
-**Mainnet Launch:** April 10, 2026  
+**Mainnet Genesis:** April 10, 2026 (validators running, closed to external peers)  
+**Mainnet Public Open:** TBD (gated on bounty program results)  
 **Total Pool:** 500,000 UDAG
 
 ## Overview
 
-UltraDAG is offering rewards for security researchers who discover and responsibly disclose vulnerabilities in the UltraDAG codebase. Testing is done against the **public testnet** — attacking mainnet is not in scope and is illegal. Valid reports are rewarded in UDAG, paid to the reporter's testnet address and (for post-mainnet findings) convertible 1:1 to mainnet UDAG per the schedule in [`LEDGER.md`](./LEDGER.md).
+UltraDAG is offering rewards for security researchers who discover and responsibly disclose vulnerabilities in the UltraDAG codebase. **All testing happens against the public testnet.** Mainnet is currently running but is **closed to external participation** — only the founder-operated Fly.io validators can join the P2P mesh. External users cannot connect as validators, peers, or relays. The public RPC on mainnet is still readable for transparency (you can query `/status`, `/balance`, etc.), but no new state can be introduced by outsiders until the bounty program has had time to harden the code.
+
+Valid reports are rewarded in testnet UDAG, recorded in the append-only [`LEDGER.md`](./LEDGER.md), and convertible 1:1 to mainnet UDAG per the vesting schedule in that file — regardless of how many times testnet is reset in the interim. See [`LEDGER.md` → Testnet Reset Safety](./LEDGER.md#testnet-reset-safety) for why a testnet wipe does not affect your claim.
+
+## Mainnet Access Policy (current phase)
+
+Mainnet is in a deliberate **hardening phase**. Key points:
+
+- **P2P port 9333 is not exposed to the public internet** on any mainnet node. External hosts cannot open TCP connections to the Noise handshake endpoint. The 5 mainnet nodes reach each other over Fly's internal WireGuard mesh (`ultradag-mainnet-[1-5].internal`) only.
+- **RPC port 10333 remains public** at `https://ultradag-mainnet-[1-5].fly.dev` for transparency. Anyone can read chain state; no one can submit transactions that affect it unless they go through the existing RPC (and most state-changing RPC endpoints are testnet-only on mainnet builds).
+- **Pre-launch token distribution happens on Arbitrum** via an ERC-20 representation of UDAG. Buying UDAG in this phase gets you Arbitrum-side tokens, not native mainnet UDAG. This lets the maintainer restart mainnet freely during hardening without invalidating any token holder. See `bridge/README.md`.
+- **Mainnet will open to public participation** only after the bounty program has validated the code against real adversaries over a meaningful window. There is no fixed date; the decision is gated on the findings in this program.
+- **Until mainnet opens, attacking mainnet nodes is out of scope and explicitly illegal.** Test against testnet only. If you can somehow reach a mainnet node (through a misconfiguration or a Fly bug) — report it privately as a finding, do not exploit it.
 
 ## Scope
 

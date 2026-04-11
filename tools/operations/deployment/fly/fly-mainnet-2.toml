@@ -33,13 +33,10 @@ primary_region = "ams"
     path = "/health"
     timeout = "10s"
 
-[[services]]
-  protocol = "tcp"
-  internal_port = 9333
-
-  [[services.ports]]
-    port = 9333
-    handlers = []
+# Mainnet P2P port 9333 is INTENTIONALLY not exposed as a public [[services]]
+# block. See fly-mainnet-1.toml for the full rationale. Nodes reach each
+# other over Fly's internal WireGuard mesh via `.internal` DNS. To re-open
+# mainnet to public peers, restore the standard P2P [[services]] block.
 
 [deploy]
   strategy = "immediate"
