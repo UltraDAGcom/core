@@ -9,9 +9,11 @@
 # can be seeded into a Uniswap pool.
 #
 # USAGE
-#   ./deploy-presale.sh sepolia                 # Arbitrum Sepolia, DRY RUN
-#   ./deploy-presale.sh sepolia --broadcast     # Arbitrum Sepolia, broadcast
-#   ./deploy-presale.sh mainnet --broadcast     # Arbitrum One (production)
+#   ./deploy-presale.sh sepolia                    # Arbitrum Sepolia, DRY RUN
+#   ./deploy-presale.sh sepolia --broadcast        # Arbitrum Sepolia, broadcast
+#   ./deploy-presale.sh unichain-sepolia           # Unichain Sepolia, DRY RUN
+#   ./deploy-presale.sh unichain-sepolia --broadcast
+#   ./deploy-presale.sh mainnet --broadcast        # Arbitrum One (production)
 #
 # REQUIRED ENVIRONMENT
 #   DEPLOYER_KEY        Private key that funds the deployment (hex, 0x...)
@@ -49,6 +51,17 @@ case "$NETWORK" in
         DEFAULT_RPC="https://sepolia-rollup.arbitrum.io/rpc"
         NETWORK_LABEL="Arbitrum Sepolia (testnet)"
         ;;
+    unichain-sepolia)
+        # Unichain Sepolia — Uniswap's own testnet. Useful because
+        # app.uniswap.org's pool-creation UI natively supports this
+        # chain, whereas Arbitrum Sepolia has been dropped from their
+        # testnet chain list. Contract bytecode is identical across
+        # EVM chains, so rehearsing the presale UX loop here is
+        # equivalent to rehearsing it on Arbitrum Sepolia.
+        CHAIN_ID=1301
+        DEFAULT_RPC="https://sepolia.unichain.org"
+        NETWORK_LABEL="Unichain Sepolia (testnet)"
+        ;;
     mainnet)
         CHAIN_ID=42161
         DEFAULT_RPC="https://arb1.arbitrum.io/rpc"
@@ -56,11 +69,12 @@ case "$NETWORK" in
         ;;
     "")
         echo "error: network argument required" >&2
-        echo "usage: $0 <sepolia|mainnet> [--broadcast]" >&2
+        echo "usage: $0 <sepolia|unichain-sepolia|mainnet> [--broadcast]" >&2
         exit 2
         ;;
     *)
-        echo "error: unknown network '$NETWORK' (expected 'sepolia' or 'mainnet')" >&2
+        echo "error: unknown network '$NETWORK'" >&2
+        echo "       supported: sepolia, unichain-sepolia, mainnet" >&2
         exit 2
         ;;
 esac
