@@ -31,10 +31,13 @@ formal/states/
 .windsurf/
 config/mainnet-keys.txt
 
-# Bridge build artifacts
+# Bridge build artifacts and per-deploy outputs
 bridge/cache/
 bridge/out/
 bridge/lib/
+bridge/broadcast/
+bridge/deployment-output.json
+bridge/.env
 
 # Fuzz artifacts
 **/fuzz/target/

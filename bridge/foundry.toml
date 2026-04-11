@@ -11,6 +11,14 @@ remappings = [
     "forge-std/=lib/forge-std/src/",
 ]
 
+# Deploy.s.sol writes its artifact to `deployment-output.json` in the
+# bridge/ directory via `vm.writeJson`. Foundry's cheatcode sandbox
+# blocks filesystem writes by default; whitelist this one path so the
+# deploy script works both in simulation and under --broadcast.
+fs_permissions = [
+    { access = "write", path = "./deployment-output.json" },
+]
+
 [fmt]
 line_length = 120
 tab_width = 4
