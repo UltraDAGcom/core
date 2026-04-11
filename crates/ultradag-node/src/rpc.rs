@@ -2474,7 +2474,11 @@ ultradag_banned_ips {ban_count}
                     let Some(action_str) = prop_req.council_action else {
                         return Ok(error_response(StatusCode::BAD_REQUEST, "council_action required ('add' or 'remove')"));
                     };
-                    let action = match action_str.as_str() {
+                    // Case-insensitive match — accept both "add"/"Add"/"ADD"
+                    // so the dashboard, SDK clients, and curl-from-shell all
+                    // work regardless of how the caller capitalised the value.
+                    // Mirrors the CouncilSeatCategory::parse_name pattern.
+                    let action = match action_str.to_lowercase().as_str() {
                         "add" => CouncilAction::Add,
                         "remove" => CouncilAction::Remove,
                         _ => return Ok(error_response(StatusCode::BAD_REQUEST, "council_action must be 'add' or 'remove'")),
@@ -2486,11 +2490,11 @@ ultradag_banned_ips {ban_count}
                         return Ok(error_response(StatusCode::BAD_REQUEST, "invalid council_address: expected 40-char hex or bech32m (udag1.../tudg1...)"));
                     };
                     let Some(cat_str) = prop_req.council_category else {
-                        return Ok(error_response(StatusCode::BAD_REQUEST, "council_category required (technical, business, legal, academic, community, foundation)"));
+                        return Ok(error_response(StatusCode::BAD_REQUEST, "council_category required (engineering, growth, legal, research, community, operations, security)"));
                     };
                     let Some(category) = CouncilSeatCategory::parse_name(&cat_str) else {
                         return Ok(error_response(StatusCode::BAD_REQUEST,
-                            "invalid council_category: must be technical, business, legal, academic, community, or foundation"));
+                            "invalid council_category: must be engineering, growth, legal, research, community, operations, or security"));
                     };
                     ProposalType::CouncilMembership { action, address, category }
                 }

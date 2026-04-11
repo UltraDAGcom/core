@@ -106,9 +106,12 @@ export function CreateProposalModal({ wallets, onClose, onSuccess }: CreatePropo
       if (!councilAddress.trim()) { setError('Council address is required'); return; }
       if (!isValidAddress(councilAddress.trim())) { setError('Invalid council address (hex or bech32m)'); return; }
       body.proposal_type = 'council_membership';
-      body.council_action = councilAction;
+      // Lowercase — the /proposal RPC endpoint matches these exactly.
+      // (The Rust side also accepts case-insensitively as of this commit,
+      // but we send lowercase anyway so older nodes keep working.)
+      body.council_action = councilAction.toLowerCase();
       body.council_address = normalizeAddress(councilAddress.trim());
-      body.council_category = councilCategory;
+      body.council_category = councilCategory.toLowerCase();
     } else {
       const amt = Math.floor(parseFloat(treasuryAmount) * 100_000_000);
       if (isNaN(amt) || amt <= 0) { setError('Treasury amount must be positive'); return; }
