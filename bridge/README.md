@@ -244,10 +244,29 @@ respected across both chains.
 
 ## Contract Addresses
 
-| Network                | Token   | Bridge  | Timelock |
-| ---------------------- | ------- | ------- | -------- |
-| Arbitrum Sepolia       | _TBD_   | _TBD_   | _TBD_    |
-| Arbitrum One (mainnet) | _TBD_   | _TBD_   | _TBD_    |
+| Network                | Contract  | Address                                      |
+| ---------------------- | --------- | -------------------------------------------- |
+| Arbitrum Sepolia       | UDAGToken | `0xc680E0D710d810BB5F32c91Bc7DC384055296cFF` |
+| Arbitrum Sepolia       | Bridge    | `0x9a2fc3BCdD8E48b27FA8ECeb85895488Cb3dEE0A` |
+| Arbitrum Sepolia       | Timelock  | `0xbC0d4cC817C1776DA0b71D9c5e6D26Cef5b3c060` |
+| Arbitrum One (mainnet) | UDAGToken | _TBD_                                        |
+| Arbitrum One (mainnet) | Bridge    | _TBD_                                        |
+| Arbitrum One (mainnet) | Timelock  | _TBD_                                        |
+
+**Testnet deploy notes (2026-04-11):**
+- Governor / timelock proposer: `0x772cD046cd69Cc182167a12b596F8D5D0f23601d`
+- Genesis allocation: 2,520,000 UDAG pre-minted to the same address
+- Bridge auto-enable: disabled (zero validators registered)
+- Token verified on Arbiscan: no (run `forge verify-contract` manually, or redeploy with `ARBISCAN_API_KEY` set)
+- Token mint tx: [0x9dcf312b...ffb7d](https://sepolia.arbiscan.io/tx/0x9dcf312bc31b7876bba48ba17d5bcf77a12b090a303781b878199608ca1ffb7d)
+- Total deploy cost: ~0.00011 ETH on Arbitrum Sepolia
+
+This testnet deployment was performed by a deployer key that was
+exposed in a development chat transcript. The key is considered
+compromised and will never be reused. It has no ongoing role on the
+deployed contracts (it is not the governor) and cannot mint, pause, or
+migrate anything, so the exposure only matters for any mainnet assets
+on the same address — which must be rotated to a new wallet.
 
 ## Layout
 
