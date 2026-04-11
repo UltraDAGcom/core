@@ -95,6 +95,32 @@ fi
 
 # ─── Sanity checks ─────────────────────────────────────────────────
 
+# Normalize DEPLOYER_KEY: forge's `vm.envUint` is strict and rejects
+# hex strings without the `0x` prefix. Users frequently paste keys
+# raw, so prepend the prefix when missing rather than error out.
+# Also validate it's the right length (32 bytes = 64 hex chars,
+# optionally preceded by `0x`).
+case "$DEPLOYER_KEY" in
+    0x*) _key_hex="${DEPLOYER_KEY#0x}" ;;
+    *)   _key_hex="$DEPLOYER_KEY" ;;
+esac
+
+if [[ ${#_key_hex} -ne 64 ]]; then
+    echo "error: DEPLOYER_KEY must be 64 hex characters (32 bytes), got ${#_key_hex}" >&2
+    echo "       example format: 0xabcd...1234 (with or without 0x prefix)" >&2
+    exit 2
+fi
+
+if ! [[ "$_key_hex" =~ ^[0-9a-fA-F]{64}$ ]]; then
+    echo "error: DEPLOYER_KEY contains non-hex characters" >&2
+    exit 2
+fi
+
+# Always re-export with the 0x prefix so downstream tools (forge, cast)
+# accept it regardless of how the user supplied it.
+DEPLOYER_KEY="0x$_key_hex"
+unset _key_hex
+
 # Cap: 2,520,000 UDAG in 8-decimal sats = 252_000_000_000_000.
 MAX_GENESIS_SATS=252000000000000
 
