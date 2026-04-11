@@ -4,11 +4,13 @@
 //! arrays in constants.rs, this test catches the drift by round-tripping
 //! through bech32m.
 //!
-//! Canonical sources (2026-04-10):
-//!   @founder    udag1nqcz7h7xe9kh2fvjnqflwjc7zxnvdyy309lt5t
-//!   @liquidity  udag1rvdfs928eu7trrc33wj2edwctdkt08gdkmhppx
-//!   @ecosystem  udag17z5yull0zrhrmkvw6337f3hdh3rfs7mgnhmvfz
-//!   @reserve    udag1rs22h8y2ack0285efhe4g57hm8kr8z7a4gkxp8
+//! Canonical sources:
+//!   @founder    udag1dps6ypxmdj7qajqv86u6vhe7rzgx5ldm9jh2h0  (2026-04-11,
+//!               rotated from the previous founder — key generated offline
+//!               via examples/mainnet_keygen.rs)
+//!   @liquidity  udag1rvdfs928eu7trrc33wj2edwctdkt08gdkmhppx  (2026-04-10)
+//!   @ecosystem  udag17z5yull0zrhrmkvw6337f3hdh3rfs7mgnhmvfz  (2026-04-10)
+//!   @reserve    udag1rs22h8y2ack0285efhe4g57hm8kr8z7a4gkxp8  (2026-04-10)
 
 use ultradag_coin::address::Address;
 use ultradag_coin::constants::{
@@ -23,7 +25,7 @@ fn protocol_address_constants_match_canonical_bech32m() {
     let cases = [
         (
             "FOUNDER",
-            "udag1nqcz7h7xe9kh2fvjnqflwjc7zxnvdyy309lt5t",
+            "udag1dps6ypxmdj7qajqv86u6vhe7rzgx5ldm9jh2h0",
             DEV_ADDRESS_BYTES,
         ),
         (

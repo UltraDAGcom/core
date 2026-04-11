@@ -150,19 +150,22 @@ const _: () = assert!(
 );
 
 /// Founder / developer address — 5% of per-round emission lands here.
-/// bech32m: `udag1nqcz7h7xe9kh2fvjnqflwjc7zxnvdyy309lt5t` (@founder, 2026-04-10).
+/// bech32m: `udag1dps6ypxmdj7qajqv86u6vhe7rzgx5ldm9jh2h0` (@founder, 2026-04-11).
 ///
 /// This is the canonical protocol-level founder address, baked into the binary
 /// so every node agrees on where founder emission is credited. The private key
-/// is held off-network by the founder (hardware wallet); nodes only need the
-/// public 20-byte address to route credits.
+/// was generated offline via `examples/mainnet_keygen.rs` and is held off-network
+/// by the founder; nodes only need the public 20-byte address to route credits.
 ///
 /// Environment variable `ULTRADAG_DEV_ADDRESS` can override this for local
 /// development and alternate networks, but the default below is the canonical
-/// protocol value for both mainnet and testnet.
+/// protocol value for both mainnet and testnet. **Any Fly secret or other
+/// runtime override MUST be unset before a mainnet restart**, otherwise the
+/// runtime `verify_genesis_matches_constant()` check (see
+/// `crates/ultradag-coin/src/state/engine.rs`) will refuse to start the node.
 pub const DEV_ADDRESS_BYTES: [u8; 20] = [
-    0x98, 0x30, 0x2f, 0x5f, 0xc6, 0xc9, 0x6d, 0x75, 0x25, 0x92,
-    0x98, 0x13, 0xf7, 0x4b, 0x1e, 0x11, 0xa6, 0xc6, 0x90, 0x91,
+    0x68, 0x61, 0xa2, 0x04, 0xdb, 0x6c, 0xbc, 0x0e, 0xc8, 0x0c,
+    0x3e, 0xb9, 0xa6, 0x5f, 0x3e, 0x18, 0x90, 0x6a, 0x7d, 0xbb,
 ];
 
 /// Testnet seed for the legacy `dev_keypair()` convenience signer.
@@ -315,8 +318,11 @@ pub const CHECKPOINT_INTERVAL: u64 = 100;
 #[cfg(not(feature = "mainnet"))]
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [0u8; 32];
 
-/// Mainnet genesis checkpoint hash — computed 2026-04-10 for the April 2026
-/// 7-bucket tokenomics update (hard fork from the original zero-pre-mine model).
+/// Mainnet genesis checkpoint hash — recomputed 2026-04-11 after rotating the
+/// founder address to one whose private key was generated offline via the
+/// `mainnet_keygen` example. Previous hash (`0xf2157d73…`) used an address
+/// whose private key was never actually held by anyone, so 5% of emission
+/// was accumulating at an unspendable account. This is the fix for that.
 ///
 /// Genesis state:
 /// - total_supply = 2,520,000 UDAG (12% IDO pre-mine only, no faucet on mainnet)
@@ -333,10 +339,10 @@ pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [0u8; 32];
 /// then paste the printed hash here and rebuild.
 #[cfg(feature = "mainnet")]
 pub const GENESIS_CHECKPOINT_HASH: [u8; 32] = [
-    0xf2, 0x15, 0x7d, 0x73, 0x68, 0x2d, 0x6b, 0x7b,
-    0x04, 0x7c, 0x5b, 0x25, 0xee, 0xbb, 0x1a, 0xcd,
-    0xac, 0x9d, 0x03, 0x97, 0x95, 0x99, 0x1d, 0x09,
-    0x3a, 0xeb, 0x25, 0xf7, 0xed, 0xcd, 0xb3, 0x7a,
+    0x38, 0x4d, 0x8d, 0xf7, 0x00, 0x1f, 0xae, 0xe9,
+    0xc1, 0x82, 0x60, 0xd6, 0x1c, 0xd4, 0x98, 0x35,
+    0x48, 0x84, 0xd6, 0xff, 0xd2, 0xc0, 0x47, 0xc3,
+    0x3f, 0x22, 0x4f, 0x21, 0x94, 0xe4, 0x94, 0xc6,
 ];
 
 /// Compile-time assertion: GENESIS_CHECKPOINT_HASH must not be the placeholder on mainnet.
