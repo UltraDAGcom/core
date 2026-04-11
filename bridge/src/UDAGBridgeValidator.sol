@@ -269,7 +269,14 @@ contract UDAGBridgeValidator is ReentrancyGuard {
             abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash)
         );
 
-        address lastSigner;
+        // Start below every possible valid signer so the first
+        // `signer <= lastSigner` check in the loop always compares
+        // against a sentinel, not an uninitialised default. Explicit
+        // zero for clarity — Solidity's implicit initialisation is
+        // the same value, but future refactors should not rely on
+        // default-initialisation semantics for a security-critical
+        // comparison.
+        address lastSigner = address(0);
 
         for (uint256 i; i < sigCount; ++i) {
             (bytes32 r, bytes32 s, uint8 v) = _extractSignature(signatures, i);
