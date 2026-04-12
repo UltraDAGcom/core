@@ -2,8 +2,8 @@
 
 **Program Start:** March 8, 2026  
 **Total Allocated:** 500,000 UDAG (mainnet)  
-**Total Awarded:** 0 UDAG  
-**Total Paid (Testnet):** 0 UDAG  
+**Total Awarded:** 15,000 UDAG  
+**Total Paid (Testnet):** 0 UDAG (pending — faucet rate-limited)  
 
 This ledger tracks all bug bounty rewards. Each entry is cryptographically signed and represents a binding commitment to distribute mainnet UDAG tokens.
 
@@ -28,7 +28,23 @@ Signature: [GPG signature]
 
 ## Active Bounties
 
-*No bounties awarded yet*
+### BB-2026-0001
+```
+ID: BB-2026-0001
+Date: 2026-04-12
+Hunter: Sumitshah00 (tudg17lzd76ue95ht07hxzna8mzey4tkpk85jtjns2d)
+Severity: Critical
+Reward: 15,000 UDAG (mainnet promise)
+Testnet Paid: Pending (faucet rate-limited; will send via validator key)
+Source: Treasury (paid from treasury emission post-launch)
+Issue: SmartOp Vote/CreateProposal path triggers fatal supply invariant
+       halt — fee debited + nonce incremented before authorization check,
+       causing supply accounting mismatch and node exit code 101.
+       Extended to all 17 SmartOp types with same validate-after-mutate pattern.
+Advisory: GHSA-q8wx-2crx-c7pp
+Fix: 45bcf706, 2f5a3a23
+Status: Validated / Fixed / Testnet Paid / Pending Mainnet
+```
 
 ---
 
@@ -47,10 +63,10 @@ Signature: [GPG signature]
 - Unique hunters: 0
 
 ### April 2026
-- Submissions: 0 valid + 1 pending (received 2026-04-10, disclosure channel was offline at the time)
-- Validated: 0
-- Rewards: 0 UDAG
-- Unique hunters: 0
+- Submissions: 1 valid (GHSA-q8wx-2crx-c7pp)
+- Validated: 1
+- Rewards: 15,000 UDAG
+- Unique hunters: 1 (Sumitshah00)
 
 ### Mainnet launched: 2026-04-10
 - All reward entries from this date onward are paid in live mainnet UDAG
@@ -158,5 +174,5 @@ All changes to this ledger are tracked in git history. Each reward entry include
 ---
 
 **Ledger Maintainer:** UltraDAG Core Team  
-**Last Updated:** April 11, 2026  
+**Last Updated:** April 12, 2026  
 **Next Audit:** May 11, 2026
