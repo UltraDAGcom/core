@@ -41,6 +41,38 @@
   pointer-events: none;
 }
 
+/* Re-enable clicks on interactive hero children (buttons, links, forms, banner).
+   The hero itself is pointer-events:none so the canvas behind receives clicks
+   on empty space for the DAG visualization. */
+.hero .token-banner,
+.hero .token-banner-copy,
+.hero .token-banner-addr,
+.hero .hero-actions a,
+.hero .hero-email,
+.hero .hero-email form,
+.hero .hero-email input,
+.hero .hero-email button,
+.hero .hero-social a,
+.hero .live-bar {
+  pointer-events: auto;
+  cursor: auto;
+}
+
+.hero .token-banner-copy,
+.hero .hero-actions a,
+.hero .hero-email button,
+.hero .hero-social a {
+  cursor: pointer;
+}
+
+.hero .token-banner-addr {
+  cursor: pointer;
+}
+
+.hero .hero-email input {
+  cursor: text;
+}
+
 .hero-eyebrow {
   font-family: 'DM Mono', monospace;
   font-size: 11px;
