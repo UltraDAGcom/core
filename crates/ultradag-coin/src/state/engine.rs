@@ -3904,53 +3904,28 @@ impl StateEngine {
     pub fn apply_smart_op_tx(&mut self, tx: &crate::tx::smart_account::SmartOpTx, current_round: u64) -> Result<(), CoinError> {
         use crate::tx::smart_account::SmartOpType;
 
-        // Ensure smart account exists (auto-registration for first-time users)
-        // This must happen before authorization checks that depend on account state.
-        self.ensure_smart_account_at_round(&tx.from, current_round);
-
-        // Pre-validate operation authorization BEFORE any state mutation (fee/nonce).
-        // This prevents partial state changes when the operation itself is unauthorized.
-        match &tx.operation {
-            // Governance operations require council membership
-            SmartOpType::Vote { .. } | SmartOpType::CreateProposal { .. } => {
-                if !self.is_council_member(&tx.from) {
-                    return Err(CoinError::ValidationError(
-                        "only council members can perform governance operations".into()
-                    ));
-                }
-            }
-            _ => {}
-        }
-
-        // Debit fee if any
-        if tx.fee > 0 {
-            self.debit(&tx.from, tx.fee)?;
-        }
-        self.increment_nonce(&tx.from);
-
+        // ── Phase 1: Pre-validate ALL preconditions BEFORE any state mutation. ──
+        // Every operation that can fail must be checked here. If any check fails,
+        // we return Err before fee debit or nonce increment, so state stays clean.
+        // This prevents the supply invariant bug (GHSA-q8wx-2crx-c7pp) where
+        // a fee was debited but the operation failed, burning tokens into nowhere.
         match &tx.operation {
             SmartOpType::Stake { amount } => {
-                let stake_tx = crate::tx::StakeTx {
-                    from: tx.from, amount: *amount, nonce: tx.nonce,
-                    pub_key: [0u8; 32], signature: crate::Signature([0u8; 64]),
-                };
-                // Skip sig/nonce/debit checks — already done above. Just apply stake logic.
                 if *amount < crate::tx::MIN_STAKE_SATS {
                     return Err(CoinError::ValidationError("below minimum stake".into()));
                 }
-                self.debit(&tx.from, *amount)?;
-                let stake = self.stake_accounts.entry(tx.from).or_insert_with(|| {
-                    StakeAccount { staked: 0, unlock_at_round: None, commission_percent: 10, commission_last_changed: None, locked_stake: 0 }
-                });
-                stake.staked = stake.staked.saturating_add(*amount);
+                // Check balance covers stake amount (fee already checked by caller)
+                let balance = self.balance(&tx.from);
+                if balance < tx.fee.saturating_add(*amount) {
+                    return Err(CoinError::ValidationError("insufficient balance for stake + fee".into()));
+                }
             }
             SmartOpType::Unstake => {
-                let stake = self.stake_accounts.get_mut(&tx.from)
+                let stake = self.stake_accounts.get(&tx.from)
                     .ok_or_else(|| CoinError::ValidationError("no stake to unstake".into()))?;
                 if stake.unlock_at_round.is_some() {
                     return Err(CoinError::ValidationError("already unstaking".into()));
                 }
-                stake.unlock_at_round = Some(current_round.saturating_add(crate::tx::UNSTAKE_COOLDOWN_ROUNDS));
             }
             SmartOpType::Delegate { validator, amount } => {
                 if tx.from == *validator {
@@ -3959,85 +3934,58 @@ impl StateEngine {
                 if *amount < crate::constants::MIN_DELEGATION_SATS {
                     return Err(CoinError::ValidationError("below minimum delegation".into()));
                 }
-                self.debit(&tx.from, *amount)?;
-                self.delegation_accounts.insert(tx.from, crate::state::engine::DelegationAccount {
-                    delegated: *amount, validator: *validator, unlock_at_round: None,
-                });
+                let balance = self.balance(&tx.from);
+                if balance < tx.fee.saturating_add(*amount) {
+                    return Err(CoinError::ValidationError("insufficient balance for delegation + fee".into()));
+                }
             }
             SmartOpType::Undelegate => {
-                let deleg = self.delegation_accounts.get_mut(&tx.from)
+                let deleg = self.delegation_accounts.get(&tx.from)
                     .ok_or_else(|| CoinError::ValidationError("no delegation to undelegate".into()))?;
                 if deleg.unlock_at_round.is_some() {
                     return Err(CoinError::ValidationError("already undelegating".into()));
                 }
-                deleg.unlock_at_round = Some(current_round.saturating_add(crate::tx::UNSTAKE_COOLDOWN_ROUNDS));
             }
             SmartOpType::SetCommission { commission_percent } => {
                 if *commission_percent > crate::constants::MAX_COMMISSION_PERCENT {
                     return Err(CoinError::ValidationError("commission exceeds maximum".into()));
                 }
-                let stake = self.stake_accounts.get_mut(&tx.from)
-                    .ok_or_else(|| CoinError::ValidationError("must be a staker to set commission".into()))?;
-                stake.commission_percent = *commission_percent;
-                stake.commission_last_changed = Some(current_round);
+                if !self.stake_accounts.contains_key(&tx.from) {
+                    return Err(CoinError::ValidationError("must be a staker to set commission".into()));
+                }
             }
-            SmartOpType::Vote { proposal_id, approve } => {
-                // Council membership already verified above before state mutation.
-                self.votes.insert((*proposal_id, tx.from), *approve);
+            SmartOpType::Vote { .. } => {
+                if !self.is_council_member(&tx.from) {
+                    return Err(CoinError::ValidationError(
+                        "only council members can perform governance operations".into()
+                    ));
+                }
             }
-            SmartOpType::CreateProposal { title, description, proposal_type_tag, param, new_value } => {
-                // Council membership already verified above before state mutation.
+            SmartOpType::CreateProposal { title, description, proposal_type_tag, .. } => {
+                if !self.is_council_member(&tx.from) {
+                    return Err(CoinError::ValidationError(
+                        "only council members can perform governance operations".into()
+                    ));
+                }
                 if title.len() > crate::constants::PROPOSAL_TITLE_MAX_BYTES || description.len() > crate::constants::PROPOSAL_DESCRIPTION_MAX_BYTES {
                     return Err(CoinError::ValidationError("proposal title or description too long".into()));
                 }
-
-                // Map tag to ProposalType
-                let proposal_type = match proposal_type_tag {
-                    0 => crate::governance::ProposalType::TextProposal,
-                    1 => crate::governance::ProposalType::ParameterChange {
-                        param: param.clone(),
-                        new_value: new_value.to_string(),
-                    },
-                    _ => return Err(CoinError::ValidationError(
+                if *proposal_type_tag > 1 {
+                    return Err(CoinError::ValidationError(
                         format!("unsupported proposal_type_tag: {}", proposal_type_tag),
-                    )),
-                };
-
-                // Check active proposal count
+                    ));
+                }
                 let active_count = self.proposals.values()
                     .filter(|p| matches!(p.status, crate::governance::ProposalStatus::Active))
                     .count();
                 if active_count as u64 >= self.governance_params.max_active_proposals {
                     return Err(CoinError::TooManyActiveProposals);
                 }
-
-                // Check proposal cooldown
                 if let Some(&last_round) = self.last_proposal_round.get(&tx.from) {
                     if current_round.saturating_sub(last_round) < crate::constants::PROPOSAL_COOLDOWN_ROUNDS {
                         return Err(CoinError::ProposalCooldownNotElapsed);
                     }
                 }
-
-                // Snapshot council count for quorum
-                let snapshot_total_stake = self.council_members.len() as u64;
-
-                // Create and insert proposal
-                let proposal = crate::governance::Proposal {
-                    id: self.next_proposal_id,
-                    proposer: tx.from,
-                    title: title.clone(),
-                    description: description.clone(),
-                    proposal_type,
-                    voting_starts: current_round,
-                    voting_ends: current_round.saturating_add(self.governance_params.voting_period_rounds),
-                    votes_for: 0,
-                    votes_against: 0,
-                    status: crate::governance::ProposalStatus::Active,
-                    snapshot_total_stake,
-                };
-                self.proposals.insert(self.next_proposal_id, proposal);
-                self.last_proposal_round.insert(tx.from, current_round);
-                self.next_proposal_id = self.next_proposal_id.saturating_add(1);
             }
             SmartOpType::RegisterName { name, duration_years } => {
                 use crate::tx::name_registry::*;
@@ -4055,14 +4003,6 @@ impl StateEngine {
                 if self.address_to_name.contains_key(&tx.from) {
                     return Err(CoinError::ValidationError("address already has a name".into()));
                 }
-                // Fee already debited above, add to treasury
-                self.treasury_balance = self.treasury_balance.saturating_add(tx.fee);
-                let expiry = current_round.saturating_add(ROUNDS_PER_YEAR.saturating_mul(*duration_years as u64));
-                self.name_to_address.insert(name.clone(), tx.from);
-                self.address_to_name.insert(tx.from, name.clone());
-                self.name_expiry.insert(name.clone(), expiry);
-                self.name_created_at.insert(name.clone(), current_round);
-                tracing::info!("Name '{}' registered to {} via SmartOp", name, tx.from.to_hex());
             }
             SmartOpType::RenewName { name, additional_years } => {
                 use crate::tx::name_registry::*;
@@ -4075,11 +4015,6 @@ impl StateEngine {
                 if tx.fee < required_fee {
                     return Err(CoinError::ValidationError("fee too low".into()));
                 }
-                self.treasury_balance = self.treasury_balance.saturating_add(tx.fee);
-                let current_expiry = self.name_expiry.get(name).copied().unwrap_or(0);
-                let base = current_expiry.max(current_round);
-                let new_expiry = base.saturating_add(ROUNDS_PER_YEAR.saturating_mul(*additional_years as u64));
-                self.name_expiry.insert(name.clone(), new_expiry);
             }
             SmartOpType::TransferName { name, new_owner } => {
                 let owner = self.name_to_address.get(name)
@@ -4090,12 +4025,8 @@ impl StateEngine {
                 if self.address_to_name.contains_key(new_owner) {
                     return Err(CoinError::ValidationError("new owner already has a name".into()));
                 }
-                self.name_to_address.insert(name.clone(), *new_owner);
-                self.address_to_name.remove(&tx.from);
-                self.address_to_name.insert(*new_owner, name.clone());
             }
-            SmartOpType::StreamCreate { recipient, rate_sats_per_round, deposit, cliff_rounds } => {
-                // Inline the core logic (fee/nonce already handled by SmartOp handler above).
+            SmartOpType::StreamCreate { recipient, rate_sats_per_round, deposit, .. } => {
                 if *deposit == 0 {
                     return Err(CoinError::ValidationError("stream deposit must be greater than 0".into()));
                 }
@@ -4108,29 +4039,10 @@ impl StateEngine {
                 if tx.from == *recipient {
                     return Err(CoinError::ValidationError("cannot stream to self".into()));
                 }
-                let mut hasher = blake3::Hasher::new();
-                hasher.update(&tx.from.0);
-                hasher.update(&recipient.0);
-                hasher.update(&tx.nonce.to_le_bytes());
-                let stream_id = *hasher.finalize().as_bytes();
-                if self.streams.contains_key(&stream_id) {
-                    return Err(CoinError::ValidationError("stream ID already exists".into()));
+                let balance = self.balance(&tx.from);
+                if balance < tx.fee.saturating_add(*deposit) {
+                    return Err(CoinError::ValidationError("insufficient balance for stream deposit + fee".into()));
                 }
-                // Debit the deposit (fee already debited by SmartOp handler above)
-                self.debit(&tx.from, *deposit)?;
-                let stream = crate::tx::stream::Stream {
-                    id: stream_id,
-                    sender: tx.from,
-                    recipient: *recipient,
-                    rate_sats_per_round: *rate_sats_per_round,
-                    start_round: current_round,
-                    deposited: *deposit,
-                    withdrawn: 0,
-                    cliff_rounds: *cliff_rounds,
-                    cancelled_at_round: None,
-                    cancel_recipient_credited: false,
-                };
-                self.streams.insert(stream_id, stream);
             }
             SmartOpType::StreamWithdraw { stream_id } => {
                 let stream = self.streams.get(stream_id)
@@ -4138,13 +4050,9 @@ impl StateEngine {
                 if tx.from != stream.recipient {
                     return Err(CoinError::ValidationError("only recipient can withdraw from stream".into()));
                 }
-                let withdrawable = stream.withdrawable_at(current_round);
-                if withdrawable == 0 {
+                if stream.withdrawable_at(current_round) == 0 {
                     return Err(CoinError::ValidationError("no funds available to withdraw".into()));
                 }
-                self.credit(&tx.from, withdrawable)?;
-                let stream = self.streams.get_mut(stream_id).unwrap();
-                stream.withdrawn = stream.withdrawn.saturating_add(withdrawable);
             }
             SmartOpType::StreamCancel { stream_id } => {
                 let stream = self.streams.get(stream_id)
@@ -4155,90 +4063,40 @@ impl StateEngine {
                 if stream.cancelled_at_round.is_some() {
                     return Err(CoinError::ValidationError("stream already cancelled".into()));
                 }
-                let accrued = stream.accrued_at(current_round);
-                let recipient_owed = accrued.saturating_sub(stream.withdrawn);
-                let sender_refund = stream.deposited.saturating_sub(accrued);
-                let recipient = stream.recipient;
-                if recipient_owed > 0 {
-                    self.credit(&recipient, recipient_owed)?;
-                }
-                if sender_refund > 0 {
-                    self.credit(&tx.from, sender_refund)?;
-                }
-                let stream = self.streams.get_mut(stream_id).unwrap();
-                stream.cancelled_at_round = Some(current_round);
-                stream.withdrawn = accrued;
-                stream.cancel_recipient_credited = true;
             }
             SmartOpType::AddKey { key_type, pubkey, label } => {
                 use crate::tx::smart_account::{AuthorizedKey, KeyType, MAX_AUTHORIZED_KEYS, MAX_KEY_LABEL_BYTES};
-
-                // Account must already exist — AddKey is adding to an existing
-                // authorized-key set, not creating an account. The outer SmartOp
-                // verification already proved `tx.from` has a valid key signing
-                // this op, so the account must exist.
-                let config = self.smart_accounts.get_mut(&tx.from)
+                let config = self.smart_accounts.get(&tx.from)
                     .ok_or_else(|| CoinError::ValidationError("smart account not found".into()))?;
-
-                // Validate label length.
                 if label.len() > MAX_KEY_LABEL_BYTES {
                     return Err(CoinError::ValidationError(
                         format!("key label exceeds {} bytes", MAX_KEY_LABEL_BYTES)
                     ));
                 }
-
-                // Validate pubkey length matches key type.
                 match key_type {
                     KeyType::Ed25519 => {
                         if pubkey.len() != 32 {
-                            return Err(CoinError::ValidationError(
-                                "Ed25519 pubkey must be 32 bytes".into()
-                            ));
+                            return Err(CoinError::ValidationError("Ed25519 pubkey must be 32 bytes".into()));
                         }
                     }
                     KeyType::P256 => {
                         if pubkey.len() != 33 && pubkey.len() != 65 {
-                            return Err(CoinError::ValidationError(
-                                "P256 pubkey must be 33 (compressed) or 65 (uncompressed) bytes".into()
-                            ));
+                            return Err(CoinError::ValidationError("P256 pubkey must be 33 (compressed) or 65 (uncompressed) bytes".into()));
                         }
                     }
                 }
-
-                // Enforce max authorized keys per account.
                 if config.authorized_keys.len() >= MAX_AUTHORIZED_KEYS {
                     return Err(CoinError::ValidationError(
                         format!("account already has the maximum {} authorized keys", MAX_AUTHORIZED_KEYS)
                     ));
                 }
-
-                // Derive key_id and reject duplicates.
                 let key_id = AuthorizedKey::compute_key_id(*key_type, pubkey);
                 if config.authorized_keys.iter().any(|k| k.key_id == key_id) {
                     return Err(CoinError::ValidationError("key already authorized on this account".into()));
                 }
-
-                // All good — append the new key.
-                config.authorized_keys.push(AuthorizedKey {
-                    key_id,
-                    key_type: *key_type,
-                    pubkey: pubkey.clone(),
-                    label: label.clone(),
-                    daily_limit: None,
-                    daily_spent: (0, 0),
-                });
-
-                let key_id_hex: String = key_id.iter().map(|b| format!("{:02x}", b)).collect();
-                tracing::info!(
-                    "AddKey: {} added key {} ({:?}) labeled '{}'",
-                    tx.from.to_hex(),
-                    key_id_hex,
-                    key_type,
-                    label,
-                );
             }
-            SmartOpType::UpdateProfile { name, external_addresses, metadata } => {
-                use crate::tx::name_registry::{NameProfile, MAX_PROFILE_EXTERNAL_ADDRESSES, MAX_PROFILE_METADATA, MAX_PROFILE_KEY_BYTES, MAX_PROFILE_VALUE_BYTES};
+            SmartOpType::UpdateProfile { name, external_addresses, metadata, .. } => {
+                use crate::tx::name_registry::{MAX_PROFILE_EXTERNAL_ADDRESSES, MAX_PROFILE_METADATA, MAX_PROFILE_KEY_BYTES, MAX_PROFILE_VALUE_BYTES};
                 let owner = self.name_to_address.get(name)
                     .ok_or_else(|| CoinError::ValidationError("name not registered".into()))?;
                 if *owner != tx.from {
@@ -4262,16 +4120,11 @@ impl StateEngine {
                         return Err(CoinError::ValidationError("metadata value too long".into()));
                     }
                 }
-                self.name_profiles.insert(name.clone(), NameProfile {
-                    external_addresses: external_addresses.clone(),
-                    metadata: metadata.clone(),
-                    ..Default::default()
-                });
             }
             SmartOpType::CreatePocket { label } => {
-                use crate::tx::name_registry::{validate_pocket_label, derive_pocket_address, MAX_POCKETS};
+                use crate::tx::name_registry::{validate_pocket_label, MAX_POCKETS};
                 validate_pocket_label(label).map_err(|e| CoinError::ValidationError(e.to_string()))?;
-                let config = self.smart_accounts.get_mut(&tx.from)
+                let config = self.smart_accounts.get(&tx.from)
                     .ok_or_else(|| CoinError::ValidationError("smart account not found".into()))?;
                 if config.pockets.len() >= MAX_POCKETS {
                     return Err(CoinError::ValidationError(format!(
@@ -4283,6 +4136,209 @@ impl StateEngine {
                         "pocket label '{}' already exists", label
                     )));
                 }
+            }
+            SmartOpType::RemovePocket { label } => {
+                let config = self.smart_accounts.get(&tx.from)
+                    .ok_or_else(|| CoinError::ValidationError("smart account not found".into()))?;
+                if !config.pockets.iter().any(|l| l == label) {
+                    return Err(CoinError::ValidationError(format!(
+                        "pocket label '{}' not found", label
+                    )));
+                }
+            }
+            SmartOpType::RemoveKey { key_id_to_remove } => {
+                let config = self.smart_accounts.get(&tx.from)
+                    .ok_or_else(|| CoinError::ValidationError("smart account not found".into()))?;
+                if config.authorized_keys.len() <= 1 {
+                    return Err(CoinError::ValidationError("cannot remove the last authorized key".into()));
+                }
+                if !config.has_key(key_id_to_remove) {
+                    return Err(CoinError::ValidationError("key to remove not found on this SmartAccount".into()));
+                }
+                if config.pending_key_removal.is_some() {
+                    return Err(CoinError::ValidationError("a key removal is already pending".into()));
+                }
+            }
+        }
+
+        // ── Phase 2: All preconditions passed. Now mutate state. ──
+        // Fee debit and nonce increment happen here — after all checks passed.
+        if tx.fee > 0 {
+            self.debit(&tx.from, tx.fee)?;
+        }
+        self.increment_nonce(&tx.from);
+
+        // ── Phase 3: Apply the operation (no more fallible preconditions). ──
+        match &tx.operation {
+            SmartOpType::Stake { amount } => {
+                self.debit(&tx.from, *amount)?;
+                let stake = self.stake_accounts.entry(tx.from).or_insert_with(|| {
+                    StakeAccount { staked: 0, unlock_at_round: None, commission_percent: 10, commission_last_changed: None, locked_stake: 0 }
+                });
+                stake.staked = stake.staked.saturating_add(*amount);
+            }
+            SmartOpType::Unstake => {
+                let stake = self.stake_accounts.get_mut(&tx.from).unwrap(); // checked in phase 1
+                stake.unlock_at_round = Some(current_round.saturating_add(crate::tx::UNSTAKE_COOLDOWN_ROUNDS));
+            }
+            SmartOpType::Delegate { validator, amount } => {
+                self.debit(&tx.from, *amount)?;
+                self.delegation_accounts.insert(tx.from, crate::state::engine::DelegationAccount {
+                    delegated: *amount, validator: *validator, unlock_at_round: None,
+                });
+            }
+            SmartOpType::Undelegate => {
+                let deleg = self.delegation_accounts.get_mut(&tx.from).unwrap(); // checked in phase 1
+                deleg.unlock_at_round = Some(current_round.saturating_add(crate::tx::UNSTAKE_COOLDOWN_ROUNDS));
+            }
+            SmartOpType::SetCommission { commission_percent } => {
+                let stake = self.stake_accounts.get_mut(&tx.from).unwrap(); // checked in phase 1
+                stake.commission_percent = *commission_percent;
+                stake.commission_last_changed = Some(current_round);
+            }
+            SmartOpType::Vote { proposal_id, approve } => {
+                self.votes.insert((*proposal_id, tx.from), *approve);
+            }
+            SmartOpType::CreateProposal { title, description, proposal_type_tag, param, new_value } => {
+                // All preconditions checked in phase 1 (council, title/desc length, tag, active count, cooldown).
+                let proposal_type = match proposal_type_tag {
+                    0 => crate::governance::ProposalType::TextProposal,
+                    1 => crate::governance::ProposalType::ParameterChange {
+                        param: param.clone(),
+                        new_value: new_value.to_string(),
+                    },
+                    _ => unreachable!("validated in phase 1"),
+                };
+                // Snapshot council count for quorum
+                let snapshot_total_stake = self.council_members.len() as u64;
+
+                // Create and insert proposal
+                let proposal = crate::governance::Proposal {
+                    id: self.next_proposal_id,
+                    proposer: tx.from,
+                    title: title.clone(),
+                    description: description.clone(),
+                    proposal_type,
+                    voting_starts: current_round,
+                    voting_ends: current_round.saturating_add(self.governance_params.voting_period_rounds),
+                    votes_for: 0,
+                    votes_against: 0,
+                    status: crate::governance::ProposalStatus::Active,
+                    snapshot_total_stake,
+                };
+                self.proposals.insert(self.next_proposal_id, proposal);
+                self.last_proposal_round.insert(tx.from, current_round);
+                self.next_proposal_id = self.next_proposal_id.saturating_add(1);
+            }
+            SmartOpType::RegisterName { name, duration_years } => {
+                // All preconditions checked in phase 1.
+                use crate::tx::name_registry::*;
+                self.treasury_balance = self.treasury_balance.saturating_add(tx.fee);
+                let expiry = current_round.saturating_add(ROUNDS_PER_YEAR.saturating_mul(*duration_years as u64));
+                self.name_to_address.insert(name.clone(), tx.from);
+                self.address_to_name.insert(tx.from, name.clone());
+                self.name_expiry.insert(name.clone(), expiry);
+                self.name_created_at.insert(name.clone(), current_round);
+                tracing::info!("Name '{}' registered to {} via SmartOp", name, tx.from.to_hex());
+            }
+            SmartOpType::RenewName { name, additional_years } => {
+                // All preconditions checked in phase 1.
+                use crate::tx::name_registry::*;
+                self.treasury_balance = self.treasury_balance.saturating_add(tx.fee);
+                let current_expiry = self.name_expiry.get(name).copied().unwrap_or(0);
+                let base = current_expiry.max(current_round);
+                let new_expiry = base.saturating_add(ROUNDS_PER_YEAR.saturating_mul(*additional_years as u64));
+                self.name_expiry.insert(name.clone(), new_expiry);
+            }
+            SmartOpType::TransferName { name, new_owner } => {
+                // All preconditions checked in phase 1.
+                self.name_to_address.insert(name.clone(), *new_owner);
+                self.address_to_name.remove(&tx.from);
+                self.address_to_name.insert(*new_owner, name.clone());
+            }
+            SmartOpType::StreamCreate { recipient, rate_sats_per_round, deposit, cliff_rounds } => {
+                // All preconditions checked in phase 1.
+                let mut hasher = blake3::Hasher::new();
+                hasher.update(&tx.from.0);
+                hasher.update(&recipient.0);
+                hasher.update(&tx.nonce.to_le_bytes());
+                let stream_id = *hasher.finalize().as_bytes();
+                self.debit(&tx.from, *deposit)?;
+                let stream = crate::tx::stream::Stream {
+                    id: stream_id,
+                    sender: tx.from,
+                    recipient: *recipient,
+                    rate_sats_per_round: *rate_sats_per_round,
+                    start_round: current_round,
+                    deposited: *deposit,
+                    withdrawn: 0,
+                    cliff_rounds: *cliff_rounds,
+                    cancelled_at_round: None,
+                    cancel_recipient_credited: false,
+                };
+                self.streams.insert(stream_id, stream);
+            }
+            SmartOpType::StreamWithdraw { stream_id } => {
+                // All preconditions checked in phase 1.
+                let withdrawable = self.streams.get(stream_id).unwrap().withdrawable_at(current_round);
+                self.credit(&tx.from, withdrawable)?;
+                let stream = self.streams.get_mut(stream_id).unwrap();
+                stream.withdrawn = stream.withdrawn.saturating_add(withdrawable);
+            }
+            SmartOpType::StreamCancel { stream_id } => {
+                // All preconditions checked in phase 1.
+                let stream = self.streams.get(stream_id).unwrap();
+                let accrued = stream.accrued_at(current_round);
+                let recipient_owed = accrued.saturating_sub(stream.withdrawn);
+                let sender_refund = stream.deposited.saturating_sub(accrued);
+                let recipient = stream.recipient;
+                if recipient_owed > 0 {
+                    self.credit(&recipient, recipient_owed)?;
+                }
+                if sender_refund > 0 {
+                    self.credit(&tx.from, sender_refund)?;
+                }
+                let stream = self.streams.get_mut(stream_id).unwrap();
+                stream.cancelled_at_round = Some(current_round);
+                stream.withdrawn = accrued;
+                stream.cancel_recipient_credited = true;
+            }
+            SmartOpType::AddKey { key_type, pubkey, label } => {
+                // All preconditions checked in phase 1.
+                use crate::tx::smart_account::{AuthorizedKey, KeyType};
+                let key_id = AuthorizedKey::compute_key_id(*key_type, pubkey);
+                let config = self.smart_accounts.get_mut(&tx.from).unwrap(); // checked in phase 1
+                config.authorized_keys.push(AuthorizedKey {
+                    key_id,
+                    key_type: *key_type,
+                    pubkey: pubkey.clone(),
+                    label: label.clone(),
+                    daily_limit: None,
+                    daily_spent: (0, 0),
+                });
+
+                let key_id_hex: String = key_id.iter().map(|b| format!("{:02x}", b)).collect();
+                tracing::info!(
+                    "AddKey: {} added key {} ({:?}) labeled '{}'",
+                    tx.from.to_hex(),
+                    key_id_hex,
+                    key_type,
+                    label,
+                );
+            }
+            SmartOpType::UpdateProfile { name, external_addresses, metadata } => {
+                // All preconditions checked in phase 1.
+                use crate::tx::name_registry::NameProfile;
+                self.name_profiles.insert(name.clone(), NameProfile {
+                    external_addresses: external_addresses.clone(),
+                    metadata: metadata.clone(),
+                    ..Default::default()
+                });
+            }
+            SmartOpType::CreatePocket { label } => {
+                // All preconditions checked in phase 1.
+                use crate::tx::name_registry::derive_pocket_address;
+                let config = self.smart_accounts.get_mut(&tx.from).unwrap(); // checked in phase 1
                 let pocket_addr = derive_pocket_address(&tx.from, label);
                 config.pockets.push(label.clone());
                 self.pocket_to_parent.insert(pocket_addr, tx.from);
@@ -4292,13 +4348,10 @@ impl StateEngine {
                 );
             }
             SmartOpType::RemovePocket { label } => {
+                // All preconditions checked in phase 1.
                 use crate::tx::name_registry::derive_pocket_address;
-                let config = self.smart_accounts.get_mut(&tx.from)
-                    .ok_or_else(|| CoinError::ValidationError("smart account not found".into()))?;
-                let idx = config.pockets.iter().position(|l| l == label)
-                    .ok_or_else(|| CoinError::ValidationError(format!(
-                        "pocket label '{}' not found", label
-                    )))?;
+                let config = self.smart_accounts.get_mut(&tx.from).unwrap(); // checked in phase 1
+                let idx = config.pockets.iter().position(|l| l == label).unwrap(); // checked in phase 1
                 config.pockets.remove(idx);
                 let pocket_addr = derive_pocket_address(&tx.from, label);
                 self.pocket_to_parent.remove(&pocket_addr);
@@ -4308,21 +4361,9 @@ impl StateEngine {
                 );
             }
             SmartOpType::RemoveKey { key_id_to_remove } => {
+                // All preconditions checked in phase 1.
                 use crate::tx::smart_account::{KEY_REMOVAL_DELAY_ROUNDS, PendingKeyRemoval};
-                let config = self.smart_accounts.get_mut(&tx.from)
-                    .ok_or_else(|| CoinError::ValidationError("smart account not found".into()))?;
-                // Cannot remove the last key — would lock the account forever.
-                if config.authorized_keys.len() <= 1 {
-                    return Err(CoinError::ValidationError("cannot remove the last authorized key".into()));
-                }
-                // Target key must exist.
-                if !config.has_key(key_id_to_remove) {
-                    return Err(CoinError::ValidationError("key to remove not found on this SmartAccount".into()));
-                }
-                // Only one pending removal at a time.
-                if config.pending_key_removal.is_some() {
-                    return Err(CoinError::ValidationError("a key removal is already pending".into()));
-                }
+                let config = self.smart_accounts.get_mut(&tx.from).unwrap(); // checked in phase 1
                 config.pending_key_removal = Some(PendingKeyRemoval {
                     key_id: *key_id_to_remove,
                     initiated_at_round: current_round,
