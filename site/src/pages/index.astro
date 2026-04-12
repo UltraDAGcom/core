@@ -52,7 +52,16 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
     <p class="hero-eyebrow">DAG-BFT Consensus for the Machine Economy</p>
     <h1>Blockchain finality<br /><em>10 seconds.</em><br />Built for <em>machines.</em></h1>
     <p class="hero-subtitle">DAG-BFT consensus for IoT, sensors, and autonomous agents. Live on testnet.</p>
-    
+
+    <!-- Token launch banner -->
+    <div class="token-banner">
+      <span class="token-banner-label">UDAG on Arbitrum:</span>
+      <a href="https://arbiscan.io/token/0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b" target="_blank" rel="noopener noreferrer" class="token-banner-addr">
+        0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b
+      </a>
+      <button class="token-banner-copy" onclick="navigator.clipboard.writeText('0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b'); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy', 1500)" aria-label="Copy token address">Copy</button>
+    </div>
+
     <div class="hero-actions">
       <a href="/network" class="btn-primary">Watch it live →</a>
       <a href="/whitepaper" class="btn-secondary">Read the whitepaper →</a>

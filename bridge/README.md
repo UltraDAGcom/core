@@ -249,9 +249,17 @@ respected across both chains.
 | Arbitrum Sepolia       | UDAGToken | `0xc680E0D710d810BB5F32c91Bc7DC384055296cFF` |
 | Arbitrum Sepolia       | Bridge    | `0x9a2fc3BCdD8E48b27FA8ECeb85895488Cb3dEE0A` |
 | Arbitrum Sepolia       | Timelock  | `0xbC0d4cC817C1776DA0b71D9c5e6D26Cef5b3c060` |
-| Arbitrum One (mainnet) | UDAGToken | _TBD_                                        |
-| Arbitrum One (mainnet) | Bridge    | _TBD_                                        |
-| Arbitrum One (mainnet) | Timelock  | _TBD_                                        |
+| Arbitrum One (mainnet) | UDAGToken | `0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b` |
+| Arbitrum One (mainnet) | Bridge    | `0xAb65098B184f24102F3C9306d8EB85bB60426F69` |
+| Arbitrum One (mainnet) | Timelock  | `0xa8Ff4C8e729bF86FE0bb38710A9FD4D7614e69Af` |
+
+**Mainnet deploy notes (2026-04-12):**
+- Governor: `0xfcE87AAbAe4E304Bdfb4920a000fD1C8F1712356` (EOA; holds DEFAULT_ADMIN_ROLE via Timelock proposer)
+- Genesis allocation: **2,520,000 UDAG** (12% of 21M cap) pre-minted to `0x9aEcb515361af7980eaa16fE40c064f69738EbF9` for Uniswap v3 seeding
+- Bridge auto-enable: **disabled** (zero validators registered — presale-first design)
+- Timelock delay: 24 hours (86400 s)
+- MINTER_ROLE admin: locked to DEAD_ROLE (bridge migration is the only mint-path change vector)
+- Explorer: https://arbiscan.io/token/0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b
 
 **Testnet deploy notes (2026-04-11):**
 - Governor / timelock proposer: `0x772cD046cd69Cc182167a12b596F8D5D0f23601d`

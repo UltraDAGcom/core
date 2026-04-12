@@ -1570,6 +1570,54 @@ section h2 em {
   gap: 24px;
 }
 
+/* Token launch banner */
+.token-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(61,155,233,0.10), rgba(61,155,233,0.04));
+  border: 1px solid rgba(61,155,233,0.3);
+  border-radius: 10px;
+  padding: 10px 16px;
+  margin: 24px auto;
+  font-size: 13px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.token-banner-label {
+  color: var(--subtle);
+  font-weight: 500;
+}
+
+.token-banner-addr {
+  color: var(--accent);
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.token-banner-addr:hover {
+  text-decoration: underline;
+}
+
+.token-banner-copy {
+  background: rgba(61,155,233,0.15);
+  border: 1px solid rgba(61,155,233,0.3);
+  color: var(--accent);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s;
+}
+
+.token-banner-copy:hover {
+  background: rgba(61,155,233,0.25);
+}
+
 /* Architecture Explorer CTA */
 .architecture-cta {
   padding: 80px 0;

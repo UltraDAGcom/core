@@ -4,6 +4,8 @@
 **Total Allocated:** 500,000 UDAG (mainnet)  
 **Total Awarded:** 15,000 UDAG  
 **Total Paid (Testnet):** 0 UDAG (pending — faucet rate-limited)  
+**UDAG Mainnet Token:** [`0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b`](https://arbiscan.io/token/0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b) (Arbitrum One, deployed 2026-04-12)  
+**Bounty Payment Source:** Genesis allocation holder `0x9aEcb515361af7980eaa16fE40c064f69738EbF9` (to be reimbursed from treasury post-emission)  
 
 This ledger tracks all bug bounty rewards. Each entry is cryptographically signed and represents a binding commitment to distribute mainnet UDAG tokens.
 
