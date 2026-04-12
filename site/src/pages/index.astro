@@ -53,8 +53,9 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
     <h1>Blockchain finality<br /><em>10 seconds.</em><br />Built for <em>machines.</em></h1>
     <p class="hero-subtitle">DAG-BFT consensus for IoT, sensors, and autonomous agents. Live on testnet.</p>
 
-    <!-- Token launch banner -->
-    <div class="token-banner">
+    <!-- Token live banner -->
+    <div class="token-banner token-banner-live">
+      <span class="token-banner-status"><span class="token-banner-dot"></span>LIVE</span>
       <span class="token-banner-label">UDAG on Arbitrum:</span>
       <a href="https://arbiscan.io/token/0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b" target="_blank" rel="noopener noreferrer" class="token-banner-addr">
         0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b
@@ -63,7 +64,7 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
     </div>
 
     <div class="hero-actions">
-      <a href="/network" class="btn-primary">Watch it live →</a>
+      <a href="https://app.uniswap.org/explore/tokens/arbitrum/0x9cfd2011df13d9e394b5bb59f0f7e7a5c512155b?inputCurrency=NATIVE" target="_blank" rel="noopener noreferrer" class="btn-primary">Buy UDAG on Uniswap →</a>
       <a href="/whitepaper" class="btn-secondary">Read the whitepaper →</a>
     </div>
 
@@ -74,19 +75,10 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
         <input type="hidden" name="id" value="daf1702c98" />
         <input type="email" name="EMAIL" placeholder="your@email.com" required autocomplete="email" aria-label="Email address" class="email-input-inline" />
         <div class="email-hp"><input type="text" name="b_7c006c449bd3dc3a523bce11d_daf1702c98" tabindex="-1" value="" /></div>
-        <button type="submit" class="email-btn-inline">Get Early Access</button>
+        <button type="submit" class="email-btn-inline">Get ecosystem updates</button>
       </form>
     </div>
 
-    <!-- Countdown -->
-    <div class="hero-launch">
-      <div class="countdown-inline">
-        <span class="countdown-num" id="cd-hero-days">--</span>d
-        <span class="countdown-num" id="cd-hero-hours">--</span>h
-        <span class="countdown-num" id="cd-hero-mins">--</span>m
-        <span class="countdown-label-inline">until token launch</span>
-      </div>
-    </div>
 
     <!-- Social links -->
     <div class="hero-social">
@@ -154,50 +146,35 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
     </div>
   </div>
 
-  <!-- Token Launch Section -->
+  <!-- Token Live Section -->
   <div class="launch-section" id="launch">
     <div class="launch-inner">
-      <div class="launch-badge">TOKEN LAUNCH</div>
-      <h2 class="launch-title">UDAG Token Launch</h2>
-      <p class="launch-subtitle">Be the first to know. Join the waitlist for priority access.</p>
+      <div class="launch-badge launch-badge-live"><span class="launch-badge-dot"></span>LIVE NOW</div>
+      <h2 class="launch-title">UDAG is <em>live</em> on Arbitrum.</h2>
+      <p class="launch-subtitle">Tradable now on Uniswap. Bridge-backed 1:1 with native UDAG on the main chain.</p>
 
-      <!-- Countdown -->
-      <div class="countdown" id="countdown">
-        <div class="countdown-block">
-          <span class="countdown-num" id="cd-days">--</span>
-          <span class="countdown-label">Days</span>
+      <div class="launch-token-card">
+        <div class="launch-token-row">
+          <span class="launch-token-label">Contract</span>
+          <a href="https://arbiscan.io/token/0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b" target="_blank" rel="noopener noreferrer" class="launch-token-addr">
+            0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b
+          </a>
+          <button class="launch-token-copy" onclick="navigator.clipboard.writeText('0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b'); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy', 1500)" aria-label="Copy contract address">Copy</button>
         </div>
-        <div class="countdown-sep">:</div>
-        <div class="countdown-block">
-          <span class="countdown-num" id="cd-hours">--</span>
-          <span class="countdown-label">Hours</span>
+        <div class="launch-token-row">
+          <span class="launch-token-label">Network</span>
+          <span class="launch-token-value">Arbitrum One</span>
         </div>
-        <div class="countdown-sep">:</div>
-        <div class="countdown-block">
-          <span class="countdown-num" id="cd-mins">--</span>
-          <span class="countdown-label">Minutes</span>
-        </div>
-        <div class="countdown-sep">:</div>
-        <div class="countdown-block">
-          <span class="countdown-num" id="cd-secs">--</span>
-          <span class="countdown-label">Seconds</span>
+        <div class="launch-token-row">
+          <span class="launch-token-label">Supply</span>
+          <span class="launch-token-value">21M max · 2.52M circulating (IDO)</span>
         </div>
       </div>
 
-      <!-- Email Form -->
-      <form class="email-form" id="email-form" onsubmit="return handleEmailSubmit(event)">
-        <input type="hidden" name="u" value="7c006c449bd3dc3a523bce11d" />
-        <input type="hidden" name="id" value="daf1702c98" />
-        <div class="email-input-wrap">
-          <input type="email" name="EMAIL" id="email-input" placeholder="your@email.com" required autocomplete="email" aria-label="Email address" class="email-input" />
-          <div class="email-hp"><input type="text" name="b_7c006c449bd3dc3a523bce11d_daf1702c98" tabindex="-1" value="" /></div>
-          <button type="submit" class="email-btn" id="email-btn">
-            <span id="email-btn-text">Get Early Access</span>
-            <svg id="email-btn-check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          </button>
-        </div>
-        <p class="email-note">No spam. Only launch updates and early access.</p>
-      </form>
+      <div class="launch-actions">
+        <a href="https://app.uniswap.org/explore/tokens/arbitrum/0x9cfd2011df13d9e394b5bb59f0f7e7a5c512155b?inputCurrency=NATIVE" target="_blank" rel="noopener noreferrer" class="btn-primary btn-lg">Buy UDAG on Uniswap →</a>
+        <a href="https://arbiscan.io/token/0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b" target="_blank" rel="noopener noreferrer" class="btn-secondary btn-lg">View on Arbiscan →</a>
+      </div>
 
       <!-- Social -->
       <div class="launch-social">
@@ -686,15 +663,19 @@ const LAUNCH_DATE = new Date('2026-05-22T12:00:00Z').getTime();
   <!-- Bottom CTA -->
   <div class="launch-section bottom-cta">
     <div class="launch-inner">
-      <h2 class="launch-title">Don't miss the launch</h2>
-      <p class="launch-subtitle">Join the waitlist and follow us for priority access to UDAG.</p>
-      <form class="email-form" onsubmit="return handleEmailSubmit(event)">
+      <h2 class="launch-title">Trade UDAG on Uniswap</h2>
+      <p class="launch-subtitle">Live on Arbitrum One. Bridge-backed, 8-decimal ERC-20, 21M max supply.</p>
+      <div class="launch-actions">
+        <a href="https://app.uniswap.org/explore/tokens/arbitrum/0x9cfd2011df13d9e394b5bb59f0f7e7a5c512155b?inputCurrency=NATIVE" target="_blank" rel="noopener noreferrer" class="btn-primary btn-lg">Buy on Uniswap →</a>
+        <a href="https://arbiscan.io/token/0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b" target="_blank" rel="noopener noreferrer" class="btn-secondary btn-lg">View on Arbiscan →</a>
+      </div>
+      <form class="email-form" onsubmit="return handleEmailSubmit(event)" style="margin-top: 32px;">
         <input type="hidden" name="u" value="7c006c449bd3dc3a523bce11d" />
         <input type="hidden" name="id" value="daf1702c98" />
         <div class="email-input-wrap">
           <input type="email" name="EMAIL" placeholder="your@email.com" required autocomplete="email" aria-label="Email address" class="email-input" />
           <div class="email-hp"><input type="text" name="b_7c006c449bd3dc3a523bce11d_daf1702c98" tabindex="-1" value="" /></div>
-          <button type="submit" class="email-btn">Get Early Access</button>
+          <button type="submit" class="email-btn">Get ecosystem updates</button>
         </div>
       </form>
       <div class="launch-social-links">

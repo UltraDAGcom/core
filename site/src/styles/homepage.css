@@ -1570,6 +1570,132 @@ section h2 em {
   gap: 24px;
 }
 
+/* Token live banner */
+.token-banner-live {
+  border-color: rgba(74,222,128,0.35);
+  background: linear-gradient(135deg, rgba(74,222,128,0.10), rgba(74,222,128,0.03));
+}
+
+.token-banner-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgb(74,222,128);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.token-banner-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgb(74,222,128);
+  box-shadow: 0 0 10px rgb(74,222,128);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Launch badge - live variant */
+.launch-badge-live {
+  background: rgba(74,222,128,0.12);
+  border: 1px solid rgba(74,222,128,0.3);
+  color: rgb(74,222,128);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.launch-badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(74,222,128);
+  box-shadow: 0 0 10px rgb(74,222,128);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Launch token card */
+.launch-token-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  margin: 32px auto;
+  max-width: 640px;
+  text-align: left;
+}
+
+.launch-token-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.launch-token-row + .launch-token-row {
+  border-top: 1px solid var(--border);
+}
+
+.launch-token-label {
+  color: var(--subtle);
+  font-size: 13px;
+}
+
+.launch-token-addr {
+  color: var(--accent);
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  text-decoration: none;
+  word-break: break-all;
+  flex: 1;
+  text-align: right;
+}
+
+.launch-token-addr:hover {
+  text-decoration: underline;
+}
+
+.launch-token-value {
+  color: var(--white);
+  font-size: 14px;
+}
+
+.launch-token-copy {
+  background: rgba(61,155,233,0.15);
+  border: 1px solid rgba(61,155,233,0.3);
+  color: var(--accent);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.launch-token-copy:hover {
+  background: rgba(61,155,233,0.25);
+}
+
+/* Launch actions */
+.launch-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 16px 0 32px;
+}
+
+.btn-lg {
+  padding: 14px 28px;
+  font-size: 15px;
+}
+
 /* Token launch banner */
 .token-banner {
   display: inline-flex;
