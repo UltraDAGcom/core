@@ -193,7 +193,13 @@ fn without_configured_count_phantom_breaks_finality() {
         new_finalized += newly.len();
     }
 
-    // This demonstrates the bug: new rounds with 4 validators can't reach
-    // the inflated threshold of 6
-    assert_eq!(new_finalized, 0, "finality should stall with phantom inflation (this is the bug)");
+    // UPDATE (adaptive quorum fix): the adaptive quorum threshold now mitigates
+    // this phantom inflation attack even WITHOUT set_configured_validators. The
+    // adaptive threshold uses the count of validators who have actually produced
+    // vertices (4), not the inflated registration count (8). So finality progresses
+    // normally despite the phantom registrations.
+    //
+    // Phantom validators cannot degrade finality because they cannot produce
+    // cryptographically-signed vertices.
+    assert!(new_finalized > 0, "adaptive quorum should allow finality despite phantom registrations");
 }

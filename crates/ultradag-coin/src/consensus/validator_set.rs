@@ -1,6 +1,12 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::address::Address;
+
+/// Number of rounds a validator can be silent before being excluded from
+/// the adaptive quorum calculation. At 2s per round this is ~17 minutes —
+/// long enough to tolerate normal restarts/redeploys, short enough to heal
+/// from real outages within a reasonable window.
+pub const LIVENESS_WINDOW_ROUNDS: u64 = 500;
 
 /// The set of known validators participating in DAG-BFT consensus.
 /// Tracks active validators and computes BFT thresholds.
@@ -17,6 +23,10 @@ pub struct ValidatorSet {
     /// When set, only addresses in this set can be registered as validators.
     /// Other nodes can still connect, sync, and submit transactions.
     allowed_validators: Option<HashSet<Address>>,
+    /// Tracks the most recent round each validator produced a vertex.
+    /// Used by `adaptive_quorum_threshold` to exclude offline validators
+    /// from the quorum, preserving liveness when some nodes go down.
+    last_produced_round: HashMap<Address, u64>,
 }
 
 impl ValidatorSet {
@@ -26,6 +36,7 @@ impl ValidatorSet {
             min_validators: min_validators.max(1),
             configured_validators: None,
             allowed_validators: None,
+            last_produced_round: HashMap::new(),
         }
     }
 
@@ -123,6 +134,63 @@ impl ValidatorSet {
         
         // ceil(2n/3) calculation with overflow protection
         (2 * effective_count).div_ceil(3)
+    }
+
+    /// Record that `addr` produced a vertex at `round`. Updates the
+    /// liveness map used by `adaptive_quorum_threshold`.
+    pub fn record_production(&mut self, addr: Address, round: u64) {
+        let entry = self.last_produced_round.entry(addr).or_insert(0);
+        if round > *entry {
+            *entry = round;
+        }
+    }
+
+    /// Count validators who produced a vertex within the last
+    /// `LIVENESS_WINDOW_ROUNDS` rounds ending at `current_round`.
+    ///
+    /// This is the **proven-active** count: these validators cryptographically
+    /// signed vertices recently, so they cannot be phantoms. Safe to use as
+    /// the quorum base.
+    pub fn active_validator_count(&self, current_round: u64) -> usize {
+        let cutoff = current_round.saturating_sub(LIVENESS_WINDOW_ROUNDS);
+        self.last_produced_round.values()
+            .filter(|&&r| r >= cutoff)
+            .count()
+    }
+
+    /// Adaptive BFT quorum threshold that shrinks when validators go offline,
+    /// preserving liveness. Uses the smaller of:
+    ///   - `configured_validators` (safety upper bound, prevents phantom inflation)
+    ///   - `active_validator_count(current_round)` (liveness lower bound)
+    /// floored at `min_validators`.
+    ///
+    /// Returns `usize::MAX` when finality cannot be decided (insufficient data
+    /// or effective count below `min_validators`).
+    ///
+    /// SECURITY: Shrinking the quorum is safe because only **proven** validators
+    /// (those who have signed vertices) count toward the active set. Phantom
+    /// registrations cannot reduce the quorum.
+    pub fn adaptive_quorum_threshold(&self, current_round: u64) -> usize {
+        let upper_bound = self.configured_validators.unwrap_or_else(|| self.validators.len());
+        let active = self.active_validator_count(current_round);
+
+        // Compute the static threshold as the safety baseline.
+        let static_threshold = self.quorum_threshold();
+
+        // If we have insufficient liveness data (fewer producing validators
+        // than min_validators), fall back to the static threshold. This preserves
+        // the conservative behavior when the liveness map is incomplete or empty.
+        if active < self.min_validators {
+            return static_threshold;
+        }
+
+        // Effective count is min(configured, active) — can shrink but never
+        // exceed the configured count.
+        let effective = active.min(upper_bound);
+
+        // Return whichever threshold is smaller (adaptive can only lower, never raise).
+        let adaptive_threshold = (2 * effective).div_ceil(3);
+        adaptive_threshold.min(static_threshold)
     }
 
     pub fn has_quorum(&self, count: usize) -> bool {

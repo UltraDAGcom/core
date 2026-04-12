@@ -56,8 +56,24 @@ impl FinalityTracker {
     }
 
     /// Calculate the minimum number of validators needed for BFT finality.
+    ///
+    /// Static quorum based on configured validator count. Use this when
+    /// `current_round` is unavailable (tests, standalone calls).
     pub fn finality_threshold(&self) -> usize {
         self.validators.quorum_threshold()
+    }
+
+    /// Adaptive finality threshold that uses the min of configured and
+    /// active-producer count — lets the network heal when validators go
+    /// offline (by proof of recent vertex production).
+    pub fn finality_threshold_at(&self, current_round: u64) -> usize {
+        self.validators.adaptive_quorum_threshold(current_round)
+    }
+
+    /// Record that `addr` produced a vertex at `round`. Feeds the adaptive
+    /// quorum's liveness map.
+    pub fn record_production(&mut self, addr: Address, round: u64) {
+        self.validators.record_production(addr, round);
     }
 
     /// Check if a vertex is finalized.
@@ -84,7 +100,7 @@ impl FinalityTracker {
             return false;
         }
 
-        let threshold = self.finality_threshold();
+        let threshold = self.finality_threshold_at(dag.current_round());
         if threshold == usize::MAX {
             return false;
         }
@@ -107,7 +123,22 @@ impl FinalityTracker {
     /// they passed signature + equivocation checks at insertion).
     /// Then forward-propagates through children for cascading finality.
     pub fn find_newly_finalized(&mut self, dag: &BlockDag) -> Vec<[u8; 32]> {
-        let threshold = self.finality_threshold();
+        // Populate the liveness map from the DAG tips so the adaptive quorum
+        // reflects which validators are actually producing. This is cheap —
+        // we only scan from the pruning floor to current round.
+        let scan_from_liveness = dag.pruning_floor();
+        let scan_to_liveness = dag.current_round();
+        for round in scan_from_liveness..=scan_to_liveness {
+            for hash in dag.hashes_in_round(round) {
+                if let Some(v) = dag.get(hash) {
+                    self.validators.record_production(v.validator, v.round);
+                }
+            }
+        }
+
+        // Use the adaptive threshold based on actually-producing validators.
+        // Falls back to the static threshold if no liveness data is available.
+        let threshold = self.finality_threshold_at(dag.current_round());
         if threshold == usize::MAX {
             return vec![];
         }
