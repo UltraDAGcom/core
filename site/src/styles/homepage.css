@@ -1570,6 +1570,67 @@ section h2 em {
   gap: 24px;
 }
 
+/* Architecture Explorer CTA */
+.architecture-cta {
+  padding: 80px 0;
+}
+
+.arch-card {
+  background: linear-gradient(135deg, rgba(61,155,233,0.06) 0%, rgba(61,155,233,0.02) 100%);
+  border: 1px solid rgba(61,155,233,0.2);
+  border-radius: 16px;
+  padding: 56px;
+  display: flex;
+  gap: 56px;
+  align-items: center;
+}
+
+.arch-content {
+  flex: 1;
+}
+
+.arch-content .section-lead {
+  margin-bottom: 32px;
+}
+
+.arch-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  flex-shrink: 0;
+}
+
+.arch-stat {
+  text-align: center;
+}
+
+.arch-num {
+  display: block;
+  font-family: 'Cormorant', serif;
+  font-size: 36px;
+  font-weight: 300;
+  color: var(--accent);
+  line-height: 1.2;
+}
+
+.arch-label {
+  display: block;
+  font-size: 13px;
+  color: var(--subtle);
+  margin-top: 4px;
+}
+
+@media (max-width: 900px) {
+  .arch-card {
+    flex-direction: column;
+    padding: 32px 24px;
+    gap: 32px;
+  }
+  .arch-stats {
+    width: 100%;
+  }
+}
+
 /* Bottom CTA */
 .bottom-cta {
   padding-bottom: 80px;
