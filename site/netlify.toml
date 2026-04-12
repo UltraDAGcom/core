@@ -9,3 +9,8 @@
   from = "/dashboard/*"
   to = "/dashboard/index.html"
   status = 200
+
+[[redirects]]
+  from = "/explore/*"
+  to = "/explore/index.html"
+  status = 200

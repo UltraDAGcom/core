@@ -1,0 +1,60 @@
+# .understandignore — patterns for files/dirs to exclude from analysis
+# Syntax: same as .gitignore (globs, # comments, ! negation, trailing / for dirs)
+#
+# Built-in defaults (always excluded unless negated):
+#   node_modules/, .git/, dist/, build/, obj/, *.lock, *.min.js, etc.
+#
+
+# --- Vendored dependencies (exclude from analysis) ---
+bridge/lib/
+_archives/
+
+# --- Fuzz corpus (binary inputs, not source) ---
+crates/ultradag-coin/fuzz/corpus/
+crates/ultradag-coin/fuzz/artifacts/
+
+# --- Generated / binary artifacts ---
+target/
+*.lock
+Cargo.lock
+package-lock.json
+*.DS_Store
+*.log
+*.jar
+
+# --- Non-source assets ---
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.woff
+*.woff2
+*.ttf
+*.eot
+*.mp3
+*.mp4
+*.pdf
+*.zip
+*.tar
+*.gz
+
+# --- Config/tooling noise ---
+.cargo/
+.dockerignore
+.gitignore
+.editorconfig
+clippy.toml
+LICENSE
+
+# --- Generated reports ---
+dashboard/playwright-report/
+dashboard/test-results.json
+dashboard/test-run-output.log
+dashboard/full-test-run.log
+formal/tlc-results-invariants.txt
+formal/tla2tools.jar
+
+# --- Site public build artifacts ---
+site/public/dashboard/
