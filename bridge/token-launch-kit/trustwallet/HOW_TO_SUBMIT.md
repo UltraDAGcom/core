@@ -30,10 +30,10 @@ mkdir -p blockchains/arbitrum/assets/0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b
 
 ```bash
 # From the UltraDAG repo:
-cp /path/to/ultradag/bridge/token-launch-kit/trustwallet/logo.png \
+cp /Users/johan/Projects/15_UltraDAG/bridge/token-launch-kit/trustwallet/logo.png \
    blockchains/arbitrum/assets/0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b/
 
-cp /path/to/ultradag/bridge/token-launch-kit/trustwallet/info.json \
+cp /Users/johan/Projects/15_UltraDAG/bridge/token-launch-kit/trustwallet/info.json \
    blockchains/arbitrum/assets/0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b/
 ```
 
