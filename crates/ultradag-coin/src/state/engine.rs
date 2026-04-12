@@ -1596,7 +1596,8 @@ impl StateEngine {
                 crate::tx::Transaction::SmartOp(op_tx) => {
                     if let Err(e) = self.apply_smart_op_tx(op_tx, vertex.round) {
                         tracing::warn!("Skipping invalid SmartOp tx in finalized vertex: {}", e);
-                        self.increment_nonce(&op_tx.from);
+                        // NOTE: nonce already incremented by apply_smart_op_tx before it failed.
+                        // Do NOT increment again — that would corrupt the nonce and break replay protection.
                         self.record_receipt(tx.hash(), vertex.round, vertex_hash, false, &e.to_string());
                         continue;
                     }
@@ -3903,6 +3904,24 @@ impl StateEngine {
     pub fn apply_smart_op_tx(&mut self, tx: &crate::tx::smart_account::SmartOpTx, current_round: u64) -> Result<(), CoinError> {
         use crate::tx::smart_account::SmartOpType;
 
+        // Ensure smart account exists (auto-registration for first-time users)
+        // This must happen before authorization checks that depend on account state.
+        self.ensure_smart_account_at_round(&tx.from, current_round);
+
+        // Pre-validate operation authorization BEFORE any state mutation (fee/nonce).
+        // This prevents partial state changes when the operation itself is unauthorized.
+        match &tx.operation {
+            // Governance operations require council membership
+            SmartOpType::Vote { .. } | SmartOpType::CreateProposal { .. } => {
+                if !self.is_council_member(&tx.from) {
+                    return Err(CoinError::ValidationError(
+                        "only council members can perform governance operations".into()
+                    ));
+                }
+            }
+            _ => {}
+        }
+
         // Debit fee if any
         if tx.fee > 0 {
             self.debit(&tx.from, tx.fee)?;
@@ -3963,15 +3982,11 @@ impl StateEngine {
                 stake.commission_last_changed = Some(current_round);
             }
             SmartOpType::Vote { proposal_id, approve } => {
-                if !self.is_council_member(&tx.from) {
-                    return Err(CoinError::ValidationError("only council members can vote".into()));
-                }
+                // Council membership already verified above before state mutation.
                 self.votes.insert((*proposal_id, tx.from), *approve);
             }
             SmartOpType::CreateProposal { title, description, proposal_type_tag, param, new_value } => {
-                if !self.is_council_member(&tx.from) {
-                    return Err(CoinError::ValidationError("only council members can create proposals".into()));
-                }
+                // Council membership already verified above before state mutation.
                 if title.len() > crate::constants::PROPOSAL_TITLE_MAX_BYTES || description.len() > crate::constants::PROPOSAL_DESCRIPTION_MAX_BYTES {
                     return Err(CoinError::ValidationError("proposal title or description too long".into()));
                 }
