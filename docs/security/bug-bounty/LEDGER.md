@@ -2,7 +2,7 @@
 
 **Program Start:** March 8, 2026  
 **Total Allocated:** 500,000 UDAG (mainnet)  
-**Total Awarded:** 15,000 UDAG  
+**Total Awarded:** 25,000 UDAG  
 **Total Paid (Testnet):** 0 UDAG (pending — faucet rate-limited)  
 **UDAG Mainnet Token:** [`0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b`](https://arbiscan.io/token/0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b) (Arbitrum One, deployed 2026-04-12)  
 **Bounty Payment Source:** Genesis allocation holder `0x9aEcb515361af7980eaa16fE40c064f69738EbF9` (to be reimbursed from treasury post-emission)  
@@ -48,6 +48,38 @@ Fix: 45bcf706, 2f5a3a23
 Status: Validated / Fixed / Testnet Paid / Pending Mainnet
 ```
 
+### BB-2026-0002
+```
+ID: BB-2026-0002
+Date: 2026-04-14
+Hunter: Sumitshah00 (tudg17lzd76ue95ht07hxzna8mzey4tkpk85jtjns2d)
+Severity: Critical
+Reward: 10,000 UDAG (mainnet promise)
+Testnet Paid: Pending (faucet rate-limited; will send via validator key)
+Source: Treasury (paid from treasury emission post-launch)
+Issue: Bridge release path enforced quorum as ceil(2n/3) of the active
+       validator set with no floor on set size or vote count. When the
+       active set degrades to n=1, the threshold collapses to 1 — a sole
+       active validator can self-sign a BridgeReleaseTx with a fabricated
+       deposit_nonce and drain the entire bridge_reserve in one tx. Report
+       included a complete self-contained Rust PoC demonstrating the drain.
+       Rated at the Critical floor because the bridge relayer is not yet
+       live, bridge_reserve is currently 0, and mainnet P2P is closed to
+       external staking — so no funds are at risk today. The bug would
+       detonate the instant the bridge ships if left unpatched.
+Fix: Added two new constants (MIN_BRIDGE_VALIDATORS=4, MIN_BRIDGE_QUORUM=3)
+     and wired both into apply_bridge_release_tx: releases are now rejected
+     when active_validator_set.len() < MIN_BRIDGE_VALIDATORS, and the
+     dynamic threshold is clamped to max(ceil(2n/3), MIN_BRIDGE_QUORUM).
+     Regression test: crates/ultradag-coin/tests/bridge_release_quorum.rs
+     (3 tests covering n=1 drain, below-floor set, and normal quorum path).
+     Deposit-nonce → source-chain proof binding (reporter's recommendation
+     #2) remains open as a separate design-level issue; tracked for a future
+     bridge-hardening pass.
+Advisory: GHSA-6gwf-frh8-ppw7
+Status: Validated / Fixed / Pending Testnet Payout / Pending Mainnet
+```
+
 ---
 
 ## Pending Validation
@@ -65,9 +97,9 @@ Status: Validated / Fixed / Testnet Paid / Pending Mainnet
 - Unique hunters: 0
 
 ### April 2026
-- Submissions: 1 valid (GHSA-q8wx-2crx-c7pp)
-- Validated: 1
-- Rewards: 15,000 UDAG
+- Submissions: 2 valid (GHSA-q8wx-2crx-c7pp, GHSA-6gwf-frh8-ppw7)
+- Validated: 2
+- Rewards: 25,000 UDAG
 - Unique hunters: 1 (Sumitshah00)
 
 ### Mainnet launched: 2026-04-10

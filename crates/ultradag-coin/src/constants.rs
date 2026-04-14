@@ -257,6 +257,19 @@ pub const MAX_ACTIVE_VALIDATORS: usize = 100;
 /// With fewer than 7 validators, the system cannot guarantee safety.
 pub const MIN_ACTIVE_VALIDATORS: usize = 7;
 
+/// Minimum active validator set size required to process a bridge release.
+/// Prevents a single or small group of validators from unilaterally draining
+/// the bridge reserve if the active set degrades (e.g., after slashing or
+/// inactivity). A 4-validator floor tolerates 1 Byzantine fault (3f+1, f=1)
+/// and matches BFT_MIN_ACTIVE_VALIDATORS.
+pub const MIN_BRIDGE_VALIDATORS: usize = 4;
+
+/// Absolute floor on the bridge release quorum, independent of active-set size.
+/// The dynamic threshold is `ceil(2n/3)`; this floor guarantees a minimum
+/// number of independent votes even if the dynamic threshold is lower.
+/// Together with MIN_BRIDGE_VALIDATORS this makes unilateral release impossible.
+pub const MIN_BRIDGE_QUORUM: usize = 3;
+
 /// Epoch length in rounds. Validator set recalculated at epoch boundaries.
 /// Matches halving interval for clean alignment.
 pub const EPOCH_LENGTH_ROUNDS: u64 = 210_000;

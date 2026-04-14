@@ -2262,6 +2262,19 @@ impl StateEngine {
             return Err(CoinError::ValidationError("only active validators can submit bridge releases".into()));
         }
 
+        // SECURITY (GHSA-6gwf-frh8-ppw7): Refuse to process bridge releases when the
+        // active validator set is too small. Without this, an attacker who becomes the
+        // sole active validator (e.g., after mass slashing / inactivity / fresh genesis)
+        // would hit ceil(2n/3) = 1 quorum and drain the bridge reserve in a single tx.
+        let active_n = self.active_validator_set.len();
+        if active_n < crate::constants::MIN_BRIDGE_VALIDATORS {
+            return Err(CoinError::ValidationError(format!(
+                "bridge releases require at least {} active validators, have {}",
+                crate::constants::MIN_BRIDGE_VALIDATORS,
+                active_n
+            )));
+        }
+
         // Validate amount range
         if tx.amount < crate::constants::MIN_BRIDGE_AMOUNT_SATS {
             return Err(CoinError::ValidationError("below minimum bridge amount".into()));
@@ -2337,9 +2350,12 @@ impl StateEngine {
         voters.insert(tx.from);
         let vote_count = voters.len();
 
-        // Calculate threshold: ceil(2n/3) where n = active validator count
+        // Calculate threshold: max(ceil(2n/3), MIN_BRIDGE_QUORUM).
+        // The MIN_BRIDGE_QUORUM floor prevents the dynamic threshold from collapsing
+        // to 1 or 2 when the active set is small, which — combined with the
+        // MIN_BRIDGE_VALIDATORS gate above — closes GHSA-6gwf-frh8-ppw7.
         let n = self.active_validator_set.len();
-        let threshold = (2 * n).div_ceil(3);
+        let threshold = (2 * n).div_ceil(3).max(crate::constants::MIN_BRIDGE_QUORUM);
 
         // Always increment the submitting validator's nonce (vote recorded)
         self.increment_nonce(&tx.from);
