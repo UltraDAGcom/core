@@ -1,0 +1,151 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="Legal & Imprint — UltraDAG"
+  description="Legal entity, registered agent, and contact information for the company operating UltraDAG."
+>
+  <section class="legal-page">
+    <div class="legal-container">
+      <h1>Legal & Imprint</h1>
+
+      <p class="legal-lede">
+        UltraDAG is an open-source protocol operated by <strong>JMS Media LLC</strong>,
+        a Wyoming (USA) limited liability company. This page provides the legal
+        entity and contact details required for transparency and regulatory
+        disclosure.
+      </p>
+
+      <h2>Operating Entity</h2>
+      <dl class="legal-dl">
+        <dt>Company name</dt>
+        <dd>JMS Media LLC</dd>
+
+        <dt>Jurisdiction</dt>
+        <dd>State of Wyoming, United States of America</dd>
+
+        <dt>Management type</dt>
+        <dd>Member-managed</dd>
+
+        <dt>Member</dt>
+        <dd>Johan Struijk</dd>
+
+        <dt>Principal address</dt>
+        <dd>
+          30 N Gould St, Ste N<br />
+          Sheridan, WY 82801<br />
+          USA
+        </dd>
+
+        <dt>Mailing address</dt>
+        <dd>
+          30 N Gould St, Ste N<br />
+          Sheridan, WY 82801<br />
+          USA
+        </dd>
+      </dl>
+
+      <h2>Registered Agent</h2>
+      <dl class="legal-dl">
+        <dt>Agent</dt>
+        <dd>Northwest Registered Agent Service Inc</dd>
+
+        <dt>Address</dt>
+        <dd>
+          30 N Gould St, Ste N<br />
+          Sheridan, WY 82801<br />
+          USA
+        </dd>
+
+        <dt>Email</dt>
+        <dd><a href="mailto:support@northwestregisteredagent.com">support@northwestregisteredagent.com</a></dd>
+
+        <dt>Phone</dt>
+        <dd>+1 509-768-2249</dd>
+      </dl>
+
+      <h2>Project Contact</h2>
+      <p>
+        For protocol, security, and project matters, please use the channels
+        below rather than contacting the registered agent (whose role is
+        limited to receiving service of process):
+      </p>
+      <ul>
+        <li>Security disclosures: see <a href="https://github.com/UltraDAGcom/core/security">github.com/UltraDAGcom/core/security</a></li>
+        <li>Bug bounty: <a href="/docs/security/bug-bounty">UltraDAG Bug Bounty Program</a></li>
+        <li>Public discussion: <a href="https://t.me/ultradagcom">Telegram</a> / <a href="https://x.com/ultradagcom">X</a></li>
+      </ul>
+
+      <h2>Disclaimer</h2>
+      <p>
+        UDAG tokens are issued and distributed in connection with the operation
+        of the UltraDAG protocol. Nothing on this site constitutes investment,
+        legal, or tax advice. Participation in the protocol or in token
+        distribution may carry risk of total loss. Residents of restricted
+        jurisdictions are responsible for determining the legality of their
+        participation under local law.
+      </p>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .legal-page {
+    padding: 6rem 1.5rem 4rem;
+    color: #e6e6e6;
+  }
+  .legal-container {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+  .legal-page h1 {
+    font-size: 2.25rem;
+    margin-bottom: 1rem;
+  }
+  .legal-page h2 {
+    font-size: 1.25rem;
+    margin-top: 2.5rem;
+    margin-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 0.4rem;
+  }
+  .legal-lede {
+    color: #b8b8b8;
+    line-height: 1.6;
+    margin-bottom: 1rem;
+  }
+  .legal-page p,
+  .legal-page li {
+    line-height: 1.6;
+    color: #cfcfcf;
+  }
+  .legal-page a {
+    color: #7fb6ff;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .legal-dl {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 0.5rem 1.25rem;
+    margin: 0;
+  }
+  .legal-dl dt {
+    color: #8a8a8a;
+    font-size: 0.9rem;
+  }
+  .legal-dl dd {
+    margin: 0;
+    color: #e6e6e6;
+  }
+  @media (max-width: 600px) {
+    .legal-dl {
+      grid-template-columns: 1fr;
+      gap: 0.1rem 0;
+    }
+    .legal-dl dd {
+      margin-bottom: 0.75rem;
+    }
+  }
+</style>
