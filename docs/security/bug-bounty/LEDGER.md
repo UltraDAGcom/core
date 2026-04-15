@@ -2,7 +2,7 @@
 
 **Program Start:** March 8, 2026  
 **Total Allocated:** 500,000 UDAG (mainnet)  
-**Total Awarded:** 25,000 UDAG  
+**Total Awarded:** 32,500 UDAG  
 **Total Paid (Testnet):** 0 UDAG (pending — faucet rate-limited)  
 **UDAG Mainnet Token:** [`0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b`](https://arbiscan.io/token/0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b) (Arbitrum One, deployed 2026-04-12)  
 **Bounty Payment Source:** Genesis allocation holder `0x9aEcb515361af7980eaa16fE40c064f69738EbF9` (to be reimbursed from treasury post-emission)  
@@ -80,6 +80,42 @@ Advisory: GHSA-6gwf-frh8-ppw7
 Status: Validated / Fixed / Pending Testnet Payout / Pending Mainnet
 ```
 
+### BB-2026-0003
+```
+ID: BB-2026-0003
+Date: 2026-04-15
+Hunter: Sumitshah00 (tudg17lzd76ue95ht07hxzna8mzey4tkpk85jtjns2d)
+Severity: High
+Reward: 7,500 UDAG (mainnet promise)
+Testnet Paid: Pending (faucet rate-limited; will send via validator key)
+Source: Treasury (paid from treasury emission post-launch)
+Issue: Adaptive-quorum patch (commit 181b2e8b) was incomplete. The earlier
+       fix only blocked registration-only phantom validators; producer-backed
+       phantoms (attacker keys that each sign one DagVertex) were still
+       counted by active_validator_count() in the LIVENESS_WINDOW, and the
+       upper_bound in unconfigured mode still derived from validators.len().
+       PoC: 4 honest validators + 3 phantom signers raised threshold to
+       ceil(2*7/3)=5, stalling finality forever in honest-only post-attack
+       rounds. Reporter included a fully self-contained Rust PoC that
+       compiles against the public tree and demonstrates the stall.
+       Production paths (--validators N, --validator-key <file>) were never
+       exposed because they pin configured topology — but the unconfigured
+       mode would have detonated for any operator that forgot the flag.
+       Premium awarded for bypass-discovery quality on a previously-claimed-fixed
+       advisory.
+Fix: ValidatorSet now fails closed in permissionless mode. quorum_threshold
+     and adaptive_quorum_threshold both return usize::MAX when neither
+     configured_validators nor allowed_validators is set. adaptive_quorum_threshold's
+     upper_bound now derives ONLY from declared topology, never from
+     validators.len(), so producer-backed phantoms cannot raise the ceiling.
+     Regression test: producer_backed_phantom_cannot_stall_finality in
+     crates/ultradag-coin/tests/phantom_validator.rs (replays the reporter's
+     exact 4-honest + 3-phantom scenario and asserts last_finalized_round
+     advances past the attack round).
+Advisory: GHSA-rprp-wjrh-hx7g
+Status: Validated / Fixed / Pending Testnet Payout / Pending Mainnet
+```
+
 ---
 
 ## Pending Validation
@@ -97,9 +133,9 @@ Status: Validated / Fixed / Pending Testnet Payout / Pending Mainnet
 - Unique hunters: 0
 
 ### April 2026
-- Submissions: 2 valid (GHSA-q8wx-2crx-c7pp, GHSA-6gwf-frh8-ppw7)
-- Validated: 2
-- Rewards: 25,000 UDAG
+- Submissions: 3 valid (GHSA-q8wx-2crx-c7pp, GHSA-6gwf-frh8-ppw7, GHSA-rprp-wjrh-hx7g)
+- Validated: 3
+- Rewards: 32,500 UDAG
 - Unique hunters: 1 (Sumitshah00)
 
 ### Mainnet launched: 2026-04-10
@@ -208,5 +244,5 @@ All changes to this ledger are tracked in git history. Each reward entry include
 ---
 
 **Ledger Maintainer:** UltraDAG Core Team  
-**Last Updated:** April 12, 2026  
+**Last Updated:** April 15, 2026  
 **Next Audit:** May 11, 2026
