@@ -2,7 +2,7 @@
 
 **Program Start:** March 8, 2026  
 **Total Allocated:** 500,000 UDAG (mainnet)  
-**Total Awarded:** 32,500 UDAG  
+**Total Awarded:** 42,500 UDAG  
 **Total Paid (Testnet):** 0 UDAG (pending — faucet rate-limited)  
 **UDAG Mainnet Token:** [`0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b`](https://arbiscan.io/token/0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b) (Arbitrum One, deployed 2026-04-12)  
 **Bounty Payment Source:** Genesis allocation holder `0x9aEcb515361af7980eaa16fE40c064f69738EbF9` (to be reimbursed from treasury post-emission)  
@@ -116,6 +116,42 @@ Advisory: GHSA-rprp-wjrh-hx7g
 Status: Validated / Fixed / Pending Testnet Payout / Pending Mainnet
 ```
 
+### BB-2026-0004
+```
+ID: BB-2026-0004
+Date: 2026-04-15
+Hunter: Sumitshah00 (tudg17lzd76ue95ht07hxzna8mzey4tkpk85jtjns2d)
+Severity: Critical
+Reward: 10,000 UDAG (mainnet promise)
+Testnet Paid: Pending (faucet rate-limited; will send via validator key)
+Source: Treasury (paid from treasury emission post-launch)
+Issue: RegisterNameTx::verify_signature short-circuited with `return true`
+       whenever fee_payer was present, skipping the owner's ed25519 signature
+       check. Because `from` is a free-form Address field bound only by that
+       signature, any attacker with a funded address could forge `from =
+       victim_address`, leave the owner signature as zeros, attach their own
+       valid fee_payer envelope, and register an arbitrary name to the
+       victim. Since the registry enforces one-name-per-address, this
+       permanently squats the victim's identity slot. Also enables relay
+       treasury drain if a public sponsor ever runs. Reporter supplied a
+       self-contained PoC with both hijack and premium-name attempts.
+       Critical tier — authentication bypass on user-visible identity.
+Fix: verify_signature now verifies the owner signature unconditionally.
+     Owner pub_key must derive to `from`, ed25519 sig over signable_bytes
+     must verify, regardless of fee_payer presence. Fee_payer signature
+     remains verified in apply_register_name_tx where it authorizes the
+     fee debit (not the name assignment). Matches standard meta-tx pattern:
+     user signs intent, sponsor signs envelope.
+     Regression tests: crates/ultradag-coin/tests/name_registry_sponsored_auth.rs
+     - sponsored_registration_rejects_forged_from_without_owner_signature
+       (exact reporter PoC)
+     - sponsored_registration_rejects_mismatched_pubkey (pub_key/from split)
+     - sponsored_registration_accepts_owner_signed_tx (legit meta-tx path)
+     - non_sponsored_registration_still_requires_owner_signature (sanity)
+Advisory: GHSA-hf8w-rcvm-rgqr
+Status: Validated / Fixed / Pending Testnet Payout / Pending Mainnet
+```
+
 ---
 
 ## Pending Validation
@@ -133,9 +169,9 @@ Status: Validated / Fixed / Pending Testnet Payout / Pending Mainnet
 - Unique hunters: 0
 
 ### April 2026
-- Submissions: 3 valid (GHSA-q8wx-2crx-c7pp, GHSA-6gwf-frh8-ppw7, GHSA-rprp-wjrh-hx7g)
-- Validated: 3
-- Rewards: 32,500 UDAG
+- Submissions: 4 valid (GHSA-q8wx-2crx-c7pp, GHSA-6gwf-frh8-ppw7, GHSA-rprp-wjrh-hx7g, GHSA-hf8w-rcvm-rgqr)
+- Validated: 4
+- Rewards: 42,500 UDAG
 - Unique hunters: 1 (Sumitshah00)
 
 ### Mainnet launched: 2026-04-10
