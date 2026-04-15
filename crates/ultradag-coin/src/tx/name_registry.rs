@@ -228,12 +228,15 @@ impl RegisterNameTx {
     pub fn total_cost(&self) -> u64 { self.fee }
 
     pub fn verify_signature(&self) -> bool {
-        // Sponsored registration: fee_payer's signature is the authorization.
-        // The sender (name owner) doesn't need to sign — they authorized via the relay.
-        // Fee payer signature is verified in StateEngine::apply_register_name_tx.
-        if self.fee_payer.is_some() {
-            return true;
-        }
+        // The name owner (`from`) must always sign — even on sponsored
+        // registrations. Without this, anyone with a funded fee_payer could
+        // register arbitrary names to arbitrary victim addresses, since
+        // `from` is a free-form field bound only by this signature
+        // (GHSA-hf8w-rcvm-rgqr).
+        //
+        // The fee_payer's signature (when present) is additionally verified
+        // in StateEngine::apply_register_name_tx — it authorizes the fee
+        // debit, not the name assignment.
         let expected_addr = Address::from_pubkey(&self.pub_key);
         if expected_addr != self.from { return false; }
         let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(&self.pub_key) else { return false; };
