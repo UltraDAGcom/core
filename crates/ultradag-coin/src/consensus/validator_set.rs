@@ -101,38 +101,47 @@ impl ValidatorSet {
         self.validators.is_empty()
     }
 
+    /// Returns true when the validator topology has been declared by the
+    /// operator — either a fixed configured count or an explicit allowlist.
+    ///
+    /// SECURITY: Fully permissionless mode (neither set) is unsafe. In that
+    /// mode an attacker can mint fresh keys, sign a single vertex per key,
+    /// and inflate both `validators.len()` and the "active producer" count,
+    /// manipulating the quorum threshold (GHSA-rprp-wjrh-hx7g). Without a
+    /// declared topology there is no sybil-resistant way to count validators,
+    /// so the thresholds fail closed (return `usize::MAX`).
+    pub fn is_topology_configured(&self) -> bool {
+        self.configured_validators.is_some() || self.allowed_validators.is_some()
+    }
+
     /// BFT quorum threshold: ceil(2n/3).
-    /// 
-    /// SECURITY: When `configured_validators` is set, uses that as `n` to prevent
-    /// phantom registrations from inflating the threshold (VULN-02 fix).
-    /// 
-    /// Returns usize::MAX if fewer than min_validators are known.
-    /// When `configured_validators` is set, uses that count for the min check
-    /// (the operator has declared the expected validator count).
-    /// 
-    /// # Panics
-    /// This function should not panic under normal operation. If arithmetic overflow
-    /// occurs, it indicates a critical bug and the node should halt.
+    ///
+    /// SECURITY: Fails closed (`usize::MAX`) when the validator topology is
+    /// not declared via `configured_validators` or `allowed_validators`.
+    /// Dynamic mode was exploitable: producer-backed phantom validators
+    /// inflated the threshold and stalled finality (GHSA-rprp-wjrh-hx7g).
+    /// Operators MUST set `--validators N` or `--validator-key <file>`.
+    ///
+    /// When `configured_validators` is set, uses that as `n`. Otherwise,
+    /// when only an allowlist is set, uses the allowlist size as `n`
+    /// (allowlisted addresses cannot be forged).
+    ///
+    /// Returns `usize::MAX` if fewer than `min_validators` are known.
     pub fn quorum_threshold(&self) -> usize {
-        let effective_count = match self.configured_validators {
-            Some(configured) => {
-                // Use configured count to prevent attacker from inflating threshold
-                // by registering fake validators (VULN-02 fix)
-                configured
-            }
-            None => {
-                // Dynamic count mode: vulnerable to phantom validator inflation
-                // Operators should always use configured_validators in production
-                self.validators.len()
+        let effective_count = match (self.configured_validators, &self.allowed_validators) {
+            (Some(configured), _) => configured,
+            (None, Some(allowed)) => allowed.len(),
+            (None, None) => {
+                // Fail closed: permissionless mode cannot distinguish real
+                // validators from phantoms. See `is_topology_configured`.
+                return usize::MAX;
             }
         };
-        
-        // Enforce minimum validator requirement
+
         if effective_count < self.min_validators {
             return usize::MAX;
         }
-        
-        // ceil(2n/3) calculation with overflow protection
+
         (2 * effective_count).div_ceil(3)
     }
 
@@ -171,7 +180,22 @@ impl ValidatorSet {
     /// (those who have signed vertices) count toward the active set. Phantom
     /// registrations cannot reduce the quorum.
     pub fn adaptive_quorum_threshold(&self, current_round: u64) -> usize {
-        let upper_bound = self.configured_validators.unwrap_or_else(|| self.validators.len());
+        // SECURITY: Fail closed in permissionless mode. Without a declared
+        // topology, an attacker can mint keys and produce signed vertices
+        // to inflate `active_validator_count`, manipulating the threshold
+        // (GHSA-rprp-wjrh-hx7g).
+        if !self.is_topology_configured() {
+            return usize::MAX;
+        }
+
+        // Upper bound derives ONLY from operator-declared topology, never
+        // from the on-the-fly `validators.len()`. Producer-backed phantoms
+        // cannot raise this ceiling.
+        let upper_bound = match (self.configured_validators, &self.allowed_validators) {
+            (Some(configured), _) => configured,
+            (None, Some(allowed)) => allowed.len(),
+            (None, None) => unreachable!("guarded by is_topology_configured above"),
+        };
         let active = self.active_validator_count(current_round);
 
         // Compute the static threshold as the safety baseline.
@@ -237,6 +261,10 @@ mod tests {
         for _ in 0..4 {
             vs.register(SecretKey::generate().address());
         }
+        // Permissionless mode fails closed.
+        assert_eq!(vs.quorum_threshold(), usize::MAX);
+
+        vs.set_configured_validators(4);
         // ceil(8/3) = 3
         assert_eq!(vs.quorum_threshold(), 3);
         assert!(vs.has_quorum(3));
@@ -246,11 +274,41 @@ mod tests {
     #[test]
     fn threshold_with_3_validators() {
         let mut vs = ValidatorSet::new(3);
+        vs.set_configured_validators(3);
         for _ in 0..3 {
             vs.register(SecretKey::generate().address());
         }
         // ceil(6/3) = 2
         assert_eq!(vs.quorum_threshold(), 2);
+    }
+
+    #[test]
+    fn permissionless_mode_fails_closed() {
+        // SECURITY: without configured count or allowlist, thresholds must
+        // return usize::MAX so finality cannot progress. Registering and/or
+        // "producing" phantom validators must not unstall the network.
+        let mut vs = ValidatorSet::new(3);
+        for _ in 0..10 {
+            let addr = SecretKey::generate().address();
+            vs.register(addr);
+            vs.record_production(addr, 42);
+        }
+        assert_eq!(vs.quorum_threshold(), usize::MAX);
+        assert_eq!(vs.adaptive_quorum_threshold(42), usize::MAX);
+        assert!(!vs.has_quorum(100));
+    }
+
+    #[test]
+    fn allowlist_alone_enables_threshold() {
+        let mut vs = ValidatorSet::new(3);
+        let sks: Vec<SecretKey> = (0..4).map(|_| SecretKey::generate()).collect();
+        let allowed: HashSet<Address> = sks.iter().map(|s| s.address()).collect();
+        vs.set_allowed_validators(allowed);
+        for sk in &sks {
+            vs.register(sk.address());
+        }
+        // Allowlist size 4 -> ceil(8/3) = 3
+        assert_eq!(vs.quorum_threshold(), 3);
     }
 
     #[test]

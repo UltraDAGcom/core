@@ -142,14 +142,19 @@ fn phantom_validator_does_not_break_finality_with_configured_count() {
 }
 
 #[test]
-fn without_configured_count_phantom_breaks_finality() {
-    // This test shows the bug: without configured_validators,
-    // phantom registrations inflate the threshold beyond reach.
+fn permissionless_mode_refuses_finality() {
+    // SECURITY (GHSA-rprp-wjrh-hx7g): in fully permissionless mode (no
+    // configured_validators, no allowlist), finality must fail closed.
+    // An attacker minting fresh keys and producing signed vertices cannot
+    // be distinguished from honest validators, so any threshold derived
+    // from "validators we've seen" is sybil-gameable. The tracker now
+    // returns threshold=usize::MAX in this mode — operators must set
+    // --validators or --validator-key.
     let sks: Vec<SecretKey> = (0..4).map(|_| SecretKey::generate()).collect();
 
     let mut dag = BlockDag::new();
     let mut finality = FinalityTracker::new(3);
-    // NO set_configured_validators — dynamic mode
+    // NO set_configured_validators, NO set_allowed_validators — permissionless.
 
     for sk in &sks {
         finality.register_validator(sk.address());
@@ -157,49 +162,75 @@ fn without_configured_count_phantom_breaks_finality() {
 
     build_dag(&sks, 20, &mut dag);
 
+    let mut total = 0;
     loop {
         let newly = finality.find_newly_finalized(&dag);
         if newly.is_empty() { break; }
-    }
-    let finalized_before = finality.finalized_count();
-    assert!(finalized_before > 0);
-
-    // Register 4 phantom validators (simulating stale persistence load)
-    for _ in 0..4 {
-        finality.register_validator(SecretKey::generate().address());
+        total += newly.len();
     }
 
-    // Now validator_count=8, threshold=ceil(16/3)=6
-    assert_eq!(finality.validator_count(), 8);
-    assert_eq!(finality.finality_threshold(), 6);
+    assert_eq!(finality.finality_threshold(), usize::MAX);
+    assert_eq!(total, 0, "permissionless mode must not finalize anything");
+}
 
-    // Continue with only 4 real validators
-    let mut nonce = 2000u64;
-    for round in 20..30 {
+#[test]
+fn producer_backed_phantom_cannot_stall_finality() {
+    // Regression test for GHSA-rprp-wjrh-hx7g (Sumitshah00, 2026-04-13).
+    //
+    // BEFORE FIX: with 4 honest validators + unconfigured mode, an attacker
+    // that produces 3 signed vertices from 3 fresh keys inflated the
+    // adaptive threshold to ceil(2*7/3)=5. Only 4 honest producers remained,
+    // so finality stalled forever at round < attack_round.
+    //
+    // AFTER FIX: operators must declare topology. With set_configured_validators(4),
+    // the upper bound is pinned at 4, phantoms cannot raise the threshold, and
+    // honest-only rounds finalize cleanly past the attack round.
+    let honest: Vec<SecretKey> = (0..4).map(|_| SecretKey::generate()).collect();
+    let mut dag = BlockDag::new();
+    let mut finality = FinalityTracker::new(3);
+    finality.set_configured_validators(4);
+    for sk in &honest {
+        finality.register_validator(sk.address());
+    }
+
+    build_dag(&honest, 20, &mut dag);
+    loop {
+        if finality.find_newly_finalized(&dag).is_empty() { break; }
+    }
+    let finalized_before = finality.last_finalized_round();
+    assert!(finalized_before > 0, "baseline rounds should finalize");
+
+    // Attack: 3 phantom producers each sign exactly one vertex in round 20.
+    let phantoms: Vec<SecretKey> = (0..3).map(|_| SecretKey::generate()).collect();
+    let attack_round = 20u64;
+    let attack_parents = dag.tips();
+    let mut nonce = 10_000u64;
+    for sk in &phantoms {
+        nonce += 1;
+        dag.insert(make_vertex(nonce, attack_round, attack_parents.clone(), sk));
+        finality.register_validator(sk.address());
+    }
+
+    // Threshold stays pinned to configured count (4) -> ceil(8/3) = 3.
+    assert_eq!(finality.finality_threshold(), 3,
+        "configured topology must pin threshold despite phantom producers");
+
+    // Honest-only rounds after the attack.
+    for round in (attack_round + 1)..(attack_round + 11) {
         let tips = dag.tips();
-        for sk in &sks {
+        for sk in &honest {
             nonce += 1;
-            let v = make_vertex(nonce, round, tips.clone(), sk);
-            dag.insert(v);
+            dag.insert(make_vertex(nonce, round, tips.clone(), sk));
         }
     }
-
-    // Finality CANNOT progress — only 4 validators can produce descendants,
-    // but threshold requires 6
-    let mut new_finalized = 0;
     loop {
-        let newly = finality.find_newly_finalized(&dag);
-        if newly.is_empty() { break; }
-        new_finalized += newly.len();
+        if finality.find_newly_finalized(&dag).is_empty() { break; }
     }
 
-    // UPDATE (adaptive quorum fix): the adaptive quorum threshold now mitigates
-    // this phantom inflation attack even WITHOUT set_configured_validators. The
-    // adaptive threshold uses the count of validators who have actually produced
-    // vertices (4), not the inflated registration count (8). So finality progresses
-    // normally despite the phantom registrations.
-    //
-    // Phantom validators cannot degrade finality because they cannot produce
-    // cryptographically-signed vertices.
-    assert!(new_finalized > 0, "adaptive quorum should allow finality despite phantom registrations");
+    assert!(
+        finality.last_finalized_round() > attack_round,
+        "finality must progress past attack_round={} (got {})",
+        attack_round,
+        finality.last_finalized_round()
+    );
 }

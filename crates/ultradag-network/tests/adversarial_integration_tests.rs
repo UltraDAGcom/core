@@ -31,11 +31,13 @@ impl AdversarialNode {
         let address = sk.address();
         let mut state = StateEngine::new();
         state.set_configured_validator_count(total_validators);
+        let mut finality = FinalityTracker::new(3);
+        finality.set_configured_validators(total_validators as usize);
         Self {
             id,
             state,
             dag: BlockDag::new(),
-            finality: FinalityTracker::new(3),
+            finality,
             secret_key: sk,
             address,
         }
@@ -193,6 +195,7 @@ async fn test_crash_restart_state_convergence() {
     nodes[3].state = fresh_state;
     nodes[3].dag = BlockDag::new();
     nodes[3].finality = FinalityTracker::new(3);
+    nodes[3].finality.set_configured_validators(4);
 
     // Replay all vertices from node 0's DAG into node 3
     let all_addresses: Vec<Address> = nodes.iter().map(|n| n.address).collect();

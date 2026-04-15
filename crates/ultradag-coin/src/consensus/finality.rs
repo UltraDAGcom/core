@@ -380,14 +380,16 @@ mod tests {
         let mut ft = FinalityTracker::new(3);
         assert_eq!(ft.finality_threshold(), usize::MAX);
 
+        // Permissionless mode stays fail-closed even after registrations
+        // (GHSA-rprp-wjrh-hx7g).
         ft.register_validator(SecretKey::generate().address());
         ft.register_validator(SecretKey::generate().address());
         assert_eq!(ft.finality_threshold(), usize::MAX);
 
-        ft.register_validator(SecretKey::generate().address());
+        ft.set_configured_validators(3);
         assert_eq!(ft.finality_threshold(), 2);
 
-        ft.register_validator(SecretKey::generate().address());
+        ft.set_configured_validators(4);
         assert_eq!(ft.finality_threshold(), 3);
     }
 
@@ -401,6 +403,7 @@ mod tests {
     fn finality_with_three_validators() {
         let mut dag = BlockDag::new();
         let mut ft = FinalityTracker::new(2);
+        ft.set_configured_validators(3);
 
         let sk1 = SecretKey::generate();
         let sk2 = SecretKey::generate();
@@ -432,6 +435,7 @@ mod tests {
     fn transitive_descendant_counts() {
         let mut dag = BlockDag::new();
         let mut ft = FinalityTracker::new(2);
+        ft.set_configured_validators(3);
 
         let sk1 = SecretKey::generate();
         let sk2 = SecretKey::generate();
@@ -460,6 +464,7 @@ mod tests {
     fn find_newly_finalized_batch() {
         let mut dag = BlockDag::new();
         let mut ft = FinalityTracker::new(2);
+        ft.set_configured_validators(3);
 
         let sk1 = SecretKey::generate();
         let sk2 = SecretKey::generate();
