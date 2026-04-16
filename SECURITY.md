@@ -1,7 +1,8 @@
 # Security Policy
 
-UltraDAG is operated by **JMS Media LLC**, a Wyoming (USA) limited liability
-company. This security policy is issued by JMS Media LLC on behalf of the
+UltraDAG is operated by **JMS Media Group LLC**, a Wyoming (USA) limited
+liability company (Wyoming Filing ID 2026-001951812, formed 2026-04-15).
+This security policy is issued by JMS Media Group LLC on behalf of the
 UltraDAG project.
 
 UltraDAG runs a **paid bug bounty program** for vulnerabilities in the

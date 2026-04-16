@@ -1,6 +1,6 @@
 # UltraDAG Bug Bounty Program
 
-**Operator:** JMS Media LLC (Wyoming, USA) — the legal entity behind the UltraDAG project and the payer of record for all bounty rewards.  
+**Operator:** JMS Media Group LLC (Wyoming, USA; Filing ID 2026-001951812) — the legal entity behind the UltraDAG project and the payer of record for all bounty rewards.  
 **Status:** Active — Testnet (mainnet is closed while the bounty program hardens the code)  
 **Launch Date:** March 8, 2026  
 **Mainnet Genesis:** April 10, 2026 (validators running, closed to external peers)  

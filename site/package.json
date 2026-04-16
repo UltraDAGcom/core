@@ -2,7 +2,7 @@
   "name": "ultradag-site",
   "type": "module",
   "version": "1.0.0",
-  "author": "JMS Media LLC (Wyoming, USA)",
+  "author": "JMS Media Group LLC (Wyoming, USA)",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
