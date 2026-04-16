@@ -22,7 +22,7 @@
 | 🟡 **Medium** | 1,000 – 5,000 UDAG |
 | 🟢 **Low** | 100 – 1,000 UDAG |
 
-**All testing happens on [testnet](https://ultradag-node-1.fly.dev/status)** — mainnet is currently closed to external participation while the bounty program hardens the code. See [`PROGRAM.md`](./docs/security/bug-bounty/PROGRAM.md#mainnet-access-policy-current-phase) for the mainnet access policy.
+**Mainnet is open** — anyone can run a validator at `ultradag-mainnet-[1-5].fly.dev:9333`. Please prefer [testnet](https://ultradag-node-1.fly.dev/status) for destructive exploration and reproduction PoCs. See [`PROGRAM.md`](./docs/security/bug-bounty/PROGRAM.md#mainnet-access-policy) for scope and rules.
 
 Reports are private via GitHub Security Advisories. Testnet resets **do not** affect any reward commitment — the append-only [`LEDGER.md`](./docs/security/bug-bounty/LEDGER.md) is the binding record, not on-chain balances. See [`LEDGER.md → Testnet Reset Safety`](./docs/security/bug-bounty/LEDGER.md#testnet-reset-safety) for why.
 

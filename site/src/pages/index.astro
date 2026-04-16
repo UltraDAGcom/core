@@ -585,39 +585,39 @@ const GECKOTERMINAL_URL =
 <span class="kw">curl</span> <span class="str">http://localhost:10333/status</span></pre>
       </div>
 
-      <!-- Mainnet Access Policy (currently closed during hardening phase) -->
+      <!-- Mainnet Access — fully open as of 2026-04-16 -->
       <div class="code-section reveal">
         <div class="code-header">
           <div class="code-dots"><div class="code-dot"></div><div class="code-dot"></div><div class="code-dot"></div></div>
-          <span class="code-label">Mainnet — Closed During Hardening Phase</span>
+          <span class="code-label">Mainnet — Open to the Public</span>
         </div>
-        <pre><span class="cm"># Mainnet is RUNNING but closed to external participation.</span>
-<span class="cm"># The 5 founder-operated validators are producing rounds, finalizing,</span>
-<span class="cm"># and crediting the 7-bucket emission, but external hosts cannot join</span>
-<span class="cm"># the P2P mesh (the Noise handshake port is not exposed to the public</span>
-<span class="cm"># internet on any mainnet node).</span>
+        <pre><span class="cm"># Mainnet opened to public participation on 2026-04-16.</span>
+<span class="cm"># Anyone can run a validator, stake UDAG, and join the active set.</span>
+<span class="cm"># The 5 founder-operated Fly nodes are peers, not gatekeepers —</span>
+<span class="cm"># ranking is purely stake-weighted.</span>
 
-<span class="cm"># Why?</span>
-<span class="cm">#   We want the bug bounty program to harden every consensus, state,</span>
-<span class="cm">#   network, and cryptographic path against real adversaries BEFORE</span>
-<span class="cm">#   letting third-party validators stake real value. Mainnet is our</span>
-<span class="cm">#   production-shaped but non-user-facing environment until then.</span>
+<span class="cm"># Run a mainnet node from source:</span>
+<span class="kw">git clone</span> https://github.com/UltraDAGcom/core &amp;&amp; <span class="kw">cd</span> core
+<span class="kw">cargo build --release --features mainnet</span>
+./target/release/ultradag-node \
+  --data-dir ./mainnet-data --port 9333 --rpc-port 10333 \
+  --seed ultradag-mainnet-1.fly.dev:9333 \
+  --validators 5
 
-<span class="cm"># What you can still do with mainnet:</span>
-<span class="cm">#   1. Query read-only RPC for transparency:</span>
+<span class="cm"># Query mainnet state:</span>
 <span class="kw">curl</span> <span class="str">https://ultradag-mainnet-1.fly.dev/status</span>
-<span class="cm">#   2. Inspect any address balance or name:</span>
 <span class="kw">curl</span> <span class="str">https://ultradag-mainnet-1.fly.dev/balance/udag1...</span>
-<span class="cm">#   3. Watch the chain progress via /round/:N and /vertex/:hash</span>
 
-<span class="cm"># Where to test, find bugs, and earn UDAG:</span>
-<span class="cm">#   → Testnet (instructions above) — 5 public validators, open mesh,</span>
-<span class="cm">#     full faucet, every RPC path enabled, full bug bounty scope.</span>
-<span class="cm">#     See docs/security/bug-bounty/PROGRAM.md for rewards + rules.</span>
+<span class="cm"># Stake to enter the validator active set:</span>
+<span class="cm">#   1. Fund your address with UDAG (bridge from Arbitrum, or earn via</span>
+<span class="cm">#      faucet/bounty on testnet first).</span>
+<span class="cm">#   2. Submit a Stake tx via /tx/submit — see docs/stake.md.</span>
+<span class="cm">#   3. If your effective stake lands in the top-N, you produce rounds</span>
+<span class="cm">#      and earn the 44% validator emission share.</span>
 
-<span class="cm"># When will mainnet open?</span>
-<span class="cm">#   Gated on bounty program results. No fixed date — we'll announce</span>
-<span class="cm">#   when we're confident enough adversarial testing has happened.</span></pre>
+<span class="cm"># Bug bounty: still runs on mainnet AND testnet.</span>
+<span class="cm">#   Use testnet for destructive PoCs. Report via GitHub Security.</span>
+<span class="cm">#   See docs/security/bug-bounty/PROGRAM.md for rewards + rules.</span></pre>
       </div>
 
       <!-- Additional Info -->
@@ -626,18 +626,18 @@ const GECKOTERMINAL_URL =
         <div class="node-info-grid">
           <div>
             <p>
-              ✓ <strong>Read-only RPC</strong> public on port 10333<br />
-              ✓ <strong>Full transparency</strong> — all state queryable<br />
-              ✗ <strong>P2P mesh</strong> closed to external nodes<br />
-              ✗ <strong>Public staking</strong> disabled until bounty review
+              ✓ <strong>P2P port 9333</strong> public on all mainnet nodes<br />
+              ✓ <strong>RPC port 10333</strong> public — reads and writes<br />
+              ✓ <strong>Permissionless validators</strong> — stake to join<br />
+              ✓ <strong>Stake-weighted active set</strong> — no allowlist
             </p>
           </div>
           <div>
             <p>
-              ✓ <strong>Bug bounty</strong> runs on testnet (open mesh)<br />
-              ✓ <strong>Pre-launch tokens</strong> on Arbitrum (ERC-20)<br />
-              ✓ <strong>Restartable</strong> — Arbitrum holders insulated<br />
-              ✓ <strong>Open date</strong> gated on bounty results
+              ✓ <strong>Bug bounty</strong> open on mainnet &amp; testnet<br />
+              ✓ <strong>Token on Arbitrum</strong> (ERC-20) + native UDAG<br />
+              ✓ <strong>Open validator set</strong> — top-N by effective stake<br />
+              ✓ <strong>Opened 2026-04-16</strong> to public participation
             </p>
           </div>
         </div>

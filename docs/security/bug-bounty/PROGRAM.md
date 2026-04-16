@@ -1,27 +1,26 @@
 # UltraDAG Bug Bounty Program
 
 **Operator:** JMS Media Group LLC (Wyoming, USA; Filing ID 2026-001951812) — the legal entity behind the UltraDAG project and the payer of record for all bounty rewards.  
-**Status:** Active — Testnet (mainnet is closed while the bounty program hardens the code)  
+**Status:** Active — Mainnet & Testnet  
 **Launch Date:** March 8, 2026  
-**Mainnet Genesis:** April 10, 2026 (validators running, closed to external peers)  
-**Mainnet Public Open:** TBD (gated on bounty program results)  
+**Mainnet Genesis:** April 10, 2026  
+**Mainnet Public Open:** April 16, 2026 (anyone can run a validator)  
 **Total Pool:** 500,000 UDAG
 
 ## Overview
 
-UltraDAG is offering rewards for security researchers who discover and responsibly disclose vulnerabilities in the UltraDAG codebase. **All testing happens against the public testnet.** Mainnet is currently running but is **closed to external participation** — only the founder-operated Fly.io validators can join the P2P mesh. External users cannot connect as validators, peers, or relays. The public RPC on mainnet is still readable for transparency (you can query `/status`, `/balance`, etc.), but no new state can be introduced by outsiders until the bounty program has had time to harden the code.
+UltraDAG is offering rewards for security researchers who discover and responsibly disclose vulnerabilities in the UltraDAG codebase. **Mainnet is now open** — anyone can run a validator, stake UDAG, and participate in consensus. Testing is welcome on both mainnet and testnet; please prefer testnet for destructive exploration. Mainnet nodes are reachable at `ultradag-mainnet-[1-5].fly.dev:9333` (P2P) and `https://ultradag-mainnet-[1-5].fly.dev` (RPC).
 
-Valid reports are rewarded in testnet UDAG, recorded in the append-only [`LEDGER.md`](./LEDGER.md), and convertible 1:1 to mainnet UDAG per the vesting schedule in that file — regardless of how many times testnet is reset in the interim. See [`LEDGER.md` → Testnet Reset Safety](./LEDGER.md#testnet-reset-safety) for why a testnet wipe does not affect your claim.
+Valid reports are rewarded in UDAG, recorded in the append-only [`LEDGER.md`](./LEDGER.md), and convertible 1:1 to mainnet UDAG per the vesting schedule in that file. See [`LEDGER.md` → Testnet Reset Safety](./LEDGER.md#testnet-reset-safety) for why a testnet wipe does not affect your claim.
 
-## Mainnet Access Policy (current phase)
+## Mainnet Access Policy
 
-Mainnet is in a deliberate **hardening phase**. Key points:
+Mainnet is **fully open**:
 
-- **P2P port 9333 is not exposed to the public internet** on any mainnet node. External hosts cannot open TCP connections to the Noise handshake endpoint. The 5 mainnet nodes reach each other over Fly's internal WireGuard mesh (`ultradag-mainnet-[1-5].internal`) only.
-- **RPC port 10333 remains public** at `https://ultradag-mainnet-[1-5].fly.dev` for transparency. Anyone can read chain state; no one can submit transactions that affect it unless they go through the existing RPC (and most state-changing RPC endpoints are testnet-only on mainnet builds).
-- **Pre-launch token distribution happens on Arbitrum** via an ERC-20 representation of UDAG. Buying UDAG in this phase gets you Arbitrum-side tokens, not native mainnet UDAG. This lets the maintainer restart mainnet freely during hardening without invalidating any token holder. See `bridge/README.md`.
-- **Mainnet will open to public participation** only after the bounty program has validated the code against real adversaries over a meaningful window. There is no fixed date; the decision is gated on the findings in this program.
-- **Until mainnet opens, attacking mainnet nodes is out of scope and explicitly illegal.** Test against testnet only. If you can somehow reach a mainnet node (through a misconfiguration or a Fly bug) — report it privately as a finding, do not exploit it.
+- **P2P port 9333 is public** on all mainnet nodes at `ultradag-mainnet-[1-5].fly.dev:9333`. External validators and observers can connect directly.
+- **RPC port 10333 is public** at `https://ultradag-mainnet-[1-5].fly.dev` for both reads and transaction submission.
+- **Validator set is permissionless** — any address with enough UDAG can stake and enter the active set. The 5 founder-operated Fly nodes have no protocol-level privilege; ranking is by effective stake.
+- **Please do not DoS mainnet.** In-scope attacks are those demonstrating a protocol or implementation bug via a minimal PoC — not brute traffic floods. If you can crash or halt a live mainnet node with a single crafted message, that's a valid Critical; sustained DoS traffic is out of scope and may be reported to the hosting provider.
 
 ## Scope
 

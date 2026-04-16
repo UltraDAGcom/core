@@ -12,7 +12,6 @@ primary_region = "ams"
   DATA_DIR = "/data"
   VALIDATORS = "5"
   SEED = "ultradag-mainnet-1.internal:9333 ultradag-mainnet-2.internal:9333 ultradag-mainnet-3.internal:9333 ultradag-mainnet-4.internal:9333"
-  NO_BOOTSTRAP = "true"
   # CLEAN_STATE = "true"
 
 [mounts]
@@ -33,10 +32,17 @@ primary_region = "ams"
     path = "/health"
     timeout = "10s"
 
-# Mainnet P2P port 9333 is INTENTIONALLY not exposed as a public [[services]]
-# block. See fly-mainnet-1.toml for the full rationale. Nodes reach each
-# other over Fly's internal WireGuard mesh via `.internal` DNS. To re-open
-# mainnet to public peers, restore the standard P2P [[services]] block.
+# Mainnet P2P is OPEN to public peers — anyone can run a validator or
+# observer node. Stake-weighted active-set selection is the only gate.
+[[services]]
+  internal_port = 9333
+  protocol = "tcp"
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 9333
 
 [deploy]
   strategy = "immediate"
