@@ -78,6 +78,10 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
   const [policyDaily, setPolicyDaily] = useState('');
   const [nameSubmitting, setNameSubmitting] = useState(false);
   const [nameError, setNameError] = useState('');
+  const [recoverySubmitting, setRecoverySubmitting] = useState(false);
+  const [recoveryError, setRecoveryError] = useState('');
+  const [policySubmitting, setPolicySubmitting] = useState(false);
+  const [policyError, setPolicyError] = useState('');
 
   // Link another device (AddKey SmartOp) — create a cross-platform passkey on
   // the scanning device, then register its P256 pubkey on-chain.
@@ -132,6 +136,67 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
       setNameSubmitting(false);
     }
   }, [nameAvail, nameInput, walletAddress, nodeUrl, fetchInfo]);
+
+  const COIN = 100_000_000n;
+  const handleSubmitRecovery = useCallback(async () => {
+    setRecoveryError('');
+    const cleaned = guardians.map(g => g.trim()).filter(g => g.length > 0);
+    if (cleaned.length === 0) { setRecoveryError('Add at least one guardian'); return; }
+    if (threshold < 1 || threshold > cleaned.length) { setRecoveryError('Threshold out of range'); return; }
+    setRecoverySubmitting(true);
+    try {
+      const balRes = await fetch(`${nodeUrl}/balance/${walletAddress}`, { signal: AbortSignal.timeout(5000) });
+      const balData = await balRes.json();
+      // MIN_RECOVERY_DELAY_ROUNDS = 5000 rounds (~2.8 hours at 2s/round).
+      await signAndSubmitSmartOp(
+        { SetRecovery: { guardians: cleaned, threshold, delay_rounds: 5000 } },
+        0,
+        balData.nonce ?? 0,
+      );
+      setShowRecoveryForm(false);
+      setGuardians(['', '', '']);
+      setThreshold(2);
+      await fetchInfo();
+    } catch (e: unknown) {
+      setRecoveryError(e instanceof Error ? e.message : 'Failed to save guardians');
+    } finally {
+      setRecoverySubmitting(false);
+    }
+  }, [guardians, threshold, walletAddress, nodeUrl, fetchInfo]);
+
+  const handleSubmitPolicy = useCallback(async () => {
+    setPolicyError('');
+    const instant = policyInstant ? BigInt(Math.floor(Number(policyInstant) * 1e8)) : 0n;
+    const vault = policyVault ? BigInt(Math.floor(Number(policyVault) * 1e8)) : 0n;
+    const daily = policyDaily ? BigInt(Math.floor(Number(policyDaily) * 1e8)) : null;
+    if (vault > 0n && instant > vault) { setPolicyError('Instant limit cannot exceed vault threshold'); return; }
+    setPolicySubmitting(true);
+    try {
+      const balRes = await fetch(`${nodeUrl}/balance/${walletAddress}`, { signal: AbortSignal.timeout(5000) });
+      const balData = await balRes.json();
+      await signAndSubmitSmartOp(
+        {
+          SetPolicy: {
+            instant_limit: instant.toString(),
+            vault_threshold: vault.toString(),
+            vault_delay_rounds: 5000, // ~2.8h default
+            whitelisted_recipients: [],
+            daily_limit: daily === null ? null : daily.toString(),
+          },
+        },
+        0,
+        balData.nonce ?? 0,
+      );
+      setShowPolicyForm(false);
+      setPolicyInstant(''); setPolicyVault(''); setPolicyDaily('');
+      await fetchInfo();
+    } catch (e: unknown) {
+      setPolicyError(e instanceof Error ? e.message : 'Failed to save policy');
+    } finally {
+      setPolicySubmitting(false);
+    }
+  }, [policyInstant, policyVault, policyDaily, walletAddress, nodeUrl, fetchInfo]);
+  void COIN;
 
   const checkName = useCallback(async (name: string) => {
     setNameInput(name); setNameAvail(null); setNameWarn('');
@@ -466,13 +531,11 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
             </div>
           ) : showRecoveryForm ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* Preview notice — shown FIRST so users know this form isn't live
-                  before they invest effort filling it out. */}
-              <div role="note" style={{ fontSize: 10.5, color: '#FFB800', background: 'rgba(255,184,0,0.06)', border: '1px solid rgba(255,184,0,0.15)', borderRadius: 8, padding: '8px 12px' }}>
-                ⚠ <strong>Preview only.</strong> Social recovery requires a protocol update
-                (<code style={{ fontSize: 10 }}>SmartOpType::SetRecovery</code> variant). Submit
-                is disabled until the Rust variant lands — feel free to explore the UI.
-              </div>
+              {recoveryError && (
+                <div role="alert" style={{ fontSize: 10.5, color: '#FF4444', background: 'rgba(255,68,68,0.06)', border: '1px solid rgba(255,68,68,0.15)', borderRadius: 8, padding: '8px 12px' }}>
+                  {recoveryError}
+                </div>
+              )}
 
               {/* Explainer */}
               <div style={{ background: 'rgba(168,85,247,0.04)', border: '1px solid rgba(168,85,247,0.1)', borderRadius: 10, padding: '12px 14px' }}>
@@ -507,7 +570,9 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
               </div>
 
               <div style={{ display: 'flex', gap: 8 }}>
-                <button disabled style={{ ...primaryButtonStyle, opacity: 0.35, cursor: 'not-allowed' }}>Save Guardians</button>
+                <button onClick={handleSubmitRecovery} disabled={recoverySubmitting} style={{ ...primaryButtonStyle, opacity: recoverySubmitting ? 0.5 : 1, cursor: recoverySubmitting ? 'wait' : 'pointer' }}>
+                  {recoverySubmitting ? 'Saving…' : 'Save Guardians'}
+                </button>
                 <button onClick={() => setShowRecoveryForm(false)} style={S.btn('var(--dag-text-muted)')}>Cancel</button>
               </div>
             </div>
@@ -542,13 +607,11 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
             </div>
           ) : showPolicyForm ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* Preview notice — shown FIRST so users know this form isn't live
-                  before they invest effort filling it out. */}
-              <div role="note" style={{ fontSize: 10.5, color: '#FFB800', background: 'rgba(255,184,0,0.06)', border: '1px solid rgba(255,184,0,0.15)', borderRadius: 8, padding: '8px 12px' }}>
-                ⚠ <strong>Preview only.</strong> Spending policy requires a protocol update
-                (<code style={{ fontSize: 10 }}>SmartOpType::SetPolicy</code> variant). Submit
-                is disabled until the Rust variant lands — feel free to explore the UI.
-              </div>
+              {policyError && (
+                <div role="alert" style={{ fontSize: 10.5, color: '#FF4444', background: 'rgba(255,68,68,0.06)', border: '1px solid rgba(255,68,68,0.15)', borderRadius: 8, padding: '8px 12px' }}>
+                  {policyError}
+                </div>
+              )}
               <div>
                 <span style={{ ...S.label, display: 'block' }}>Instant limit (UDAG)</span>
                 <input type="number" placeholder="1" value={policyInstant} onChange={e => setPolicyInstant(e.target.value)} style={S.input} />
@@ -571,7 +634,9 @@ export function SmartAccountPage({ walletAddress, nodeUrl }: { walletAddress?: s
                 </p>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button disabled style={{ ...primaryButtonStyle, opacity: 0.35, cursor: 'not-allowed' }}>Save (2.8hr time-lock)</button>
+                <button onClick={handleSubmitPolicy} disabled={policySubmitting} style={{ ...primaryButtonStyle, opacity: policySubmitting ? 0.5 : 1, cursor: policySubmitting ? 'wait' : 'pointer' }}>
+                  {policySubmitting ? 'Saving…' : 'Save (2.8hr time-lock)'}
+                </button>
                 <button onClick={() => setShowPolicyForm(false)} style={S.btn('var(--dag-text-muted)')}>Cancel</button>
               </div>
             </div>

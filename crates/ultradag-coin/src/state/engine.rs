@@ -4175,6 +4175,55 @@ impl StateEngine {
                     return Err(CoinError::ValidationError("a key removal is already pending".into()));
                 }
             }
+            SmartOpType::SetPolicy { instant_limit, vault_threshold, whitelisted_recipients, .. } => {
+                use crate::tx::smart_account::MAX_WHITELISTED_RECIPIENTS;
+                if !self.smart_accounts.contains_key(&tx.from) {
+                    return Err(CoinError::ValidationError("smart account not found".into()));
+                }
+                if whitelisted_recipients.len() > MAX_WHITELISTED_RECIPIENTS {
+                    return Err(CoinError::ValidationError(format!(
+                        "too many whitelisted recipients: {} (max {})",
+                        whitelisted_recipients.len(), MAX_WHITELISTED_RECIPIENTS
+                    )));
+                }
+                if *vault_threshold > 0 && *instant_limit > *vault_threshold {
+                    return Err(CoinError::ValidationError("instant_limit cannot exceed vault_threshold".into()));
+                }
+            }
+            SmartOpType::SetRecovery { guardians, threshold, delay_rounds } => {
+                use crate::tx::smart_account::{MAX_GUARDIANS, MIN_RECOVERY_DELAY_ROUNDS, MAX_RECOVERY_DELAY_ROUNDS};
+                if guardians.is_empty() {
+                    return Err(CoinError::ValidationError("must specify at least one guardian".into()));
+                }
+                if guardians.len() > MAX_GUARDIANS {
+                    return Err(CoinError::ValidationError(format!(
+                        "too many guardians: {} (max {})", guardians.len(), MAX_GUARDIANS
+                    )));
+                }
+                if *threshold == 0 || *threshold as usize > guardians.len() {
+                    return Err(CoinError::ValidationError(format!(
+                        "threshold {} out of range for {} guardians", threshold, guardians.len()
+                    )));
+                }
+                if *delay_rounds < MIN_RECOVERY_DELAY_ROUNDS || *delay_rounds > MAX_RECOVERY_DELAY_ROUNDS {
+                    return Err(CoinError::ValidationError(format!(
+                        "delay_rounds {} out of range [{}, {}]",
+                        delay_rounds, MIN_RECOVERY_DELAY_ROUNDS, MAX_RECOVERY_DELAY_ROUNDS
+                    )));
+                }
+                if guardians.contains(&tx.from) {
+                    return Err(CoinError::ValidationError("cannot set self as guardian".into()));
+                }
+                let mut seen = std::collections::HashSet::new();
+                for g in guardians {
+                    if !seen.insert(*g) {
+                        return Err(CoinError::ValidationError("duplicate guardian address".into()));
+                    }
+                }
+                if !self.smart_accounts.contains_key(&tx.from) {
+                    return Err(CoinError::ValidationError("smart account not found".into()));
+                }
+            }
         }
 
         // ── Phase 2: All preconditions passed. Now mutate state. ──
@@ -4390,6 +4439,43 @@ impl StateEngine {
                     tx.from.to_hex(),
                     key_id_to_remove.iter().map(|b| format!("{b:02x}")).collect::<String>(),
                     current_round.saturating_add(KEY_REMOVAL_DELAY_ROUNDS)
+                );
+            }
+            SmartOpType::SetRecovery { guardians, threshold, delay_rounds } => {
+                // All preconditions checked in phase 1.
+                use crate::tx::smart_account::RecoveryConfig;
+                let config = self.smart_accounts.get_mut(&tx.from).unwrap(); // checked in phase 1
+                config.recovery = Some(RecoveryConfig {
+                    guardians: guardians.clone(),
+                    threshold: *threshold,
+                    delay_rounds: *delay_rounds,
+                });
+                config.pending_recovery = None;
+                tracing::info!(
+                    "SmartAccount {}: SmartOp SetRecovery configured with {}-of-{} guardians, {} round delay",
+                    tx.from.to_hex(), threshold, guardians.len(), delay_rounds
+                );
+            }
+            SmartOpType::SetPolicy { instant_limit, vault_threshold, vault_delay_rounds, whitelisted_recipients, daily_limit } => {
+                // All preconditions checked in phase 1. Mirrors apply_set_policy_tx.
+                use crate::tx::smart_account::{SpendingPolicy, PendingPolicyChange, POLICY_CHANGE_DELAY_ROUNDS};
+                let new_policy = SpendingPolicy {
+                    instant_limit: *instant_limit,
+                    vault_threshold: *vault_threshold,
+                    vault_delay_rounds: *vault_delay_rounds,
+                    whitelisted_recipients: whitelisted_recipients.clone(),
+                    daily_limit: *daily_limit,
+                    daily_spent: (0, 0),
+                };
+                let config = self.smart_accounts.get_mut(&tx.from).unwrap(); // checked in phase 1
+                config.pending_policy_change = Some(PendingPolicyChange {
+                    new_policy,
+                    initiated_at_round: current_round,
+                    executes_at_round: current_round.saturating_add(POLICY_CHANGE_DELAY_ROUNDS),
+                });
+                tracing::info!(
+                    "SmartAccount {}: SmartOp SetPolicy change initiated, executes at round {}",
+                    tx.from.to_hex(), current_round.saturating_add(POLICY_CHANGE_DELAY_ROUNDS)
                 );
             }
         }

@@ -1008,6 +1008,29 @@ pub enum SmartOpType {
     /// remove the last key — add a replacement first.
     /// Fee-exempt (account management op).
     RemoveKey { key_id_to_remove: [u8; 8] },
+    /// Configure social recovery guardians.
+    /// The passkey-friendly counterpart to `SetRecoveryTx` (Ed25519-only).
+    /// Signed by any currently-authorized key. Replaces any existing config
+    /// and cancels any pending recovery. Cannot set self as guardian.
+    /// Fee-exempt (account management op).
+    SetRecovery {
+        guardians: Vec<Address>,
+        threshold: u8,
+        delay_rounds: u64,
+    },
+    /// Configure spending policy (time-locked change).
+    /// The passkey-friendly counterpart to `SetPolicyTx` (Ed25519-only).
+    /// Signed by any currently-authorized key. The new policy takes effect
+    /// after `POLICY_CHANGE_DELAY_ROUNDS` — this time-lock prevents an
+    /// attacker who compromises a key from instantly disabling limits.
+    /// Fee-exempt (account management op).
+    SetPolicy {
+        instant_limit: u64,
+        vault_threshold: u64,
+        vault_delay_rounds: u64,
+        whitelisted_recipients: Vec<Address>,
+        daily_limit: Option<u64>,
+    },
 }
 
 /// A generic SmartAccount operation signed with any authorized key (Ed25519 or P256).
@@ -1150,6 +1173,29 @@ impl SmartOpTx {
                 buf.push(17);
                 buf.extend_from_slice(key_id_to_remove);
             }
+            SmartOpType::SetRecovery { guardians, threshold, delay_rounds } => {
+                buf.push(18);
+                buf.extend_from_slice(&(guardians.len() as u32).to_le_bytes());
+                for g in guardians {
+                    buf.extend_from_slice(&g.0);
+                }
+                buf.push(*threshold);
+                buf.extend_from_slice(&delay_rounds.to_le_bytes());
+            }
+            SmartOpType::SetPolicy { instant_limit, vault_threshold, vault_delay_rounds, whitelisted_recipients, daily_limit } => {
+                buf.push(19);
+                buf.extend_from_slice(&instant_limit.to_le_bytes());
+                buf.extend_from_slice(&vault_threshold.to_le_bytes());
+                buf.extend_from_slice(&vault_delay_rounds.to_le_bytes());
+                buf.extend_from_slice(&(whitelisted_recipients.len() as u32).to_le_bytes());
+                for addr in whitelisted_recipients {
+                    buf.extend_from_slice(&addr.0);
+                }
+                match daily_limit {
+                    Some(limit) => { buf.push(1); buf.extend_from_slice(&limit.to_le_bytes()); }
+                    None => { buf.push(0); }
+                }
+            }
         }
         buf.extend_from_slice(&self.fee.to_le_bytes());
         buf.extend_from_slice(&self.nonce.to_le_bytes());
@@ -1193,6 +1239,8 @@ impl SmartOpTx {
             | SmartOpType::RemoveKey { .. }    // Account management op
             | SmartOpType::CreatePocket { .. } // Account management op
             | SmartOpType::RemovePocket { .. } // Account management op
+            | SmartOpType::SetRecovery { .. }  // Account management op
+            | SmartOpType::SetPolicy { .. }    // Account management op
         )
     }
 }
