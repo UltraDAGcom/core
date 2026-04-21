@@ -467,6 +467,11 @@ pub struct PendingVaultTransfer {
     pub executes_at_round: u64,
     /// Unique transfer ID: blake3(from || to || amount || nonce)[..8]
     pub transfer_id: [u8; 8],
+    /// Origin address of the funds. May be a pocket whose policy is
+    /// enforced on the parent (held here so cancel refunds to the
+    /// right surface).
+    #[serde(default)]
+    pub from: Address,
 }
 
 /// A pending time-locked spending policy change.

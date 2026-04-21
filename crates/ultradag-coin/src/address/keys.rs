@@ -2,7 +2,7 @@ use ed25519_dalek::Signer;
 use serde::{Deserialize, Serialize};
 
 /// A 20-byte address derived from the Ed25519 public key: blake3(pubkey)[..20].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Address(pub [u8; 20]);
 
 /// An Ed25519 signing key (32-byte seed).

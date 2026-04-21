@@ -4,7 +4,7 @@ This directory contains published security advisories for vulnerabilities that h
 
 ## Published Advisories
 
-*No advisories published yet*
+- [GHSA-9chc-gjfr-6hrq](GHSA-9chc-gjfr-6hrq.md) — Critical — Spending-policy bypass via pockets. SmartAccount policies (daily limit, vault threshold, whitelist, per-key limit) were not enforced on transfers originating from pocket sub-addresses. Reported by Sumitshah00, fixed 2026-04-21.
 
 ## Disclosure Timeline
 

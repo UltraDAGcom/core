@@ -3475,16 +3475,20 @@ impl StateEngine {
 
         self.increment_nonce(&tx.from);
 
-        // Refund the amount (was debited when vault was created)
-        self.credit(&tx.from, vault.amount).map_err(|e| {
+        // Refund to the origin surface — pocket-originated vaults must return
+        // to the pocket, not the parent, or a cancel silently rehomes the
+        // balance across security surfaces. Zero-address (legacy records
+        // without the `from` field) falls back to the parent for safety.
+        let refund_to = if vault.from == Address::default() { tx.from } else { vault.from };
+        self.credit(&refund_to, vault.amount).map_err(|e| {
             CoinError::ValidationError(format!("Failed to refund vault transfer: {}", e))
         })?;
 
         let config = self.smart_accounts.get_mut(&tx.from).unwrap();
         config.pending_vault_transfers.remove(vault_idx);
 
-        tracing::info!("SmartAccount {}: vault transfer cancelled, {} sats refunded",
-            tx.from.to_hex(), vault.amount);
+        tracing::info!("SmartAccount {}: vault transfer cancelled, {} sats refunded to {}",
+            tx.from.to_hex(), vault.amount, refund_to.to_hex());
 
         Ok(())
     }
@@ -3497,7 +3501,11 @@ impl StateEngine {
     ) -> Result<Option<crate::tx::smart_account::PendingVaultTransfer>, CoinError> {
         use crate::tx::smart_account::*;
 
-        let config = match self.smart_accounts.get_mut(from) {
+        // Pockets inherit the parent's spending policy. Resolving here keeps
+        // policy enforcement symmetric with signature authorization.
+        let policy_owner = self.pocket_to_parent.get(from).copied().unwrap_or(*from);
+
+        let config = match self.smart_accounts.get_mut(&policy_owner) {
             Some(c) => c,
             None => return Ok(None), // No SmartAccount = no policy
         };
@@ -3547,6 +3555,7 @@ impl StateEngine {
                 created_at_round: current_round,
                 executes_at_round: current_round.saturating_add(policy.vault_delay_rounds),
                 transfer_id,
+                from: *from,
             };
             return Ok(Some(vault));
         }
@@ -4520,8 +4529,13 @@ impl StateEngine {
 
         let current_round = self.last_finalized_round.unwrap_or(0);
 
+        // Pockets are policy-transparent: per-key limits, vault thresholds, and
+        // daily budgets all live on the parent config. Authorization already
+        // resolves to the parent in verify_smart_transfer — enforcement must too.
+        let policy_owner = self.pocket_to_parent.get(&tx.from).copied().unwrap_or(tx.from);
+
         // Check per-key daily spending limit
-        if let Some(config) = self.smart_accounts.get_mut(&tx.from) {
+        if let Some(config) = self.smart_accounts.get_mut(&policy_owner) {
             if let Some(key) = config.authorized_keys.iter_mut().find(|k| k.key_id == tx.signing_key_id) {
                 if let Some(key_limit) = key.daily_limit {
                     use crate::tx::smart_account::ROUNDS_PER_DAY;
@@ -4543,16 +4557,19 @@ impl StateEngine {
             }
         }
 
-        // Check account-level spending policy (daily limits, vault threshold)
+        // Check account-level spending policy (daily limits, vault threshold).
+        // check_spending_policy itself resolves pocket→parent, but we pass the
+        // raw origin so the vault transfer remembers it for cancel-refund.
         let vault_result = self.check_spending_policy(&tx.from, &tx.to, tx.amount, tx.nonce, current_round)?;
 
-        // Debit sender (amount + fee)
+        // Debit sender (amount + fee) from the origin surface.
         self.debit(&tx.from, tx.total_cost())?;
         self.increment_nonce(&tx.from);
 
         if let Some(vault_transfer) = vault_result {
-            // Transfer exceeds vault threshold — hold in pending vault (amount already debited)
-            let config = self.smart_accounts.get_mut(&tx.from).unwrap();
+            // Transfer exceeds vault threshold — hold in pending vault on the
+            // parent config (only the parent can execute/cancel vault ops).
+            let config = self.smart_accounts.get_mut(&policy_owner).unwrap();
             config.pending_vault_transfers.push(vault_transfer);
             tracing::info!("SmartAccount {}: transfer of {} sats to {} held in vault (executes after delay)",
                 tx.from.to_hex(), tx.amount, tx.to.to_hex());
