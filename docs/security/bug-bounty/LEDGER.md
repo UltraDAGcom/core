@@ -2,7 +2,7 @@
 
 **Program Start:** March 8, 2026  
 **Total Allocated:** 500,000 UDAG (mainnet)  
-**Total Awarded:** 42,500 UDAG  
+**Total Awarded:** 52,500 UDAG  
 **Total Paid (Testnet):** 0 UDAG (pending — faucet rate-limited)  
 **UDAG Mainnet Token:** [`0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b`](https://arbiscan.io/token/0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b) (Arbitrum One, deployed 2026-04-12)  
 **Bounty Payment Source:** Genesis allocation holder `0x9aEcb515361af7980eaa16fE40c064f69738EbF9` (to be reimbursed from treasury post-emission)  
@@ -152,6 +152,46 @@ Advisory: GHSA-hf8w-rcvm-rgqr
 Status: Validated / Fixed / Pending Testnet Payout / Pending Mainnet
 ```
 
+### BB-2026-0005
+```
+ID: BB-2026-0005
+Date: 2026-04-21
+Hunter: Sumitshah00 (tudg17lzd76ue95ht07hxzna8mzey4tkpk85jtjns2d)
+Severity: Critical
+Reward: 10,000 UDAG (mainnet promise)
+Testnet Paid: Pending (faucet rate-limited; will send via validator key)
+Source: Treasury (paid from treasury emission post-launch)
+Issue: SmartAccount spending-policy enforcement was not applied to
+       transfers originating from pocket sub-addresses. Authorization
+       in verify_smart_transfer correctly resolved pocket_to_parent →
+       parent, but check_spending_policy and apply_smart_transfer_tx
+       keyed enforcement on tx.from — with no SmartAccountConfig at
+       the pocket address, the default-deny branch fell through to
+       Ok(None) and bypassed every constraint on the account: daily
+       limit, vault threshold + time-lock delay, whitelist restriction,
+       and per-key daily limit. A holder of a low-security key whose
+       entire purpose is to cap blast radius could drain every pocket.
+       Reporter supplied a self-contained PoC against a 1 UDAG daily
+       limit demonstrating instant drainage of a 10K UDAG pocket.
+Fix: check_spending_policy now resolves pocket_to_parent → parent
+     before loading the policy config. apply_smart_transfer_tx threads
+     the same policy_owner through the per-key daily-limit check and
+     pushes pending vault transfers onto the parent config. Added
+     `from: Address` to PendingVaultTransfer so apply_cancel_vault_tx
+     refunds to the origin surface rather than silently rehoming the
+     balance onto the parent. Zero-address fallback on the new field
+     routes legacy records to the parent.
+     Regression tests: crates/ultradag-coin/tests/smart_account_policy_pocket.rs
+     - pocket_transfer_respects_parent_daily_limit
+     - pocket_transfer_routes_large_spend_to_parent_vault
+     - pocket_vault_cancel_refunds_pocket_not_parent
+     - pocket_transfer_respects_per_key_daily_limit
+     - pocket_transfer_inherits_parent_whitelist
+Advisory: GHSA-9chc-gjfr-6hrq
+Fix: fb6ef59d
+Status: Validated / Fixed / Pending Testnet Payout / Pending Mainnet
+```
+
 ---
 
 ## Pending Validation
@@ -169,9 +209,9 @@ Status: Validated / Fixed / Pending Testnet Payout / Pending Mainnet
 - Unique hunters: 0
 
 ### April 2026
-- Submissions: 4 valid (GHSA-q8wx-2crx-c7pp, GHSA-6gwf-frh8-ppw7, GHSA-rprp-wjrh-hx7g, GHSA-hf8w-rcvm-rgqr)
-- Validated: 4
-- Rewards: 42,500 UDAG
+- Submissions: 5 valid (GHSA-q8wx-2crx-c7pp, GHSA-6gwf-frh8-ppw7, GHSA-rprp-wjrh-hx7g, GHSA-hf8w-rcvm-rgqr, GHSA-9chc-gjfr-6hrq)
+- Validated: 5
+- Rewards: 52,500 UDAG
 - Unique hunters: 1 (Sumitshah00)
 
 ### Mainnet launched: 2026-04-10
@@ -280,5 +320,5 @@ All changes to this ledger are tracked in git history. Each reward entry include
 ---
 
 **Ledger Maintainer:** UltraDAG Core Team  
-**Last Updated:** April 15, 2026  
+**Last Updated:** April 21, 2026  
 **Next Audit:** May 11, 2026
