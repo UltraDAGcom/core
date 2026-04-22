@@ -558,9 +558,16 @@ pub fn load_from_redb(path: &Path) -> Result<StateEngine, PersistenceError> {
     engine.restore_bridge_state(bridge_attestations, bridge_sigs, bridge_nonce);
     engine.set_bridge_contract_address(bridge_contract_address);
 
-    // Restore SmartAccounts
+    // Restore SmartAccounts. The pocket_to_parent reverse-index is derived
+    // state — it lives in memory only, not in redb — so it must be rebuilt
+    // from each config's pockets list immediately after restore. Without
+    // this, every pocket on the node becomes unspendable after a restart
+    // (verify_smart_transfer's parent-fallback finds no entry) and spending
+    // policies silently stop being enforced (check_spending_policy's
+    // pocket→parent resolution falls through to the pocket's empty config).
     if !smart_accounts_vec.is_empty() {
         engine.restore_smart_accounts(smart_accounts_vec);
+        engine.rebuild_pocket_map();
     }
 
     // Restore Name Registry
