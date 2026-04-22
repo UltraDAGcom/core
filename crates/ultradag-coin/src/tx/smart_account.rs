@@ -1645,15 +1645,17 @@ mod tests {
             challenge_b64
         ).into_bytes();
 
-        // 4. Compute what the browser would sign: SHA-256(authenticatorData || SHA-256(clientDataJSON))
+        // 4. Compute the bytes the browser signs: authenticatorData || SHA-256(clientDataJSON).
+        //    The ECDSA Signer trait applies SHA-256 internally, so we pass the raw
+        //    concatenation — prehashing here would produce SHA-256(SHA-256(...)),
+        //    which neither verification path in verify_webauthn expects.
         let client_data_hash = Sha256::digest(&client_data_json);
         let mut signed_data = Vec::new();
         signed_data.extend_from_slice(&authenticator_data);
         signed_data.extend_from_slice(&client_data_hash);
-        let signed_message = Sha256::digest(&signed_data);
 
-        // 5. Sign with P256
-        let p256_signature: p256::ecdsa::Signature = p256_sk.sign(&signed_message);
+        // 5. Sign with P256 — raw bytes; the Signer internally SHA-256s.
+        let p256_signature: p256::ecdsa::Signature = p256_sk.sign(&signed_data);
 
         // 6. Package into WebAuthnSignature
         tx.webauthn = Some(WebAuthnSignature {
