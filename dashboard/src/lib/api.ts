@@ -3,18 +3,12 @@
 const TESTNET_NODES = [
   'https://ultradag-node-1.fly.dev',
   'https://ultradag-node-2.fly.dev',
-  'https://ultradag-node-3.fly.dev',
-  'https://ultradag-node-4.fly.dev',
-  'https://ultradag-node-5.fly.dev',
 ];
 
-const MAINNET_NODES = [
-  'https://ultradag-mainnet-1.fly.dev',
-  'https://ultradag-mainnet-2.fly.dev',
-  'https://ultradag-mainnet-3.fly.dev',
-  'https://ultradag-mainnet-4.fly.dev',
-  'https://ultradag-mainnet-5.fly.dev',
-];
+// Mainnet is paused — no reachable nodes. The network toggle is kept in the
+// UI so the codepath is preserved for future re-enablement, but selecting it
+// surfaces an empty node list and the dashboard stays in the paused state.
+const MAINNET_NODES: string[] = [];
 
 export type NetworkType = 'mainnet' | 'testnet';
 
@@ -22,13 +16,15 @@ export type NetworkType = 'mainnet' | 'testnet';
 function loadNetwork(): NetworkType {
   try {
     const stored = localStorage.getItem('ultradag_network');
-    if (stored === 'mainnet' || stored === 'testnet') return stored;
+    // Mainnet is paused — any stored 'mainnet' preference is overridden to
+    // testnet at load time so the dashboard is usable out of the box.
+    if (stored === 'testnet') return stored;
   } catch {}
-  return 'mainnet'; // default — matches explorer/network pages
+  return 'testnet';
 }
 
 let currentNetwork: NetworkType = loadNetwork();
-let currentNode = (currentNetwork === 'mainnet' ? MAINNET_NODES : TESTNET_NODES)[0];
+let currentNode = (currentNetwork === 'mainnet' ? MAINNET_NODES : TESTNET_NODES)[0] ?? '';
 let connected = false;
 /** Incremented on every network switch — stale responses check this to self-discard */
 let switchGeneration = 0;
@@ -43,7 +39,7 @@ export function switchNetwork(network: NetworkType) {
   currentNetwork = network;
   localStorage.setItem('ultradag_network', network);
   const nodes = network === 'mainnet' ? MAINNET_NODES : TESTNET_NODES;
-  currentNode = nodes[0];
+  currentNode = nodes[0] ?? '';
   connected = false;
   switchGeneration++;
   // Notify all pages to refetch immediately
@@ -70,6 +66,12 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
 
 export async function connectToNode(): Promise<boolean> {
   const nodes = currentNetwork === 'mainnet' ? MAINNET_NODES : TESTNET_NODES;
+
+  // Mainnet is paused — no nodes to race against.
+  if (nodes.length === 0) {
+    connected = false;
+    return false;
+  }
 
   // Race all nodes in parallel — first healthy response wins
   try {

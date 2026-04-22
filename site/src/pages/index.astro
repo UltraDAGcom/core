@@ -585,59 +585,52 @@ const GECKOTERMINAL_URL =
 <span class="kw">curl</span> <span class="str">http://localhost:10333/status</span></pre>
       </div>
 
-      <!-- Mainnet Access — fully open as of 2026-04-16 -->
+      <!-- Mainnet — currently paused. Testnet is the live environment. -->
       <div class="code-section reveal">
         <div class="code-header">
           <div class="code-dots"><div class="code-dot"></div><div class="code-dot"></div><div class="code-dot"></div></div>
-          <span class="code-label">Mainnet — Open to the Public</span>
+          <span class="code-label">Mainnet — Paused</span>
         </div>
-        <pre><span class="cm"># Mainnet opened to public participation on 2026-04-16.</span>
-<span class="cm"># Anyone can run a validator, stake UDAG, and join the active set.</span>
-<span class="cm"># The 5 founder-operated Fly nodes are peers, not gatekeepers —</span>
-<span class="cm"># ranking is purely stake-weighted.</span>
+        <pre><span class="cm"># Mainnet is currently paused.</span>
+<span class="cm"># Testnet remains live for development, validator experiments,</span>
+<span class="cm"># and the bug bounty program.</span>
 
-<span class="cm"># Run a mainnet node from source:</span>
+<span class="cm"># Connect to testnet:</span>
+<span class="kw">curl</span> <span class="str">https://ultradag-node-1.fly.dev/status</span>
+<span class="kw">curl</span> <span class="str">https://ultradag-node-1.fly.dev/balance/tudg1...</span>
+
+<span class="cm"># Run a testnet node from source:</span>
 <span class="kw">git clone</span> https://github.com/UltraDAGcom/core &amp;&amp; <span class="kw">cd</span> core
-<span class="kw">cargo build --release --features mainnet</span>
+<span class="kw">cargo build --release</span>
 ./target/release/ultradag-node \
-  --data-dir ./mainnet-data --port 9333 --rpc-port 10333 \
-  --seed ultradag-mainnet-1.fly.dev:9333 \
-  --validators 5
+  --data-dir ./testnet-data --port 9333 --rpc-port 10333 \
+  --seed ultradag-node-1.fly.dev:9333
 
-<span class="cm"># Query mainnet state:</span>
-<span class="kw">curl</span> <span class="str">https://ultradag-mainnet-1.fly.dev/status</span>
-<span class="kw">curl</span> <span class="str">https://ultradag-mainnet-1.fly.dev/balance/udag1...</span>
-
-<span class="cm"># Stake to enter the validator active set:</span>
-<span class="cm">#   1. Fund your address with UDAG (bridge from Arbitrum, or earn via</span>
-<span class="cm">#      faucet/bounty on testnet first).</span>
-<span class="cm">#   2. Submit a Stake tx via /tx/submit — see docs/stake.md.</span>
-<span class="cm">#   3. If your effective stake lands in the top-N, you produce rounds</span>
-<span class="cm">#      and earn the 44% validator emission share.</span>
-
-<span class="cm"># Bug bounty: still runs on mainnet AND testnet.</span>
-<span class="cm">#   Use testnet for destructive PoCs. Report via GitHub Security.</span>
-<span class="cm">#   See docs/security/bug-bounty/PROGRAM.md for rewards + rules.</span></pre>
+<span class="cm"># Bug bounty remains open — runs on testnet.</span>
+<span class="cm">#   See docs/security/bug-bounty/PROGRAM.md for rewards + rules.</span>
+<span class="cm">#   Mainnet payouts are deferred until mainnet returns; every</span>
+<span class="cm">#   ledger entry in docs/security/bug-bounty/LEDGER.md remains</span>
+<span class="cm">#   binding regardless of mainnet availability.</span></pre>
       </div>
 
-      <!-- Additional Info -->
+      <!-- Current network status -->
       <div class="node-info reveal">
-        <div class="node-info-tag">Mainnet Access Policy</div>
+        <div class="node-info-tag">Network Status</div>
         <div class="node-info-grid">
           <div>
             <p>
-              ✓ <strong>P2P port 9333</strong> public on all mainnet nodes<br />
-              ✓ <strong>RPC port 10333</strong> public — reads and writes<br />
-              ✓ <strong>Permissionless validators</strong> — stake to join<br />
-              ✓ <strong>Stake-weighted active set</strong> — no allowlist
+              ✓ <strong>Testnet live</strong> — 2 seed nodes in Amsterdam<br />
+              ✓ <strong>RPC open</strong> on ultradag-node-1.fly.dev<br />
+              ✓ <strong>Bug bounty active</strong> — report via GitHub Security<br />
+              ✓ <strong>UDAG on Arbitrum</strong> (ERC-20) continues trading
             </p>
           </div>
           <div>
             <p>
-              ✓ <strong>Bug bounty</strong> open on mainnet &amp; testnet<br />
-              ✓ <strong>Token on Arbitrum</strong> (ERC-20) + native UDAG<br />
-              ✓ <strong>Open validator set</strong> — top-N by effective stake<br />
-              ✓ <strong>Opened 2026-04-16</strong> to public participation
+              ⏸ <strong>Mainnet paused</strong><br />
+              ⏸ <strong>Validator set</strong> not currently accepting stake<br />
+              ⏸ <strong>Mainnet bounty payouts</strong> deferred<br />
+              ✓ <strong>Ledger commitments</strong> remain binding
             </p>
           </div>
         </div>

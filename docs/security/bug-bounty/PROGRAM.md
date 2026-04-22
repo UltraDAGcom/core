@@ -1,26 +1,24 @@
 # UltraDAG Bug Bounty Program
 
 **Operator:** JMS Media Group LLC (Wyoming, USA; Filing ID 2026-001951812) — the legal entity behind the UltraDAG project and the payer of record for all bounty rewards.  
-**Status:** Active — Mainnet & Testnet  
+**Status:** Active — Testnet (Mainnet paused as of 2026-04-22)  
 **Launch Date:** March 8, 2026  
 **Mainnet Genesis:** April 10, 2026  
-**Mainnet Public Open:** April 16, 2026 (anyone can run a validator)  
+**Mainnet Paused:** April 22, 2026  
 **Total Pool:** 500,000 UDAG
 
 ## Overview
 
-UltraDAG is offering rewards for security researchers who discover and responsibly disclose vulnerabilities in the UltraDAG codebase. **Mainnet is now open** — anyone can run a validator, stake UDAG, and participate in consensus. Testing is welcome on both mainnet and testnet; please prefer testnet for destructive exploration. Mainnet nodes are reachable at `ultradag-mainnet-[1-5].fly.dev:9333` (P2P) and `https://ultradag-mainnet-[1-5].fly.dev` (RPC).
+UltraDAG is offering rewards for security researchers who discover and responsibly disclose vulnerabilities in the UltraDAG codebase. **Mainnet is currently paused**; testing runs on testnet only. Testnet nodes are reachable at `ultradag-node-[1-2].fly.dev:9333` (P2P) and `https://ultradag-node-[1-2].fly.dev` (RPC).
 
-Valid reports are rewarded in UDAG, recorded in the append-only [`LEDGER.md`](./LEDGER.md), and convertible 1:1 to mainnet UDAG per the vesting schedule in that file. See [`LEDGER.md` → Testnet Reset Safety](./LEDGER.md#testnet-reset-safety) for why a testnet wipe does not affect your claim.
+Valid reports are rewarded in UDAG and recorded in the append-only [`LEDGER.md`](./LEDGER.md). Payout in mainnet UDAG is deferred while mainnet is paused but every ledger entry remains binding per the program's testnet-reset-safety policy — the commitment is the git-tracked entry plus the hunter's key, not the chain state. See [`LEDGER.md` → Testnet Reset Safety](./LEDGER.md#testnet-reset-safety).
 
-## Mainnet Access Policy
+## Testnet Access
 
-Mainnet is **fully open**:
-
-- **P2P port 9333 is public** on all mainnet nodes at `ultradag-mainnet-[1-5].fly.dev:9333`. External validators and observers can connect directly.
-- **RPC port 10333 is public** at `https://ultradag-mainnet-[1-5].fly.dev` for both reads and transaction submission.
-- **Validator set is permissionless** — any address with enough UDAG can stake and enter the active set. The 5 founder-operated Fly nodes have no protocol-level privilege; ranking is by effective stake.
-- **Please do not DoS mainnet.** In-scope attacks are those demonstrating a protocol or implementation bug via a minimal PoC — not brute traffic floods. If you can crash or halt a live mainnet node with a single crafted message, that's a valid Critical; sustained DoS traffic is out of scope and may be reported to the hosting provider.
+- **P2P port 9333 is public** on both testnet nodes at `ultradag-node-[1-2].fly.dev:9333`.
+- **RPC port 10333 is public** at `https://ultradag-node-[1-2].fly.dev` for reads and transaction submission.
+- **Please do not DoS the testnet.** In-scope attacks are those demonstrating a protocol or implementation bug via a minimal PoC — not brute traffic floods. If you can crash or halt a testnet node with a single crafted message, that's a valid Critical; sustained DoS traffic is out of scope and may be reported to the hosting provider.
+- **Mainnet attack surfaces remain in scope for review** — any bug you find against the current codebase is eligible regardless of whether it's exercisable on a live mainnet today. The vulnerability class is what matters for the reward tier.
 
 ## Scope
 
@@ -155,8 +153,9 @@ Create a GitHub Security Advisory with:
    the severity assessment, reward range, and planned timeline.
 
 ### Mainnet conversion (applies to all ledger entries)
-Mainnet launched **2026-04-10**. Every entry in the ledger converts 1:1 to
-mainnet UDAG under the following rules:
+Mainnet genesis was **2026-04-10**; mainnet is currently paused as of
+**2026-04-22**. Every entry in the ledger converts 1:1 to mainnet UDAG
+under the following rules:
 
 1. **Vesting schedule:** 25% unlocked at the vesting anchor (immediate), 75%
    vested linearly over the 12 months following.
@@ -167,6 +166,10 @@ mainnet UDAG under the following rules:
    the Ed25519 secret key (or passkey) behind their testnet address. This
    proves ownership without needing the testnet address to hold any balance
    or for the testnet to even still be running.
+4. **Pause handling:** while mainnet is paused, claim windows open as soon
+   as mainnet is re-enabled. The vesting anchor rule above still applies —
+   a paused period does not reset or delay the anchor. Entries already
+   accrued continue to accrue the 12-month linear vest.
 
 **Testnet reset safety:** testnet `--clean` restarts do not affect any ledger
 entry. The commitments live in git, not on the testnet chain. See the

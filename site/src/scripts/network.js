@@ -1,6 +1,7 @@
 // UltraDAG Network Page Script
-var TESTNET_NODES = ['https://ultradag-node-1.fly.dev','https://ultradag-node-2.fly.dev','https://ultradag-node-3.fly.dev','https://ultradag-node-4.fly.dev','https://ultradag-node-5.fly.dev'];
-var MAINNET_NODES = ['https://ultradag-mainnet-1.fly.dev','https://ultradag-mainnet-2.fly.dev','https://ultradag-mainnet-3.fly.dev','https://ultradag-mainnet-4.fly.dev','https://ultradag-mainnet-5.fly.dev'];
+var TESTNET_NODES = ['https://ultradag-node-1.fly.dev','https://ultradag-node-2.fly.dev'];
+// Mainnet is paused — array kept for future re-enablement.
+var MAINNET_NODES = [];
 var NODES = TESTNET_NODES;
 var currentNet = 'testnet';
 var SATS = 100000000, MAX_SUPPLY = 21000000;

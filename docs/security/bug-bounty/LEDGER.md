@@ -7,6 +7,13 @@
 **UDAG Mainnet Token:** [`0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b`](https://arbiscan.io/token/0x9cFD2011DF13d9E394B5Bb59f0f7e7A5C512155b) (Arbitrum One, deployed 2026-04-12)  
 **Bounty Payment Source:** Genesis allocation holder `0x9aEcb515361af7980eaa16fE40c064f69738EbF9` (to be reimbursed from treasury post-emission)  
 
+> **Mainnet paused as of 2026-04-22.** Mainnet payouts are deferred until
+> mainnet is re-enabled. Every entry below remains binding — the commitment
+> is the git-tracked entry plus the hunter's key, not the chain state. See
+> [Testnet Reset Safety](#testnet-reset-safety) below; the same policy
+> applies to a mainnet pause. Vesting anchors and the 1:1 UDAG conversion
+> are unchanged.
+
 This ledger tracks all bug bounty rewards. Each entry is cryptographically signed and represents a binding commitment to distribute mainnet UDAG tokens.
 
 ---

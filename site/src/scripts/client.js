@@ -145,10 +145,7 @@ function initLiveBar() {
   const SATS = 100_000_000;
   const NODES = [
     'https://ultradag-node-1.fly.dev',
-    'https://ultradag-node-2.fly.dev',
-    'https://ultradag-node-3.fly.dev',
-    'https://ultradag-node-4.fly.dev',
-    'https://ultradag-node-5.fly.dev'
+    'https://ultradag-node-2.fly.dev'
   ];
 
   const elRound = document.getElementById('live-round');

@@ -216,13 +216,10 @@ Common causes:
 |------|-------------|
 | Node 1 | `https://ultradag-node-1.fly.dev` |
 | Node 2 | `https://ultradag-node-2.fly.dev` |
-| Node 3 | `https://ultradag-node-3.fly.dev` |
-| Node 4 | `https://ultradag-node-4.fly.dev` |
-| Node 5 | `https://ultradag-node-5.fly.dev` |
 
 ### Is mainnet live?
 
-Not yet. The testnet is live and operational. See the [mainnet launch checklist](/docs/security/audits) for progress.
+Mainnet is currently **paused**. Testnet remains live for development, validator experiments, and the bug bounty program. Bounty commitments recorded in the ledger remain binding per the program's own testnet-reset-safety policy, and mainnet payouts will resume when mainnet returns.
 
 ### How do I check if the network is healthy?
 

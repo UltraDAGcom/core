@@ -280,7 +280,7 @@ Best,
 
 ---
 
-**Program Status:** ✅ Active (mainnet live since 2026-04-10)  
+**Program Status:** ✅ Active — Testnet (Mainnet paused 2026-04-22)  
 **Private reporting:** Enabled on the repo; advisory URL live  
 **Next Action:** Announce publicly via `PROMOTION.md` channels  
-**Last Updated:** April 11, 2026
+**Last Updated:** April 22, 2026

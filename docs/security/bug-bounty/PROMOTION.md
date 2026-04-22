@@ -112,10 +112,11 @@ affect the commitment.
 
 UltraDAG is offering up to 50k UDAG for critical vulnerabilities.
 DAG-BFT blockchain with 2-3 round finality — interesting consensus
-model to test. Mainnet is live (5 validators) but all testing must
-happen against the public testnet (attacking mainnet is out of scope).
+model to test. Mainnet is currently paused; all testing runs against
+the public testnet.
 
-Live testnet + immediate testnet payouts + mainnet conversion schedule.
+Live testnet + mainnet conversion schedule. Ledger commitments remain
+binding through the pause.
 Details: https://github.com/UltraDAGcom/core/blob/main/SECURITY.md
 ```
 

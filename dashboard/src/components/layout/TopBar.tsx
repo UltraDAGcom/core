@@ -108,11 +108,12 @@ export function TopBar({
     return udag < 0.01 && udag > 0 ? '<0.01' : udag.toLocaleString(undefined, { maximumFractionDigits: 2 });
   };
 
+  // Mainnet is paused — the button is disabled and shown in a muted style.
   const mainnetBtnStyle: React.CSSProperties = {
     ...switchBtnBase,
-    ...(isMainnet
-      ? { background: 'rgba(0,224,196,0.15)', color: '#00E0C4', border: '1px solid rgba(0,224,196,0.25)' }
-      : { color: 'var(--dag-text-muted)' }),
+    color: 'var(--dag-text-muted)',
+    opacity: 0.4,
+    cursor: 'not-allowed',
   };
 
   const testnetBtnStyle: React.CSSProperties = {
@@ -148,10 +149,14 @@ export function TopBar({
         </div>
       </div>
 
-      {/* Center: network switcher */}
+      {/* Center: network switcher (mainnet currently paused) */}
       <div style={switcherWrapStyle}>
-        <button onClick={() => onSwitchNetwork('mainnet')} style={mainnetBtnStyle}>
-          Mainnet
+        <button
+          style={mainnetBtnStyle}
+          disabled
+          title="Mainnet is paused"
+        >
+          Mainnet (paused)
         </button>
         <button onClick={() => onSwitchNetwork('testnet')} style={testnetBtnStyle}>
           Testnet
