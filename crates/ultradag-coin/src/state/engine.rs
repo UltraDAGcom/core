@@ -2610,6 +2610,19 @@ impl StateEngine {
     /// Called when a legacy account sends its first transaction after SmartAccount creation.
     fn auto_register_ed25519_key(&mut self, addr: &Address, pub_key: &[u8; 32], round: u64) {
         use crate::tx::smart_account::{AuthorizedKey, KeyType};
+
+        // Only auto-register a key that cryptographically belongs to this
+        // address (i.e. blake3(pub_key)[..20] == addr). Pockets and any other
+        // non-EOA addresses do NOT derive from any keypair — auto-registering
+        // an attacker-supplied key on them would grant that key authorization
+        // over the pocket's balance (verify_smart_transfer checks the pocket's
+        // own config before falling back to the parent). Pockets inherit
+        // authorization from their parent via `pocket_to_parent`, not via
+        // their own authorized_keys list, which must stay empty.
+        if Address::from_pubkey(pub_key) != *addr {
+            return;
+        }
+
         self.ensure_smart_account_at_round(addr, round);
         if let Some(config) = self.smart_accounts.get_mut(addr) {
             if config.authorized_keys.is_empty() {
@@ -2866,6 +2879,18 @@ impl StateEngine {
     /// Used by the relay endpoint. Creates the SmartAccount if it doesn't exist.
     pub fn auto_register_key(&mut self, addr: &Address, key_type: crate::tx::smart_account::KeyType, pubkey: Vec<u8>) -> Result<(), CoinError> {
         use crate::tx::smart_account::AuthorizedKey;
+
+        // Pockets must never have their own authorized_keys — they inherit
+        // from their parent via pocket_to_parent. Allowing a key to be
+        // planted here would let the caller spend from the pocket, because
+        // verify_smart_transfer checks the pocket's own config before the
+        // parent's.
+        if self.pocket_to_parent.contains_key(addr) {
+            return Err(CoinError::ValidationError(
+                "cannot register a key directly on a pocket address — pockets inherit from their parent".into(),
+            ));
+        }
+
         self.ensure_smart_account(addr);
         let config = self.smart_accounts.get_mut(addr)
             .ok_or_else(|| CoinError::ValidationError("smart account not found".into()))?;
